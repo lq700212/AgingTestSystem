@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</ProjectGuid>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>BarometerWinform</RootNamespace>
+    <AssemblyName>BarometerWinform</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <Deterministic>true</Deterministic>
+    <!-- 指定应用设计器文件夹，VS设计器依赖此属性定位 AssemblyInfo.cs -->
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <!-- 【修复 L2】指定应用程序清单文件，启用 DPI 感知 -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Configuration" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Models\BarometerData.cs" />
+    <Compile Include="Models\IoStatus.cs" />
+    <Compile Include="Models\DeviceConfig.cs" />
+    <Compile Include="Models\RecipeConfig.cs" />
+    <Compile Include="Models\UserRole.cs" />
+    <Compile Include="Models\UserAccount.cs" />
+    <Compile Include="Interfaces\IBarometerReader.cs" />
+    <Compile Include="Interfaces\IIoController.cs" />
+    <Compile Include="Services\MockBarometerReader.cs" />
+    <Compile Include="Services\MockIoController.cs" />
+    <Compile Include="Services\DeviceManager.cs" />
+    <Compile Include="Services\UserManager.cs" />
+    <Compile Include="Views\BarometerPanelView.cs">
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="Views\BarometerPanelView.Designer.cs">
+      <DependentUpon>BarometerPanelView.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Views\MainForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Views\MainForm.Designer.cs">
+      <DependentUpon>MainForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Dialogs\CommunicationSettingForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Dialogs\CommunicationSettingForm.Designer.cs">
+      <DependentUpon>CommunicationSettingForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Dialogs\CommonParameterForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Dialogs\CommonParameterForm.Designer.cs">
+      <DependentUpon>CommonParameterForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Dialogs\RecipeManagerForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Dialogs\RecipeManagerForm.Designer.cs">
+      <DependentUpon>RecipeManagerForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Dialogs\HistoryRecordForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Dialogs\HistoryRecordForm.Designer.cs">
+      <DependentUpon>HistoryRecordForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Dialogs\ScanSimulationForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Dialogs\ScanSimulationForm.Designer.cs">
+      <DependentUpon>ScanSimulationForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Dialogs\LoginForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Dialogs\LoginForm.Designer.cs">
+      <DependentUpon>LoginForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Dialogs\UserManagementForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Dialogs\UserManagementForm.Designer.cs">
+      <DependentUpon>UserManagementForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="App.config" />
+    <!-- 【修复 L2】应用程序清单文件，启用 DPI 感知 -->
+    <None Include="app.manifest" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>
