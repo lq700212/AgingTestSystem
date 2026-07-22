@@ -1,0 +1,39 @@
+# ============================================================
+# .gitignore for C# / .NET Framework WinForms projects
+# 忽略不需要提交到 git 的文件和目录
+# ============================================================
+
+# ===== Visual Studio 临时文件 =====
+## VS 工作区缓存目录（含 .suo 等用户私有设置）
+.vs/
+
+# ===== 编译输出目录 =====
+## 编译中间文件和最终输出
+bin/
+obj/
+
+# ===== 用户私有文件 =====
+## 用户级解决方案选项（包含个人断点、窗口布局等）
+*.user
+*.suo
+
+# ===== Visual Studio 调试临时文件 =====
+*.pdb
+*.vshost.exe
+*.vshost.exe.config
+*.vshost.exe.manifest
+
+# ===== Windows 系统文件 =====
+## 缩略图缓存
+Thumbs.db
+## 桌面.ini 文件
+desktop.ini
+
+# ===== 其他临时文件 =====
+*.log
+*.tmp
+*.bak
+*.cache
+
+# ===== NuGet 包目录（如果使用 NuGet） =====
+packages/
