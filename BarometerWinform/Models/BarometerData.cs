@@ -50,16 +50,19 @@ namespace BarometerWinform.Models
         public DateTime CollectTime { get; set; }
 
         /// <summary>
-        /// IO输入状态列表（每个气压表对应2个IO输入）
-        /// 索引0对应I0_1，索引1对应I0_2
+        /// IO输入状态列表（每个气压表对应1个IO输入）
+        /// 【V1.09 更新】依据显耀IO表，每个气压表仅有1个输入: 真空负压表信号(NPN, X地址)
+        /// 索引0对应 真空负压表输入点(X000 等)
         /// </summary>
-        public bool[] InputStatus { get; set; } = new bool[2];
+        public bool[] InputStatus { get; set; } = new bool[1];
 
         /// <summary>
-        /// IO输出状态列表（每个气压表对应4个IO输出）
-        /// 索引0-3分别对应OP_1到OP_4
+        /// IO输出状态列表（每个气压表对应2个IO输出）
+        /// 【V1.09 更新】依据显耀IO表，每个气压表有2个输出(PNP, Y地址):
+        /// 索引0对应 真空电磁阀输出点(Y000 等)
+        /// 索引1对应 载台上电输出点(Y110 等)
         /// </summary>
-        public bool[] OutputStatus { get; set; } = new bool[4];
+        public bool[] OutputStatus { get; set; } = new bool[2];
 
         /// <summary>
         /// 创建当前对象的深拷贝

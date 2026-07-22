@@ -1,4 +1,4 @@
-namespace BarometerWinform.Models
+﻿namespace BarometerWinform.Models
 {
     /// <summary>
     /// 用户角色枚举

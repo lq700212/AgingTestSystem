@@ -50,6 +50,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Models\BarometerData.cs" />
     <Compile Include="Models\IoStatus.cs" />
+    <Compile Include="Models\IoPointDefinition.cs" />
     <Compile Include="Models\DeviceConfig.cs" />
     <Compile Include="Models\RecipeConfig.cs" />
     <Compile Include="Models\UserRole.cs" />
@@ -58,6 +59,7 @@
     <Compile Include="Interfaces\IIoController.cs" />
     <Compile Include="Services\MockBarometerReader.cs" />
     <Compile Include="Services\MockIoController.cs" />
+    <Compile Include="Services\IoMapBuilder.cs" />
     <Compile Include="Services\DeviceManager.cs" />
     <Compile Include="Services\UserManager.cs" />
     <Compile Include="Views\BarometerPanelView.cs">

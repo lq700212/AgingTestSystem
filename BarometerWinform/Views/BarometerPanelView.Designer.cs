@@ -58,11 +58,8 @@
             this.lblDelayArrive = new System.Windows.Forms.Label();
             this.txtDelayArrive = new System.Windows.Forms.TextBox();
             this.boxInput1 = new System.Windows.Forms.Label();
-            this.boxInput2 = new System.Windows.Forms.Label();
             this.boxOutput1 = new System.Windows.Forms.Label();
             this.boxOutput2 = new System.Windows.Forms.Label();
-            this.boxOutput3 = new System.Windows.Forms.Label();
-            this.boxOutput4 = new System.Windows.Forms.Label();
             this.lblStatus = new System.Windows.Forms.Label();
             this.SuspendLayout();
             //
@@ -176,71 +173,45 @@
             this.txtDelayArrive.TabIndex = 11;
             this.txtDelayArrive.Text = "00:00:00";
             //
-            // boxInput1 - IO输入1状态框（左上）
+            // boxInput1 - 真空负压表输入状态框（左, NPN, X地址）
+            // 【V1.09 更新】显示2行: 第1行功能名"负压表", 第2行物理地址"X000"
+            // 实际文本在运行时由 BarometerPanelView.cs 根据设备编号设置
             //
             this.boxInput1.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.boxInput1.Location = new System.Drawing.Point(6, 28);
             this.boxInput1.Name = "boxInput1";
-            this.boxInput1.Size = new System.Drawing.Size(60, 20);
+            this.boxInput1.Size = new System.Drawing.Size(64, 40);
+            this.boxInput1.AutoSize = false;
             this.boxInput1.TabIndex = 13;
-            this.boxInput1.Text = "L_1_1";
+            this.boxInput1.Text = "负压表\r\nX000";
             this.boxInput1.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             this.boxInput1.BackColor = System.Drawing.Color.LightGray;
             //
-            // boxInput2 - IO输入2状态框（左下）
-            //
-            this.boxInput2.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.boxInput2.Location = new System.Drawing.Point(6, 51);
-            this.boxInput2.Name = "boxInput2";
-            this.boxInput2.Size = new System.Drawing.Size(60, 20);
-            this.boxInput2.TabIndex = 14;
-            this.boxInput2.Text = "INT_1_1";
-            this.boxInput2.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-            this.boxInput2.BackColor = System.Drawing.Color.LightGray;
-            //
-            // boxOutput1 - IO输出1状态框（中上）
+            // boxOutput1 - 真空电磁阀输出状态框（中, PNP, Y地址）
+            // 【V1.09 更新】显示2行: 第1行功能名"真空阀", 第2行物理地址"Y000"
             //
             this.boxOutput1.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.boxOutput1.Location = new System.Drawing.Point(72, 28);
             this.boxOutput1.Name = "boxOutput1";
-            this.boxOutput1.Size = new System.Drawing.Size(60, 20);
+            this.boxOutput1.Size = new System.Drawing.Size(64, 40);
+            this.boxOutput1.AutoSize = false;
             this.boxOutput1.TabIndex = 15;
-            this.boxOutput1.Text = "OP_1_1";
+            this.boxOutput1.Text = "真空阀\r\nY000";
             this.boxOutput1.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             this.boxOutput1.BackColor = System.Drawing.Color.LightGray;
             //
-            // boxOutput2 - IO输出2状态框（中下）
+            // boxOutput2 - 载台上电输出状态框（右, PNP, Y地址）
+            // 【V1.09 更新】显示2行: 第1行功能名"载台电", 第2行物理地址"Y110"
             //
             this.boxOutput2.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.boxOutput2.Location = new System.Drawing.Point(72, 51);
+            this.boxOutput2.Location = new System.Drawing.Point(138, 28);
             this.boxOutput2.Name = "boxOutput2";
-            this.boxOutput2.Size = new System.Drawing.Size(60, 20);
+            this.boxOutput2.Size = new System.Drawing.Size(64, 40);
+            this.boxOutput2.AutoSize = false;
             this.boxOutput2.TabIndex = 16;
-            this.boxOutput2.Text = "L_1_2";
+            this.boxOutput2.Text = "载台电\r\nY110";
             this.boxOutput2.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             this.boxOutput2.BackColor = System.Drawing.Color.LightGray;
-            //
-            // boxOutput3 - IO输出3状态框（右上）
-            //
-            this.boxOutput3.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.boxOutput3.Location = new System.Drawing.Point(138, 28);
-            this.boxOutput3.Name = "boxOutput3";
-            this.boxOutput3.Size = new System.Drawing.Size(60, 20);
-            this.boxOutput3.TabIndex = 17;
-            this.boxOutput3.Text = "OP_1_3";
-            this.boxOutput3.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-            this.boxOutput3.BackColor = System.Drawing.Color.LightGray;
-            //
-            // boxOutput4 - IO输出4状态框（右下）
-            //
-            this.boxOutput4.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.boxOutput4.Location = new System.Drawing.Point(138, 51);
-            this.boxOutput4.Name = "boxOutput4";
-            this.boxOutput4.Size = new System.Drawing.Size(60, 20);
-            this.boxOutput4.TabIndex = 18;
-            this.boxOutput4.Text = "OP_1_4";
-            this.boxOutput4.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-            this.boxOutput4.BackColor = System.Drawing.Color.LightGray;
             //
             // lblStatus - 设备状态标签（右上角）
             //
@@ -257,11 +228,8 @@
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.Controls.Add(this.lblStatus);
-            this.Controls.Add(this.boxOutput4);
-            this.Controls.Add(this.boxOutput3);
             this.Controls.Add(this.boxOutput2);
             this.Controls.Add(this.boxOutput1);
-            this.Controls.Add(this.boxInput2);
             this.Controls.Add(this.boxInput1);
             this.Controls.Add(this.txtDelayArrive);
             this.Controls.Add(this.lblDelayArrive);
@@ -310,18 +278,12 @@
         private System.Windows.Forms.Label lblDelayArrive;
         /// <summary>延时到达时间输入框</summary>
         private System.Windows.Forms.TextBox txtDelayArrive;
-        /// <summary>IO输入1状态框</summary>
+        /// <summary>真空负压表输入状态框（NPN, X地址）</summary>
         private System.Windows.Forms.Label boxInput1;
-        /// <summary>IO输入2状态框</summary>
-        private System.Windows.Forms.Label boxInput2;
-        /// <summary>IO输出1状态框</summary>
+        /// <summary>真空电磁阀输出状态框（PNP, Y地址）</summary>
         private System.Windows.Forms.Label boxOutput1;
-        /// <summary>IO输出2状态框</summary>
+        /// <summary>载台上电输出状态框（PNP, Y地址）</summary>
         private System.Windows.Forms.Label boxOutput2;
-        /// <summary>IO输出3状态框</summary>
-        private System.Windows.Forms.Label boxOutput3;
-        /// <summary>IO输出4状态框</summary>
-        private System.Windows.Forms.Label boxOutput4;
         /// <summary>设备状态标签（右上角）</summary>
         private System.Windows.Forms.Label lblStatus;
     }

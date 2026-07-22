@@ -11,9 +11,14 @@ namespace BarometerWinform.Services
     /// 用于开发和测试阶段，模拟IO输入输出操作
     /// 实际使用时需要替换为真实的硬件通信实现
     ///
-    /// IO点编号规则：
-    /// - 输入点：1 ~ TotalInputs（默认 1 ~ 72）
-    /// - 输出点：TotalInputs+1 ~ TotalInputs+TotalOutputs（默认 73 ~ 216）
+    /// 【V1.09 更新 —— 显耀IO表】
+    /// IO点编号规则(依据显耀IO表):
+    /// - 输入点(NPN, X地址): 1 ~ TotalInputs(默认 1 ~ 72)
+    ///   对应物理地址 X000~X107(三菱八进制), 设备名: 真空负压表-1~72
+    /// - 输出点(PNP, Y地址): TotalInputs+1 ~ TotalInputs+TotalOutputs(默认 73 ~ 216)
+    ///   真空电磁阀(73~144): Y000~Y107
+    ///   载台上电(145~216): Y110~Y217
+    /// - 物理地址映射详见 <see cref="IoMapBuilder"/>
     ///
     /// 【修复说明】
     /// 修复 M5：使用 lock 保护 Random，避免多线程访问导致内部状态损坏

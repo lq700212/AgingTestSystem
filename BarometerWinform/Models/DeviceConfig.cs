@@ -19,9 +19,10 @@ namespace BarometerWinform.Models
         /// 当前需求：72 个（每个气压表对应 1 个输入点，共 72 个设备）
         /// 输入点编号范围：1 ~ TotalInputs（默认 1 ~ 72）
         ///
-        /// 【修复 L4】原注释存在矛盾（既说"每个气压表2个输入"又说"按区域管理为72组"），
-        /// 实际配置值就是 72，与 App.config 中 TotalInputs=72 一致。
-        /// 注释已更正为与配置值一致的说明。
+        /// 【V1.09 更新】依据显耀IO表:
+        /// - 72 个输入点均为 NPN 型, 对应三菱PLC X 地址(八进制编址 X000~X107)
+        /// - 设备名: 真空负压表-1 ~ 真空负压表-72
+        /// - 物理地址映射详见 <see cref="Services.IoMapBuilder"/>
         /// </summary>
         public int TotalInputs { get; set; } = 72;
 
@@ -30,9 +31,11 @@ namespace BarometerWinform.Models
         /// 当前需求：144 个（每个气压表对应 2 个输出点，共 72 个设备 × 2 = 144）
         /// 输出点编号范围：TotalInputs+1 ~ TotalInputs+TotalOutputs（默认 73 ~ 216）
         ///
-        /// 【修复 L4】原注释存在矛盾（既说"每个气压表4个输出"又说"按区域管理为144组"），
-        /// 实际配置值就是 144，与 App.config 中 TotalOutputs=144 一致。
-        /// 注释已更正为与配置值一致的说明。
+        /// 【V1.09 更新】依据显耀IO表:
+        /// - 144 个输出点均为 PNP 型, 对应三菱PLC Y 地址(八进制编址)
+        /// - 真空电磁阀-1~72: Y000~Y107 (内部编号 73~144)
+        /// - 载台上电-1~72:  Y110~Y217 (内部编号 145~216)
+        /// - 物理地址映射详见 <see cref="Services.IoMapBuilder"/>
         /// </summary>
         public int TotalOutputs { get; set; } = 144;
 

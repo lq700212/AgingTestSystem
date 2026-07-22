@@ -74,11 +74,14 @@ namespace BarometerWinform.Services
             }
 
             // 使用 lock 保护 Random 访问（修复 M5）
+            // 【V1.09 更新】依据显耀IO表: 1输入(真空负压表) + 2输出(真空电磁阀 + 载台上电)
             int pressureInt;
             int statusInt;
             int delayStartMin, delayStartSec;
             int delayArriveMin, delayArriveSec;
-            bool in1, in2, out1, out2, out3, out4;
+            bool vacuumPressureInput;      // 真空负压表输入(NPN, X地址)
+            bool vacuumValveOutput;        // 真空电磁阀输出(PNP, Y地址)
+            bool carrierPowerOutput;       // 载台上电输出(PNP, Y地址)
 
             lock (_randomLock)
             {
@@ -89,12 +92,9 @@ namespace BarometerWinform.Services
                 delayStartSec = _random.Next(0, 60);
                 delayArriveMin = _random.Next(0, 60);
                 delayArriveSec = _random.Next(0, 60);
-                in1 = _random.Next(0, 2) == 1;
-                in2 = _random.Next(0, 2) == 1;
-                out1 = _random.Next(0, 2) == 1;
-                out2 = _random.Next(0, 2) == 1;
-                out3 = _random.Next(0, 2) == 1;
-                out4 = _random.Next(0, 2) == 1;
+                vacuumPressureInput = _random.Next(0, 2) == 1;
+                vacuumValveOutput = _random.Next(0, 2) == 1;
+                carrierPowerOutput = _random.Next(0, 2) == 1;
             }
 
             return new BarometerData
@@ -107,8 +107,10 @@ namespace BarometerWinform.Services
                 DelayStartTime = new TimeSpan(0, delayStartMin, delayStartSec),
                 DelayArriveTime = new TimeSpan(0, delayArriveMin, delayArriveSec),
                 CollectTime = DateTime.Now,
-                InputStatus = new[] { in1, in2 },
-                OutputStatus = new[] { out1, out2, out3, out4 }
+                // 1个输入: 真空负压表信号
+                InputStatus = new[] { vacuumPressureInput },
+                // 2个输出: 真空电磁阀 + 载台上电
+                OutputStatus = new[] { vacuumValveOutput, carrierPowerOutput }
             };
         }
 

@@ -1,4 +1,4 @@
-namespace BarometerWinform.Dialogs
+﻿namespace BarometerWinform.Dialogs
 {
     /// <summary>
     /// 登录窗体 —— 设计器自动生成部分

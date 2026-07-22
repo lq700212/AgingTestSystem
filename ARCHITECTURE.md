@@ -10,8 +10,9 @@
 | 需求项 | 描述 | 当前状态 |
 | :--- | :--- | :--- |
 | 气压表数据采集 | 实时读取72个气压表的真空压力数据 | 已实现（Mock） |
-| IO输入监控 | 监控72个IO输入点状态 | 预留接口 |
-| IO输出控制 | 控制144个IO输出点状态 | 预留接口 |
+| IO输入监控 | 监控72个IO输入点状态(NPN, X000~X107) | 已接入显耀IO表（Mock） |
+| IO输出控制 | 控制144个IO输出点状态(PNP, Y000~Y217) | 已接入显耀IO表（Mock） |
+| IO点映射表 | 内部编号与三菱PLC物理地址的映射 | 已实现（IoMapBuilder） |
 | 动态面板显示 | 根据配置动态创建气压表面板 | 已实现 |
 | 参数配置 | 配方管理、延时设置等 | 预留功能 |
 | 数据记录 | LOG记录功能 | 预留功能 |
@@ -250,6 +251,37 @@
 | `OnBatchDataUpdated` | 一次采集周期完成时触发一次，参数为所有气压表数据数组（修复 M2，避免逐条触发 72 次事件） |
 | `OnConnectionStatusChanged` | 连接状态变更时（Dispose 期间不触发，修复 H3） |
 
+#### 3.2.2 IoMapBuilder（IO映射表构建器）【V1.09 新增】
+
+**职责**: 依据现场"显耀IO表"，建立内部连续编号与三菱PLC物理地址之间的映射关系。
+
+**核心功能**:
+1. **构建完整IO映射表**: 按"输入→真空电磁阀输出→载台上电输出"顺序生成所有IO点定义
+2. **获取设备IO映射**: 获取指定气压表的1输入+2输出映射，供面板显示使用
+3. **八进制地址转换**: 将十进制数值转为三菱PLC八进制地址（如 0→X000, 72→Y110, 143→Y217）
+
+**关键方法**:
+
+| 方法 | 功能 |
+| :--- | :--- |
+| `Build(totalBarometers)` | 构建完整IO映射表（totalBarometers×3 个点） |
+| `GetDeviceMapping(deviceId, totalBarometers)` | 获取指定设备的1输入+2输出映射 |
+
+**八进制编址说明**:
+
+三菱PLC的 X/Y 点采用八进制编号（每位数字仅 0~7），与十进制不同：
+- X007 的下一个是 X010（不是 X008）
+- X077 的下一个是 X100
+- Y107（真空电磁阀-72）之后，载台上电从 Y110 开始（八进制 110 = 十进制 72）
+
+**地址映射规则**:
+
+| 设备 | 内部编号 | 物理地址 | 转换公式 |
+| :--- | :--- | :--- | :--- |
+| 真空负压表-N | N (1~72) | X + octal(N-1) | N=1→X000, N=72→X107 |
+| 真空电磁阀-N | 72+N (73~144) | Y + octal(N-1) | N=1→Y000, N=72→Y107 |
+| 载台上电-N | 144+N (145~216) | Y + octal(72+N-1) | N=1→Y110, N=72→Y217 |
+
 ---
 
 ### 3.3 接口层 (Interfaces)
@@ -300,26 +332,34 @@ public interface IIoController
 }
 ```
 
-**【预留说明】**
+**【V1.09 更新 —— 显耀IO表接入】**
 
-当前使用 `MockIoController` 作为模拟实现。现场有72个IO输入和144个IO输出需要接入。
+依据现场"显耀IO表"，IO配置已明确：
+
+| 类型 | 电气特性 | 数量 | 物理地址 | 设备名 | 内部编号 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 输入 | NPN（漏型） | 72 | X000~X107（八进制） | 真空负压表-1~72 | 1~72 |
+| 输出 | PNP（源型） | 72 | Y000~Y107（八进制） | 真空电磁阀-1~72 | 73~144 |
+| 输出 | PNP（源型） | 72 | Y110~Y217（八进制） | 载台上电-1~72 | 145~216 |
+
+**每个气压表对应**: 1个输入（真空负压表）+ 2个输出（真空电磁阀 + 载台上电）
 
 **IO点编号规则**:
+- 输入点：1 ~ TotalInputs（默认 1 ~ 72）
+- 输出点：TotalInputs+1 ~ TotalInputs+TotalOutputs（默认 73 ~ 216）
 
-| 类型 | 编号范围 | 说明 |
-| :--- | :--- | :--- |
-| 输入点 | 1-72 | 共72个输入通道 |
-| 输出点 | 73-216 | 共144个输出通道（72+144=216） |
+**物理地址映射**：内部编号与三菱PLC物理地址的转换由 `IoMapBuilder` 服务完成（详见 3.2.2 节）。
 
-**每个气压表对应**:
-- 2个输入点：用于检测传感器信号
-- 4个输出点：用于控制执行器
+**电气特性说明**:
+- **输入 NPN（漏型）**：传感器导通时将信号拉低到 0V，IO模块内部上拉后识别为"导通"。适合 NPN 型接近开关、光电传感器。
+- **输出 PNP（源型）**：输出导通时输出 +24V 高电平，向外提供电流。适合直接驱动中间继电器线圈（继电器另一端接 0V），再由继电器触点控制大功率负载（电磁阀、载台电源）。
 
 **接入方式**:
 
 1. 创建新类实现 `IIoController` 接口（如 `PlcIoController`）
 2. 在 `DeviceManager` 的构造函数中替换 `MockIoController`
 3. 根据实际PLC或IO采集卡的通信协议实现各方法
+4. 使用 `IoMapBuilder.GetDeviceMapping(deviceId)` 获取物理地址进行通信
 
 ---
 
@@ -337,8 +377,13 @@ public interface IIoController
 | `DelayStartTime` | TimeSpan | 延时开启时间 |
 | `DelayArriveTime` | TimeSpan | 延时到达时间 |
 | `CollectTime` | DateTime | 采集时间戳 |
-| `InputStatus` | bool[] | IO输入状态（2个） |
-| `OutputStatus` | bool[] | IO输出状态（4个） |
+| `InputStatus` | bool[1] | IO输入状态（1个：真空负压表，NPN） |
+| `OutputStatus` | bool[2] | IO输出状态（2个：真空电磁阀+载台上电，PNP） |
+
+**【V1.09 更新】** 依据显耀IO表，每个气压表的IO分配从"2输入+4输出"调整为"1输入+2输出":
+- `InputStatus[0]`: 真空负压表输入状态（X地址，NPN）
+- `OutputStatus[0]`: 真空电磁阀输出状态（Y地址，PNP）
+- `OutputStatus[1]`: 载台上电输出状态（Y地址，PNP）
 
 #### 3.4.2 DeviceConfig（设备配置模型）
 
@@ -619,20 +664,22 @@ BarometerWinform/
 │   ├── Properties/                         # 程序集属性
 │   │   └── AssemblyInfo.cs                 # 程序集元数据（设计器依赖）
 │   ├── Models/                             # 数据模型层
-│   │   ├── BarometerData.cs                # 气压表数据模型
-│   │   ├── IoStatus.cs                     # IO状态模型
-│   │   ├── DeviceConfig.cs                 # 设备配置模型
-│   │   ├── RecipeConfig.cs                 # 配方配置模型
-│   │   ├── UserRole.cs                     # 【新增】用户角色枚举（操作员/技术员/管理员）
-│   │   └── UserAccount.cs                  # 【新增】用户账号模型 + 登录结果
-│   ├── Interfaces/                         # 接口层
-│   │   ├── IBarometerReader.cs             # 气压表读取接口
-│   │   └── IIoController.cs                # IO控制器接口
-│   ├── Services/                           # 服务层
-│   │   ├── MockBarometerReader.cs          # 气压表模拟读取器
-│   │   ├── MockIoController.cs             # IO模拟控制器
-│   │   ├── DeviceManager.cs                # 设备管理器
-│   │   └── UserManager.cs                  # 【新增】用户管理服务（登录/改密/权限校验）
+    │   ├── BarometerData.cs                # 气压表数据模型
+    │   ├── IoStatus.cs                     # IO状态模型 + IoType/IoFunction/ElectricalType 枚举
+    │   ├── IoPointDefinition.cs            # 【V1.09新增】IO点定义模型 + 设备IO映射集合
+    │   ├── DeviceConfig.cs                 # 设备配置模型
+    │   ├── RecipeConfig.cs                 # 配方配置模型
+    │   ├── UserRole.cs                     # 【新增】用户角色枚举（操作员/技术员/管理员）
+    │   └── UserAccount.cs                  # 【新增】用户账号模型 + 登录结果
+    ├── Interfaces/                         # 接口层
+    │   ├── IBarometerReader.cs             # 气压表读取接口
+    │   └── IIoController.cs                # IO控制器接口（V1.09更新注释:显耀IO表映射）
+    ├── Services/                           # 服务层
+    │   ├── MockBarometerReader.cs          # 气压表模拟读取器
+    │   ├── MockIoController.cs             # IO模拟控制器
+    │   ├── IoMapBuilder.cs                 # 【V1.09新增】IO映射表构建器（八进制地址转换）
+    │   ├── DeviceManager.cs                # 设备管理器
+    │   └── UserManager.cs                  # 【新增】用户管理服务（登录/改密/权限校验）
 │   ├── Views/                              # 视图层
 │   │   ├── MainForm.cs                     # 主窗体（业务逻辑）
 │   │   ├── MainForm.Designer.cs            # 主窗体（设计器代码，含 rootScrollPanel 滚动容器）
@@ -811,8 +858,9 @@ Get-ChildItem -Path $projectRoot -Recurse -Filter "*.cs" -File |
 
 ### 8.3 版本更新
 
-- 当前版本: V1.08
+- 当前版本: V1.09
 - 更新日志:
+  - V1.09 (2026-07-22): 接入客户"显耀IO表"IO配置；新增 IoPointDefinition 模型和 IoMapBuilder 服务（内部编号↔三菱PLC八进制物理地址映射）；新增 IoFunction/ElectricalType 枚举（NPN输入/PNP输出电气特性）；BarometerData 调整为1输入+2输出（真空负压表/真空电磁阀/载台上电）；BarometerPanelView IO状态框改为3个并显示功能名+物理地址；IIoController/MockIoController/DeviceConfig 注释更新实际IO映射
   - V1.08 (2026-07-21): 新增用户权限管理系统（登录窗体 LoginForm + 用户管理窗体 UserManagementForm + UserManager 服务）；主窗体支持自适应屏幕分辨率，缩小时显示水平和垂直滚动条（rootScrollPanel + Anchor 布局）；通讯设置和参数设置按钮需要技术员或管理员权限才能操作；管理员可修改操作员和技术员的用户名密码
   - V1.07 (2026-07-21): 修复设计器无法预览问题（.cs 文件编码）和运行时 TargetParameterCountException 异常，详见第 11 章"V1.07 修复记录"
   - V1.06 (2026-07-21): 全面代码审查与修复（33 项），详见第 10 章"代码审查修复记录"
@@ -827,14 +875,26 @@ Get-ChildItem -Path $projectRoot -Recurse -Filter "*.cs" -File |
 
 ## 9. 附录
 
-### 9.1 IO点映射表（参考）
+### 9.1 IO点映射表（依据显耀IO表，V1.09 更新）
 
-| 气压表编号 | 输入点1 | 输入点2 | 输出点1 | 输出点2 | 输出点3 | 输出点4 |
+**每个气压表对应: 1个输入(NPN, X地址) + 2个输出(PNP, Y地址)**
+
+| 气压表编号 | 输入(NPN) | 输入物理地址 | 输出1-真空电磁阀(PNP) | 输出1物理地址 | 输出2-载台上电(PNP) | 输出2物理地址 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| 1 | I1_1 | I1_2 | O1_1 | O1_2 | O1_3 | O1_4 |
-| 2 | I2_1 | I2_2 | O2_1 | O2_2 | O2_3 | O2_4 |
-| ... | ... | ... | ... | ... | ... | ... |
-| 72 | I72_1 | I72_2 | O72_1 | O72_2 | O72_3 | O72_4 |
+| 1 | 真空负压表-1 | X000 | 真空电磁阀-1 | Y000 | 载台上电-1 | Y110 |
+| 2 | 真空负压表-2 | X001 | 真空电磁阀-2 | Y001 | 载台上电-2 | Y111 |
+| 8 | 真空负压表-8 | X007 | 真空电磁阀-8 | Y007 | 载台上电-8 | Y117 |
+| 9 | 真空负压表-9 | X010 | 真空电磁阀-9 | Y010 | 载台上电-9 | Y120 |
+| 64 | 真空负压表-64 | X077 | 真空电磁阀-64 | Y077 | 载台上电-64 | Y177 |
+| 65 | 真空负压表-65 | X100 | 真空电磁阀-65 | Y100 | 载台上电-65 | Y200 |
+| 72 | 真空负压表-72 | X107 | 真空电磁阀-72 | Y107 | 载台上电-72 | Y217 |
+
+**地址为三菱PLC八进制编址**（每位数字仅0~7，X007之后是X010，X077之后是X100）。
+
+**内部编号映射**:
+- 输入(N): 内部编号 = N (1~72)
+- 真空电磁阀(N): 内部编号 = 72 + N (73~144)
+- 载台上电(N): 内部编号 = 144 + N (145~216)
 
 ### 9.2 设备状态说明
 
@@ -1061,3 +1121,98 @@ this.BeginInvoke(
    - `Views\MainForm.cs` - 应能正常显示主窗体设计视图
    - `Views\BarometerPanelView.cs` - 应能正常显示气压表面板设计视图
 6. **运行程序**：F5 启动，确认不再弹窗 `TargetParameterCountException`
+
+---
+
+## 12. V1.09 修复记录（显耀IO表接入）
+
+本章记录 V1.09 版本接入客户"显耀IO表"的详细变更。
+
+### 12.1 IO配置来源
+
+客户提供的"显耀IO.xlsx"文件，包含3个工作表（Sheet1为有效数据，Sheet2/Sheet3为空）。
+Sheet1 布局为5列：A列=输入设备名、B列=输入地址、C列=分隔、D列=输出设备名、E列=输出地址。
+
+### 12.2 显耀IO表实际配置
+
+| 类别 | 电气特性 | 数量 | 设备名 | 物理地址(三菱八进制) |
+| :--- | :--- | :--- | :--- | :--- |
+| 输入 | NPN（漏型） | 72 | 真空负压表-1~72 | X000~X007, X010~X017, ..., X100~X107 |
+| 输出 | PNP（源型） | 72 | 真空电磁阀-1~72 | Y000~Y007, Y010~Y017, ..., Y100~Y107 |
+| 输出 | PNP（源型） | 72 | 载台上电-1~72 | Y110~Y117, Y120~Y127, ..., Y210~Y217 |
+
+**每个气压表对应**: 1输入（真空负压表）+ 2输出（真空电磁阀 + 载台上电）
+
+### 12.3 电气特性说明
+
+#### NPN 输入（漏型/灌入式）
+- 传感器导通时将IO输入信号拉低到 0V（低电平有效）
+- IO模块内部提供上拉电阻，NPN传感器导通时拉低电平，模块识别为"导通"
+- 适合 NPN 型接近开关、光电传感器等
+- 接线方式：+V → 传感器 → IO输入；传感器公共端接 0V
+
+#### PNP 输出（源型/拉出式）
+- 输出导通时IO输出端输出 +24V 高电平，向外提供电流
+- 适合直接驱动中间继电器线圈（继电器另一端接 0V）
+- 再由继电器触点控制大功率负载（电磁阀、载台电源）
+- 接线方式：IO输出 → 继电器线圈 → 0V；继电器常开触点串联在负载回路中
+
+### 12.4 代码变更清单
+
+| 文件 | 变更内容 |
+| :--- | :--- |
+| Models/IoPointDefinition.cs | 【新增】IO点定义模型 + DeviceIoMapping 设备IO映射集合 |
+| Models/IoStatus.cs | 【更新】新增 PhysicalAddress/Function/Electrical 字段；新增 IoFunction/ElectricalType 枚举 |
+| Models/BarometerData.cs | 【更新】InputStatus 由 bool[2] 改为 bool[1]；OutputStatus 由 bool[4] 改为 bool[2] |
+| Models/DeviceConfig.cs | 【更新】TotalInputs/TotalOutputs 注释补充显耀IO表物理地址说明 |
+| Services/IoMapBuilder.cs | 【新增】IO映射表构建器，含八进制地址转换 Convert.ToString(value, 8) |
+| Services/MockBarometerReader.cs | 【更新】生成1输入+2输出数据（真空负压表/真空电磁阀/载台上电） |
+| Services/MockIoController.cs | 【更新】类注释补充显耀IO表映射说明 |
+| Interfaces/IIoController.cs | 【更新】接口注释补充实际IO映射/NPN输入/PNP输出说明 |
+| Views/BarometerPanelView.cs | 【更新】IO状态框改为3个，构造函数调用 IoMapBuilder 设置功能名+物理地址文本 |
+| Views/BarometerPanelView.Designer.cs | 【更新】移除 boxInput2/boxOutput3/boxOutput4，保留3个框(各2行显示) |
+| BarometerWinform.csproj | 【更新】添加 IoPointDefinition.cs 和 IoMapBuilder.cs 编译项 |
+| ARCHITECTURE.md | 【更新】3.2.2/3.3.2/3.4.1/9.1/8.3 章节 + 本章新增 |
+
+### 12.5 八进制地址转换验证
+
+三菱PLC的X/Y点采用八进制编址（每位数字仅0~7），与十进制不同。
+`IoMapBuilder.ToOctal()` 使用 `Convert.ToString(value, 8).PadLeft(3, '0')` 转换：
+
+| 设备 | 十进制值 | 八进制地址 | 验证 |
+| :--- | :--- | :--- | :--- |
+| 真空负压表-1 | 0 | X000 | ✓ |
+| 真空负压表-8 | 7 | X007 | ✓ |
+| 真空负压表-9 | 8 | X010 | ✓（非X008） |
+| 真空负压表-64 | 63 | X077 | ✓ |
+| 真空负压表-65 | 64 | X100 | ✓（非X080） |
+| 真空负压表-72 | 71 | X107 | ✓ |
+| 真空电磁阀-1 | 0 | Y000 | ✓ |
+| 真空电磁阀-72 | 71 | Y107 | ✓ |
+| 载台上电-1 | 72 | Y110 | ✓（72十进制=110八进制） |
+| 载台上电-8 | 79 | Y117 | ✓ |
+| 载台上电-56 | 127 | Y177 | ✓ |
+| 载台上电-57 | 128 | Y200 | ✓（八进制跳变: 177→200） |
+| 载台上电-64 | 135 | Y207 | ✓ |
+| 载台上电-65 | 136 | Y210 | ✓（八进制跳变: 207→210） |
+| 载台上电-72 | 143 | Y217 | ✓（143十进制=217八进制） |
+
+### 12.6 预留业务逻辑说明
+
+以下业务逻辑因现场工艺流程尚未明确，当前仅接入IO点位定义，实际控制逻辑预留：
+
+| 预留项 | 当前状态 | 说明 |
+| :--- | :--- | :--- |
+| 真空负压表信号处理 | 仅显示状态 | 输入信号已映射到X地址，但"到达真空阈值判定"逻辑待现场确认阈值后实现 |
+| 真空电磁阀控制 | 仅显示状态 | 输出已映射到Y地址，但"开阀/关阀时序"待工艺流程明确后实现 |
+| 载台上电控制 | 仅显示状态 | 输出已映射到Y地址，但"上电/断电时序与联锁"待工艺流程明确后实现 |
+| 真空启动流程 | 预留 | MainForm"开启真空"按钮已创建，需结合真空电磁阀时序实现 |
+| 载台上电流程 | 预留 | 需结合载台上电输出与产品测试流程实现 |
+| IO通信协议 | 待确定 | 当前为Mock实现，实际需根据PLC型号实现（如三菱MC协议/Modbus TCP） |
+| 故障联锁 | 预留 | 真空负压表信号异常时的报警与输出联锁逻辑待实现 |
+
+### 12.7 编译验证
+
+- 修复后编译结果：**0 警告，0 错误**
+- 编译命令：`dotnet build BarometerWinform.sln --configuration Debug`
+- 所有新增/修改的 .cs 文件已转换为 UTF-8 with BOM 编码

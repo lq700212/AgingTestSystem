@@ -135,6 +135,13 @@ namespace BarometerWinform.Views
         private const int RowSelectButtonColumnWidth = 80;
         /// <summary>气压表面板的行高（像素），包含面板高度和上下边距</summary>
         private const int PanelRowHeight = 220;
+        /// <summary>
+        /// 气压表面板的列宽（像素）= 面板设计宽度210 + 左右边距4 + 边框余量6
+        /// 【说明】使用绝对列宽而非百分比，确保每个单元格足够宽容纳面板内容，
+        ///        避免窗口缩小时面板被压缩导致内容显示不全。
+        ///        窗口宽度不够时由 TableLayoutPanel.AutoScroll 显示水平滚动条。
+        /// </summary>
+        private const int PanelColumnWidth = 220;
         /// <summary>日志文本框的最大字符数，超过时自动裁剪旧内容（修复 M8）</summary>
         private const int MaxLogTextLength = 100_000;
         /// <summary>日志裁剪后保留的字符数（保留最近一半内容）</summary>
@@ -148,6 +155,9 @@ namespace BarometerWinform.Views
             // 1. 先初始化界面控件（Designer.cs 中的 InitializeComponent）
             //    必须最先调用，否则其他代码访问控件会报空引用
             InitializeComponent();
+
+            // 1.5 自适应调整右侧操作面板宽度（不写死, 根据内容自动计算）
+            AdjustRightPanelWidth();
 
             // 2. 加载配置（从 App.config 读取设备数量、采集间隔等）
             _config = LoadConfig();
@@ -172,6 +182,46 @@ namespace BarometerWinform.Views
 
             // 注意：下拉菜单不再需要预先初始化
             // 改为在按钮点击事件中动态创建弹出窗体（见 ShowDropdownPopup 方法）
+        }
+
+        /// <summary>
+        /// 自适应调整右侧操作面板（tableLayoutPanelRight）的宽度
+        ///
+        /// 【原理】
+        /// 1. 临时将 tableLayoutPanelRight 切换为 AutoSize + Dock=None，
+        ///    让 WinForms 自动计算包裹所有内容所需的最小宽度
+        /// 2. 读取自动计算的宽度值
+        /// 3. 恢复 Dock=Fill，让面板重新填满 Panel2
+        /// 4. 设置 SplitterDistance 使 Panel2 宽度 = 内容最小宽度
+        /// 5. FixedPanel=Panel2（已在 Designer 中设置）确保窗口缩放时右侧宽度不变
+        ///
+        /// 【优点】
+        /// - 不写死宽度数字，内容变化时自动适应
+        /// - 最终效果为 Dock=Fill，无空白区域
+        /// </summary>
+        private void AdjustRightPanelWidth()
+        {
+            // 1. 临时切换为 AutoSize 模式，让 TableLayoutPanel 自动计算内容所需宽度
+            tableLayoutPanelRight.Dock = DockStyle.None;
+            tableLayoutPanelRight.AutoSize = true;
+            tableLayoutPanelRight.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+
+            // 2. 触发布局计算，让 AutoSize 立即生效
+            tableLayoutPanelRight.PerformLayout();
+
+            // 3. 读取自动计算的宽度（刚好包裹内容的最小宽度）
+            int contentWidth = tableLayoutPanelRight.Width;
+
+            // 4. 恢复 Dock=Fill，让 TableLayoutPanel 重新填满 Panel2
+            tableLayoutPanelRight.AutoSize = false;
+            tableLayoutPanelRight.AutoSizeMode = AutoSizeMode.GrowOnly;
+            tableLayoutPanelRight.Dock = DockStyle.Fill;
+
+            // 5. 设置 SplitterDistance，让 Panel2 宽度 = 内容最小宽度
+            //    Panel2 宽度 = splitContainerMain 总宽 - SplitterDistance - 分隔条宽度
+            //    => SplitterDistance = 总宽 - 内容宽度 - 分隔条宽度
+            splitContainerMain.SplitterDistance =
+                splitContainerMain.Width - contentWidth - splitContainerMain.SplitterWidth;
         }
 
         /// <summary>
@@ -430,10 +480,13 @@ namespace BarometerWinform.Views
             tableLayoutPanel.ColumnCount = cols + 1;
             tableLayoutPanel.RowCount = rows;
 
-            // 设置前 cols 列宽（百分比平均分配剩余空间）
+            // 设置前 cols 列宽（绝对值，确保每个单元格足够宽容纳面板内容）
+            // 【修复】之前用百分比列宽，窗口缩小时单元格会压缩到~107px，
+            //        远小于面板设计宽度210px，导致面板重叠、内容被裁剪。
+            //        改用绝对列宽220px，确保单元格始终足够宽。
             for (int i = 0; i < cols; i++)
             {
-                tableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / cols));
+                tableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, PanelColumnWidth));
             }
             // 最后一列：行全选按钮列，使用绝对宽度
             tableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, RowSelectButtonColumnWidth));
@@ -450,8 +503,11 @@ namespace BarometerWinform.Views
             {
                 int deviceId = i + 1;  // 设备编号从1开始
 
-                // 创建面板实例（带设备编号）
-                var panel = new BarometerPanelView(deviceId);
+                // 创建面板实例（带设备编号和气压表总数, 确保载台上电Y地址计算正确）
+                var panel = new BarometerPanelView(deviceId, _config.TotalBarometers);
+
+                // 【修复】设置 Dock=Fill 让面板填满单元格，避免与相邻面板重叠
+                panel.Dock = DockStyle.Fill;
 
                 // 设置面板边距和内边距，避免面板挤在一起
                 panel.Margin = new Padding(2);

@@ -295,8 +295,12 @@ namespace BarometerWinform.Views
             this.btnAbout.Click += new System.EventHandler(this.btnAbout_Click);
             //
             // splitContainerMain - 中间分割容器（左:气压表区域 右:操作面板）
+            // 【调整】FixedPanel=Panel2 让右侧面板宽度固定，窗口放大时只有左侧变宽
+            //   SplitterDistance 的精确值在运行时由 MainForm.AdjustRightPanelWidth() 自适应计算,
+            //   不写死, 内容变化时自动调整(临时启用 AutoSize 测量内容最小宽度)
             //
             this.splitContainerMain.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.splitContainerMain.FixedPanel = System.Windows.Forms.FixedPanel.Panel2;
             this.splitContainerMain.Location = new System.Drawing.Point(3, 73);
             this.splitContainerMain.Name = "splitContainerMain";
             //
@@ -307,7 +311,7 @@ namespace BarometerWinform.Views
             //
             this.splitContainerMain.Panel2.Controls.Add(this.tableLayoutPanelRight);
             this.splitContainerMain.Size = new System.Drawing.Size(1394, 799);
-            this.splitContainerMain.SplitterDistance = 1050;
+            this.splitContainerMain.SplitterDistance = 1064;
             this.splitContainerMain.TabIndex = 2;
             //
             // tableLayoutPanelRight - 右侧布局容器（4行：状态/监视/操作/日志）
@@ -326,7 +330,7 @@ namespace BarometerWinform.Views
             this.tableLayoutPanelRight.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 120F));
             this.tableLayoutPanelRight.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 200F));
             this.tableLayoutPanelRight.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelRight.Size = new System.Drawing.Size(340, 799);
+            this.tableLayoutPanelRight.Size = new System.Drawing.Size(326, 799);
             this.tableLayoutPanelRight.TabIndex = 0;
             //
             // groupBoxStatus - 运行状态分组

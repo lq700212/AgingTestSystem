@@ -2,6 +2,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 using BarometerWinform.Models;
+using BarometerWinform.Services;
 
 namespace BarometerWinform.Views
 {
@@ -15,13 +16,12 @@ namespace BarometerWinform.Views
     /// 界面控件的创建和布局代码在 <see cref="BarometerPanelView.Designer.cs"/> 文件中，
     /// 由 Visual Studio 设计器自动维护，请勿手动修改 Designer.cs 中的控件布局。
     ///
-    /// 面板布局说明：
+    /// 面板布局说明（V1.09 更新，依据显耀IO表）:
     /// ┌──────────────────────────────┐
     /// │ NO.1                    空闲 │  ← 设备编号 + 状态标签
     /// │ ┌──────┐ ┌──────┐ ┌──────┐ │
-    /// │ │ L1_1 │ │ OP1_1│ │ OP1_3│ │  ← IO状态显示（绿=导通，灰=断开）
-    /// │ ├──────┤ ├──────┤ ├──────┤ │
-    /// │ │INT1_1│ │ L1_2 │ │ OP1_4│ │
+    /// │ │负压表│ │真空阀│ │载台电│ │  ← IO状态显示（绿=导通，灰=断开）
+    /// │ │ X000 │ │ Y000 │ │ Y110 │ │  ← 第2行显示物理地址(三菱八进制)
     /// │ └──────┘ └──────┘ └──────┘ │
     /// │ 真空压力: [_________] Pa     │  ← 压力值显示
     /// │ SN:      [_________]        │  ← 序列号
@@ -30,6 +30,11 @@ namespace BarometerWinform.Views
     /// │ 延时到达: [__:__:__] │ Set│ │
     /// │                      └────┘ │
     /// └──────────────────────────────┘
+    ///
+    /// 【V1.09 IO显示说明】
+    /// - boxInput1: 真空负压表输入(NPN, X地址), 绿=导通(传感器拉低电平)
+    /// - boxOutput1: 真空电磁阀输出(PNP, Y地址), 绿=导通(输出+24V驱动继电器)
+    /// - boxOutput2: 载台上电输出(PNP, Y地址), 绿=导通(输出+24V驱动继电器)
     /// </summary>
     /// <remarks>
     /// 【修复 H10】设计器报错"无法设计基类 System.Void"
@@ -115,13 +120,60 @@ namespace BarometerWinform.Views
         /// <summary>
         /// 带设备编号的构造函数（运行时使用）
         /// 通过 : this() 调用无参构造函数完成控件初始化，再设置设备编号
+        /// 【V1.09 新增】根据设备编号设置3个IO状态框的文本(功能名 + 物理地址)
+        ///
+        /// 【注意】此重载使用默认 totalBarometers=72。
+        /// 推荐使用 BarometerPanelView(int deviceId, int totalBarometers) 重载,
+        /// 以确保配置变更时载台上电物理地址正确。
         /// </summary>
         /// <param name="deviceId">设备编号（从1开始）</param>
-        public BarometerPanelView(int deviceId) : this()
+        public BarometerPanelView(int deviceId) : this(deviceId, 72)
+        {
+        }
+
+        /// <summary>
+        /// 带设备编号和气压表总数的构造函数（运行时推荐使用）
+        /// 通过 : this() 调用无参构造函数完成控件初始化，再设置设备编号和IO标签
+        /// 【修复】原 UpdateIoBoxLabels 硬编码 72, 改为通过参数传入, 配置变更时地址正确
+        /// </summary>
+        /// <param name="deviceId">设备编号（从1开始）</param>
+        /// <param name="totalBarometers">气压表总数（用于计算载台上电Y地址偏移）</param>
+        public BarometerPanelView(int deviceId, int totalBarometers) : this()
         {
             DeviceId = deviceId;
             // 根据设备编号更新顶部显示
             lblDeviceId.Text = $"NO.{deviceId}";
+
+            // 【V1.09 新增】设置IO状态框文本: 第1行功能名, 第2行物理地址(三菱八进制)
+            // 通过 IoMapBuilder 获取该设备的IO点映射(1输入 + 2输出)
+            UpdateIoBoxLabels(deviceId, totalBarometers);
+        }
+
+        /// <summary>
+        /// 更新3个IO状态框的标签文本（功能名 + 物理地址）
+        /// 【V1.09 新增】依据显耀IO表，通过 IoMapBuilder 获取该设备对应的IO点定义:
+        /// - boxInput1:  真空负压表输入(NPN, X地址)
+        /// - boxOutput1:  真空电磁阀输出(PNP, Y地址)
+        /// - boxOutput2:  载台上电输出(PNP, Y地址)
+        ///
+        /// 文本格式为2行: 第1行功能简称, 第2行物理地址(如 "负压表\r\nX000")
+        /// </summary>
+        /// <param name="deviceId">设备编号(1 ~ TotalBarometers)</param>
+        /// <param name="totalBarometers">气压表总数(用于载台上电Y地址偏移计算)</param>
+        private void UpdateIoBoxLabels(int deviceId, int totalBarometers)
+        {
+            // 通过 IoMapBuilder 获取该设备的IO点映射
+            // totalBarometers 影响载台上电地址: Y + octal(totalBarometers + deviceId - 1)
+            DeviceIoMapping mapping = IoMapBuilder.GetDeviceMapping(deviceId, totalBarometers);
+
+            // 真空负压表输入框: 显示 "负压表" + X地址(如 X000)
+            boxInput1.Text = $"负压表\r\n{mapping.VacuumPressureInput.PhysicalAddress}";
+
+            // 真空电磁阀输出框: 显示 "真空阀" + Y地址(如 Y000)
+            boxOutput1.Text = $"真空阀\r\n{mapping.VacuumValveOutput.PhysicalAddress}";
+
+            // 载台上电输出框: 显示 "载台电" + Y地址(如 Y110)
+            boxOutput2.Text = $"载台电\r\n{mapping.CarrierPowerOutput.PhysicalAddress}";
         }
 
         /// <summary>
@@ -148,7 +200,7 @@ namespace BarometerWinform.Views
             // 更新配方名称
             txtRecipe.Text = data.RecipeName;
 
-            // 更新IO状态显示（输入2个、输出4个）
+            // 更新IO状态显示（输入1个、输出2个）
             UpdateIoStatus(data);
 
             // 更新延时时间显示（格式：时:分:秒）
@@ -167,24 +219,25 @@ namespace BarometerWinform.Views
         /// 更新IO状态显示
         /// 根据输入输出状态设置相应控件的背景色
         /// 状态为 true 时显示绿色（导通），false 时显示灰色（断开）
+        ///
+        /// 【V1.09 更新】依据显耀IO表，每个气压表对应:
+        /// - 1个输入(真空负压表, NPN): boxInput1
+        /// - 2个输出(真空电磁阀 + 载台上电, PNP): boxOutput1、boxOutput2
         /// </summary>
         /// <param name="data">气压表数据</param>
         private void UpdateIoStatus(BarometerData data)
         {
-            // 更新输入状态（共2个输入：boxInput1、boxInput2）
-            if (data.InputStatus != null && data.InputStatus.Length >= 2)
+            // 更新输入状态（1个输入: 真空负压表）
+            if (data.InputStatus != null && data.InputStatus.Length >= 1)
             {
                 UpdateIoBoxColor(boxInput1, data.InputStatus[0]);
-                UpdateIoBoxColor(boxInput2, data.InputStatus[1]);
             }
 
-            // 更新输出状态（共4个输出：boxOutput1 ~ boxOutput4）
-            if (data.OutputStatus != null && data.OutputStatus.Length >= 4)
+            // 更新输出状态（2个输出: 真空电磁阀 + 载台上电）
+            if (data.OutputStatus != null && data.OutputStatus.Length >= 2)
             {
                 UpdateIoBoxColor(boxOutput1, data.OutputStatus[0]);
                 UpdateIoBoxColor(boxOutput2, data.OutputStatus[1]);
-                UpdateIoBoxColor(boxOutput3, data.OutputStatus[2]);
-                UpdateIoBoxColor(boxOutput4, data.OutputStatus[3]);
             }
         }
 
