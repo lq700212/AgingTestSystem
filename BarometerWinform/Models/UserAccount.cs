@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace BarometerWinform.Models
@@ -35,6 +35,14 @@ namespace BarometerWinform.Models
             Username = username;
             Password = password;
             Role = role;
+        }
+
+        /// <summary>
+        /// 无参构造函数（用于 JSON 序列化/反序列化）
+        /// Newtonsoft.Json 在反序列化时需要无参构造函数
+        /// </summary>
+        public UserAccount()
+        {
         }
     }
 

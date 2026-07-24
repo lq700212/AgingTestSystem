@@ -208,14 +208,28 @@
 | :--- | :--- | :--- | :--- |
 | `CommunicationSettingForm` | PLC通讯设置 | IP/端口/协议/串口参数配置 | 测试连接、参数持久化 |
 | `CommonParameterForm` | 公共参数设置 | 采集间隔配置 | 报警阈值等参数需现场确认 |
-| `RecipeManagerForm` | 配方管理 | 配方列表显示 | 新增/编辑/删除/持久化 |
+| `RecipeManagerForm` | 配方管理 | 左右分栏布局：左侧配方列表（序号+配方名称），右侧配方设置（配方名称、延时时间、启动时间、极限温度），底部添加/更新/删除按钮和保存设置按钮 | 新增/编辑/删除/持久化待实现 |
 | `HistoryRecordForm` | 历史记录查询 | 日期范围查询、Mock日志数据（7天10种事件） | 实际查询逻辑、日志存储路径、导出 |
 | `ScanSimulationForm` | 扫码模拟 | 条码输入并触发事件 | 真实扫码枪接入 |
 | `LoginForm` | 用户登录 | 用户名/密码输入、登录验证、Enter/Esc 键支持 | 密码哈希存储（当前明文） |
-| `UserManagementForm` | 用户账号管理（仅管理员） | 修改操作员/技术员的用户名和密码 | 用户持久化、新增/删除账号 |
+| `UserManagementForm` | 用户账号管理（仅管理员） | 修改操作员/技术员的用户名和密码，用户数据持久化到 Users.json 文件 | 新增/删除账号 |
+| `BatchRecipeForm` | 批量设置配方 | 配方名称、延时时间1/2（时:分:秒）、启动时间（时:分:秒）、极限温度输入，加入队列功能，配方队列管理 | 配方批量应用到选中面板待实现 |
+| `InputLotForm` | 录入批号 | 批号输入框、红色背景注释提示、确定/取消按钮、Enter键支持、输入校验，确定后弹出ID绑定界面 | 批号持久化、关联生产记录待实现 |
+| `IdBindingForm` | ID绑定 | 批号显示（只读）、工位编号输入框、SN输入框、红色背景注释说明、产品列表显示（带滚动条）、保存按钮、重复工位覆盖确认、Enter键支持、Excel文档生成（命名规则：批号_日期_时间.xlsx） | ID绑定数据持久化待实现 |
 
 **ScanSimulationForm 事件**:
 - `OnScanCompleted` 事件：扫码完成时触发，主窗体订阅此事件处理扫码结果。
+
+**BatchRecipeForm 事件**:
+- `OnRecipeAdded` 事件：配方加入队列时触发，主窗体订阅此事件记录日志。
+
+**InputLotForm 事件**:
+- `OnLotInputCompleted` 事件：批号录入完成（ID绑定保存成功）时触发，主窗体订阅此事件获取录入的批号。
+
+**IdBindingForm 事件**:
+- `OnBindingCompleted` 事件：ID绑定保存时触发，参数为 `Tuple<string, List<ProductBinding>>`（批号 + 产品绑定列表）。
+- `ProductBinding` 类：包含 `StationNo`（工位编号）、`Sn`（产品SN）、`RecipeName`（配方名称）、`DelayTime`（延时时间）、`StartTime`（启动时间）属性。
+- Excel文档生成：保存时自动生成Excel文档，命名规则为 `批号_日期_时间.xlsx`，包含批号、工位号、SN、配方名称、延时时间、启动时间列。
 
 ---
 
@@ -440,9 +454,9 @@ public interface IIoController
 
 #### 3.5.1 UserManager（用户管理服务）
 
-**职责**: 维护用户账号、提供登录验证、密码修改、权限校验功能。
+**职责**: 维护用户账号、提供登录验证、密码修改、权限校验功能，用户数据持久化到 JSON 文件。
 
-**默认账号**（程序启动时初始化，内存中维护）：
+**默认账号**（程序首次启动时初始化，数据持久化到 Users.json）：
 
 | 角色 | 用户名 | 密码 |
 | :--- | :--- | :--- |
@@ -450,14 +464,33 @@ public interface IIoController
 | 技术员 | technician | 123456 |
 | 管理员 | admin | 123456 |
 
+**数据持久化方案**：使用 JSON 文件（Users.json）存储用户数据
+
+**选择 JSON 而非 XML 的原因**：
+
+| 对比项 | JSON | XML |
+| :--- | :--- | :--- |
+| 文件体积 | 轻量级，键值对结构简洁，无冗余标签 | 冗余标签多，文件体积大 |
+| 可读性 | 直观的键值对格式，易于人工查看和修改 | 标签嵌套复杂，阅读体验差 |
+| 序列化 | Newtonsoft.Json API 简单，一行代码即可完成 | 需要处理命名空间、声明等，相对复杂 |
+| 学习成本 | 低，现代开发人员普遍熟悉 | 高，语法繁琐 |
+| 主流趋势 | 当前数据交换的标准格式 | 逐渐被 JSON 取代 |
+
+**数据存储说明**：
+- 用户数据存储在程序运行目录下的 `Users.json` 文件中
+- 程序启动时自动加载用户数据
+- 用户数据变更（修改用户名/密码）时自动保存到文件
+- 文件不存在时使用默认账号并自动创建文件
+- 文件损坏或格式错误时使用默认账号并重建文件
+
 **关键方法**:
 
 | 方法 | 功能 | 权限要求 |
 | :--- | :--- | :--- |
 | `Login(targetRole, username, password)` | 校验账号密码，并验证账号是否属于目标角色 | 任意 |
 | `Logout()` | 退出登录，恢复未登录状态 | 任意 |
-| `UpdateUsername(targetRole, newUsername)` | 修改指定角色的用户名 | 仅管理员 |
-| `UpdatePassword(targetRole, newPassword)` | 修改指定角色的密码 | 仅管理员 |
+| `UpdateUsername(targetRole, newUsername)` | 修改指定角色的用户名，修改后自动保存到文件 | 仅管理员 |
+| `UpdatePassword(targetRole, newPassword)` | 修改指定角色的密码，修改后自动保存到文件 | 仅管理员 |
 | `GetAccount(role)` | 获取指定角色的账号信息（用于用户管理窗体显示） | 任意 |
 | `HasPermission(requiredRole)` | 判断当前用户是否拥有指定权限 | 任意 |
 
@@ -467,27 +500,27 @@ public interface IIoController
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ 用户点击"用户权限"按钮                                            │
+│ 用户点击"用户权限"按钮                                                │
 │           ↓                                                       │
-│ 弹出下拉菜单：操作员 / 技术员 / 管理员 / 用户管理*               │
+│ 弹出下拉菜单：操作员 / 技术员 / 管理员 / 用户管理*                        │
 │           ↓                                                       │
-│ 用户选择角色（例如"管理员"）                                      │
+│ 用户选择角色（例如"管理员"）                                           │
 │           ↓                                                       │
-│ 弹出 LoginForm 登录窗体                                           │
+│ 弹出 LoginForm 登录窗体                                             │
 │ ┌──────────────────────────────┐                                  │
-│ │  切换为 管理员 权限          │                                  │
-│ │  用户名: [_______________]   │                                  │
-│ │  密  码: [_______________]   │                                  │
-│ │       [确认]    [取消]       │                                  │
+│ │  切换为 管理员 权限             │                                  │
+│ │  用户名: [_______________]    │                                  │
+│ │  密  码: [_______________]    │                                  │
+│ │       [确认]    [取消]         │                                  │
 │ └──────────────────────────────┘                                  │
 │           ↓                                                       │
-│ 用户输入用户名密码并点击"确认"                                    │
+│ 用户输入用户名密码并点击"确认"                                         │
 │           ↓                                                       │
-│ UserManager.Login() 校验账号密码                                  │
-│   ├─ 成功 → 更新 lblPermission，启用/禁用相关按钮，写入日志       │
-│   └─ 失败 → 弹出错误提示窗口，用户可重新输入                     │
+│ UserManager.Login() 校验账号密码                                    │
+│   ├─ 成功 → 更新 lblPermission，启用/禁用相关按钮，写入日志             │
+│   └─ 失败 → 弹出错误提示窗口，用户可重新输入                             │
 │                                                                   │
-│ *用户管理选项仅管理员可见，点击后弹出 UserManagementForm          │
+│ *用户管理选项仅管理员可见，点击后弹出 UserManagementForm                │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -630,8 +663,9 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 | 面板批量操作 | 预留 | MainForm.cs / BarometerPanelView | IsSelected 属性已实现，批量设置配方/启动等操作待业务流程明确后实现 |
 | 温控操作 | 预留 | MainForm.cs | 操作面板按钮已创建，逻辑待实现 |
 | 开启真空 | 预留 | MainForm.cs | 操作面板按钮已创建，逻辑待实现 |
-| 批量设置配方 | 预留 | MainForm.cs | 操作面板按钮已创建，逻辑待实现 |
-| 录入批号 | 预留 | MainForm.cs | 操作面板按钮已创建，逻辑待实现 |
+| 批量设置配方 | 已实现 | MainForm.cs / BatchRecipeForm.cs | 批量设置配方窗口已实现，支持配方名称、延时时间1/2、启动时间、极限温度输入，以及配方队列管理；配方批量应用到选中面板待实现 |
+| 录入批号 | 已实现 | MainForm.cs / InputLotForm.cs | 录入批号窗口已实现，支持手动输入批号、输入校验、Enter键确认；确定后弹出ID绑定界面；批号持久化待实现 |
+| ID绑定 | 已实现 | InputLotForm.cs / IdBindingForm.cs | ID绑定窗口已实现，支持工位编号和SN输入、产品列表显示、重复工位覆盖确认、保存功能；保存时自动生成Excel文档（命名规则：批号_日期_时间.xlsx），包含批号、工位号、SN、配方名称、延时时间、启动时间列；ID绑定数据持久化待实现 |
 | 启动运行 | 预留 | MainForm.cs | 操作面板按钮已创建，逻辑待实现 |
 | 日志持久化 | 预留 | MainForm.cs | 当前仅显示在界面，未写入文件 |
 | 配置持久化 | 预留 | Dialogs/*Form.cs | 各设置窗体的配置仅内存生效，未保存到文件 |
@@ -696,7 +730,13 @@ BarometerWinform/
 │       ├── LoginForm.cs                           # 【新增】用户登录窗体
 │       ├── LoginForm.Designer.cs
 │       ├── UserManagementForm.cs                   # 【新增】用户账号管理窗体（仅管理员）
-│       └── UserManagementForm.Designer.cs
+│       ├── UserManagementForm.Designer.cs
+│       ├── BatchRecipeForm.cs                      # 【新增】批量设置配方窗体
+│       ├── BatchRecipeForm.Designer.cs
+│       ├── InputLotForm.cs                         # 【新增】录入批号窗体
+│       ├── InputLotForm.Designer.cs
+│       ├── IdBindingForm.cs                        # 【新增】ID绑定窗体（批号绑定工位和SN）
+│       └── IdBindingForm.Designer.cs
 └── ARCHITECTURE.md                         # 架构文档（本文档）
 ```
 
@@ -855,8 +895,10 @@ Get-ChildItem -Path $projectRoot -Recurse -Filter "*.cs" -File |
 
 ### 8.3 版本更新
 
-- 当前版本: V1.09
+- 当前版本: V1.13
 - 更新日志:
+  - V1.13 (2026-07-24): 用户数据持久化到 JSON 文件（Users.json）；新增 LoadUsersFromFile/SaveUsersToFile 方法；程序启动时自动加载用户数据，修改用户名/密码后自动保存；UserAccount 新增无参构造函数用于 JSON 反序列化；添加 Newtonsoft.Json NuGet 包引用；文档更新持久化方案说明
+  - V1.12 (2026-07-24): 配方管理窗口样式调整为左右分栏布局；左侧DataGridView只显示序号和配方名称两列；右侧显示选中配方的详细信息（配方名称、延时时间、启动时间、极限温度）；底部添加/更新/删除按钮和保存设置按钮；添加表格点击事件更新右侧显示
   - V1.09 (2026-07-22): 接入客户"显耀IO表"IO配置；新增 IoPointDefinition 模型和 IoMapBuilder 服务（内部编号↔三菱PLC八进制物理地址映射）；新增 IoFunction/ElectricalType 枚举（NPN输入/PNP输出电气特性）；BarometerData 调整为1输入+2输出（真空负压表/真空电磁阀/载台上电）；BarometerPanelView IO状态框改为3个并显示功能名+物理地址；IIoController/MockIoController/DeviceConfig 注释更新实际IO映射
   - V1.08 (2026-07-21): 新增用户权限管理系统（登录窗体 LoginForm + 用户管理窗体 UserManagementForm + UserManager 服务）；主窗体支持自适应屏幕分辨率，缩小时显示水平和垂直滚动条（rootScrollPanel + Anchor 布局）；通讯设置和参数设置按钮需要技术员或管理员权限才能操作；管理员可修改操作员和技术员的用户名密码
   - V1.07 (2026-07-21): 修复设计器无法预览问题（.cs 文件编码）和运行时 TargetParameterCountException 异常，详见第 11 章"V1.07 修复记录"

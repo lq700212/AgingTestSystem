@@ -1110,21 +1110,81 @@ namespace BarometerWinform.Views
         }
 
         /// <summary>
-        /// 批量设置配方按钮点击（预留功能）
+        /// 批量设置配方按钮点击
+        /// 弹出批量设置配方窗口，允许用户配置配方参数并加入队列
         /// </summary>
         private void btnBatchRecipe_Click(object sender, EventArgs e)
         {
-            MessageBox.Show("批量设置配方功能开发中...", "提示",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            using (var form = new BatchRecipeForm())
+            {
+                // 订阅配方加入事件，记录日志
+                form.OnRecipeAdded += (sender2, recipe) =>
+                {
+                    WriteLog($"[批量设置配方] 配方 \"{recipe.Name}\" 已加入队列");
+                };
+
+                // 显示窗口（模态对话框，阻塞主窗口直到关闭）
+                DialogResult result = form.ShowDialog(this);
+
+                // 用户关闭窗口后，获取配方队列
+                if (result == DialogResult.OK)
+                {
+                    var recipeQueue = form.GetRecipeQueue();
+                    if (recipeQueue.Count > 0)
+                    {
+                        // 【预留】实际项目中应将配方队列应用到选中的气压表面板
+                        // 当前简化为提示信息，显示队列中的配方数量
+                        WriteLog($"[批量设置配方] 窗口关闭，队列中共有 {recipeQueue.Count} 个配方");
+                        MessageBox.Show(
+                            $"批量设置配方窗口已关闭！\n\n" +
+                            $"配方队列中共有 {recipeQueue.Count} 个配方待处理。\n\n" +
+                            $"【预留功能】\n" +
+                            $"后续实现：将队列中的配方批量应用到所有选中的气压表面板",
+                            "批量设置配方",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information);
+                    }
+                    else
+                    {
+                        WriteLog("[批量设置配方] 窗口关闭，配方队列为空");
+                    }
+                }
+            }
         }
 
         /// <summary>
-        /// 录入批号按钮点击（预留功能）
+        /// 录入批号按钮点击事件
+        /// 弹出录入批号窗口，允许用户手动输入产品批号
         /// </summary>
         private void btnInputLot_Click(object sender, EventArgs e)
         {
-            MessageBox.Show("录入批号功能开发中...", "提示",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            using (var form = new InputLotForm())
+            {
+                // 订阅批号录入完成事件，记录日志
+                form.OnLotInputCompleted += (sender2, lotNumber) =>
+                {
+                    WriteLog($"[录入批号] 用户录入批号: {lotNumber}");
+                };
+
+                // 显示窗口（模态对话框，阻塞主窗口直到关闭）
+                DialogResult result = form.ShowDialog(this);
+
+                // 用户关闭窗口后，处理录入结果
+                if (result == DialogResult.OK)
+                {
+                    string lotNumber = form.GetLotNumber();
+                    WriteLog($"[录入批号] 批号录入成功: {lotNumber}");
+                    MessageBox.Show(
+                        $"批号录入成功！\n\n录入的批号: {lotNumber}\n\n【预留】批号将用于标识当前生产批次，便于后续追溯和数据分析。",
+                        "录入批号",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                }
+                else
+                {
+                    WriteLog("[录入批号] 用户取消了批号录入");
+                }
+            }
         }
 
         /// <summary>
