@@ -1,6 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.IO;
 using BarometerWinform.Models;
+using Newtonsoft.Json;
 
 namespace BarometerWinform.Services
 {
@@ -12,6 +14,7 @@ namespace BarometerWinform.Services
     /// 2. 提供登录验证功能（校验用户名和密码）
     /// 3. 提供密码修改功能（仅管理员可调用）
     /// 4. 提供用户名修改功能（仅管理员可调用）
+    /// 5. 用户数据持久化到 JSON 文件（程序重启后数据不丢失）
     ///
     /// 【默认账号】
     /// - 管理员: admin / 123456
@@ -19,11 +22,27 @@ namespace BarometerWinform.Services
     /// - 操作员: operator / 123456
     ///
     /// 【数据存储说明】
-    /// 当前用户数据仅在内存中维护，程序重启后会恢复默认值。
-    /// 实际项目中应持久化到文件（如 JSON/XML）或数据库。
+    /// 用户数据持久化到 JSON 文件：Users.json（程序运行目录下）
+    /// - 程序启动时自动加载用户数据
+    /// - 用户数据变更时自动保存到文件
+    /// - 文件不存在时使用默认账号并自动创建文件
+    /// - 文件损坏或格式错误时使用默认账号并重建文件
+    ///
+    /// 【JSON 持久化方案选择】
+    /// 选择 JSON 而非 XML 的原因：
+    /// 1. JSON 文件体积更小，键值对结构简洁，无冗余标签
+    /// 2. JSON 更易读，直观的键值格式，便于人工查看和修改
+    /// 3. Newtonsoft.Json API 简单，一行代码即可完成序列化/反序列化
+    /// 4. JSON 是当前主流数据交换格式，学习成本低
+    /// 5. XML 需要处理命名空间、声明等，相对复杂繁琐
     /// </summary>
     public class UserManager
     {
+        /// <summary>
+        /// 用户数据文件路径（程序运行目录下的 Users.json）
+        /// </summary>
+        private const string UserDataFilePath = "Users.json";
+
         /// <summary>
         /// 用户列表（按角色索引方便查找）
         /// Key: 用户角色，Value: 该角色的用户账号
@@ -36,21 +55,153 @@ namespace BarometerWinform.Services
         public UserAccount CurrentUser { get; private set; }
 
         /// <summary>
-        /// 构造函数 - 初始化默认用户账号
+        /// 构造函数 - 初始化用户账号
+        /// 优先从 JSON 文件加载，文件不存在则使用默认账号
         /// </summary>
         public UserManager()
         {
-            // 初始化默认账号
-            // 【注意】实际项目中应从配置文件或数据库加载，此处使用硬编码默认值
-            _users = new Dictionary<UserRole, UserAccount>
+            _users = new Dictionary<UserRole, UserAccount>();
+
+            // 尝试从文件加载用户数据
+            bool loadSuccess = LoadUsersFromFile();
+
+            if (!loadSuccess)
             {
-                { UserRole.Operator, new UserAccount("operator", "123456", UserRole.Operator) },
-                { UserRole.Technician, new UserAccount("technician", "123456", UserRole.Technician) },
-                { UserRole.Administrator, new UserAccount("admin", "123456", UserRole.Administrator) }
-            };
+                // 加载失败，使用默认账号
+                InitializeDefaultUsers();
+
+                // 保存默认账号到文件
+                SaveUsersToFile();
+            }
 
             // 默认状态：未登录（CurrentPermission 显示为"操作员"对应未登录态）
             CurrentUser = null;
+        }
+
+        /// <summary>
+        /// 初始化默认用户账号
+        /// 当 JSON 文件不存在或加载失败时调用
+        /// </summary>
+        private void InitializeDefaultUsers()
+        {
+            _users.Clear();
+            _users.Add(UserRole.Operator, new UserAccount("operator", "123456", UserRole.Operator));
+            _users.Add(UserRole.Technician, new UserAccount("technician", "123456", UserRole.Technician));
+            _users.Add(UserRole.Administrator, new UserAccount("admin", "123456", UserRole.Administrator));
+        }
+
+        /// <summary>
+        /// 从 JSON 文件加载用户数据
+        /// </summary>
+        /// <returns>加载成功返回 true，失败返回 false</returns>
+        private bool LoadUsersFromFile()
+        {
+            try
+            {
+                // 检查文件是否存在
+                if (!File.Exists(UserDataFilePath))
+                {
+                    System.Diagnostics.Debug.WriteLine("[用户管理] 用户数据文件不存在，将使用默认账号");
+                    return false;
+                }
+
+                // 读取文件内容
+                string jsonContent = File.ReadAllText(UserDataFilePath);
+
+                // 反序列化 JSON
+                List<UserAccount> userList = JsonConvert.DeserializeObject<List<UserAccount>>(jsonContent);
+
+                if (userList == null || userList.Count == 0)
+                {
+                    System.Diagnostics.Debug.WriteLine("[用户管理] 用户数据文件为空，将使用默认账号");
+                    return false;
+                }
+
+                // 将用户列表转换为字典（按角色索引）
+                _users.Clear();
+                foreach (var user in userList)
+                {
+                    _users[user.Role] = user;
+                }
+
+                // 确保三个角色都有账号（防止文件中缺少某些角色）
+                EnsureAllRolesExist();
+
+                System.Diagnostics.Debug.WriteLine("[用户管理] 用户数据加载成功，共 {0} 个用户", _users.Count);
+                return true;
+            }
+            catch (JsonException ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[用户管理] JSON 解析失败，将使用默认账号: {0}", ex.Message);
+                return false;
+            }
+            catch (IOException ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[用户管理] 读取用户数据文件失败，将使用默认账号: {0}", ex.Message);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[用户管理] 加载用户数据异常，将使用默认账号: {0}", ex.Message);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 确保三个角色都有账号
+        /// 如果文件中缺少某个角色的账号，使用默认值补充
+        /// </summary>
+        private void EnsureAllRolesExist()
+        {
+            if (!_users.ContainsKey(UserRole.Operator))
+            {
+                _users.Add(UserRole.Operator, new UserAccount("operator", "123456", UserRole.Operator));
+            }
+            if (!_users.ContainsKey(UserRole.Technician))
+            {
+                _users.Add(UserRole.Technician, new UserAccount("technician", "123456", UserRole.Technician));
+            }
+            if (!_users.ContainsKey(UserRole.Administrator))
+            {
+                _users.Add(UserRole.Administrator, new UserAccount("admin", "123456", UserRole.Administrator));
+            }
+        }
+
+        /// <summary>
+        /// 将用户数据保存到 JSON 文件
+        /// </summary>
+        /// <returns>保存成功返回 true，失败返回 false</returns>
+        private bool SaveUsersToFile()
+        {
+            try
+            {
+                // 将字典转换为列表
+                List<UserAccount> userList = new List<UserAccount>(_users.Values);
+
+                // 序列化 JSON（格式化输出，方便阅读）
+                string jsonContent = JsonConvert.SerializeObject(userList, Formatting.Indented);
+
+                // 写入文件
+                File.WriteAllText(UserDataFilePath, jsonContent);
+
+                System.Diagnostics.Debug.WriteLine("[用户管理] 用户数据保存成功");
+                return true;
+            }
+            catch (JsonException ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[用户管理] JSON 序列化失败: {0}", ex.Message);
+                return false;
+            }
+            catch (IOException ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[用户管理] 写入用户数据文件失败: {0}", ex.Message);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[用户管理] 保存用户数据异常: {0}", ex.Message);
+                return false;
+            }
         }
 
         /// <summary>
@@ -157,6 +308,10 @@ namespace BarometerWinform.Services
             }
 
             user.Username = trimmed;
+
+            // 修改成功后保存到文件
+            SaveUsersToFile();
+
             return (true, "用户名修改成功");
         }
 
@@ -192,6 +347,10 @@ namespace BarometerWinform.Services
             }
 
             user.Password = newPassword;
+
+            // 修改成功后保存到文件
+            SaveUsersToFile();
+
             return (true, "密码修改成功");
         }
 
