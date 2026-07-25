@@ -16,7 +16,6 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <!-- 【修复 L2】指定应用程序清单文件，启用 DPI 感知 -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -101,6 +100,9 @@
     <Compile Include="Views\mForm_Progress.Designer.cs">
       <DependentUpon>mForm_Progress.cs</DependentUpon>
     </Compile>
+    <EmbeddedResource Include="Dialogs\InputLotForm.resx">
+      <DependentUpon>InputLotForm.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
