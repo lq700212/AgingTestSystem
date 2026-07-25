@@ -5,7 +5,7 @@ namespace BarometerWinform.Dialogs
     ///
     /// 【界面布局说明】
     /// 窗口样式参考用户提供的图片，包含左右两个区域：
-    /// 左侧区域：输入区域，包含批号、工位编号、SN输入框，以及红色背景注释区域
+    /// 左侧区域：输入区域，包含批号、工位编号、SN输入框
     /// 右侧区域：产品列表区域，显示已绑定的产品信息，底部有保存按钮
     ///
     /// 【控件布局】
@@ -24,9 +24,6 @@ namespace BarometerWinform.Dialogs
     /// │ │ ├─────────────────────┤ │  │ │ btnSave              │ │   │
     /// │ │ │ lblSn               │ │  │ └─────────────────────┘ │   │
     /// │ │ │ txtSn               │ │  └─────────────────────────┘   │
-    /// │ │ ├─────────────────────┤ │                                │
-    /// │ │ │ lblComment          │ │                                │
-    /// │ │ │ (红色背景，多行)     │ │                                │
     /// │ │ └─────────────────────┘ │                                │
     /// │ └─────────────────────────┘                                │
     /// └─────────────────────────────────────────────────────────────┘
@@ -57,7 +54,6 @@ namespace BarometerWinform.Dialogs
         {
             this.tableLayoutPanelMain = new System.Windows.Forms.TableLayoutPanel();
             this.panelLeft = new System.Windows.Forms.Panel();
-            this.lblComment = new System.Windows.Forms.Label();
             this.txtSn = new System.Windows.Forms.TextBox();
             this.lblSn = new System.Windows.Forms.Label();
             this.txtStationNo = new System.Windows.Forms.TextBox();
@@ -90,7 +86,6 @@ namespace BarometerWinform.Dialogs
             //
             // panelLeft - 左侧输入区域面板
             //
-            this.panelLeft.Controls.Add(this.lblComment);
             this.panelLeft.Controls.Add(this.txtSn);
             this.panelLeft.Controls.Add(this.lblSn);
             this.panelLeft.Controls.Add(this.txtStationNo);
@@ -103,17 +98,6 @@ namespace BarometerWinform.Dialogs
             this.panelLeft.Name = "panelLeft";
             this.panelLeft.Size = new System.Drawing.Size(294, 444);
             this.panelLeft.TabIndex = 0;
-            //
-            // lblComment - 注释标签（红色背景，多行说明）
-            //
-            this.lblComment.BackColor = System.Drawing.Color.Red;
-            this.lblComment.ForeColor = System.Drawing.Color.White;
-            this.lblComment.Location = new System.Drawing.Point(15, 180);
-            this.lblComment.Name = "lblComment";
-            this.lblComment.Size = new System.Drawing.Size(260, 120);
-            this.lblComment.TabIndex = 6;
-            this.lblComment.Text = "注释：批号继承自动手动输入\r\n工位号码扫码枪输入\r\n产品_ID扫码枪输入\r\n\r\n绑定顺序：\r\n先扫描工位号，再扫描产品SN，\r\n把工位号和产品SN移入产品列表，\r\n移入产品列表前先检查是否有重复的工位号，\r\n如果有进行覆盖操作，然后清除输入栏的工位编号和SN";
-            this.lblComment.TextAlign = System.Drawing.ContentAlignment.TopLeft;
             //
             // txtSn - SN输入框
             //
@@ -258,9 +242,6 @@ namespace BarometerWinform.Dialogs
 
         /// <summary>SN输入框</summary>
         private System.Windows.Forms.TextBox txtSn;
-
-        /// <summary>注释标签（红色背景，多行说明）</summary>
-        private System.Windows.Forms.Label lblComment;
 
         /// <summary>产品列表标题标签</summary>
         private System.Windows.Forms.Label lblProductListTitle;
