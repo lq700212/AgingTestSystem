@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Drawing;
 using System.Windows.Forms;
 using BarometerWinform.Models;
@@ -127,7 +127,7 @@ namespace BarometerWinform.Views
         /// 以确保配置变更时载台上电物理地址正确。
         /// </summary>
         /// <param name="deviceId">设备编号（从1开始）</param>
-        public BarometerPanelView(int deviceId) : this(deviceId, 72)
+        public BarometerPanelView(int deviceId) : this(deviceId, 72, 72)
         {
         }
 
@@ -146,7 +146,20 @@ namespace BarometerWinform.Views
 
             // 【V1.09 新增】设置IO状态框文本: 第1行功能名, 第2行物理地址(三菱八进制)
             // 通过 IoMapBuilder 获取该设备的IO点映射(1输入 + 2输出)
-            UpdateIoBoxLabels(deviceId, totalBarometers);
+            UpdateIoBoxLabels(deviceId, totalBarometers, totalBarometers);
+        }
+
+        /// <summary>
+        /// 带设备编号、气压表总数、IO输入通道总数的构造函数（用于 TotalInputs != TotalBarometers 的现场）
+        /// </summary>
+        /// <param name="deviceId">设备编号（从1开始）</param>
+        /// <param name="totalBarometers">气压表总数</param>
+        /// <param name="totalInputs">IO 输入通道总数（用于计算输出点内部编号起点）</param>
+        public BarometerPanelView(int deviceId, int totalBarometers, int totalInputs) : this()
+        {
+            DeviceId = deviceId;
+            lblDeviceId.Text = $"NO.{deviceId}";
+            UpdateIoBoxLabels(deviceId, totalBarometers, totalInputs);
         }
 
         /// <summary>
@@ -160,11 +173,12 @@ namespace BarometerWinform.Views
         /// </summary>
         /// <param name="deviceId">设备编号(1 ~ TotalBarometers)</param>
         /// <param name="totalBarometers">气压表总数(用于载台上电Y地址偏移计算)</param>
-        private void UpdateIoBoxLabels(int deviceId, int totalBarometers)
+        /// <param name="totalInputs">IO 输入通道总数（用于计算输出点内部编号起点）</param>
+        private void UpdateIoBoxLabels(int deviceId, int totalBarometers, int totalInputs)
         {
             // 通过 IoMapBuilder 获取该设备的IO点映射
             // totalBarometers 影响载台上电地址: Y + octal(totalBarometers + deviceId - 1)
-            DeviceIoMapping mapping = IoMapBuilder.GetDeviceMapping(deviceId, totalBarometers);
+            DeviceIoMapping mapping = IoMapBuilder.GetDeviceMapping(deviceId, totalBarometers, totalInputs);
 
             // 真空负压表输入框: 显示 "负压表" + X地址(如 X000)
             boxInput1.Text = $"负压表\r\n{mapping.VacuumPressureInput.PhysicalAddress}";

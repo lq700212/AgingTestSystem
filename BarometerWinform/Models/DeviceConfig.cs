@@ -1,4 +1,4 @@
-﻿
+
 namespace BarometerWinform.Models
 {
     /// <summary>
@@ -16,28 +16,39 @@ namespace BarometerWinform.Models
 
         /// <summary>
         /// IO输入总数
-        /// 当前需求：72 个（每个气压表对应 1 个输入点，共 72 个设备）
-        /// 输入点编号范围：1 ~ TotalInputs（默认 1 ~ 72）
+        /// 当前现场接线：GX-CL140 后面接了 3 个输入模块（2×DI50N-S + 1×DI40N-S），合计 80 路输入通道。
+        ///
+        /// 重要：TotalInputs 表示“耦合器提供的 DI 通道总数”，不等同于气压表数量。
+        /// - TotalBarometers（气压表数量）当前是 72
+        /// - TotalInputs（输入通道数量）当前是 80（其中前 72 路用于真空负压表-1~72，剩余 8 路预留）
+        ///
+        /// 输入点编号范围：1 ~ TotalInputs（默认 1 ~ 80）
         ///
         /// 【V1.09 更新】依据显耀IO表:
         /// - 72 个输入点均为 NPN 型, 对应三菱PLC X 地址(八进制编址 X000~X107)
         /// - 设备名: 真空负压表-1 ~ 真空负压表-72
         /// - 物理地址映射详见 <see cref="Services.IoMapBuilder"/>
         /// </summary>
-        public int TotalInputs { get; set; } = 72;
+        public int TotalInputs { get; set; } = 80;
 
         /// <summary>
         /// IO输出总数
-        /// 当前需求：144 个（每个气压表对应 2 个输出点，共 72 个设备 × 2 = 144）
-        /// 输出点编号范围：TotalInputs+1 ~ TotalInputs+TotalOutputs（默认 73 ~ 216）
+        /// 当前现场接线：GX-CL140 后面接了 5 个输出模块（5×DQ50P-S），合计 160 路输出通道。
+        ///
+        /// 重要：TotalOutputs 表示“耦合器提供的 DO 通道总数”，其中业务实际用到的是：
+        /// - 真空电磁阀：72 路（对应 真空电磁阀-1~72）
+        /// - 载台上电：72 路（对应 载台上电-1~72）
+        /// 合计 144 路，其余 16 路预留。
+        ///
+        /// 输出点编号范围：TotalInputs+1 ~ TotalInputs+TotalOutputs（默认 81 ~ 240）
         ///
         /// 【V1.09 更新】依据显耀IO表:
         /// - 144 个输出点均为 PNP 型, 对应三菱PLC Y 地址(八进制编址)
-        /// - 真空电磁阀-1~72: Y000~Y107 (内部编号 73~144)
-        /// - 载台上电-1~72:  Y110~Y217 (内部编号 145~216)
+        /// - 真空电磁阀-1~72: Y000~Y107 (内部编号 = TotalInputs + deviceId)
+        /// - 载台上电-1~72:  Y110~Y217 (内部编号 = TotalInputs + TotalBarometers + deviceId)
         /// - 物理地址映射详见 <see cref="Services.IoMapBuilder"/>
         /// </summary>
-        public int TotalOutputs { get; set; } = 144;
+        public int TotalOutputs { get; set; } = 160;
 
         /// <summary>
         /// 通信端口名称（如 COM1）
@@ -65,9 +76,10 @@ namespace BarometerWinform.Models
         public string Parity { get; set; } = "None";
 
         /// <summary>
-        /// PLC连接地址（预留字段，待确认协议）
+        /// PLC/IO 耦合器连接地址
+        /// 当前现场 GX-CL140 默认 IP：192.168.1.20
         /// </summary>
-        public string PlcAddress { get; set; } = "192.168.1.100";
+        public string PlcAddress { get; set; } = "192.168.1.20";
 
         /// <summary>
         /// PLC通讯端口（默认502为Modbus TCP标准端口）
@@ -80,14 +92,18 @@ namespace BarometerWinform.Models
         public int CollectInterval { get; set; } = 1000;
 
         /// <summary>
-        /// 主视图每行显示的气压表数量
+        /// 主视图每行显示的气压表数量（列数）
+        ///
+        /// 当前要求：8 列 × 9 行 = 72 个气压表面板
         /// </summary>
-        public int PanelColumns { get; set; } = 9;
+        public int PanelColumns { get; set; } = 8;
 
         /// <summary>
-        /// 主视图每列显示的气压表数量
+        /// 主视图每列显示的气压表数量（行数）
+        ///
+        /// 当前要求：8 列 × 9 行 = 72 个气压表面板
         /// </summary>
-        public int PanelRows { get; set; } = 8;
+        public int PanelRows { get; set; } = 9;
 
         /// <summary>
         /// 是否使用模拟通讯（Mock）
@@ -121,6 +137,24 @@ namespace BarometerWinform.Models
         /// TCP 接收超时（毫秒）
         /// </summary>
         public int TcpReceiveTimeoutMs { get; set; } = 3000;
+
+        /// <summary>
+        /// 是否对输入点逻辑取反
+        ///
+        /// 现场可能出现的情况：
+        /// - 线路/模块是 NPN（低电平有效）
+        /// - 但耦合器映射到寄存器后，有的设备会把“低有效”转换为 “1=ON”，有的不会
+        ///
+        /// 因为是否需要取反只能通过现场实测确认，所以做成配置项：
+        /// - false：寄存器 bit=1 认为输入 ON（默认）
+        /// - true：寄存器 bit=0 认为输入 ON（逻辑取反）
+        /// </summary>
+        public bool InvertInputs { get; set; } = false;
+
+        /// <summary>
+        /// 是否对输出点逻辑取反
+        /// </summary>
+        public bool InvertOutputs { get; set; } = false;
 
         /// <summary>
         /// IO 模块的从站地址（UnitId/SlaveId）

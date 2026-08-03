@@ -450,6 +450,16 @@ namespace BarometerWinform.Views
                 config.TcpReceiveTimeoutMs = tcpReceiveTimeoutMs;
             }
 
+            if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["InvertInputs"], out bool invertInputs))
+            {
+                config.InvertInputs = invertInputs;
+            }
+
+            if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["InvertOutputs"], out bool invertOutputs))
+            {
+                config.InvertOutputs = invertOutputs;
+            }
+
             if (byte.TryParse(System.Configuration.ConfigurationManager.AppSettings["IoUnitId"], out byte ioUnitId))
             {
                 config.IoUnitId = ioUnitId;
@@ -483,6 +493,21 @@ namespace BarometerWinform.Views
             if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["AlarmWhenPressureHigherThanThreshold"], out bool alarmHigher))
             {
                 config.AlarmWhenPressureHigherThanThreshold = alarmHigher;
+            }
+
+            if (config.TotalInputs < config.TotalBarometers)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"配置警告: TotalInputs({config.TotalInputs}) < TotalBarometers({config.TotalBarometers})，将自动把 TotalInputs 纠正为 {config.TotalBarometers}");
+                config.TotalInputs = config.TotalBarometers;
+            }
+
+            int minOutputs = config.TotalBarometers * 2;
+            if (config.TotalOutputs < minOutputs)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    $"配置警告: TotalOutputs({config.TotalOutputs}) < TotalBarometers×2({minOutputs})，将自动把 TotalOutputs 纠正为 {minOutputs}");
+                config.TotalOutputs = minOutputs;
             }
 
             // 配置项一致性校验：TotalBarometers 应等于 PanelRows × PanelColumns
@@ -548,8 +573,8 @@ namespace BarometerWinform.Views
         /// 面板按行列网格布局排列在中间区域
         ///
         /// 【布局说明】
-        /// 使用 TableLayoutPanel 实现网格布局（9列×8行=72个面板 + 1列行全选按钮）
-        /// 共 10 列：前 9 列放气压表面板（百分比宽度），最后 1 列放行全选按钮（固定宽度）
+        /// 使用 TableLayoutPanel 实现网格布局（8列×9行=72个面板 + 1列行全选按钮）
+        /// 共 9 列：前 8 列放气压表面板（固定宽度），最后 1 列放行全选按钮（固定宽度）
         /// 直接将 TableLayoutPanel 添加到 splitContainerMain.Panel1
         /// 【注意】不能放在 FlowLayoutPanel 中，因为 FlowLayoutPanel
         /// 不尊重子控件的 Dock=Fill 属性，会导致 TableLayoutPanel 尺寸为0
@@ -572,7 +597,7 @@ namespace BarometerWinform.Views
             tableLayoutPanel.Dock = DockStyle.Fill;  // 填满整个左侧区域
             tableLayoutPanel.AutoScroll = true;      // 内容超出时显示滚动条
 
-            // 设置行列数（根据配置：默认9列8行）
+            // 设置行列数（根据配置：默认8列9行）
             int rows = _config.PanelRows;
             int cols = _config.PanelColumns;
 
@@ -603,8 +628,9 @@ namespace BarometerWinform.Views
             {
                 int deviceId = i + 1;  // 设备编号从1开始
 
-                // 创建面板实例（带设备编号和气压表总数, 确保载台上电Y地址计算正确）
-                var panel = new BarometerPanelView(deviceId, _config.TotalBarometers);
+                // 创建面板实例（带设备编号、气压表总数、IO输入通道总数）
+                // TotalInputs 参与“输出点内部编号”的计算（outputId 从 TotalInputs+1 开始）
+                var panel = new BarometerPanelView(deviceId, _config.TotalBarometers, _config.TotalInputs);
 
                 // 【修复】设置 Dock=Fill 让面板填满单元格，避免与相邻面板重叠
                 panel.Dock = DockStyle.Fill;

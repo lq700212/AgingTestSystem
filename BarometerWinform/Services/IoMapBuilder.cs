@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using BarometerWinform.Models;
 
@@ -30,31 +30,43 @@ namespace BarometerWinform.Services
     {
         /// <summary>
         /// 构建完整的IO映射表
-        /// 按"输入→真空电磁阀输出→载台上电输出"顺序生成所有IO点定义
+        /// 按"输入→真空电磁阀输出→载台上电输出→预留输入/输出"顺序生成所有IO点定义
         ///
         /// 【设计说明】
-        /// 每个气压表固定对应 1输入 + 2输出, 因此总数由 totalBarometers 决定:
-        /// - 输入点数量 = totalBarometers
-        /// - 输出点数量 = totalBarometers × 2
-        /// - 总IO点数量 = totalBarometers × 3
+        /// 业务角度：每个气压表固定对应 1输入 + 2输出，因此“业务必需”总数由 totalBarometers 决定。
+        ///
+        /// 现场角度：GX-CL140 后面模块数量可能多于业务使用量（例如现场是 80DI/160DO，但业务用 72DI/144DO）。
+        /// 因此本构建器支持把多出来的通道作为“预留点”也生成出来，便于后续扩展或现场排查。
         /// </summary>
-        /// <param name="totalBarometers">气压表总数(默认72)</param>
-        /// <returns>所有IO点定义列表(totalBarometers×3 个)</returns>
-        public static List<IoPointDefinition> Build(int totalBarometers)
+        /// <param name="config">设备配置（含 TotalBarometers/TotalInputs/TotalOutputs）</param>
+        /// <returns>所有 IO 点定义列表</returns>
+        public static List<IoPointDefinition> Build(DeviceConfig config)
         {
-            if (totalBarometers < 1)
+            if (config == null) throw new ArgumentNullException(nameof(config));
+            if (config.TotalBarometers < 1)
             {
-                throw new ArgumentOutOfRangeException(nameof(totalBarometers),
+                throw new ArgumentOutOfRangeException(nameof(config.TotalBarometers),
                     "气压表总数不能小于1");
             }
 
-            // 容量 = 输入(totalBarometers) + 真空电磁阀(totalBarometers) + 载台上电(totalBarometers)
-            var map = new List<IoPointDefinition>(totalBarometers * 3);
+            if (config.TotalInputs < config.TotalBarometers)
+            {
+                throw new ArgumentOutOfRangeException(nameof(config.TotalInputs),
+                    "TotalInputs 不能小于 TotalBarometers（每个气压表至少需要 1 个输入点）");
+            }
+
+            if (config.TotalOutputs < config.TotalBarometers * 2)
+            {
+                throw new ArgumentOutOfRangeException(nameof(config.TotalOutputs),
+                    "TotalOutputs 不能小于 TotalBarometers×2（每个气压表至少需要 2 个输出点）");
+            }
+
+            var map = new List<IoPointDefinition>(config.TotalInputs + config.TotalOutputs);
             int ioId = 1;
 
             // ===== 1. 输入点: 真空负压表-N → X 地址(八进制) =====
             // 地址规律: X + octal(n-1), 即 n=1→X000, n=8→X007, n=9→X010, n=72→X107
-            for (int n = 1; n <= totalBarometers; n++)
+            for (int n = 1; n <= config.TotalBarometers; n++)
             {
                 map.Add(new IoPointDefinition
                 {
@@ -69,9 +81,26 @@ namespace BarometerWinform.Services
                 });
             }
 
+            // ===== 1.1 预留输入点: X 地址继续顺延 =====
+            // 例如：现场 TotalInputs=80, TotalBarometers=72，则预留输入为 73~80，对应 X110~X117
+            for (int n = config.TotalBarometers + 1; n <= config.TotalInputs; n++)
+            {
+                map.Add(new IoPointDefinition
+                {
+                    IoId = ioId++,
+                    PhysicalAddress = "X" + ToOctal(n - 1),
+                    DeviceName = $"预留输入-{n}",
+                    DeviceId = n,
+                    Type = IoType.Input,
+                    Function = IoFunction.Unknown,
+                    Electrical = ElectricalType.NPN,
+                    LocalIndex = 1
+                });
+            }
+
             // ===== 2. 输出点A: 真空电磁阀-N → Y 地址(八进制) =====
             // 地址规律: Y + octal(n-1), 即 n=1→Y000, n=72→Y107
-            for (int n = 1; n <= totalBarometers; n++)
+            for (int n = 1; n <= config.TotalBarometers; n++)
             {
                 map.Add(new IoPointDefinition
                 {
@@ -90,12 +119,12 @@ namespace BarometerWinform.Services
             // 地址规律: Y + octal(totalBarometers + n - 1)
             // 即从 totalBarometers 的八进制地址开始(72→110)
             // n=1→Y110, n=8→Y117, n=9→Y120, n=72→Y217
-            for (int n = 1; n <= totalBarometers; n++)
+            for (int n = 1; n <= config.TotalBarometers; n++)
             {
                 map.Add(new IoPointDefinition
                 {
                     IoId = ioId++,
-                    PhysicalAddress = "Y" + ToOctal(totalBarometers + n - 1),
+                    PhysicalAddress = "Y" + ToOctal(config.TotalBarometers + n - 1),
                     DeviceName = $"载台上电-{n}",
                     DeviceId = n,
                     Type = IoType.Output,
@@ -105,7 +134,38 @@ namespace BarometerWinform.Services
                 });
             }
 
+            // ===== 3.1 预留输出点: Y 地址继续顺延 =====
+            // 例如：现场 TotalOutputs=160, TotalBarometers=72，则预留输出为 145~160，对应 Y220~Y237
+            int usedOutputs = config.TotalBarometers * 2;
+            for (int n = usedOutputs + 1; n <= config.TotalOutputs; n++)
+            {
+                map.Add(new IoPointDefinition
+                {
+                    IoId = ioId++,
+                    PhysicalAddress = "Y" + ToOctal(n - 1),
+                    DeviceName = $"预留输出-{n}",
+                    DeviceId = n,
+                    Type = IoType.Output,
+                    Function = IoFunction.Unknown,
+                    Electrical = ElectricalType.PNP,
+                    LocalIndex = 1
+                });
+            }
+
             return map;
+        }
+
+        /// <summary>
+        /// 构建完整的IO映射表（兼容旧调用）
+        /// </summary>
+        public static List<IoPointDefinition> Build(int totalBarometers)
+        {
+            return Build(new DeviceConfig
+            {
+                TotalBarometers = totalBarometers,
+                TotalInputs = totalBarometers,
+                TotalOutputs = totalBarometers * 2
+            });
         }
 
         /// <summary>
@@ -114,17 +174,23 @@ namespace BarometerWinform.Services
         /// </summary>
         /// <param name="deviceId">气压表编号(1 ~ TotalBarometers)</param>
         /// <param name="totalBarometers">气压表总数</param>
+        /// <param name="totalInputs">IO 输入通道总数（用于计算内部输出编号起点）</param>
         /// <returns>该设备的IO点映射集合</returns>
         /// <exception cref="ArgumentOutOfRangeException">
         /// deviceId 不在 [1, totalBarometers] 范围内, 或 totalBarometers 小于1
         /// </exception>
-        public static DeviceIoMapping GetDeviceMapping(int deviceId, int totalBarometers)
+        public static DeviceIoMapping GetDeviceMapping(int deviceId, int totalBarometers, int totalInputs)
         {
             // 参数校验: 防止 deviceId 越界导致 ToOctal 生成非法地址(如 "X0-1")
             if (totalBarometers < 1)
             {
                 throw new ArgumentOutOfRangeException(nameof(totalBarometers),
                     "气压表总数不能小于1");
+            }
+            if (totalInputs < totalBarometers)
+            {
+                throw new ArgumentOutOfRangeException(nameof(totalInputs),
+                    "TotalInputs 不能小于 totalBarometers（每个气压表至少需要 1 个输入点）");
             }
             if (deviceId < 1 || deviceId > totalBarometers)
             {
@@ -149,7 +215,7 @@ namespace BarometerWinform.Services
                 // 输出1: 真空电磁阀, Y + octal(deviceId-1)
                 VacuumValveOutput = new IoPointDefinition
                 {
-                    IoId = totalBarometers + deviceId,
+                    IoId = totalInputs + deviceId,
                     PhysicalAddress = "Y" + ToOctal(deviceId - 1),
                     DeviceName = $"真空电磁阀-{deviceId}",
                     DeviceId = deviceId,
@@ -161,7 +227,7 @@ namespace BarometerWinform.Services
                 // 输出2: 载台上电, Y + octal(totalBarometers + deviceId - 1)
                 CarrierPowerOutput = new IoPointDefinition
                 {
-                    IoId = totalBarometers * 2 + deviceId,
+                    IoId = totalInputs + totalBarometers + deviceId,
                     PhysicalAddress = "Y" + ToOctal(totalBarometers + deviceId - 1),
                     DeviceName = $"载台上电-{deviceId}",
                     DeviceId = deviceId,

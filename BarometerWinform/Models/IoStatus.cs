@@ -1,4 +1,4 @@
-﻿
+
 using System;
 
 namespace BarometerWinform.Models
@@ -101,6 +101,11 @@ namespace BarometerWinform.Models
     /// </summary>
     public enum IoFunction
     {
+        /// <summary>
+        /// 未定义/预留 IO 点
+        /// </summary>
+        Unknown,
+
         /// <summary>
         /// 真空负压表信号（输入，NPN）
         /// 用于检测真空压力是否到达设定阈值
