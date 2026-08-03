@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows.Forms;
 using BarometerWinform.Models;
 
@@ -48,8 +48,7 @@ namespace BarometerWinform.Dialogs
             // 修复 H6：用 Clamp 限制在 NumericUpDown 的 Minimum/Maximum 范围内
             numCollectInterval.Value = ClampToNumericRange(_config.CollectInterval, numCollectInterval);
 
-            // 其他参数为预留字段，使用默认值显示
-            // TODO: 待现场确认实际参数项后补充
+            txtAlarmThreshold.Text = _config.AlarmPressureThresholdPa.ToString();
         }
 
         /// <summary>
@@ -83,8 +82,13 @@ namespace BarometerWinform.Dialogs
 
             _config.CollectInterval = (int)numCollectInterval.Value;
 
-            // 【预留】其他参数保存逻辑
-            // TODO: 待现场确认实际参数项后补充
+            if (!decimal.TryParse(txtAlarmThreshold.Text, out decimal alarmThresholdPa))
+            {
+                MessageBox.Show("报警压力阈值格式错误", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            _config.AlarmPressureThresholdPa = alarmThresholdPa;
 
             // 【预留】持久化保存到配置文件
             // TODO: 实现将配置保存到 App.config 或独立配置文件

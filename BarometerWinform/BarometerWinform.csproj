@@ -38,6 +38,12 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.CSharp" />
+    <Reference Include="NModbus, Version=3.0.83.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\NModbus.3.0.83\lib\net46\NModbus.dll</HintPath>
+    </Reference>
+    <Reference Include="NModbus.Serial, Version=3.0.83.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\NModbus.Serial.3.0.83\lib\net46\NModbus.Serial.dll</HintPath>
+    </Reference>
     <Reference Include="SunnyUI, Version=3.9.8.0, Culture=neutral, PublicKeyToken=3f4ebed4237db5e1, processorArchitecture=MSIL">
       <HintPath>..\packages\SunnyUI.3.9.8\lib\net472\SunnyUI.dll</HintPath>
     </Reference>
@@ -79,6 +85,8 @@
     </Compile>
     <Compile Include="Services\MockBarometerReader.cs" />
     <Compile Include="Services\MockIoController.cs" />
+    <Compile Include="Services\ModbusRtuBarometerReader.cs" />
+    <Compile Include="Services\ModbusTcpIoController.cs" />
     <Compile Include="Services\IoMapBuilder.cs" />
     <Compile Include="Services\DeviceManager.cs" />
     <Compile Include="Services\UserManager.cs" />
@@ -100,6 +108,9 @@
     <Compile Include="Views\mForm_Progress.Designer.cs">
       <DependentUpon>mForm_Progress.cs</DependentUpon>
     </Compile>
+    <EmbeddedResource Include="Dialogs\BatchRecipeForm.resx">
+      <DependentUpon>BatchRecipeForm.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Dialogs\InputLotForm.resx">
       <DependentUpon>InputLotForm.cs</DependentUpon>
     </EmbeddedResource>

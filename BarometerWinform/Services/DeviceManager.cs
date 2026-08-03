@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Timers;
@@ -62,6 +62,15 @@ namespace BarometerWinform.Services
         private readonly object _collectLock = new object();
 
         /// <summary>
+        /// 记录上一次采集周期的“报警状态”
+        /// 
+        /// 目的（给新手看的）：
+        /// - 如果某一路气压持续处于报警区间，我们不希望每 1 秒都重复下发“关阀/断电”
+        /// - 所以只在“从未报警 → 进入报警”的边沿触发一次输出动作
+        /// </summary>
+        private readonly bool[] _lastAlarmStates;
+
+        /// <summary>
         /// 标记是否已释放资源
         /// 【线程安全】使用 volatile 修饰，确保跨线程可见性
         /// 防止 Dispose 期间后台线程仍访问已释放资源
@@ -92,9 +101,22 @@ namespace BarometerWinform.Services
             _config = config;
 
             // 初始化硬件接口实现
-            // TODO: 后续需要根据实际硬件协议替换为真实实现
-            _barometerReader = new MockBarometerReader();
-            _ioController = new MockIoController();
+            // 
+            // 对新手说明：
+            // - 项目开发早期没有接线/设备时，用 Mock 可以保证 UI/业务流程能跑起来
+            // - 现场接线完成后，把 App.config 里的 UseMockCommunication=false 即可切换到真实通讯
+            if (_config.UseMockCommunication)
+            {
+                _barometerReader = new MockBarometerReader();
+                _ioController = new MockIoController();
+            }
+            else
+            {
+                _barometerReader = new ModbusRtuBarometerReader();
+                _ioController = new ModbusTcpIoController();
+            }
+
+            _lastAlarmStates = new bool[_config.TotalBarometers];
 
             // 订阅错误事件（使用命名方法，便于 Dispose 时取消订阅）
             _barometerReader.OnError += BarometerReader_OnError;
@@ -329,9 +351,90 @@ namespace BarometerWinform.Services
                 // 防御性检查：数据为空时直接返回，避免空引用异常
                 if (allData == null || allData.Length == 0) return;
 
+                // 从 IO 控制器读取整机 DI/DO 状态
+                //
+                // 给新手的说明：
+                // - IO 模块通常支持一次性读出一整段寄存器（比如从 0x1000 读 5 个寄存器 = 72 路输入）
+                // - 如果我们逐点调用 ReadInput(1) / ReadInput(2) ... ReadInput(72)，
+                //   相当于发 72 次网络请求，更慢，也更容易超时
+                // - 所以这里设计为“先批量读到 bool[]”，再按 deviceId 分配给每个面板的数据对象
+                bool[] allInputs = _ioController.ReadAllInputs();
+                bool[] allOutputs = _ioController.ReadAllOutputs();
+
+                for (int i = 0; i < allData.Length; i++)
+                {
+                    BarometerData data = allData[i];
+                    if (data == null) continue;
+
+                    int deviceId = data.DeviceId;
+                    if (deviceId < 1 || deviceId > _config.TotalBarometers) continue;
+
+                    // 1) 回填输入状态（每个气压表 1 个输入：真空负压表信号）
+                    // allInputs 的索引规则：索引 0 对应 inputId=1（X000）
+                    if (allInputs != null && allInputs.Length >= _config.TotalInputs && deviceId <= _config.TotalInputs)
+                    {
+                        if (data.InputStatus == null || data.InputStatus.Length < 1) data.InputStatus = new bool[1];
+                        data.InputStatus[0] = allInputs[deviceId - 1];
+                    }
+
+                    // 2) 回填输出状态（每个气压表 2 个输出：真空电磁阀 + 载台上电）
+                    // allOutputs 的索引规则：索引 0 对应 outputId=TotalInputs+1（默认 73，对应 Y000）
+                    if (allOutputs != null && allOutputs.Length >= _config.TotalOutputs)
+                    {
+                        if (data.OutputStatus == null || data.OutputStatus.Length < 2) data.OutputStatus = new bool[2];
+
+                        int outputStart = _config.TotalInputs + 1;
+
+                        // 输出点内部编号规则（与 IoMapBuilder 一致）：
+                        // - 真空电磁阀：TotalInputs + deviceId
+                        //   例：deviceId=1 => outputId=73（Y000）
+                        // - 载台上电：TotalInputs + TotalBarometers + deviceId
+                        //   例：deviceId=1 => outputId=145（Y110）
+                        int valveOutputId = _config.TotalInputs + deviceId;
+                        int carrierOutputId = _config.TotalInputs + _config.TotalBarometers + deviceId;
+
+                        // 从“内部编号 outputId”换算成 allOutputs[] 的数组下标：
+                        // - allOutputs[0] 对应 outputId=outputStart
+                        // - 所以 index = outputId - outputStart
+                        int valveIndex = valveOutputId - outputStart;
+                        int carrierIndex = carrierOutputId - outputStart;
+
+                        if (valveIndex >= 0 && valveIndex < allOutputs.Length)
+                        {
+                            data.OutputStatus[0] = allOutputs[valveIndex];
+                        }
+
+                        if (carrierIndex >= 0 && carrierIndex < allOutputs.Length)
+                        {
+                            data.OutputStatus[1] = allOutputs[carrierIndex];
+                        }
+                    }
+
+                    // 3) 计算报警状态（只依赖压力值）
+                    // 注意：这里是“业务判定”，不是硬件通讯协议的一部分
+                    bool isAlarm = IsAlarm(data.VacuumPressure);
+                    if (isAlarm && !_lastAlarmStates[deviceId - 1])
+                    {
+                        // 进入报警边沿：执行一次联动输出
+                        HandleAlarm(deviceId);
+                    }
+
+                    // 记录本次报警状态，供下次采集做边沿判断
+                    _lastAlarmStates[deviceId - 1] = isAlarm;
+                    if (isAlarm)
+                    {
+                        // UI 表现：如果报警则把面板状态置为 Fault（红色）
+                        data.Status = DeviceStatus.Fault;
+                    }
+                }
+
                 // 批量更新缓存
                 lock (_cacheLock)
                 {
+                    // 为什么需要 lock：
+                    // - _collectTimer 的 Elapsed 在后台线程执行
+                    // - UI 线程会通过 GetBarometerData/GetAllBarometerData 读取缓存
+                    // - 不加锁会导致字典并发读写抛异常
                     foreach (var data in allData)
                     {
                         if (data != null)
@@ -350,6 +453,39 @@ namespace BarometerWinform.Services
             {
                 System.Diagnostics.Debug.WriteLine($"数据采集失败: {ex.Message}");
             }
+        }
+
+        private bool IsAlarm(decimal pressurePa)
+        {
+            // 报警判定规则说明：
+            // - 真空压力通常是负数，绝对值越大真空越好
+            // - “阈值”是工艺定义：例如 -95000 Pa
+            // - AlarmWhenPressureHigherThanThreshold=true 的含义：
+            //   当压力值变“更高”（更接近 0）时，代表真空变差，触发报警
+            if (_config.AlarmWhenPressureHigherThanThreshold)
+            {
+                return pressurePa > _config.AlarmPressureThresholdPa;
+            }
+
+            return pressurePa < _config.AlarmPressureThresholdPa;
+        }
+
+        private void HandleAlarm(int deviceId)
+        {
+            int valveOutputId = _config.TotalInputs + deviceId;
+            int carrierOutputId = _config.TotalInputs + _config.TotalBarometers + deviceId;
+
+            // 报警联动动作（当前策略）：
+            // - 关真空阀（防止继续抽真空/泄漏等异常扩大）
+            // - 断载台上电（保护被测件/治具）
+            //
+            // 现场确认项：
+            // - 是否需要“报警解除后自动恢复”？
+            // - 关闭/断电是否需要保持，是否需要人工复位？
+            _ioController.WriteOutput(valveOutputId, false);
+            _ioController.WriteOutput(carrierOutputId, false);
+
+            // TODO: 待现场确认报警动作（关闭阀/断电是否需要保持，报警解除后是否自动恢复）
         }
 
         /// <summary>
