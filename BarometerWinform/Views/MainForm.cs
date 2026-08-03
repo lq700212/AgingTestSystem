@@ -409,6 +409,82 @@ namespace BarometerWinform.Views
                 config.BaudRate = baudRate;
             }
 
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["DataBits"], out int dataBits))
+            {
+                config.DataBits = dataBits;
+            }
+
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["StopBits"], out int stopBits))
+            {
+                config.StopBits = stopBits;
+            }
+
+            string parity = System.Configuration.ConfigurationManager.AppSettings["Parity"];
+            if (!string.IsNullOrWhiteSpace(parity))
+            {
+                config.Parity = parity;
+            }
+
+            if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["UseMockCommunication"], out bool useMock))
+            {
+                config.UseMockCommunication = useMock;
+            }
+
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["SerialReadTimeoutMs"], out int serialReadTimeoutMs))
+            {
+                config.SerialReadTimeoutMs = serialReadTimeoutMs;
+            }
+
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["SerialWriteTimeoutMs"], out int serialWriteTimeoutMs))
+            {
+                config.SerialWriteTimeoutMs = serialWriteTimeoutMs;
+            }
+
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["TcpSendTimeoutMs"], out int tcpSendTimeoutMs))
+            {
+                config.TcpSendTimeoutMs = tcpSendTimeoutMs;
+            }
+
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["TcpReceiveTimeoutMs"], out int tcpReceiveTimeoutMs))
+            {
+                config.TcpReceiveTimeoutMs = tcpReceiveTimeoutMs;
+            }
+
+            if (byte.TryParse(System.Configuration.ConfigurationManager.AppSettings["IoUnitId"], out byte ioUnitId))
+            {
+                config.IoUnitId = ioUnitId;
+            }
+
+            if (TryParseUShortFromAppSettings("IoInputRegisterStartAddress", out ushort ioInputStart))
+            {
+                config.IoInputRegisterStartAddress = ioInputStart;
+            }
+
+            if (TryParseUShortFromAppSettings("IoOutputRegisterStartAddress", out ushort ioOutputStart))
+            {
+                config.IoOutputRegisterStartAddress = ioOutputStart;
+            }
+
+            if (TryParseUShortFromAppSettings("BarometerPressureRegisterAddress", out ushort barometerPressureReg))
+            {
+                config.BarometerPressureRegisterAddress = barometerPressureReg;
+            }
+
+            if (decimal.TryParse(System.Configuration.ConfigurationManager.AppSettings["BarometerPressureScale"], out decimal barometerPressureScale))
+            {
+                config.BarometerPressureScale = barometerPressureScale;
+            }
+
+            if (decimal.TryParse(System.Configuration.ConfigurationManager.AppSettings["AlarmPressureThresholdPa"], out decimal alarmThresholdPa))
+            {
+                config.AlarmPressureThresholdPa = alarmThresholdPa;
+            }
+
+            if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["AlarmWhenPressureHigherThanThreshold"], out bool alarmHigher))
+            {
+                config.AlarmWhenPressureHigherThanThreshold = alarmHigher;
+            }
+
             // 配置项一致性校验：TotalBarometers 应等于 PanelRows × PanelColumns
             // 不匹配时记录警告（不阻止启动，但布局可能错位）
             int expectedTotal = config.PanelRows * config.PanelColumns;
@@ -419,6 +495,30 @@ namespace BarometerWinform.Views
             }
 
             return config;
+        }
+
+        /// <summary>
+        /// 从 App.config 的 appSettings 读取 ushort
+        /// 
+        /// 给新手的说明：
+        /// - 有些寄存器地址习惯用十六进制表示（例如 0x1000）
+        /// - 但 ConfigurationManager 读出来一定是字符串，所以这里同时支持：
+        ///   1) "4096" 这种十进制写法
+        ///   2) "0x1000" 这种十六进制写法
+        /// </summary>
+        private bool TryParseUShortFromAppSettings(string key, out ushort value)
+        {
+            value = 0;
+            string raw = System.Configuration.ConfigurationManager.AppSettings[key];
+            if (string.IsNullOrWhiteSpace(raw)) return false;
+
+            if (raw.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            {
+                return ushort.TryParse(raw.Substring(2), System.Globalization.NumberStyles.HexNumber,
+                    System.Globalization.CultureInfo.InvariantCulture, out value);
+            }
+
+            return ushort.TryParse(raw, out value);
         }
 
         /// <summary>

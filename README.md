@@ -9,9 +9,9 @@
 
 | 需求项 | 描述 | 当前状态 |
 | :--- | :--- | :--- |
-| 气压表数据采集 | 实时读取72个气压表的真空压力数据 | 已实现（Mock） |
-| IO输入监控 | 监控72个IO输入点状态(NPN, X000~X107) | 已接入显耀IO表（Mock） |
-| IO输出控制 | 控制144个IO输出点状态(PNP, Y000~Y217) | 已接入显耀IO表（Mock） |
+| 气压表数据采集 | 实时读取72个气压表的真空压力数据 | 已实现（Mock/真实可切换） |
+| IO输入监控 | 监控72个IO输入点状态(NPN, X000~X107) | 已接入显耀IO表（Mock/真实可切换） |
+| IO输出控制 | 控制144个IO输出点状态(PNP, Y000~Y217) | 已接入显耀IO表（Mock/真实可切换） |
 | IO点映射表 | 内部编号与三菱PLC物理地址的映射 | 已实现（IoMapBuilder） |
 | 动态面板显示 | 根据配置动态创建气压表面板 | 已实现 |
 | 参数配置 | 配方管理、延时设置等 | 预留功能 |
@@ -895,8 +895,9 @@ Get-ChildItem -Path $projectRoot -Recurse -Filter "*.cs" -File |
 
 ### 8.3 版本更新
 
-- 当前版本: V1.13
+- 当前版本: V1.14
 - 更新日志:
+  - V1.14 (2026-08-03): 接入真实通讯链路（气压表 Modbus RTU + IO Modbus TCP），DeviceManager 支持 UseMockCommunication 切换；新增报警阈值参数并实现“报警边沿→关阀/断载台电”联动；新增 CHANGELOG.md 与 通讯接入说明.md 文档
   - V1.13 (2026-07-24): 用户数据持久化到 JSON 文件（Users.json）；新增 LoadUsersFromFile/SaveUsersToFile 方法；程序启动时自动加载用户数据，修改用户名/密码后自动保存；UserAccount 新增无参构造函数用于 JSON 反序列化；添加 Newtonsoft.Json NuGet 包引用；文档更新持久化方案说明
   - V1.12 (2026-07-24): 配方管理窗口样式调整为左右分栏布局；左侧DataGridView只显示序号和配方名称两列；右侧显示选中配方的详细信息（配方名称、延时时间、启动时间、极限温度）；底部添加/更新/删除按钮和保存设置按钮；添加表格点击事件更新右侧显示
   - V1.09 (2026-07-22): 接入客户"显耀IO表"IO配置；新增 IoPointDefinition 模型和 IoMapBuilder 服务（内部编号↔三菱PLC八进制物理地址映射）；新增 IoFunction/ElectricalType 枚举（NPN输入/PNP输出电气特性）；BarometerData 调整为1输入+2输出（真空负压表/真空电磁阀/载台上电）；BarometerPanelView IO状态框改为3个并显示功能名+物理地址；IIoController/MockIoController/DeviceConfig 注释更新实际IO映射
