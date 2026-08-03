@@ -45,8 +45,6 @@ namespace BarometerWinform.Views
         private void InitializeComponent()
         {
             this.components = new System.ComponentModel.Container();
-            // 【新增】rootScrollPanel - 根滚动容器，包裹整个主布局
-            // 当窗体缩小到内容最小尺寸以下时，自动显示水平和垂直滚动条
             this.rootScrollPanel = new System.Windows.Forms.Panel();
             this.tableLayoutPanelMain = new System.Windows.Forms.TableLayoutPanel();
             this.tableLayoutPanelTop = new System.Windows.Forms.TableLayoutPanel();
@@ -99,13 +97,9 @@ namespace BarometerWinform.Views
             this.groupBoxLog.SuspendLayout();
             this.statusStripMain.SuspendLayout();
             this.SuspendLayout();
-            //
-            // rootScrollPanel - 根滚动容器
-            // 【新增】包裹整个主布局，实现"窗体缩小时显示滚动条"的需求
-            // - Dock=Fill：填满整个窗体客户区
-            // - AutoScroll=true：当内部内容超过可见区域时，自动显示滚动条
-            // - AutoScrollMinSize=(1400, 900)：设置内容最小尺寸，窗体小于此尺寸时显示滚动条
-            //
+            // 
+            // rootScrollPanel
+            // 
             this.rootScrollPanel.AutoScroll = true;
             this.rootScrollPanel.AutoScrollMinSize = new System.Drawing.Size(1400, 900);
             this.rootScrollPanel.Controls.Add(this.tableLayoutPanelMain);
@@ -114,24 +108,18 @@ namespace BarometerWinform.Views
             this.rootScrollPanel.Name = "rootScrollPanel";
             this.rootScrollPanel.Size = new System.Drawing.Size(1400, 900);
             this.rootScrollPanel.TabIndex = 0;
-            //
-            // tableLayoutPanelMain - 主布局容器（4行：顶栏/菜单/内容/状态栏）
-            // 【修改】从 Dock=Fill 改为 Anchor 方式，配合 rootScrollPanel 的 AutoScroll 实现滚动条
-            // - Anchor=Top|Bottom|Left|Right：内容随窗体缩放
-            // - MinimumSize=(1400, 900)：内容最小尺寸，小于此尺寸时父容器显示滚动条
-            // - Dock=None：不使用 Fill 模式，让 Anchor 生效
-            //
+            // 
+            // tableLayoutPanelMain
+            // 
+            this.tableLayoutPanelMain.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
             this.tableLayoutPanelMain.ColumnCount = 1;
             this.tableLayoutPanelMain.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanelMain.Controls.Add(this.tableLayoutPanelTop, 0, 0);
             this.tableLayoutPanelMain.Controls.Add(this.tableLayoutPanelMenu, 0, 1);
             this.tableLayoutPanelMain.Controls.Add(this.splitContainerMain, 0, 2);
             this.tableLayoutPanelMain.Controls.Add(this.statusStripMain, 0, 3);
-            // 【关键】Anchor=四方向锚定，让布局跟随父容器大小变化
-            this.tableLayoutPanelMain.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
-            | System.Windows.Forms.AnchorStyles.Left)
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.tableLayoutPanelMain.Dock = System.Windows.Forms.DockStyle.None;
             this.tableLayoutPanelMain.Location = new System.Drawing.Point(0, 0);
             this.tableLayoutPanelMain.MinimumSize = new System.Drawing.Size(1400, 900);
             this.tableLayoutPanelMain.Name = "tableLayoutPanelMain";
@@ -142,9 +130,9 @@ namespace BarometerWinform.Views
             this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 25F));
             this.tableLayoutPanelMain.Size = new System.Drawing.Size(1400, 900);
             this.tableLayoutPanelMain.TabIndex = 0;
-            //
-            // tableLayoutPanelTop - 顶部信息栏（标题/权限/PLC状态）
-            //
+            // 
+            // tableLayoutPanelTop
+            // 
             this.tableLayoutPanelTop.ColumnCount = 4;
             this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 40F));
             this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
@@ -161,46 +149,46 @@ namespace BarometerWinform.Views
             this.tableLayoutPanelTop.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanelTop.Size = new System.Drawing.Size(1394, 24);
             this.tableLayoutPanelTop.TabIndex = 0;
-            //
-            // lblTitle - 系统标题
-            //
+            // 
+            // lblTitle
+            // 
             this.lblTitle.AutoSize = true;
             this.lblTitle.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Bold);
             this.lblTitle.Location = new System.Drawing.Point(3, 0);
             this.lblTitle.Name = "lblTitle";
-            this.lblTitle.Size = new System.Drawing.Size(101, 17);
+            this.lblTitle.Size = new System.Drawing.Size(113, 17);
             this.lblTitle.TabIndex = 0;
             this.lblTitle.Text = "老化测试系统V1.00";
-            //
-            // lblPermission - 当前操作权限显示
-            //
+            // 
+            // lblPermission
+            // 
             this.lblPermission.AutoSize = true;
-            this.lblPermission.Location = new System.Drawing.Point(562, 0);
+            this.lblPermission.Location = new System.Drawing.Point(560, 0);
             this.lblPermission.Name = "lblPermission";
-            this.lblPermission.Size = new System.Drawing.Size(95, 12);
+            this.lblPermission.Size = new System.Drawing.Size(125, 12);
             this.lblPermission.TabIndex = 1;
             this.lblPermission.Text = "当前操作权限: 操作员";
-            //
-            // lblPlcStatusLabel - "PLC连接状态:"标签
-            //
+            // 
+            // lblPlcStatusLabel
+            // 
             this.lblPlcStatusLabel.AutoSize = true;
-            this.lblPlcStatusLabel.Location = new System.Drawing.Point(909, 0);
+            this.lblPlcStatusLabel.Location = new System.Drawing.Point(908, 0);
             this.lblPlcStatusLabel.Name = "lblPlcStatusLabel";
-            this.lblPlcStatusLabel.Size = new System.Drawing.Size(65, 12);
+            this.lblPlcStatusLabel.Size = new System.Drawing.Size(77, 12);
             this.lblPlcStatusLabel.TabIndex = 2;
             this.lblPlcStatusLabel.Text = "PLC连接状态:";
-            //
-            // lblPlcStatus - PLC连接状态值
-            //
+            // 
+            // lblPlcStatus
+            // 
             this.lblPlcStatus.AutoSize = true;
-            this.lblPlcStatus.Location = new System.Drawing.Point(1188, 0);
+            this.lblPlcStatus.Location = new System.Drawing.Point(1186, 0);
             this.lblPlcStatus.Name = "lblPlcStatus";
             this.lblPlcStatus.Size = new System.Drawing.Size(41, 12);
             this.lblPlcStatus.TabIndex = 3;
             this.lblPlcStatus.Text = "未连接";
-            //
-            // tableLayoutPanelMenu - 菜单按钮栏（6个按钮）
-            //
+            // 
+            // tableLayoutPanelMenu
+            // 
             this.tableLayoutPanelMenu.ColumnCount = 6;
             this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 16.66667F));
             this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 16.66667F));
@@ -221,9 +209,9 @@ namespace BarometerWinform.Views
             this.tableLayoutPanelMenu.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanelMenu.Size = new System.Drawing.Size(1394, 34);
             this.tableLayoutPanelMenu.TabIndex = 1;
-            //
-            // btnUserPermission - 用户权限按钮
-            //
+            // 
+            // btnUserPermission
+            // 
             this.btnUserPermission.BackColor = System.Drawing.Color.LimeGreen;
             this.btnUserPermission.ForeColor = System.Drawing.Color.White;
             this.btnUserPermission.Location = new System.Drawing.Point(3, 3);
@@ -233,9 +221,9 @@ namespace BarometerWinform.Views
             this.btnUserPermission.Text = "用户权限";
             this.btnUserPermission.UseVisualStyleBackColor = false;
             this.btnUserPermission.Click += new System.EventHandler(this.btnUserPermission_Click);
-            //
-            // btnCommunication - 通信设置按钮
-            //
+            // 
+            // btnCommunication
+            // 
             this.btnCommunication.BackColor = System.Drawing.Color.LimeGreen;
             this.btnCommunication.ForeColor = System.Drawing.Color.White;
             this.btnCommunication.Location = new System.Drawing.Point(235, 3);
@@ -245,9 +233,9 @@ namespace BarometerWinform.Views
             this.btnCommunication.Text = "通信设置";
             this.btnCommunication.UseVisualStyleBackColor = false;
             this.btnCommunication.Click += new System.EventHandler(this.btnCommunication_Click);
-            //
-            // btnParameter - 参数设置按钮
-            //
+            // 
+            // btnParameter
+            // 
             this.btnParameter.BackColor = System.Drawing.Color.LimeGreen;
             this.btnParameter.ForeColor = System.Drawing.Color.White;
             this.btnParameter.Location = new System.Drawing.Point(467, 3);
@@ -257,9 +245,9 @@ namespace BarometerWinform.Views
             this.btnParameter.Text = "参数设置";
             this.btnParameter.UseVisualStyleBackColor = false;
             this.btnParameter.Click += new System.EventHandler(this.btnParameter_Click);
-            //
-            // btnLog - LOG记录按钮
-            //
+            // 
+            // btnLog
+            // 
             this.btnLog.BackColor = System.Drawing.Color.LimeGreen;
             this.btnLog.ForeColor = System.Drawing.Color.White;
             this.btnLog.Location = new System.Drawing.Point(699, 3);
@@ -269,9 +257,9 @@ namespace BarometerWinform.Views
             this.btnLog.Text = "LOG记录";
             this.btnLog.UseVisualStyleBackColor = false;
             this.btnLog.Click += new System.EventHandler(this.btnLog_Click);
-            //
-            // btnTest - TEST按钮
-            //
+            // 
+            // btnTest
+            // 
             this.btnTest.BackColor = System.Drawing.Color.LimeGreen;
             this.btnTest.ForeColor = System.Drawing.Color.White;
             this.btnTest.Location = new System.Drawing.Point(931, 3);
@@ -281,9 +269,9 @@ namespace BarometerWinform.Views
             this.btnTest.Text = "TEST";
             this.btnTest.UseVisualStyleBackColor = false;
             this.btnTest.Click += new System.EventHandler(this.btnTest_Click);
-            //
-            // btnAbout - 关于按钮
-            //
+            // 
+            // btnAbout
+            // 
             this.btnAbout.BackColor = System.Drawing.Color.LimeGreen;
             this.btnAbout.ForeColor = System.Drawing.Color.White;
             this.btnAbout.Location = new System.Drawing.Point(1163, 3);
@@ -293,29 +281,23 @@ namespace BarometerWinform.Views
             this.btnAbout.Text = "关于";
             this.btnAbout.UseVisualStyleBackColor = false;
             this.btnAbout.Click += new System.EventHandler(this.btnAbout_Click);
-            //
-            // splitContainerMain - 中间分割容器（左:气压表区域 右:操作面板）
-            // 【调整】FixedPanel=Panel2 让右侧面板宽度固定，窗口放大时只有左侧变宽
-            //   SplitterDistance 的精确值在运行时由 MainForm.AdjustRightPanelWidth() 自适应计算,
-            //   不写死, 内容变化时自动调整(临时启用 AutoSize 测量内容最小宽度)
-            //
+            // 
+            // splitContainerMain
+            // 
             this.splitContainerMain.Dock = System.Windows.Forms.DockStyle.Fill;
             this.splitContainerMain.FixedPanel = System.Windows.Forms.FixedPanel.Panel2;
             this.splitContainerMain.Location = new System.Drawing.Point(3, 73);
             this.splitContainerMain.Name = "splitContainerMain";
-            //
-            // splitContainerMain.Panel1 - 左侧气压表显示区域
-            // 【修复 M10】移除 flowLayoutPanelPanels 僵尸控件，运行时由 CreateBarometerPanels() 动态填充
-            //
-            // splitContainerMain.Panel2 - 右侧操作面板区域
-            //
+            // 
+            // splitContainerMain.Panel2
+            // 
             this.splitContainerMain.Panel2.Controls.Add(this.tableLayoutPanelRight);
             this.splitContainerMain.Size = new System.Drawing.Size(1394, 799);
             this.splitContainerMain.SplitterDistance = 1064;
             this.splitContainerMain.TabIndex = 2;
-            //
-            // tableLayoutPanelRight - 右侧布局容器（4行：状态/监视/操作/日志）
-            //
+            // 
+            // tableLayoutPanelRight
+            // 
             this.tableLayoutPanelRight.ColumnCount = 1;
             this.tableLayoutPanelRight.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanelRight.Controls.Add(this.groupBoxStatus, 0, 0);
@@ -332,30 +314,30 @@ namespace BarometerWinform.Views
             this.tableLayoutPanelRight.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanelRight.Size = new System.Drawing.Size(326, 799);
             this.tableLayoutPanelRight.TabIndex = 0;
-            //
-            // groupBoxStatus - 运行状态分组
-            //
+            // 
+            // groupBoxStatus
+            // 
             this.groupBoxStatus.Controls.Add(this.lblRunStatus);
             this.groupBoxStatus.Dock = System.Windows.Forms.DockStyle.Fill;
             this.groupBoxStatus.Location = new System.Drawing.Point(3, 3);
             this.groupBoxStatus.Name = "groupBoxStatus";
-            this.groupBoxStatus.Size = new System.Drawing.Size(334, 74);
+            this.groupBoxStatus.Size = new System.Drawing.Size(320, 74);
             this.groupBoxStatus.TabIndex = 0;
             this.groupBoxStatus.TabStop = false;
             this.groupBoxStatus.Text = "运行状态";
-            //
-            // lblRunStatus - 运行状态文本
-            //
+            // 
+            // lblRunStatus
+            // 
             this.lblRunStatus.AutoSize = true;
             this.lblRunStatus.Font = new System.Drawing.Font("微软雅黑", 10F);
             this.lblRunStatus.Location = new System.Drawing.Point(15, 30);
             this.lblRunStatus.Name = "lblRunStatus";
-            this.lblRunStatus.Size = new System.Drawing.Size(145, 19);
+            this.lblRunStatus.Size = new System.Drawing.Size(138, 20);
             this.lblRunStatus.TabIndex = 0;
             this.lblRunStatus.Text = "空闲/测试中(D4204)";
-            //
-            // groupBoxMonitor - 监视分组（温度显示）
-            //
+            // 
+            // groupBoxMonitor
+            // 
             this.groupBoxMonitor.Controls.Add(this.lblLowerTempLabel);
             this.groupBoxMonitor.Controls.Add(this.txtLowerTemp);
             this.groupBoxMonitor.Controls.Add(this.lblUpperTempLabel);
@@ -365,82 +347,82 @@ namespace BarometerWinform.Views
             this.groupBoxMonitor.Dock = System.Windows.Forms.DockStyle.Fill;
             this.groupBoxMonitor.Location = new System.Drawing.Point(3, 83);
             this.groupBoxMonitor.Name = "groupBoxMonitor";
-            this.groupBoxMonitor.Size = new System.Drawing.Size(334, 114);
+            this.groupBoxMonitor.Size = new System.Drawing.Size(320, 114);
             this.groupBoxMonitor.TabIndex = 1;
             this.groupBoxMonitor.TabStop = false;
             this.groupBoxMonitor.Text = "监视";
-            //
-            // lblLowerTempLabel - "下部温度"标签
-            //
+            // 
+            // lblLowerTempLabel
+            // 
             this.lblLowerTempLabel.AutoSize = true;
             this.lblLowerTempLabel.Location = new System.Drawing.Point(15, 80);
             this.lblLowerTempLabel.Name = "lblLowerTempLabel";
             this.lblLowerTempLabel.Size = new System.Drawing.Size(53, 12);
             this.lblLowerTempLabel.TabIndex = 5;
             this.lblLowerTempLabel.Text = "下部温度";
-            //
-            // txtLowerTemp - 下部温度值显示框
-            //
+            // 
+            // txtLowerTemp
+            // 
             this.txtLowerTemp.Location = new System.Drawing.Point(100, 77);
             this.txtLowerTemp.Name = "txtLowerTemp";
             this.txtLowerTemp.ReadOnly = true;
             this.txtLowerTemp.Size = new System.Drawing.Size(200, 21);
             this.txtLowerTemp.TabIndex = 4;
             this.txtLowerTemp.Text = "(D4704)";
-            //
-            // lblUpperTempLabel - "上部温度"标签
-            //
+            // 
+            // lblUpperTempLabel
+            // 
             this.lblUpperTempLabel.AutoSize = true;
             this.lblUpperTempLabel.Location = new System.Drawing.Point(15, 53);
             this.lblUpperTempLabel.Name = "lblUpperTempLabel";
             this.lblUpperTempLabel.Size = new System.Drawing.Size(53, 12);
             this.lblUpperTempLabel.TabIndex = 3;
             this.lblUpperTempLabel.Text = "上部温度";
-            //
-            // txtUpperTemp - 上部温度值显示框
-            //
+            // 
+            // txtUpperTemp
+            // 
             this.txtUpperTemp.Location = new System.Drawing.Point(100, 50);
             this.txtUpperTemp.Name = "txtUpperTemp";
             this.txtUpperTemp.ReadOnly = true;
             this.txtUpperTemp.Size = new System.Drawing.Size(200, 21);
             this.txtUpperTemp.TabIndex = 2;
             this.txtUpperTemp.Text = "(D4702)";
-            //
-            // lblSetTempLabel - "设置温度"标签
-            //
+            // 
+            // lblSetTempLabel
+            // 
             this.lblSetTempLabel.AutoSize = true;
             this.lblSetTempLabel.Location = new System.Drawing.Point(15, 26);
             this.lblSetTempLabel.Name = "lblSetTempLabel";
             this.lblSetTempLabel.Size = new System.Drawing.Size(53, 12);
             this.lblSetTempLabel.TabIndex = 1;
             this.lblSetTempLabel.Text = "设置温度";
-            //
-            // txtSetTemp - 设置温度值显示框
-            //
+            // 
+            // txtSetTemp
+            // 
             this.txtSetTemp.Location = new System.Drawing.Point(100, 23);
             this.txtSetTemp.Name = "txtSetTemp";
             this.txtSetTemp.ReadOnly = true;
             this.txtSetTemp.Size = new System.Drawing.Size(200, 21);
             this.txtSetTemp.TabIndex = 0;
             this.txtSetTemp.Text = "(D4700)";
-            //
-            // groupBoxOperation - 操作分组（5个操作按钮）
-            //
+            // 
+            // groupBoxOperation
+            // 
             this.groupBoxOperation.Controls.Add(this.btnStartRun);
             this.groupBoxOperation.Controls.Add(this.btnInputLot);
             this.groupBoxOperation.Controls.Add(this.btnBatchRecipe);
             this.groupBoxOperation.Controls.Add(this.btnVacuum);
             this.groupBoxOperation.Controls.Add(this.btnTemperatureControl);
             this.groupBoxOperation.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.groupBoxOperation.Location = new System.Drawing.Point(3, 197);
+            this.groupBoxOperation.Location = new System.Drawing.Point(3, 203);
             this.groupBoxOperation.Name = "groupBoxOperation";
-            this.groupBoxOperation.Size = new System.Drawing.Size(334, 194);
+            this.groupBoxOperation.Size = new System.Drawing.Size(320, 194);
             this.groupBoxOperation.TabIndex = 2;
             this.groupBoxOperation.TabStop = false;
             this.groupBoxOperation.Text = "操作";
-            //
-            // btnStartRun - 启动运行按钮
-            //
+            // 
+            // btnStartRun
+            // 
             this.btnStartRun.BackColor = System.Drawing.SystemColors.Control;
             this.btnStartRun.Location = new System.Drawing.Point(15, 155);
             this.btnStartRun.Name = "btnStartRun";
@@ -449,9 +431,9 @@ namespace BarometerWinform.Views
             this.btnStartRun.Text = "启动运行(D4202)";
             this.btnStartRun.UseVisualStyleBackColor = false;
             this.btnStartRun.Click += new System.EventHandler(this.btnStartRun_Click);
-            //
-            // btnInputLot - 录入批号按钮
-            //
+            // 
+            // btnInputLot
+            // 
             this.btnInputLot.BackColor = System.Drawing.Color.LimeGreen;
             this.btnInputLot.ForeColor = System.Drawing.Color.White;
             this.btnInputLot.Location = new System.Drawing.Point(15, 121);
@@ -461,9 +443,9 @@ namespace BarometerWinform.Views
             this.btnInputLot.Text = "录入批号";
             this.btnInputLot.UseVisualStyleBackColor = false;
             this.btnInputLot.Click += new System.EventHandler(this.btnInputLot_Click);
-            //
-            // btnBatchRecipe - 批量设置配方按钮
-            //
+            // 
+            // btnBatchRecipe
+            // 
             this.btnBatchRecipe.BackColor = System.Drawing.Color.LimeGreen;
             this.btnBatchRecipe.ForeColor = System.Drawing.Color.White;
             this.btnBatchRecipe.Location = new System.Drawing.Point(15, 87);
@@ -473,9 +455,9 @@ namespace BarometerWinform.Views
             this.btnBatchRecipe.Text = "批量设置配方";
             this.btnBatchRecipe.UseVisualStyleBackColor = false;
             this.btnBatchRecipe.Click += new System.EventHandler(this.btnBatchRecipe_Click);
-            //
-            // btnVacuum - 开启真空按钮
-            //
+            // 
+            // btnVacuum
+            // 
             this.btnVacuum.BackColor = System.Drawing.SystemColors.Control;
             this.btnVacuum.Location = new System.Drawing.Point(15, 53);
             this.btnVacuum.Name = "btnVacuum";
@@ -484,9 +466,9 @@ namespace BarometerWinform.Views
             this.btnVacuum.Text = "开启真空(VAC_1)";
             this.btnVacuum.UseVisualStyleBackColor = false;
             this.btnVacuum.Click += new System.EventHandler(this.btnVacuum_Click);
-            //
-            // btnTemperatureControl - 温控操作按钮
-            //
+            // 
+            // btnTemperatureControl
+            // 
             this.btnTemperatureControl.BackColor = System.Drawing.SystemColors.Control;
             this.btnTemperatureControl.Location = new System.Drawing.Point(15, 19);
             this.btnTemperatureControl.Name = "btnTemperatureControl";
@@ -495,20 +477,20 @@ namespace BarometerWinform.Views
             this.btnTemperatureControl.Text = "温控操作(D4203)";
             this.btnTemperatureControl.UseVisualStyleBackColor = false;
             this.btnTemperatureControl.Click += new System.EventHandler(this.btnTemperatureControl_Click);
-            //
-            // groupBoxLog - LOG日志分组
-            //
+            // 
+            // groupBoxLog
+            // 
             this.groupBoxLog.Controls.Add(this.txtLog);
             this.groupBoxLog.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.groupBoxLog.Location = new System.Drawing.Point(3, 397);
+            this.groupBoxLog.Location = new System.Drawing.Point(3, 403);
             this.groupBoxLog.Name = "groupBoxLog";
-            this.groupBoxLog.Size = new System.Drawing.Size(334, 399);
+            this.groupBoxLog.Size = new System.Drawing.Size(320, 393);
             this.groupBoxLog.TabIndex = 3;
             this.groupBoxLog.TabStop = false;
             this.groupBoxLog.Text = "LOG";
-            //
-            // txtLog - 日志输出文本框（只读，垂直滚动）
-            //
+            // 
+            // txtLog
+            // 
             this.txtLog.Dock = System.Windows.Forms.DockStyle.Fill;
             this.txtLog.Font = new System.Drawing.Font("Consolas", 8F);
             this.txtLog.Location = new System.Drawing.Point(3, 17);
@@ -516,63 +498,57 @@ namespace BarometerWinform.Views
             this.txtLog.Name = "txtLog";
             this.txtLog.ReadOnly = true;
             this.txtLog.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.txtLog.Size = new System.Drawing.Size(328, 379);
+            this.txtLog.Size = new System.Drawing.Size(314, 373);
             this.txtLog.TabIndex = 0;
-            //
-            // statusStripMain - 底部状态栏
-            //
+            // 
+            // statusStripMain
+            // 
             this.statusStripMain.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.toolStripStatusLabelDeviceCount,
             this.toolStripStatusLabelInterval,
             this.toolStripStatusLabelTime});
-            this.statusStripMain.Location = new System.Drawing.Point(0, 875);
+            this.statusStripMain.Location = new System.Drawing.Point(0, 878);
             this.statusStripMain.Name = "statusStripMain";
-            this.statusStripMain.Size = new System.Drawing.Size(1400, 25);
+            this.statusStripMain.Size = new System.Drawing.Size(1400, 22);
             this.statusStripMain.TabIndex = 3;
             this.statusStripMain.Text = "statusStrip1";
-            //
-            // toolStripStatusLabelDeviceCount - 设备数量状态
-            //
+            // 
+            // toolStripStatusLabelDeviceCount
+            // 
             this.toolStripStatusLabelDeviceCount.Name = "toolStripStatusLabelDeviceCount";
-            this.toolStripStatusLabelDeviceCount.Size = new System.Drawing.Size(69, 20);
+            this.toolStripStatusLabelDeviceCount.Size = new System.Drawing.Size(77, 17);
             this.toolStripStatusLabelDeviceCount.Text = "设备数量: 72";
-            //
-            // toolStripStatusLabelInterval - 采集间隔状态
-            //
+            // 
+            // toolStripStatusLabelInterval
+            // 
             this.toolStripStatusLabelInterval.Name = "toolStripStatusLabelInterval";
-            this.toolStripStatusLabelInterval.Size = new System.Drawing.Size(77, 20);
+            this.toolStripStatusLabelInterval.Size = new System.Drawing.Size(108, 17);
             this.toolStripStatusLabelInterval.Text = "采集间隔: 1000ms";
-            //
-            // toolStripStatusLabelTime - 当前时间状态
-            //
+            // 
+            // toolStripStatusLabelTime
+            // 
             this.toolStripStatusLabelTime.Name = "toolStripStatusLabelTime";
-            this.toolStripStatusLabelTime.Size = new System.Drawing.Size(140, 20);
+            this.toolStripStatusLabelTime.Size = new System.Drawing.Size(126, 17);
             this.toolStripStatusLabelTime.Text = "2024-01-01 00:00:00";
-            //
-            // timerTime - 时间更新定时器（1秒间隔）
-            //
+            // 
+            // timerTime
+            // 
             this.timerTime.Interval = 1000;
             this.timerTime.Tick += new System.EventHandler(this.timerTime_Tick);
-            //
-            // MainForm - 主窗体自身属性设置
-            // 【修改】窗体最大化启动，支持自适应分辨率
-            // - WindowState=Maximized：启动时最大化铺满屏幕
-            // - MinimumSize=(800, 600)：允许用户缩小窗体的最小尺寸
-            // - 添加 rootScrollPanel 作为根容器（内部支持滚动条）
-            //
+            // 
+            // MainForm
+            // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1400, 900);
-            // 【修改】将根容器 rootScrollPanel 加入窗体（而不是直接加入 tableLayoutPanelMain）
             this.Controls.Add(this.rootScrollPanel);
+            this.MinimumSize = new System.Drawing.Size(800, 600);
             this.Name = "MainForm";
             this.Text = "老化测试系统V1.00";
-            // 【新增】窗体最小尺寸，允许用户缩小窗体
-            this.MinimumSize = new System.Drawing.Size(800, 600);
-            // 【新增】启动时最大化，自适应屏幕分辨率
             this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.MainForm_FormClosing);
             this.Load += new System.EventHandler(this.MainForm_Load);
+            this.rootScrollPanel.ResumeLayout(false);
             this.tableLayoutPanelMain.ResumeLayout(false);
             this.tableLayoutPanelMain.PerformLayout();
             this.tableLayoutPanelTop.ResumeLayout(false);
@@ -591,9 +567,8 @@ namespace BarometerWinform.Views
             this.groupBoxLog.PerformLayout();
             this.statusStripMain.ResumeLayout(false);
             this.statusStripMain.PerformLayout();
-            // 【新增】恢复 rootScrollPanel 布局
-            this.rootScrollPanel.ResumeLayout(false);
             this.ResumeLayout(false);
+
         }
 
         #endregion

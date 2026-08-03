@@ -18,8 +18,22 @@ namespace BarometerWinform.Services
     /// 2) 这里把 DI/DO 视为“16 点打包成 1 个寄存器”的常见实现：
     ///    - 第 1~16 点 → 第 1 个寄存器的 bit0~bit15
     ///    - 第 17~32 点 → 第 2 个寄存器的 bit0~bit15
-    /// 3) 读/写使用的寄存器类型（Input Register / Holding Register / Coil）必须以说明书为准：
-    ///    你给的 Demo 采用 0x1000(InputReg) 读 DI，0x2000(HoldingReg) 写 DO，这里保持一致，并留 TODO 给现场确认。
+    /// 3) 本项目的寄存器区与位序，已依据现场 ModbusTCPTest 实测结果固化（GX-CL140）：
+    ///    - DI（输入）：
+    ///      - 起始地址：0x1000
+    ///      - 读取方式：ReadInputRegisters（功能码 0x04）
+    ///      - 位序：从右往左第 1 位为第 1 路（也就是 bit0=第1路，bit15=第16路）
+    ///    - DO（输出）：
+    ///      - 起始地址：0x2000
+    ///      - 读取方式：ReadHoldingRegisters（功能码 0x03）
+    ///      - 写入方式：WriteSingleRegister（功能码 0x06）
+    ///      - 位序：同 DI（bit0=第1路）
+    ///    - 现场 5 个 DQ50P-S（每个 32 路）对应 10 个寄存器：
+    ///      - 模块1：0x2000(1~16) + 0x2001(17~32)
+    ///      - 模块2：0x2002(33~48) + 0x2003(49~64)
+    ///      - 模块3：0x2004(65~80) + 0x2005(81~96)
+    ///      - 模块4：0x2006(97~112) + 0x2007(113~128)
+    ///      - 模块5：0x2008(129~144) + 0x2009(145~160)
     /// 4) 为了简单直观，这里对单点输出采用“读-改-写”方式修改某一 bit。
     ///    后续如果发现写入频繁导致闪烁，可以优化成“按寄存器批量写”。
     /// </summary>
@@ -151,8 +165,16 @@ namespace BarometerWinform.Services
                 // 用位运算取某一位：
                 // - (1 << bit) 生成掩码，例如 bit=0 => 0x0001，bit=15 => 0x8000
                 // - value & mask != 0 表示该 bit 为 1
-                // TODO: 待现场确认位序定义（是否 bit0=通道1、是否需要高低电平取反）
-                return (value & (1 << bit)) != 0;
+                //
+                // 【已现场确认（来自 ModbusTCPTest 实测）】
+                // - bit0 对应“第 1 路输入”，bit15 对应“第 16 路输入”
+                // - 因此 inputId=1 对应 reg=0x1000, bit=0
+                //
+                // InvertInputs 用于兼容少数现场“低有效/高有效”逻辑与寄存器 bit 值不一致的情况：
+                // - false：bit=1 认为输入 ON（默认）
+                // - true：逻辑取反（把 bit=0 当成 ON）
+                bool rawState = (value & (1 << bit)) != 0;
+                return _config.InvertInputs ? !rawState : rawState;
             }
             catch (Exception ex)
             {
@@ -191,7 +213,8 @@ namespace BarometerWinform.Services
                     int regIndex = i / 16;
                     int bit = i % 16;
                     if (regIndex >= regs.Length) break;
-                    result[i] = (regs[regIndex] & (1 << bit)) != 0;
+                    bool rawState = (regs[regIndex] & (1 << bit)) != 0;
+                    result[i] = _config.InvertInputs ? !rawState : rawState;
                 }
 
                 return result;
@@ -224,6 +247,7 @@ namespace BarometerWinform.Services
 
             try
             {
+                bool outputState = _config.InvertOutputs ? !state : state;
                 int bitIndex = outputId - outputStart;
                 ushort regAddress = (ushort)(_config.IoOutputRegisterStartAddress + (bitIndex / 16));
                 int bit = bitIndex % 16;
@@ -236,12 +260,15 @@ namespace BarometerWinform.Services
                     ushort current = (currentRegs != null && currentRegs.Length > 0) ? currentRegs[0] : (ushort)0;
 
                     ushort mask = (ushort)(1 << bit);
-                    ushort newValue = state ? (ushort)(current | mask) : (ushort)(current & ~mask);
+                    ushort newValue = outputState ? (ushort)(current | mask) : (ushort)(current & ~mask);
 
                     // 写单寄存器（功能码 0x06）
                     // - 写入的是 16bit 的 newValue，其中只有一个 bit 被改变
                     // - 其它 bit 保持原状
-                    // TODO: 待现场确认写入区域/功能码（示例用 0x2000 写保持寄存器；部分IO模块可能用 Coil）
+                    //
+                    // 【已现场确认（来自 ModbusTCPTest 实测）】
+                    // - GX-CL140 + DQ50P-S 输出模块：DO 区域可用 Holding Register 写入（0x06）控制指示灯/通道
+                    // - 起始地址默认 0x2000，每个寄存器 16 路，bit0=第1路
                     _master.WriteSingleRegister(_config.IoUnitId, regAddress, newValue);
                 }
             }
@@ -309,7 +336,8 @@ namespace BarometerWinform.Services
                     value = regs[0];
                 }
 
-                return (value & (1 << bit)) != 0;
+                bool rawState = (value & (1 << bit)) != 0;
+                return _config.InvertOutputs ? !rawState : rawState;
             }
             catch (Exception ex)
             {
@@ -345,7 +373,8 @@ namespace BarometerWinform.Services
                     int regIndex = i / 16;
                     int bit = i % 16;
                     if (regIndex >= regs.Length) break;
-                    result[i] = (regs[regIndex] & (1 << bit)) != 0;
+                    bool rawState = (regs[regIndex] & (1 << bit)) != 0;
+                    result[i] = _config.InvertOutputs ? !rawState : rawState;
                 }
 
                 return result;

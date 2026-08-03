@@ -411,8 +411,8 @@ public interface IIoController
 | `PlcAddress` | string | 192.168.1.100 | PLC连接地址（预留，待确认协议） |
 | `PlcPort` | int | 502 | PLC通讯端口（默认502为Modbus TCP标准端口） |
 | `CollectInterval` | int | 1000 | 采集间隔（ms） |
-| `PanelColumns` | int | 9 | 面板列数 |
-| `PanelRows` | int | 8 | 面板行数 |
+| `PanelColumns` | int | 8 | 面板列数 |
+| `PanelRows` | int | 9 | 面板行数 |
 
 #### 3.4.3 RecipeConfig（配方配置模型）
 
@@ -610,8 +610,8 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 | `TotalInputs` | IO输入总数 | 72 |
 | `TotalOutputs` | IO输出总数 | 144 |
 | `CollectInterval` | 数据采集间隔（毫秒） | 1000 |
-| `PanelColumns` | 主视图面板列数 | 9 |
-| `PanelRows` | 主视图面板行数 | 8 |
+| `PanelColumns` | 主视图面板列数 | 8 |
+| `PanelRows` | 主视图面板行数 | 9 |
 | `PortName` | 通信端口 | COM1 |
 | `BaudRate` | 波特率 | 9600 |
 | `DataBits` | 数据位 | 8 |
