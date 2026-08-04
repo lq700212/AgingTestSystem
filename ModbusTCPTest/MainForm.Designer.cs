@@ -1,4 +1,4 @@
-﻿namespace ModbusTCPTest
+namespace ModbusTCPTest
 {
     partial class MainForm
     {
@@ -33,6 +33,7 @@
             this.btnWriteData = new System.Windows.Forms.Button();
             this.btnReadData = new System.Windows.Forms.Button();
             this.btnWriteDatas = new System.Windows.Forms.Button();
+            this.btnPowerOnTest = new System.Windows.Forms.Button();
             this.SuspendLayout();
             // 
             // btnConnection
@@ -92,11 +93,23 @@
             this.btnWriteDatas.UseVisualStyleBackColor = true;
             this.btnWriteDatas.Click += new System.EventHandler(this.btnWriteDatas_Click);
             // 
+            // btnPowerOnTest
+            // 
+            this.btnPowerOnTest.Font = new System.Drawing.Font("宋体", 21.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.btnPowerOnTest.Location = new System.Drawing.Point(378, 295);
+            this.btnPowerOnTest.Name = "btnPowerOnTest";
+            this.btnPowerOnTest.Size = new System.Drawing.Size(227, 39);
+            this.btnPowerOnTest.TabIndex = 5;
+            this.btnPowerOnTest.Text = "测试载台上电";
+            this.btnPowerOnTest.UseVisualStyleBackColor = true;
+            this.btnPowerOnTest.Click += new System.EventHandler(this.btnPowerOnTest_Click);
+            // 
             // MainForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(800, 450);
+            this.ClientSize = new System.Drawing.Size(800, 530);
+            this.Controls.Add(this.btnPowerOnTest);
             this.Controls.Add(this.btnWriteDatas);
             this.Controls.Add(this.btnReadData);
             this.Controls.Add(this.btnWriteData);
@@ -117,6 +130,7 @@
         private System.Windows.Forms.Button btnWriteData;
         private System.Windows.Forms.Button btnReadData;
         private System.Windows.Forms.Button btnWriteDatas;
+        private System.Windows.Forms.Button btnPowerOnTest;
     }
 }
 

@@ -50,7 +50,7 @@ namespace ModbusTCPTest
         }
 
         // ========== 2. 写入DO（数字量输出）测试按钮 ==========
-        // 功能：向地址 0x2000 写入一个值，控制第1~16路输出通道的开关状态
+        // 功能：向地址 0x2000 写入一个值，控制第1~16路输出通道的开关状态，相当于 16 个二进制的 bit 位
         private void btnWriteData_Click(object sender, EventArgs e)
         {
             // 先检查是否已连接，未连接则提示
@@ -89,7 +89,7 @@ namespace ModbusTCPTest
         }
 
         // ========== 3. 读取DI（数字量输入）测试按钮 ==========
-        // 功能：读取地址 0x1000 的输入寄存器，获取第1~16路DI的状态
+        // 功能：读取地址 0x1000 的输入寄存器，获取第1~16路DI的状态, 一个寄存器对应
         private void btnReadData_Click(object sender, EventArgs e)
         {
             // 先检查连接状态
@@ -194,6 +194,20 @@ namespace ModbusTCPTest
                 modbusClient.WriteSingleRegister(startAddress, 0x0000);
                 // 为下一轮的循环做准备，将起始地址加1，模拟写入下一个寄存器
                 startAddress += 1;
+            }
+        }
+
+        // ========== 5. 测试载台上电（跳转到 PowerOnTestForm） ==========
+        // 功能：打开“载台上电（继电器）测试”窗体，用于现场逐排 / 逐点验证 9×8=72 路载台上电输出。
+        // 该窗体内部自己管理 ModbusClient（与 MainForm 解耦），需要先在窗体内点击“连接测试”。
+        private void btnPowerOnTest_Click(object sender, EventArgs e)
+        {
+            // 使用默认参数（192.168.1.20:502）创建子窗体
+            // 与本窗体 InitData() 中的 IP/端口保持一致
+            using (PowerOnTestForm form = new PowerOnTestForm())
+            {
+                // 以模态方式打开，关闭后才返回主窗体
+                form.ShowDialog(this);
             }
         }
     }
