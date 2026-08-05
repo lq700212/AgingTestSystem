@@ -153,27 +153,27 @@ namespace BarometerWinform.Services
 
             try
             {
-                // raw：寄存器原始值（0~65535），后续按说明书解释
-                ushort raw;
+                ushort[] registers;
                 lock (_syncRoot)
                 {
-                    // 3) 读取保持寄存器（Holding Register，功能码 0x03）
+                    // 3) 读取输入寄存器（Input Register，功能码 0x04）
                     //    - slaveAddress：从站地址（默认使用 deviceId）
-                    //    - startAddress：寄存器地址（来自配置 BarometerPressureRegisterAddress）
-                    //    - numberOfPoints：读取数量，这里仅读 1 个寄存器
-                    ushort[] registers = _master.ReadHoldingRegisters((byte)deviceId, _config.BarometerPressureRegisterAddress, 1);
-                    if (registers == null || registers.Length < 1) return null;
-                    raw = registers[0];
+                    //    - startAddress：寄存器地址（来自配置 BarometerPressureRegisterAddress，默认 0x0001）
+                    //    - numberOfPoints：一次读 2 个寄存器（0x0001 压力原始值 + 0x0002 小数位数）
+                    //    注意：以 ModbusRtuBarometerTest Demo 实测为准，压力走 Input Register（0x04），
+                    //    不是 Holding Register（0x03）——早期实现读 0x0010 是错的（0x0010 实际是阈值寄存器）。
+                    registers = _master.ReadInputRegisters((byte)deviceId, _config.BarometerPressureRegisterAddress, 2);
+                    if (registers == null || registers.Length < 2) return null;
                 }
 
-                // 4) 寄存器值到压力值的转换
-                //    注意：这里的转换方式完全取决于设备说明书。
-                //    常见情况：
-                //    - 值为有符号 short（可能出现负压）
-                //    - 或者值为无符号 ushort，需要自行做偏移/比例换算
-                decimal pressurePa = (short)raw;
+                // 4) 寄存器值到压力值的转换（以 Demo 为准）
+                //    - 压力原始值按有符号 short 解释（0xFFFE → -2，支持负压）
+                //    - 小数位数寄存器合法范围 0~4，非法则用默认值（BarometerDefaultDecimalPlaces，默认 1）
+                //    - 实际压力 = 有符号原始值 / 10^小数位，再乘以可选缩放系数 BarometerPressureScale
+                short rawSigned = (short)registers[0];
+                int decimalPos = (registers[1] <= 4) ? registers[1] : _config.BarometerDefaultDecimalPlaces;
+                decimal pressurePa = rawSigned / (decimal)Math.Pow(10, decimalPos);
                 pressurePa *= _config.BarometerPressureScale;
-                // TODO: 待现场确认寄存器含义与单位换算（是否需要除以1000、是否为无符号值、是否有偏移）
 
                 var data = new BarometerData
                 {

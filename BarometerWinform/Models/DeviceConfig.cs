@@ -57,8 +57,9 @@ namespace BarometerWinform.Models
 
         /// <summary>
         /// 通信波特率
+        /// 以 ModbusRtuBarometerTest Demo 实测为准：19200
         /// </summary>
-        public int BaudRate { get; set; } = 9600;
+        public int BaudRate { get; set; } = 19200;
 
         /// <summary>
         /// 数据位
@@ -184,13 +185,20 @@ namespace BarometerWinform.Models
         public ushort IoOutputRegisterStartAddress { get; set; } = 0x2000;
 
         /// <summary>
-        /// 气压表压力值寄存器地址（Holding Register）
-        /// 
-        /// 约定：
-        /// - 默认 0x0010（来自你提供的串口 RTU Demo）
-        /// - 是否确实为 0x0010，需要以气压表说明书为准
+        /// 气压表压力值寄存器起始地址（Input Register，功能码 0x04）
+        ///
+        /// 约定（以 ModbusRtuBarometerTest Demo 实测为准）：
+        /// - 0x0001 = 压力原始值（按有符号 short 解释，支持负压）
+        /// - 0x0002 = 小数位数（合法 0~4；非法时用 BarometerDefaultDecimalPlaces）
+        /// - 读取时一次读 2 个寄存器：ReadInputRegisters(slaveId, 0x0001, 2)
         /// </summary>
-        public ushort BarometerPressureRegisterAddress { get; set; } = 0x0010;
+        public ushort BarometerPressureRegisterAddress { get; set; } = 0x0001;
+
+        /// <summary>
+        /// 小数位数默认值（当从设备读到的 0x0002 非法/无效时使用）
+        /// 以 ModbusRtuBarometerTest Demo 实测为准：默认 1
+        /// </summary>
+        public int BarometerDefaultDecimalPlaces { get; set; } = 1;
 
         /// <summary>
         /// 压力值缩放系数
