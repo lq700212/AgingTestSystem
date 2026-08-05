@@ -9,13 +9,17 @@
 
 | 需求项 | 描述 | 当前状态 |
 | :--- | :--- | :--- |
-| 气压表数据采集 | 实时读取72个气压表的真空压力数据 | 已实现（Mock/真实可切换） |
-| IO输入监控 | 监控72个IO输入点状态(NPN, X000~X107) | 已接入显耀IO表（Mock/真实可切换） |
-| IO输出控制 | 控制144个IO输出点状态(PNP, Y000~Y217) | 已接入显耀IO表（Mock/真实可切换） |
+| 气压表数据采集 | 实时读取72个气压表的真空压力数据 | 已实现（Modbus RTU，Mock/真实可切换） |
+| IO输入监控 | 监控72个IO输入点状态(NPN, X000~X107) | 已接入显耀IO表（Modbus TCP，Mock/真实可切换） |
+| IO输出控制 | 控制144个IO输出点状态(PNP, Y000~Y217) | 已接入显耀IO表（Modbus TCP，Mock/真实可切换） |
 | IO点映射表 | 内部编号与三菱PLC物理地址的映射 | 已实现（IoMapBuilder） |
 | 动态面板显示 | 根据配置动态创建气压表面板 | 已实现 |
-| 参数配置 | 配方管理、延时设置等 | 预留功能 |
-| 数据记录 | LOG记录功能 | 预留功能 |
+| 冷却送风机控制 | 定值启动/停止 + 温度/湿度监视 | 已实现（V1.15，Modbus TCP） |
+| 老化测试业务 | 启动运行 → 真空确认 → 老化计时 → 自动停止 | 已实现（V1.15） |
+| 报警联动 | 压力越限/真空建立失败/通讯失联 → 关阀+断电 | 已实现（V1.12/V1.15） |
+| 用户权限管理 | 操作员/技术员/管理员登录与权限控制 | 已实现 |
+| 参数配置 | 采集间隔、报警阈值、配方管理等 | 部分实现（配置持久化待完成） |
+| 数据记录 | 事件日志 CSV 落盘 + 历史记录查询 | 已实现（V1.15，TestEventLogger） |
 
 ### 1.2 技术栈
 
@@ -35,7 +39,7 @@
 │                          MainForm (主视图)                           │
 │  ┌─────────────┐  ┌──────────────────────────────┐  ┌─────────────┐ │
 │  │   菜单栏     │  │     BarometerPanelView × N   │  │   操作面板    │ │
-│  │ (6个按钮)    │  │        (子视图/动态加载)       │   │ (5个按钮)    │ │
+│  │ (6个按钮)    │  │        (子视图/动态加载)       │   │ (9个按钮)    │ │
 │  │  ↓ 下拉菜单  │  └──────────────────────────────┘   └─────────────┘ │
 │  └──────┬──────┘                                                    │
 └─────────┼───────────────────────────────────────────────────────────┘
@@ -44,23 +48,24 @@
 ┌─────────────────────────────────────────────────────────────────────┐
 │                 Dialogs (对话框窗体层)                                │
 │  CommunicationSettingForm │ CommonParameterForm │ RecipeManagerForm │
-│  HistoryRecordForm        │ ScanSimulationForm                      │
+│  HistoryRecordForm │ ScanSimulationForm │ DeviceManualForm (V1.15)  │
 └─────────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      DeviceManager (服务层)                          │
-│  ┌─────────────────────┐  ┌─────────────────────┐                   │
-│  │ IBarometerReader    │  │ IIoController       │                   │
-│  │ (气压表数据读取)       │  │ (IO输入输出控制)      │                   │
-│  │ └─ MockBarometer... │  │ └─ MockIoController │                   │
-│  └─────────────────────┘  └─────────────────────┘                   │
+│  ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────────┐ │
+│  │ IBarometerReader │ │ IIoController    │ │ IFanController       │ │
+│  │ (气压表读取)      │ │ (IO输入输出控制)   │ │ (送风机定值启停)      │ │
+│  │ └MockBarometer…  │ │ └MockIoController│ │ └MockFanController   │ │
+│  └──────────────────┘ └──────────────────┘ └──────────────────────┘ │
+│  └─ TestEventLogger：测试事件写 CSV，供历史记录查询 (V1.15)            │
 └─────────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                          Models (数据模型层)                          │
-│  BarometerData │ IoStatus │ DeviceConfig │ RecipeConfig             │
+│  BarometerData │ FanData(V1.15) │ IoStatus │ DeviceConfig │ Recipe   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -69,10 +74,10 @@
 | 层级 | 名称 | 职责 | 关键文件 |
 | :--- | :--- | :--- | :--- |
 | **视图层** | Views | 负责主UI展示和用户交互 | MainForm.cs, BarometerPanelView.cs |
-| **对话框层** | Dialogs | 菜单按钮弹出的子窗体 | CommunicationSettingForm.cs, RecipeManagerForm.cs 等 |
-| **服务层** | Services | 负责业务逻辑和硬件通信 | DeviceManager.cs, MockBarometerReader.cs, MockIoController.cs |
-| **接口层** | Interfaces | 定义硬件通信标准接口 | IBarometerReader.cs, IIoController.cs |
-| **模型层** | Models | 定义数据结构和配置参数 | BarometerData.cs, IoStatus.cs, DeviceConfig.cs, RecipeConfig.cs |
+| **对话框层** | Dialogs | 菜单按钮弹出的子窗体 | CommunicationSettingForm.cs, RecipeManagerForm.cs, DeviceManualForm.cs 等 |
+| **服务层** | Services | 负责业务逻辑和硬件通信（气压表 / IO / 送风机） | DeviceManager.cs, ModbusRtuBarometerReader.cs, ModbusTcpIoController.cs, FanControllerClient.cs, MockFanController.cs, TestEventLogger.cs 等 |
+| **接口层** | Interfaces | 定义硬件通信标准接口 | IBarometerReader.cs, IIoController.cs, IFanController.cs |
+| **模型层** | Models | 定义数据结构和配置参数 | BarometerData.cs, FanData.cs, IoStatus.cs, DeviceConfig.cs, RecipeConfig.cs |
 
 ---
 
@@ -88,16 +93,19 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ 标题栏: 老化测试系统V1.00 | 权限: 操作员 | PLC状态: 已连接             │
+│ 标题栏: 老化测试系统V1.15 | 权限: 操作员 | PLC状态: 已连接           │
 ├─────────────────────────────────────────────────────────────────┤
-│ 菜单按钮: 用户权限 | 通信设置 | 参数设置 | LOG记录 | TEST | 关于        │
+│ 菜单按钮: 用户权限 | 通信设置 | 参数设置 | LOG记录 | TEST | 关于      │
 ├──────────────────────────────────────┬──────────────────────────┤
 │                                      │ 运行状态                  │
-│         气压表显示区域                  │ 监视(温度)                │
-│      (9列 × 8行 = 72个面板)            │ 操作按钮                  │
+│         气压表显示区域                  │ 送风机监视                  │
+│      (9列 × 8行 = 72个面板)            │ (状态/当前温度/当前湿度/设定) │
+│       每个面板带 Set 按钮               │ 操作                      │
+│                                      │ (送风机启停/开启真空/启动/   │
+│                                      │  停止/复位/急停/配方/批号)  │
 │                                      │ LOG输出                   │
 ├──────────────────────────────────────┴──────────────────────────┤
-│ 状态栏: 设备数量 | 采集间隔 | 当前时间                                │
+│ 状态栏: 设备数量 | 采集间隔 | 测试中 | 在线 | 当前时间                │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -116,6 +124,10 @@
 | `UpdateStatusBar()` | 更新底部状态栏 |
 | `UpdateConnectionStatus()` | 更新 PLC 连接状态显示（修复 H1，含 IsDisposed 检查和异常捕获） |
 | `LoadConfig()` | 从 App.config 加载所有配置项（修复 H7，含一致性校验） |
+| `DeviceManager_OnFanDataUpdated()` | 处理送风机数据更新事件（BeginInvoke 异步切到 UI 线程） |
+| `UpdateFanDisplay(data)` | 更新送风机监视区显示（状态/温度/湿度/设定值） |
+| `UpdateRunStatusSummary()` | 更新状态栏"测试中/在线"统计 |
+| `GetSelectedDeviceIds()` | 获取选中的设备编号列表，未选中时弹出提示 |
 
 #### 3.1.2 BarometerPanelView（气压表显示面板）
 
@@ -207,9 +219,9 @@
 | 窗体 | 功能 | 已实现 | 预留项 |
 | :--- | :--- | :--- | :--- |
 | `CommunicationSettingForm` | PLC通讯设置 | IP/端口/协议/串口参数配置 | 测试连接、参数持久化 |
-| `CommonParameterForm` | 公共参数设置 | 采集间隔配置 | 报警阈值等参数需现场确认 |
+| `CommonParameterForm` | 公共参数设置 | 采集间隔 + 报警压力阈值（写回内存配置） | 参数持久化待实现 |
 | `RecipeManagerForm` | 配方管理 | 左右分栏布局：左侧配方列表（序号+配方名称），右侧配方设置（配方名称、延时时间、启动时间、极限温度），底部添加/更新/删除按钮和保存设置按钮 | 新增/编辑/删除/持久化待实现 |
-| `HistoryRecordForm` | 历史记录查询 | 日期范围查询、Mock日志数据（7天10种事件） | 实际查询逻辑、日志存储路径、导出 |
+| `HistoryRecordForm` | 历史记录查询 | 【V1.15】日期范围查询 + 读取 Logs\TestLog_*.csv 真实事件日志（自动跨 CSV 解析、跳过表头），"导出"按钮打开 Logs 文件夹 | Mock 数据已移除 |
 | `ScanSimulationForm` | 扫码模拟 | 条码输入并触发事件 | 真实扫码枪接入 |
 | `LoginForm` | 用户登录 | 用户名/密码输入、登录验证、Enter/Esc 键支持 | 密码哈希存储（当前明文） |
 | `UserManagementForm` | 用户账号管理（仅管理员） | 修改操作员/技术员的用户名和密码，用户数据持久化到 Users.json 文件 | 新增/删除账号 |
@@ -241,19 +253,32 @@
 
 **核心功能**:
 
-1. **设备连接管理**: 连接/断开气压表读取器和IO控制器
-2. **定时数据采集**: 通过定时器定期采集所有气压表数据
+1. **设备连接管理**: 连接/断开气压表读取器、IO控制器和送风机控制器
+2. **定时数据采集**: 定时采集气压表数据（采集间隔 CollectInterval）；送风机用独立定时器轮询（2s），互不阻塞
 3. **数据缓存**: 维护所有设备的最新数据
-4. **事件通知**: 数据更新和连接状态变更时触发事件
+4. **事件通知**: 数据更新、连接状态变更、送风机数据更新时触发事件
+5. **测试状态机**: StartTesting（开真空+载台上电+送风机定值启动+进测试+真空确认）/ StopTesting / ResetDevices / StopAll（急停）
+6. **报警联动**: 压力越限 / 真空建立超时 / 通讯失联 / DI触点(可选) → 边沿触发关阀+断电+标故障
+7. **送风机全局生命周期**: 有任一台在测试 → 保持运行；全部停止 → 才允许停机
 
 **关键方法**:
 
 | 方法 | 功能 |
 | :--- | :--- |
-| `Start()` | 启动设备管理器 |
-| `Stop()` | 停止设备管理器 |
-| `CollectData()` | 执行数据采集 |
-| `GetBarometerData(deviceId)` | 获取指定设备的数据 |
+| `Start()` | 启动设备管理器（连接气压表/IO/送风机，启动采集定时器） |
+| `Stop()` | 停止设备管理器（停止定时器、断开连接） |
+| `CollectData()` | 执行一轮气压表数据采集与报警判定 |
+| `GetBarometerData(deviceId)` | 获取指定设备的数据（Clone 深拷贝） |
+| `GetAllBarometerData()` | 获取全部设备数据快照 |
+| `StartTesting(deviceIds)` | 启动选中台老化测试（开真空+载台上电+送风机定值启动+进测试+真空确认） |
+| `StopTesting(deviceIds)` | 停止选中台测试（关阀+断电，末台时送风机自动停止） |
+| `ResetDevices(deviceIds)` | 报警复位，清除故障状态，可重新测试 |
+| `StopAll()` | 急停：全关阀 + 全断电 + 停送风机 |
+| `StartFan()` / `StopFan()` | 手动定值启动/停止送风机 |
+| `GetFanData()` | 获取送风机最新状态（缓存） |
+| `SetOutput(outputId, state)` | 写单个 IO 输出（供单台手动控制等） |
+| `GetOutput(outputId)` / `GetInput(inputId)` | 读单个 IO 输出/输入状态 |
+| `GetTestingCount()` / `GetOnlineCount()` | 统计测试中/在线台数（状态栏显示） |
 
 **事件**:
 
@@ -261,6 +286,7 @@
 | :--- | :--- |
 | `OnBatchDataUpdated` | 一次采集周期完成时触发一次，参数为所有气压表数据数组（修复 M2，避免逐条触发 72 次事件） |
 | `OnConnectionStatusChanged` | 连接状态变更时（Dispose 期间不触发，修复 H3） |
+| `OnFanDataUpdated` | 送风机每轮轮询完成时触发，参数为 FanData |
 
 #### 3.2.2 IoMapBuilder（IO映射表构建器）【V1.09 新增】
 
@@ -313,15 +339,17 @@ public interface IBarometerReader
 }
 ```
 
-**【预留说明】**
+**【V1.12 更新 —— 真实实现已内置】**
 
-当前使用 `MockBarometerReader` 作为模拟实现。实际使用时需要根据现场气压表的通信协议（如 Modbus、RS232 自定义协议等）实现具体的读取类。
+- Mock 实现：`MockBarometerReader`（`UseMockCommunication=true` 时使用，免接线演示）
+- 真实实现：`ModbusRtuBarometerReader`（`UseMockCommunication=false` 时使用，Modbus RTU / RS485→USB，19200）
+- 由 `DeviceManager` 依据 `UseMockCommunication` 配置自动切换，无需改代码
 
-**接入方式**:
+**接入其他协议（如需）**:
 
-1. 创建新类实现 `IBarometerReader` 接口（如 `ModbusBarometerReader`）
-2. 在 `DeviceManager` 的构造函数中替换 `MockBarometerReader`
-3. 根据实际协议实现 `Connect`、`ReadData`、`Disconnect` 方法
+1. 创建新类实现 `IBarometerReader` 接口
+2. 参考 `ModbusRtuBarometerReader` 实现 `Connect`、`ReadData`、`Disconnect`
+3. 在 `DeviceManager` 构造函数中按需替换实现
 
 #### 3.3.2 IIoController（IO控制器接口）
 
@@ -365,12 +393,36 @@ public interface IIoController
 - **输入 NPN（漏型）**：传感器导通时将信号拉低到 0V，IO模块内部上拉后识别为"导通"。适合 NPN 型接近开关、光电传感器。
 - **输出 PNP（源型）**：输出导通时输出 +24V 高电平，向外提供电流。适合直接驱动中间继电器线圈（继电器另一端接 0V），再由继电器触点控制大功率负载（电磁阀、载台电源）。
 
-**接入方式**:
+**【V1.12 更新 —— 真实实现已内置】**
 
-1. 创建新类实现 `IIoController` 接口（如 `PlcIoController`）
-2. 在 `DeviceManager` 的构造函数中替换 `MockIoController`
-3. 根据实际PLC或IO采集卡的通信协议实现各方法
-4. 使用 `IoMapBuilder.GetDeviceMapping(deviceId)` 获取物理地址进行通信
+- Mock 实现：`MockIoController`；真实实现：`ModbusTcpIoController`（GX-CL140，Modbus TCP）
+- 由 `DeviceManager` 依据 `UseMockCommunication` 自动切换，无需改代码
+- 使用 `IoMapBuilder.GetDeviceMapping(deviceId)` 获取物理地址进行通信
+- 现场实测已确认：DI 从 0x1000 读（Input Register 0x04），DO 从 0x2000 写（Holding Register），每 16 路 1 个寄存器（详见通讯接入说明.md 第 2.2/4 节）
+
+#### 3.3.3 IFanController（冷却送风机控制接口）【V1.15 新增】
+
+**定义**:
+
+```csharp
+public interface IFanController : IDisposable
+{
+    bool IsConnected { get; }
+    bool Connect(DeviceConfig config);
+    void Disconnect();
+    FanData ReadStatus();        // 读取状态（状态/温度/湿度/设定值），失败返回 null
+    bool StartFixedValue();      // 定值启动（写入 0x0001 = 0x0003）
+    bool Stop();                 // 定值停止（写入 0x0001 = 0x0002）
+    event EventHandler<string> OnError;
+}
+```
+
+**业务说明**：冷却送风机（厂商自带控制屏）的自动控温已由厂商集成，上位机只需"定值启动/定值停止"并周期读状态用于显示。
+
+**实现**：
+- Mock：`MockFanController`（`FanEnabled=true` 且无设备时演示用）
+- 真实：`FanControllerClient`（Modbus TCP，同步版，带锁 + 断线重连节流 + 连接超时）
+- 送风机是"可选设备"，连接失败不影响整机启动；用独立定时器轮询（2s），不阻塞 72 台气压表采集
 
 ---
 
@@ -396,25 +448,65 @@ public interface IIoController
 - `OutputStatus[0]`: 真空电磁阀输出状态（Y地址，PNP）
 - `OutputStatus[1]`: 载台上电输出状态（Y地址，PNP）
 
-#### 3.4.2 DeviceConfig（设备配置模型）
+#### 3.4.2 FanData（冷却送风机数据模型）【V1.15 新增】
+
+| 属性 | 类型 | 说明 |
+| :--- | :--- | :--- |
+| `RunState` | FanRunState | 运行状态（Unknown/程式停止/程式启动/定值停止/定值启动） |
+| `Temperature` | float | 当前温度（°C，寄存器值/100） |
+| `Humidity` | float | 当前湿度（%RH，寄存器值/100） |
+| `TempSetpoint` | float | 温度设定值（°C，厂商控制屏设定，只读） |
+| `HumSetpoint` | float | 湿度设定值（%RH，只读） |
+| `IsOnline` | bool | 本次是否成功读到数据（false=通讯失败，字段为默认值） |
+| `CollectTime` | DateTime | 采集时间戳 |
+
+`FanRunState` 枚举值与寄存器 0x0001 实测对应：0x0000=程式停止、0x0001=程式启动、0x0002=定值停止、0x0003=定值启动；`Unknown(-1)` 为本程序自定义哨兵值（读失败/未初始化）。`Clone()` 提供深拷贝，避免外部修改污染缓存。
+
+#### 3.4.3 DeviceConfig（设备配置模型）
+
+> 默认值以 App.config 为准（完整配置清单见 4.1 节）。
 
 | 属性 | 类型 | 默认值 | 说明 |
 | :--- | :--- | :--- | :--- |
 | `TotalBarometers` | int | 72 | 气压表总数 |
-| `TotalInputs` | int | 72 | IO输入总数（编号 1 ~ TotalInputs） |
-| `TotalOutputs` | int | 144 | IO输出总数（编号 TotalInputs+1 ~ TotalInputs+TotalOutputs） |
-| `PortName` | string | COM1 | 通信端口 |
-| `BaudRate` | int | 9600 | 波特率 |
+| `TotalInputs` | int | 80 | IO输入总数（GX-CL140 接 3 个输入模块，80DI） |
+| `TotalOutputs` | int | 160 | IO输出总数（GX-CL140 接 5 个输出模块，160DO） |
+| `PortName` | string | COM1 | 串口（气压表 RTU，RS485→USB） |
+| `BaudRate` | int | 19200 | 波特率（ModbusRtuBarometerTest Demo 实测） |
 | `DataBits` | int | 8 | 数据位 |
 | `StopBits` | int | 1 | 停止位 |
 | `Parity` | string | None | 校验位 |
-| `PlcAddress` | string | 192.168.1.100 | PLC连接地址（预留，待确认协议） |
-| `PlcPort` | int | 502 | PLC通讯端口（默认502为Modbus TCP标准端口） |
-| `CollectInterval` | int | 1000 | 采集间隔（ms） |
+| `UseMockCommunication` | bool | false | true=Mock 免接线演示；false=真实通讯（App.config 默认 false） |
+| `SerialReadTimeoutMs` | int | 1000 | 串口读取超时（毫秒） |
+| `SerialWriteTimeoutMs` | int | 1000 | 串口写入超时（毫秒） |
+| `TcpSendTimeoutMs` | int | 3000 | TCP 发送超时（毫秒） |
+| `TcpReceiveTimeoutMs` | int | 3000 | TCP 接收超时（毫秒） |
+| `InvertInputs` / `InvertOutputs` | bool | false | 输入/输出逻辑取反（NPN/PNP 现场差异） |
+| `IoUnitId` | byte | 1 | IO 耦合器从站地址（UnitId） |
+| `IoInputRegisterStartAddress` | ushort | 0x1000 | DI 起始寄存器（Input Register 0x04） |
+| `IoOutputRegisterStartAddress` | ushort | 0x2000 | DO 起始寄存器（Holding Register） |
+| `BarometerPressureRegisterAddress` | ushort | 0x0001 | 压力寄存器（0x0002 为小数位） |
+| `BarometerDefaultDecimalPlaces` | int | 1 | 小数位默认值 |
+| `BarometerPressureScale` | decimal | 1 | 压力缩放系数 |
+| `AlarmPressureThresholdPa` | decimal | -95000 | 报警压力阈值（Pa） |
+| `AlarmWhenPressureHigherThanThreshold` | bool | true | 压力高于阈值报警 |
+| `PlcAddress` | string | 192.168.1.20 | GX-CL140 IP |
+| `PlcPort` | int | 502 | GX-CL140 端口（Modbus TCP） |
+| `CollectInterval` | int | 1000 | 气压表采集间隔（毫秒） |
 | `PanelColumns` | int | 8 | 面板列数 |
 | `PanelRows` | int | 9 | 面板行数 |
+| `FanEnabled` | bool | true | 是否启用冷却送风机（可选设备，连接失败不影响启动） |
+| `FanIpAddress` | string | 192.168.1.221 | 送风机控制屏 IP |
+| `FanPort` | int | 50000 | 送风机端口（厂商控制屏实测） |
+| `FanUnitId` | byte | 1 | 送风机从站地址 |
+| `FanTimeoutMs` | int | 3000 | 送风机通讯超时（毫秒） |
+| `VacuumConfirmTimeoutMs` | int | 15000 | 真空建立确认超时（毫秒） |
+| `CommunicationLossAlarmCount` | int | 3 | 通讯失联报警阈值（连续失败次数） |
+| `MaxTestDurationSeconds` | int | 0 | 老化测试最大时长（秒，0=不限） |
+| `UseDiAlarmContact` | bool | false | DI 报警触点并入判定（需现场确认电平后开） |
+| `FanTempAlarmLimitC` | float | 0 | 送风机温度告警上限（°C，0=不启用） |
 
-#### 3.4.3 RecipeConfig（配方配置模型）
+#### 3.4.4 RecipeConfig（配方配置模型）
 
 | 属性 | 类型 | 说明 |
 | :--- | :--- | :--- |
@@ -425,7 +517,7 @@ public interface IIoController
 | `DelayArriveTime` | TimeSpan | 延时到达时间 |
 | `LimitTemperature` | decimal | 极限温度 |
 
-#### 3.4.4 UserRole（用户角色枚举）
+#### 3.4.5 UserRole（用户角色枚举）
 
 | 枚举值 | 数值 | 说明 |
 | :--- | :--- | :--- |
@@ -435,7 +527,7 @@ public interface IIoController
 
 **权限规则**：数值越大权限越高，`HasPermission(requiredRole)` 通过 `CurrentUser.Role >= requiredRole` 判断。
 
-#### 3.4.5 UserAccount / LoginResult（用户账号 / 登录结果）
+#### 3.4.6 UserAccount / LoginResult（用户账号 / 登录结果）
 
 | 类 | 属性/方法 | 说明 |
 | :--- | :--- | :--- |
@@ -607,18 +699,38 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 | 配置项 | 说明 | 默认值 |
 | :--- | :--- | :--- |
 | `TotalBarometers` | 气压表总数 | 72 |
-| `TotalInputs` | IO输入总数 | 72 |
-| `TotalOutputs` | IO输出总数 | 144 |
+| `TotalInputs` | IO输入总数（现场 80DI） | 80 |
+| `TotalOutputs` | IO输出总数（现场 160DO） | 160 |
 | `CollectInterval` | 数据采集间隔（毫秒） | 1000 |
 | `PanelColumns` | 主视图面板列数 | 8 |
 | `PanelRows` | 主视图面板行数 | 9 |
-| `PortName` | 通信端口 | COM1 |
-| `BaudRate` | 波特率 | 9600 |
+| `PortName` | 串口（气压表 RTU） | COM1 |
+| `BaudRate` | 波特率（Demo 实测 19200） | 19200 |
 | `DataBits` | 数据位 | 8 |
 | `StopBits` | 停止位 | 1 |
 | `Parity` | 校验位 | None |
-| `PlcAddress` | PLC连接地址（预留） | 192.168.1.100 |
-| `PlcPort` | PLC通讯端口（修复 L3 补全） | 502 |
+| `UseMockCommunication` | true=Mock（免接线），false=真实通讯 | false |
+| `InvertInputs` / `InvertOutputs` | 输入/输出逻辑取反（NPN/PNP 现场差异） | false |
+| `IoUnitId` | IO 耦合器从站地址 | 1 |
+| `IoInputRegisterStartAddress` | DI 起始寄存器（Input Register 0x04） | 0x1000 |
+| `IoOutputRegisterStartAddress` | DO 起始寄存器（Holding Register） | 0x2000 |
+| `BarometerPressureRegisterAddress` | 压力寄存器（0x0001，0x0002 为小数位） | 0x0001 |
+| `BarometerDefaultDecimalPlaces` | 小数位默认值 | 1 |
+| `BarometerPressureScale` | 压力缩放系数 | 1 |
+| `AlarmPressureThresholdPa` | 报警压力阈值（Pa） | -95000 |
+| `AlarmWhenPressureHigherThanThreshold` | 压力高于阈值报警 | true |
+| `PlcAddress` | GX-CL140 IP | 192.168.1.20 |
+| `PlcPort` | GX-CL140 端口 | 502 |
+| `FanEnabled` | 是否启用冷却送风机（可选设备） | true |
+| `FanIpAddress` | 送风机控制屏 IP | 192.168.1.221 |
+| `FanPort` | 送风机端口（实测 50000） | 50000 |
+| `FanUnitId` | 送风机从站地址 | 1 |
+| `FanTimeoutMs` | 送风机通讯超时（毫秒） | 3000 |
+| `VacuumConfirmTimeoutMs` | 真空建立确认超时（毫秒） | 15000 |
+| `CommunicationLossAlarmCount` | 通讯失联报警阈值（连续失败次数） | 3 |
+| `MaxTestDurationSeconds` | 老化测试最大时长（秒，0=不限） | 0 |
+| `UseDiAlarmContact` | 是否把 DI 报警触点并入报警判定（需现场确认电平后开） | false |
+| `FanTempAlarmLimitC` | 送风机温度告警上限（°C，0=不启用） | 0 |
 
 ### 4.2 动态扩展说明
 
@@ -639,35 +751,43 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 
 ## 5. 预留接口与待完善项
 
-### 5.1 待确定的协议/接口
+### 5.1 协议/接口确认状态
 
 | 项 | 状态 | 说明 |
 | :--- | :--- | :--- |
-| 气压表通信协议 | **待确定** | 需要根据实际硬件确定（Modbus/RS232/自定义协议） |
-| IO通信协议 | **待确定** | 需要根据PLC或IO采集卡确定 |
-| PLC连接方式 | **待确定** | 以太网/串口，具体协议待确认 |
-| 数据存储方案 | **待确定** | 数据库类型和表结构设计 |
+| 气压表通信协议 | 已确认 | Modbus RTU / RS485→USB，19200（ModbusRtuBarometerTest Demo 实测） |
+| IO通信协议 | 已确认 | Modbus TCP，GX-CL140（192.168.1.20:502，ModbusTCPTest Demo 实测） |
+| 送风机通信协议 | 已确认 | Modbus TCP，厂商控制屏（192.168.1.221:50000，ModbusTCPFanControllerTest Demo 实测） |
+| PLC连接方式 | 已确认 | 以太网 Modbus TCP |
+| 数据存储方案 | 部分确定 | 事件日志已落盘 CSV（Logs\TestLog_*.csv）；数据库方案待定 |
 
 ### 5.2 预留的功能接口
 
 | 功能 | 状态 | 文件位置 | 说明 |
 | :--- | :--- | :--- | :--- |
-| 用户权限管理 | 已实现 | MainForm.cs / UserManager.cs / LoginForm.cs / UserManagementForm.cs | 下拉菜单（操作员/技术员/管理员）+ 登录窗体 + 用户管理（管理员修改他人账号）；用户持久化待实现 |
+| 用户权限管理 | 已实现 | MainForm.cs / UserManager.cs / LoginForm.cs / UserManagementForm.cs | 下拉菜单（操作员/技术员/管理员）+ 登录窗体 + 用户管理（管理员修改他人账号）；用户数据持久化到 Users.json（V1.13） |
 | 通信设置 | 部分实现 | MainForm.cs / CommunicationSettingForm | PLC通讯设置窗体已实现，参数持久化与测试连接待实现 |
 | 参数设置-公共参数 | 部分实现 | MainForm.cs / CommonParameterForm | 公共参数窗体已实现，参数项需现场确认补充 |
 | 参数设置-配方管理 | 部分实现 | MainForm.cs / RecipeManagerForm | 配方列表显示已实现，新增/编辑/删除逻辑待实现 |
-| LOG记录-历史记录 | Mock实现 | MainForm.cs / HistoryRecordForm | Mock日志数据已实现（7天10种事件），实际查询与导出待实现 |
+| LOG记录-历史记录 | 已实现（V1.15） | MainForm.cs / HistoryRecordForm | 读取 Logs\TestLog_*.csv 真实事件日志，按日期查询 |
 | TEST-扫码模拟 | 部分实现 | MainForm.cs / ScanSimulationForm | 扫码模拟窗体已实现，真实扫码枪接入待实现 |
 | 关于-版本说明 | 已实现 | MainForm.cs | 版本信息弹窗已实现 |
-| 行全选按钮 Set(SEL_N) | 部分实现 | MainForm.cs | 按钮已实现，点击切换该行所有面板选中状态（浅蓝高亮）；批量操作逻辑待实现 |
-| 面板批量操作 | 预留 | MainForm.cs / BarometerPanelView | IsSelected 属性已实现，批量设置配方/启动等操作待业务流程明确后实现 |
-| 温控操作 | 预留 | MainForm.cs | 操作面板按钮已创建，逻辑待实现 |
-| 开启真空 | 预留 | MainForm.cs | 操作面板按钮已创建，逻辑待实现 |
+| 行全选按钮 Set(SEL_N) | 已实现 | MainForm.cs | 点击切换该行所有面板选中状态（浅蓝高亮） |
+| 面板批量操作 | 已实现（V1.15） | MainForm.cs / BarometerPanelView | 选中面板后执行：开启真空 / 启动运行 / 停止运行 / 报警复位 |
+| 送风机定值启动 | 已实现（V1.15） | MainForm.cs / FanControllerClient.cs | 送风机 Modbus TCP 接入，定值启动/停止 + 温度湿度监视 |
+| 送风机定值停止 | 已实现（V1.15） | MainForm.cs / FanControllerClient.cs | 手动停止；有台测试时自动保持运行 |
+| 开启真空（选中台） | 已实现（V1.15） | MainForm.cs | 对选中面板打开真空电磁阀（单动作，预检用） |
+| 启动运行（选中台） | 已实现（V1.15） | MainForm.cs / DeviceManager.cs | 开真空+载台上电+送风机定值启动+进测试，真空确认+老化计时 |
+| 停止运行（选中台） | 已实现（V1.15） | MainForm.cs / DeviceManager.cs | 关阀+断电+退出测试（末台时送风机自动停止） |
+| 报警复位（选中台） | 已实现（V1.15） | MainForm.cs / DeviceManager.cs | 人工解除故障状态，可重新测试 |
+| 全部停止（急停） | 已实现（V1.15） | MainForm.cs / DeviceManager.cs | 一键全关阀+全断电+停送风机，带防误触确认 |
+| 单台手动控制 | 已实现（V1.15） | Dialogs/DeviceManualForm.cs | 面板 Set 按钮打开，点动阀/载台电 + 实时 DI 状态 |
 | 批量设置配方 | 已实现 | MainForm.cs / BatchRecipeForm.cs | 批量设置配方窗口已实现，支持配方名称、延时时间1/2、启动时间、极限温度输入，以及配方队列管理；配方批量应用到选中面板待实现 |
-| 录入批号 | 已实现 | MainForm.cs / InputLotForm.cs | 录入批号窗口已实现，支持手动输入批号、输入校验、Enter键确认；确定后弹出ID绑定界面；批号持久化待实现 |
+| 录入批号 | 已实现 | MainForm.cs / InputLotForm.cs | 录入批号窗口已实现，支持手动输入批号、输入校验、Enter键确认；确定后弹出ID绑定界面；批号写入 DeviceManager 供日志追溯 |
 | ID绑定 | 已实现 | InputLotForm.cs / IdBindingForm.cs | ID绑定窗口已实现，支持工位编号和SN输入、产品列表显示、重复工位覆盖确认、保存功能；保存时自动生成Excel文档（命名规则：批号_日期_时间.xlsx），包含批号、工位号、SN、配方名称、延时时间、启动时间列；ID绑定数据持久化待实现 |
-| 启动运行 | 预留 | MainForm.cs | 操作面板按钮已创建，逻辑待实现 |
-| 日志持久化 | 预留 | MainForm.cs | 当前仅显示在界面，未写入文件 |
+| 老化计时自动停止 | 已实现（V1.15） | DeviceManager.cs | 真空确认后开始计时，到达 MaxTestDurationSeconds 自动停止并记日志 |
+| 报警事件落盘 | 已实现（V1.15） | TestEventLogger.cs | 启动/停止/报警/复位/急停/真空建立 写入 Logs\TestLog_yyyyMMdd.csv |
+| 日志持久化 | 部分实现（V1.15） | TestEventLogger.cs | 事件日志已落盘 CSV；界面 LOG 文本框仍未写文件 |
 | 配置持久化 | 预留 | Dialogs/*Form.cs | 各设置窗体的配置仅内存生效，未保存到文件 |
 
 ### 5.3 硬件接入待确认项
@@ -695,22 +815,29 @@ BarometerWinform/
 │   ├── Properties/                         # 程序集属性
 │   │   └── AssemblyInfo.cs                 # 程序集元数据（设计器依赖）
 │   ├── Models/                             # 数据模型层
-    │   ├── BarometerData.cs                # 气压表数据模型
-    │   ├── IoStatus.cs                     # IO状态模型 + IoType/IoFunction/ElectricalType 枚举
-    │   ├── IoPointDefinition.cs            # 【V1.09新增】IO点定义模型 + 设备IO映射集合
-    │   ├── DeviceConfig.cs                 # 设备配置模型
-    │   ├── RecipeConfig.cs                 # 配方配置模型
-    │   ├── UserRole.cs                     # 【新增】用户角色枚举（操作员/技术员/管理员）
-    │   └── UserAccount.cs                  # 【新增】用户账号模型 + 登录结果
-    ├── Interfaces/                         # 接口层
-    │   ├── IBarometerReader.cs             # 气压表读取接口
-    │   └── IIoController.cs                # IO控制器接口（V1.09更新注释:显耀IO表映射）
-    ├── Services/                           # 服务层
-    │   ├── MockBarometerReader.cs          # 气压表模拟读取器
-    │   ├── MockIoController.cs             # IO模拟控制器
-    │   ├── IoMapBuilder.cs                 # 【V1.09新增】IO映射表构建器（八进制地址转换）
-    │   ├── DeviceManager.cs                # 设备管理器
-    │   └── UserManager.cs                  # 【新增】用户管理服务（登录/改密/权限校验）
+│   │   ├── BarometerData.cs                # 气压表数据模型
+│   │   ├── FanData.cs                      # 【V1.15新增】送风机数据模型 + 运行状态枚举
+│   │   ├── IoStatus.cs                     # IO状态模型 + IoType/IoFunction/ElectricalType 枚举
+│   │   ├── IoPointDefinition.cs            # 【V1.09新增】IO点定义模型 + 设备IO映射集合
+│   │   ├── DeviceConfig.cs                 # 设备配置模型
+│   │   ├── RecipeConfig.cs                 # 配方配置模型
+│   │   ├── UserRole.cs                     # 【新增】用户角色枚举（操作员/技术员/管理员）
+│   │   └── UserAccount.cs                  # 【新增】用户账号模型 + 登录结果
+│   ├── Interfaces/                         # 接口层
+│   │   ├── IBarometerReader.cs             # 气压表读取接口
+│   │   ├── IIoController.cs                # IO控制器接口（V1.09更新注释:显耀IO表映射）
+│   │   └── IFanController.cs               # 【V1.15新增】送风机控制接口（定值启动/停止/读状态）
+│   ├── Services/                           # 服务层
+│   │   ├── MockBarometerReader.cs          # 气压表模拟读取器
+│   │   ├── ModbusRtuBarometerReader.cs     # 气压表 Modbus RTU 真实读取（RS485→USB）
+│   │   ├── MockIoController.cs             # IO模拟控制器
+│   │   ├── ModbusTcpIoController.cs        # IO Modbus TCP 真实读写（GX-CL140）
+│   │   ├── IoMapBuilder.cs                 # 【V1.09新增】IO映射表构建器（八进制地址转换）
+│   │   ├── FanControllerClient.cs          # 【V1.15新增】送风机 Modbus TCP 真实实现
+│   │   ├── MockFanController.cs            # 【V1.15新增】送风机 Mock
+│   │   ├── TestEventLogger.cs              # 【V1.15新增】测试事件 CSV 落盘
+│   │   ├── DeviceManager.cs                # 设备管理器（业务编排核心）
+│   │   └── UserManager.cs                  # 【新增】用户管理服务（登录/改密/权限校验）
 │   ├── Views/                              # 视图层
 │   │   ├── MainForm.cs                     # 主窗体（业务逻辑）
 │   │   ├── MainForm.Designer.cs            # 主窗体（设计器代码，含 rootScrollPanel 滚动容器）
@@ -736,8 +863,10 @@ BarometerWinform/
 │       ├── InputLotForm.cs                         # 【新增】录入批号窗体
 │       ├── InputLotForm.Designer.cs
 │       ├── IdBindingForm.cs                        # 【新增】ID绑定窗体（批号绑定工位和SN）
-│       └── IdBindingForm.Designer.cs
-└── ARCHITECTURE.md                         # 架构文档（本文档）
+│       ├── IdBindingForm.Designer.cs
+│       ├── DeviceManualForm.cs                     # 【V1.15新增】单台手动控制（面板 Set 按钮打开）
+│       └── DeviceManualForm.Designer.cs
+└── README.md                                 # 本文档（使用/架构说明）
 ```
 
 ### 6.1 视图层文件拆分说明（重要）
@@ -768,55 +897,35 @@ WinForms 视图层采用 **partial class（分部类）** 机制，每个窗体/
 
 ### 7.1 硬件接入步骤
 
-**步骤1: 实现气压表读取器**
+**【V1.12/V1.15 更新】** 真实通讯实现已内置，接入现场硬件 = 配置 `App.config` + 关闭 Mock，无需改代码：
+
+1. **接好线**：气压表 RS485→USB 串口；GX-CL140 用网线连上位机；送风机控制屏用网线连上位机（如可选）
+2. **改配置**（App.config）：串口 `PortName/BaudRate(19200)`、IO `PlcAddress(192.168.1.20)/PlcPort(502)`、送风机 `FanIpAddress(192.168.1.221)/FanPort(50000)`
+3. **关闭 Mock**：`UseMockCommunication=false`
+4. **启动程序**：DeviceManager 会自动使用真实实现（`ModbusRtuBarometerReader` + `ModbusTcpIoController` + `FanControllerClient`）
+5. **按序验证**：先用各测试 Demo 验证单条链路，再整机联动（详见通讯接入说明.md 第 6 节"推荐通线验证顺序"）
+
+**如换用其他协议的硬件**（如三菱 MC 协议、其他品牌气压表），才需要新写实现类：
 
 ```csharp
-public class ModbusBarometerReader : IBarometerReader
+// 气压表：实现 IBarometerReader
+public class MyBarometerReader : IBarometerReader
 {
-    public bool Connect(DeviceConfig config)
-    {
-        // 实现Modbus连接逻辑
-        // TODO: 根据实际协议实现
-    }
+    public bool Connect(DeviceConfig config) { /* 按新协议实现 */ }
+    public BarometerData ReadData(int deviceId) { /* 按新协议实现 */ }
+    // ... 其他成员
+}
 
-    public BarometerData ReadData(int deviceId)
-    {
-        // 实现数据读取逻辑
-        // TODO: 根据实际协议实现
-    }
-
-    // ... 其他方法
+// IO：实现 IIoController
+public class MyIoController : IIoController
+{
+    public bool Connect(DeviceConfig config) { /* 按新协议实现 */ }
+    public bool ReadInput(int inputId) { /* 按新协议实现 */ }
+    // ... 其他成员
 }
 ```
 
-**步骤2: 实现IO控制器**
-
-```csharp
-public class PlcIoController : IIoController
-{
-    public bool Connect(DeviceConfig config)
-    {
-        // 实现PLC连接逻辑
-        // TODO: 根据实际协议实现
-    }
-
-    public bool ReadInput(int inputId)
-    {
-        // 实现输入读取逻辑
-        // TODO: 根据实际协议实现
-    }
-
-    // ... 其他方法
-}
-```
-
-**步骤3: 更新DeviceManager**
-
-```csharp
-// 在DeviceManager构造函数中替换实现
-_barometerReader = new ModbusBarometerReader();  // 替换 MockBarometerReader
-_ioController = new PlcIoController();           // 替换 MockIoController
-```
+然后在 `DeviceManager` 构造函数中按需替换即可。
 
 ### 7.2 新增功能开发流程
 
@@ -895,8 +1004,9 @@ Get-ChildItem -Path $projectRoot -Recurse -Filter "*.cs" -File |
 
 ### 8.3 版本更新
 
-- 当前版本: V1.14
+- 当前版本: V1.15
 - 更新日志:
+  - V1.15 (2026-08-06): 业务串联 + 冷却送风机接入。新增送风机接口/实现/Mock/数据模型（Modbus TCP，定值启动/停止 + 温度湿度监视）；DeviceManager 增加测试状态机（启动/停止/报警复位/全部停止）、真空建立确认、通讯失联报警、老化计时自动停止、送风机全局生命周期（首台启动/末台停止）；新增事件 CSV 落盘（TestEventLogger）+ 历史记录读真实日志；新增单台手动控制对话框；右侧面板新增送风机监视区与业务操作按钮。详见 CHANGELOG.md
   - V1.14 (2026-08-03): 接入真实通讯链路（气压表 Modbus RTU + IO Modbus TCP），DeviceManager 支持 UseMockCommunication 切换；新增报警阈值参数并实现“报警边沿→关阀/断载台电”联动；新增 CHANGELOG.md 与 通讯接入说明.md 文档
   - V1.13 (2026-07-24): 用户数据持久化到 JSON 文件（Users.json）；新增 LoadUsersFromFile/SaveUsersToFile 方法；程序启动时自动加载用户数据，修改用户名/密码后自动保存；UserAccount 新增无参构造函数用于 JSON 反序列化；添加 Newtonsoft.Json NuGet 包引用；文档更新持久化方案说明
   - V1.12 (2026-07-24): 配方管理窗口样式调整为左右分栏布局；左侧DataGridView只显示序号和配方名称两列；右侧显示选中配方的详细信息（配方名称、延时时间、启动时间、极限温度）；底部添加/更新/删除按钮和保存设置按钮；添加表格点击事件更新右侧显示
@@ -1135,7 +1245,7 @@ this.BeginInvoke(
 | Views/BarometerPanelView.cs | H10: 基类改为完整命名空间 |
 | 所有 .cs 文件（25个） | H10: 转换为 UTF-8 with BOM 编码 |
 | obj/Debug/*.cache | 清理设计器缓存文件 |
-| ARCHITECTURE.md | 文档同步更新 |
+| README.md | 文档同步更新 |
 
 ### 11.4 编译验证
 
@@ -1212,7 +1322,7 @@ Sheet1 布局为5列：A列=输入设备名、B列=输入地址、C列=分隔、
 | Views/BarometerPanelView.cs | 【更新】IO状态框改为3个，构造函数调用 IoMapBuilder 设置功能名+物理地址文本 |
 | Views/BarometerPanelView.Designer.cs | 【更新】移除 boxInput2/boxOutput3/boxOutput4，保留3个框(各2行显示) |
 | BarometerWinform.csproj | 【更新】添加 IoPointDefinition.cs 和 IoMapBuilder.cs 编译项 |
-| ARCHITECTURE.md | 【更新】3.2.2/3.3.2/3.4.1/9.1/8.3 章节 + 本章新增 |
+| README.md | 【更新】3.2.2/3.3.2/3.4.1/9.1/8.3 章节 + 本章新增 |
 
 ### 12.5 八进制地址转换验证
 
@@ -1239,17 +1349,18 @@ Sheet1 布局为5列：A列=输入设备名、B列=输入地址、C列=分隔、
 
 ### 12.6 预留业务逻辑说明
 
-以下业务逻辑因现场工艺流程尚未明确，当前仅接入IO点位定义，实际控制逻辑预留：
+> **注**：本章为 V1.09 接入显耀IO表时的历史状态。下述"仅显示状态/预留"项已随后续版本实现——
+> 真空阈值判定与报警联动（V1.12）、开阀/断电时序、故障联锁、老化测试状态机（V1.15），详见 5.2 节。
 
-| 预留项 | 当前状态 | 说明 |
+| 预留项 | V1.09 当时状态 | 后续实现 |
 | :--- | :--- | :--- |
-| 真空负压表信号处理 | 仅显示状态 | 输入信号已映射到X地址，但"到达真空阈值判定"逻辑待现场确认阈值后实现 |
-| 真空电磁阀控制 | 仅显示状态 | 输出已映射到Y地址，但"开阀/关阀时序"待工艺流程明确后实现 |
-| 载台上电控制 | 仅显示状态 | 输出已映射到Y地址，但"上电/断电时序与联锁"待工艺流程明确后实现 |
-| 真空启动流程 | 预留 | MainForm"开启真空"按钮已创建，需结合真空电磁阀时序实现 |
-| 载台上电流程 | 预留 | 需结合载台上电输出与产品测试流程实现 |
-| IO通信协议 | 待确定 | 当前为Mock实现，实际需根据PLC型号实现（如三菱MC协议/Modbus TCP） |
-| 故障联锁 | 预留 | 真空负压表信号异常时的报警与输出联锁逻辑待实现 |
+| 真空负压表信号处理 | 仅显示状态 | V1.12 读取压力值并按 AlarmPressureThresholdPa 判定；V1.15 真空建立超时报警 |
+| 真空电磁阀控制 | 仅显示状态 | V1.12/V1.15 开启真空/启动运行开阀，停止/报警/急停关阀 |
+| 载台上电控制 | 仅显示状态 | V1.12/V1.15 启动运行上电，停止/报警/急停断电 |
+| 真空启动流程 | 预留 | V1.15 "开启真空（选中台）" → DeviceManager 真空确认 |
+| 载台上电流程 | 预留 | V1.15 并入"启动运行"流程，随报警/停止联动断电 |
+| IO通信协议 | 待确定 | V1.12 ModbusTcpIoController（GX-CL140，Modbus TCP） |
+| 故障联锁 | 预留 | V1.12/V1.15 报警边沿→关阀+断电+标故障，人工报警复位后恢复 |
 
 ### 12.7 编译验证
 

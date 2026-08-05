@@ -76,7 +76,6 @@ namespace BarometerWinform.Services
             // 使用 lock 保护 Random 访问（修复 M5）
             // 【V1.09 更新】依据显耀IO表: 1输入(真空负压表) + 2输出(真空电磁阀 + 载台上电)
             int pressureInt;
-            int statusInt;
             int delayStartMin, delayStartSec;
             int delayArriveMin, delayArriveSec;
             bool vacuumPressureInput;      // 真空负压表输入(NPN, X地址)
@@ -85,9 +84,19 @@ namespace BarometerWinform.Services
 
             lock (_randomLock)
             {
-                // 模拟生成气压数据，范围在 -1000 到 -100000 Pa 之间（真空度）
-                pressureInt = -_random.Next(1000, 100000);
-                statusInt = _random.Next(0, 3);
+                // 模拟生成气压数据（V1.10 改为偏向"真空良好"，让 Demo 流程更真实）：
+                // - 85% 概率生成"真空良好"：-96000 ~ -100000 Pa（低于报警阈值 -95000，不报警）
+                //   这样点"启动运行"后真空能正常建立，演示"测试中→老化计时→自动停止"的完整流程
+                // - 15% 概率生成"真空较差"：-1000 ~ -90000 Pa（高于阈值，触发报警联动演示）
+                if (_random.Next(100) < 85)
+                {
+                    pressureInt = -_random.Next(96000, 100001); // 真空良好（低于 -95000 阈值）
+                }
+                else
+                {
+                    pressureInt = -_random.Next(1000, 90001);   // 真空较差（高于阈值，会报警）
+                }
+
                 delayStartMin = _random.Next(0, 30);
                 delayStartSec = _random.Next(0, 60);
                 delayArriveMin = _random.Next(0, 60);
@@ -103,7 +112,9 @@ namespace BarometerWinform.Services
                 VacuumPressure = pressureInt,
                 SerialNumber = $"SN{deviceId:D4}",
                 RecipeName = $"配方{deviceId % 5 + 1}",
-                Status = (DeviceStatus)statusInt,
+                // V1.10：状态统一由 DeviceManager 根据测试状态/报警判定来写，
+                // Mock 读取器只负责提供压力数据，避免随机状态误导 Demo
+                Status = DeviceStatus.Idle,
                 DelayStartTime = new TimeSpan(0, delayStartMin, delayStartSec),
                 DelayArriveTime = new TimeSpan(0, delayArriveMin, delayArriveSec),
                 CollectTime = DateTime.Now,
