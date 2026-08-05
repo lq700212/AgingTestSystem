@@ -73,11 +73,13 @@
     <Compile Include="Models\IoStatus.cs" />
     <Compile Include="Models\IoPointDefinition.cs" />
     <Compile Include="Models\DeviceConfig.cs" />
+    <Compile Include="Models\FanData.cs" />
     <Compile Include="Models\RecipeConfig.cs" />
     <Compile Include="Models\UserRole.cs" />
     <Compile Include="Models\UserAccount.cs" />
     <Compile Include="Interfaces\IBarometerReader.cs" />
     <Compile Include="Interfaces\IIoController.cs" />
+    <Compile Include="Interfaces\IFanController.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
@@ -85,9 +87,12 @@
     </Compile>
     <Compile Include="Services\MockBarometerReader.cs" />
     <Compile Include="Services\MockIoController.cs" />
+    <Compile Include="Services\MockFanController.cs" />
     <Compile Include="Services\ModbusRtuBarometerReader.cs" />
     <Compile Include="Services\ModbusTcpIoController.cs" />
+    <Compile Include="Services\FanControllerClient.cs" />
     <Compile Include="Services\IoMapBuilder.cs" />
+    <Compile Include="Services\TestEventLogger.cs" />
     <Compile Include="Services\DeviceManager.cs" />
     <Compile Include="Services\UserManager.cs" />
     <Compile Include="Views\BarometerPanelView.cs">
@@ -183,6 +188,12 @@
     </Compile>
     <Compile Include="Dialogs\IdBindingForm.Designer.cs">
       <DependentUpon>IdBindingForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Dialogs\DeviceManualForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Dialogs\DeviceManualForm.Designer.cs">
+      <DependentUpon>DeviceManualForm.cs</DependentUpon>
     </Compile>
     <Compile Include="Program.cs" />
   </ItemGroup>

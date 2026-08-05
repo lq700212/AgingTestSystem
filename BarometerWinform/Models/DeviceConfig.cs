@@ -220,10 +220,104 @@ namespace BarometerWinform.Models
 
         /// <summary>
         /// 报警比较方向
-        /// 
+        ///
         /// true：当 pressurePa > AlarmPressureThresholdPa 触发报警（真空变差：负数变“大”）
         /// false：当 pressurePa < AlarmPressureThresholdPa 触发报警（少见，保留扩展）
         /// </summary>
         public bool AlarmWhenPressureHigherThanThreshold { get; set; } = true;
+
+        // =====================================================================
+        // 冷却送风机配置
+        // 说明：冷却送风机（厂商自带控制屏）的自动控温已由厂商集成，
+        //      上位机只需要"定值启动 / 定值停止"，并周期读取状态用于显示。
+        // 寄存器映射 / 端口以 ModbusTCPFanControllerTest Demo 实测为准。
+        // =====================================================================
+
+        /// <summary>
+        /// 是否启用冷却送风机接入
+        ///
+        /// - true：程序启动时尝试连接送风机控制屏并周期轮询状态；
+        ///         送风机是"可选设备"，连接失败不会影响整机启动
+        /// - false：完全跳过送风机（不创建连接、不轮询、不显示）
+        /// </summary>
+        public bool FanEnabled { get; set; } = true;
+
+        /// <summary>
+        /// 冷却送风机控制屏 IP 地址
+        /// 以 ModbusTCPFanControllerTest Demo 实测为准：192.168.1.221
+        /// </summary>
+        public string FanIpAddress { get; set; } = "192.168.1.221";
+
+        /// <summary>
+        /// 冷却送风机通讯端口
+        /// 实测默认 50000（厂商控制屏，非标准 Modbus TCP 502 端口）
+        /// </summary>
+        public int FanPort { get; set; } = 50000;
+
+        /// <summary>
+        /// 冷却送风机从站地址（UnitId / SlaveId）
+        /// 实测默认 1
+        /// </summary>
+        public byte FanUnitId { get; set; } = 1;
+
+        /// <summary>
+        /// 冷却送风机通讯超时（毫秒）
+        /// 同时用于连接超时、读写超时，防止设备掉线时界面卡死
+        /// </summary>
+        public int FanTimeoutMs { get; set; } = 3000;
+
+        // =====================================================================
+        // 老化测试业务参数
+        // 这些参数决定"启动运行 / 报警联动 / 自动停止"等业务规则，
+        // 是设计评审后新增的（详见 README 业务逻辑章节）。
+        // =====================================================================
+
+        /// <summary>
+        /// 真空建立确认超时（毫秒）
+        ///
+        /// 【业务意义】
+        /// 启动运行时先打开真空电磁阀，但真空建立需要时间（从常压抽到目标负压）。
+        /// 如果开阀后 <VacuumConfirmTimeoutMs> 毫秒内压力仍未进入正常区间
+        /// （说明真空没建立：阀故障/管路泄漏/产品没放好），按"真空建立失败"报警，
+        /// 关闭该台电磁阀并切断载台上电，避免产品在未吸附固定的情况下通电老化。
+        /// </summary>
+        public int VacuumConfirmTimeoutMs { get; set; } = 15000;
+
+        /// <summary>
+        /// 通讯故障报警阈值（连续读取失败次数）
+        ///
+        /// 【业务意义】
+        /// 气压表通讯中断时，压力会停留在旧值上，如果不处理会"假正常"继续老化。
+        /// 当某台连续读取失败达到本阈值，视为通讯故障 → 触发报警（关阀+断电+标故障）。
+        /// </summary>
+        public int CommunicationLossAlarmCount { get; set; } = 3;
+
+        /// <summary>
+        /// 老化测试最大时长（秒），0 = 不限时长（手动停止）
+        ///
+        /// 【业务意义】
+        /// 老化测试到时长后自动停止该台（关真空+断载台电+记日志），形成业务闭环。
+        /// 注：后续可扩展为按配方（每台）指定时长，当前用全局默认值。
+        /// </summary>
+        public int MaxTestDurationSeconds { get; set; } = 0;
+
+        /// <summary>
+        /// 是否把"气压表报警触点（DI）"并入报警判定
+        ///
+        /// 【业务意义】
+        /// 现场气压表除 RTU 压力值外，还有一路硬件报警触点接在 DI 上。
+        /// 默认 false（仅显示，不参与联锁），因为触点"常开/常闭"与 NPN 线制
+        /// 需要现场确认后才能确定触发电平；确认后置 true 可作为软件报警的冗余输入。
+        /// </summary>
+        public bool UseDiAlarmContact { get; set; } = false;
+
+        /// <summary>
+        /// 送风机温度告警上限（°C），0 = 不启用温度告警
+        ///
+        /// 【业务意义】
+        /// 送风机回报的当前温度超过本上限时，界面把温度显示为红色并写日志，
+        /// 提醒操作员老化箱可能过温（厂商自动控温异常时的人工兜底）。
+        /// </summary>
+        public float FanTempAlarmLimitC { get; set; } = 0f;
     }
 }

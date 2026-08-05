@@ -70,17 +70,25 @@ namespace BarometerWinform.Views
             this.txtUpperTemp = new System.Windows.Forms.TextBox();
             this.lblSetTempLabel = new System.Windows.Forms.Label();
             this.txtSetTemp = new System.Windows.Forms.TextBox();
+            this.lblFanStateLabel = new System.Windows.Forms.Label();
+            this.lblFanState = new System.Windows.Forms.Label();
             this.groupBoxOperation = new System.Windows.Forms.GroupBox();
             this.btnStartRun = new System.Windows.Forms.Button();
+            this.btnStopRun = new System.Windows.Forms.Button();
+            this.btnResetAlarm = new System.Windows.Forms.Button();
+            this.btnStopAll = new System.Windows.Forms.Button();
             this.btnInputLot = new System.Windows.Forms.Button();
             this.btnBatchRecipe = new System.Windows.Forms.Button();
             this.btnVacuum = new System.Windows.Forms.Button();
+            this.btnFanStop = new System.Windows.Forms.Button();
             this.btnTemperatureControl = new System.Windows.Forms.Button();
             this.groupBoxLog = new System.Windows.Forms.GroupBox();
             this.txtLog = new System.Windows.Forms.TextBox();
             this.statusStripMain = new System.Windows.Forms.StatusStrip();
             this.toolStripStatusLabelDeviceCount = new System.Windows.Forms.ToolStripStatusLabel();
             this.toolStripStatusLabelInterval = new System.Windows.Forms.ToolStripStatusLabel();
+            this.toolStripStatusLabelTesting = new System.Windows.Forms.ToolStripStatusLabel();
+            this.toolStripStatusLabelOnline = new System.Windows.Forms.ToolStripStatusLabel();
             this.toolStripStatusLabelTime = new System.Windows.Forms.ToolStripStatusLabel();
             this.timerTime = new System.Windows.Forms.Timer(this.components);
             this.rootScrollPanel.SuspendLayout();
@@ -158,7 +166,7 @@ namespace BarometerWinform.Views
             this.lblTitle.Name = "lblTitle";
             this.lblTitle.Size = new System.Drawing.Size(113, 17);
             this.lblTitle.TabIndex = 0;
-            this.lblTitle.Text = "老化测试系统V1.00";
+            this.lblTitle.Text = "老化测试系统V1.15";
             // 
             // lblPermission
             // 
@@ -308,9 +316,10 @@ namespace BarometerWinform.Views
             this.tableLayoutPanelRight.Location = new System.Drawing.Point(0, 0);
             this.tableLayoutPanelRight.Name = "tableLayoutPanelRight";
             this.tableLayoutPanelRight.RowCount = 4;
-            this.tableLayoutPanelRight.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 80F));
-            this.tableLayoutPanelRight.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 120F));
-            this.tableLayoutPanelRight.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 200F));
+            // 行高（V1.10 调整）：状态 90 + 送风机监视 150 + 操作 300 + LOG 剩余
+            this.tableLayoutPanelRight.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 90F));
+            this.tableLayoutPanelRight.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 150F));
+            this.tableLayoutPanelRight.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 300F));
             this.tableLayoutPanelRight.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanelRight.Size = new System.Drawing.Size(326, 799);
             this.tableLayoutPanelRight.TabIndex = 0;
@@ -321,122 +330,229 @@ namespace BarometerWinform.Views
             this.groupBoxStatus.Dock = System.Windows.Forms.DockStyle.Fill;
             this.groupBoxStatus.Location = new System.Drawing.Point(3, 3);
             this.groupBoxStatus.Name = "groupBoxStatus";
-            this.groupBoxStatus.Size = new System.Drawing.Size(320, 74);
+            this.groupBoxStatus.Size = new System.Drawing.Size(320, 84);
             this.groupBoxStatus.TabIndex = 0;
             this.groupBoxStatus.TabStop = false;
             this.groupBoxStatus.Text = "运行状态";
-            // 
+            //
             // lblRunStatus
-            // 
+            //
             this.lblRunStatus.AutoSize = true;
             this.lblRunStatus.Font = new System.Drawing.Font("微软雅黑", 10F);
             this.lblRunStatus.Location = new System.Drawing.Point(15, 30);
             this.lblRunStatus.Name = "lblRunStatus";
-            this.lblRunStatus.Size = new System.Drawing.Size(138, 20);
+            this.lblRunStatus.Size = new System.Drawing.Size(200, 20);
             this.lblRunStatus.TabIndex = 0;
-            this.lblRunStatus.Text = "空闲/测试中(D4204)";
-            // 
+            this.lblRunStatus.Text = "空闲";
+            //
             // groupBoxMonitor
-            // 
+            //
             this.groupBoxMonitor.Controls.Add(this.lblLowerTempLabel);
             this.groupBoxMonitor.Controls.Add(this.txtLowerTemp);
             this.groupBoxMonitor.Controls.Add(this.lblUpperTempLabel);
             this.groupBoxMonitor.Controls.Add(this.txtUpperTemp);
             this.groupBoxMonitor.Controls.Add(this.lblSetTempLabel);
             this.groupBoxMonitor.Controls.Add(this.txtSetTemp);
+            this.groupBoxMonitor.Controls.Add(this.lblFanStateLabel);
+            this.groupBoxMonitor.Controls.Add(this.lblFanState);
             this.groupBoxMonitor.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.groupBoxMonitor.Location = new System.Drawing.Point(3, 83);
+            this.groupBoxMonitor.Location = new System.Drawing.Point(3, 93);
             this.groupBoxMonitor.Name = "groupBoxMonitor";
-            this.groupBoxMonitor.Size = new System.Drawing.Size(320, 114);
+            this.groupBoxMonitor.Size = new System.Drawing.Size(320, 144);
             this.groupBoxMonitor.TabIndex = 1;
             this.groupBoxMonitor.TabStop = false;
-            this.groupBoxMonitor.Text = "监视";
-            // 
-            // lblLowerTempLabel
-            // 
-            this.lblLowerTempLabel.AutoSize = true;
-            this.lblLowerTempLabel.Location = new System.Drawing.Point(15, 80);
-            this.lblLowerTempLabel.Name = "lblLowerTempLabel";
-            this.lblLowerTempLabel.Size = new System.Drawing.Size(53, 12);
-            this.lblLowerTempLabel.TabIndex = 5;
-            this.lblLowerTempLabel.Text = "下部温度";
-            // 
-            // txtLowerTemp
-            // 
-            this.txtLowerTemp.Location = new System.Drawing.Point(100, 77);
-            this.txtLowerTemp.Name = "txtLowerTemp";
-            this.txtLowerTemp.ReadOnly = true;
-            this.txtLowerTemp.Size = new System.Drawing.Size(200, 21);
-            this.txtLowerTemp.TabIndex = 4;
-            this.txtLowerTemp.Text = "(D4704)";
-            // 
-            // lblUpperTempLabel
-            // 
-            this.lblUpperTempLabel.AutoSize = true;
-            this.lblUpperTempLabel.Location = new System.Drawing.Point(15, 53);
-            this.lblUpperTempLabel.Name = "lblUpperTempLabel";
-            this.lblUpperTempLabel.Size = new System.Drawing.Size(53, 12);
-            this.lblUpperTempLabel.TabIndex = 3;
-            this.lblUpperTempLabel.Text = "上部温度";
-            // 
-            // txtUpperTemp
-            // 
-            this.txtUpperTemp.Location = new System.Drawing.Point(100, 50);
-            this.txtUpperTemp.Name = "txtUpperTemp";
-            this.txtUpperTemp.ReadOnly = true;
-            this.txtUpperTemp.Size = new System.Drawing.Size(200, 21);
-            this.txtUpperTemp.TabIndex = 2;
-            this.txtUpperTemp.Text = "(D4702)";
-            // 
+            this.groupBoxMonitor.Text = "送风机监视";
+            //
+            // lblFanStateLabel
+            //
+            this.lblFanStateLabel.AutoSize = true;
+            this.lblFanStateLabel.Location = new System.Drawing.Point(15, 24);
+            this.lblFanStateLabel.Name = "lblFanStateLabel";
+            this.lblFanStateLabel.Size = new System.Drawing.Size(65, 12);
+            this.lblFanStateLabel.TabIndex = 6;
+            this.lblFanStateLabel.Text = "送风机状态";
+            //
+            // lblFanState
+            //
+            this.lblFanState.AutoSize = true;
+            this.lblFanState.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Bold);
+            this.lblFanState.Location = new System.Drawing.Point(100, 21);
+            this.lblFanState.Name = "lblFanState";
+            this.lblFanState.Size = new System.Drawing.Size(200, 17);
+            this.lblFanState.TabIndex = 7;
+            this.lblFanState.Text = "未连接";
+            //
             // lblSetTempLabel
-            // 
+            //
             this.lblSetTempLabel.AutoSize = true;
-            this.lblSetTempLabel.Location = new System.Drawing.Point(15, 26);
+            this.lblSetTempLabel.Location = new System.Drawing.Point(15, 55);
             this.lblSetTempLabel.Name = "lblSetTempLabel";
             this.lblSetTempLabel.Size = new System.Drawing.Size(53, 12);
             this.lblSetTempLabel.TabIndex = 1;
-            this.lblSetTempLabel.Text = "设置温度";
-            // 
+            this.lblSetTempLabel.Text = "当前温度";
+            //
             // txtSetTemp
-            // 
-            this.txtSetTemp.Location = new System.Drawing.Point(100, 23);
+            //
+            this.txtSetTemp.Location = new System.Drawing.Point(100, 52);
             this.txtSetTemp.Name = "txtSetTemp";
             this.txtSetTemp.ReadOnly = true;
             this.txtSetTemp.Size = new System.Drawing.Size(200, 21);
             this.txtSetTemp.TabIndex = 0;
-            this.txtSetTemp.Text = "(D4700)";
-            // 
+            this.txtSetTemp.Text = "---";
+            //
+            // lblUpperTempLabel
+            //
+            this.lblUpperTempLabel.AutoSize = true;
+            this.lblUpperTempLabel.Location = new System.Drawing.Point(15, 81);
+            this.lblUpperTempLabel.Name = "lblUpperTempLabel";
+            this.lblUpperTempLabel.Size = new System.Drawing.Size(53, 12);
+            this.lblUpperTempLabel.TabIndex = 3;
+            this.lblUpperTempLabel.Text = "当前湿度";
+            //
+            // txtUpperTemp
+            //
+            this.txtUpperTemp.Location = new System.Drawing.Point(100, 78);
+            this.txtUpperTemp.Name = "txtUpperTemp";
+            this.txtUpperTemp.ReadOnly = true;
+            this.txtUpperTemp.Size = new System.Drawing.Size(200, 21);
+            this.txtUpperTemp.TabIndex = 2;
+            this.txtUpperTemp.Text = "---";
+            //
+            // lblLowerTempLabel
+            //
+            this.lblLowerTempLabel.AutoSize = true;
+            this.lblLowerTempLabel.Location = new System.Drawing.Point(15, 107);
+            this.lblLowerTempLabel.Name = "lblLowerTempLabel";
+            this.lblLowerTempLabel.Size = new System.Drawing.Size(53, 12);
+            this.lblLowerTempLabel.TabIndex = 5;
+            this.lblLowerTempLabel.Text = "设定温度";
+            //
+            // txtLowerTemp
+            //
+            this.txtLowerTemp.Location = new System.Drawing.Point(100, 104);
+            this.txtLowerTemp.Name = "txtLowerTemp";
+            this.txtLowerTemp.ReadOnly = true;
+            this.txtLowerTemp.Size = new System.Drawing.Size(200, 21);
+            this.txtLowerTemp.TabIndex = 4;
+            this.txtLowerTemp.Text = "---";
+            //
             // groupBoxOperation
-            // 
+            //
             this.groupBoxOperation.Controls.Add(this.btnStartRun);
+            this.groupBoxOperation.Controls.Add(this.btnStopRun);
+            this.groupBoxOperation.Controls.Add(this.btnResetAlarm);
+            this.groupBoxOperation.Controls.Add(this.btnStopAll);
             this.groupBoxOperation.Controls.Add(this.btnInputLot);
             this.groupBoxOperation.Controls.Add(this.btnBatchRecipe);
             this.groupBoxOperation.Controls.Add(this.btnVacuum);
+            this.groupBoxOperation.Controls.Add(this.btnFanStop);
             this.groupBoxOperation.Controls.Add(this.btnTemperatureControl);
             this.groupBoxOperation.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.groupBoxOperation.Location = new System.Drawing.Point(3, 203);
+            this.groupBoxOperation.Location = new System.Drawing.Point(3, 243);
             this.groupBoxOperation.Name = "groupBoxOperation";
-            this.groupBoxOperation.Size = new System.Drawing.Size(320, 194);
+            this.groupBoxOperation.Size = new System.Drawing.Size(320, 294);
             this.groupBoxOperation.TabIndex = 2;
             this.groupBoxOperation.TabStop = false;
             this.groupBoxOperation.Text = "操作";
-            // 
-            // btnStartRun
-            // 
-            this.btnStartRun.BackColor = System.Drawing.SystemColors.Control;
-            this.btnStartRun.Location = new System.Drawing.Point(15, 155);
+            //
+            // btnTemperatureControl（送风机定值启动）
+            //
+            this.btnTemperatureControl.BackColor = System.Drawing.Color.LimeGreen;
+            this.btnTemperatureControl.ForeColor = System.Drawing.Color.White;
+            this.btnTemperatureControl.Location = new System.Drawing.Point(15, 18);
+            this.btnTemperatureControl.Name = "btnTemperatureControl";
+            this.btnTemperatureControl.Size = new System.Drawing.Size(300, 28);
+            this.btnTemperatureControl.TabIndex = 0;
+            this.btnTemperatureControl.Text = "送风机定值启动";
+            this.btnTemperatureControl.UseVisualStyleBackColor = false;
+            this.btnTemperatureControl.Click += new System.EventHandler(this.btnTemperatureControl_Click);
+            //
+            // btnFanStop（送风机定值停止）
+            //
+            this.btnFanStop.BackColor = System.Drawing.Color.LimeGreen;
+            this.btnFanStop.ForeColor = System.Drawing.Color.White;
+            this.btnFanStop.Location = new System.Drawing.Point(15, 47);
+            this.btnFanStop.Name = "btnFanStop";
+            this.btnFanStop.Size = new System.Drawing.Size(300, 28);
+            this.btnFanStop.TabIndex = 5;
+            this.btnFanStop.Text = "送风机定值停止";
+            this.btnFanStop.UseVisualStyleBackColor = false;
+            this.btnFanStop.Click += new System.EventHandler(this.btnFanStop_Click);
+            //
+            // btnVacuum（开启真空）
+            //
+            this.btnVacuum.BackColor = System.Drawing.SystemColors.Control;
+            this.btnVacuum.Location = new System.Drawing.Point(15, 76);
+            this.btnVacuum.Name = "btnVacuum";
+            this.btnVacuum.Size = new System.Drawing.Size(300, 28);
+            this.btnVacuum.TabIndex = 1;
+            this.btnVacuum.Text = "开启真空（选中台）";
+            this.btnVacuum.UseVisualStyleBackColor = false;
+            this.btnVacuum.Click += new System.EventHandler(this.btnVacuum_Click);
+            //
+            // btnStartRun（启动运行）
+            //
+            this.btnStartRun.BackColor = System.Drawing.Color.DodgerBlue;
+            this.btnStartRun.ForeColor = System.Drawing.Color.White;
+            this.btnStartRun.Location = new System.Drawing.Point(15, 105);
             this.btnStartRun.Name = "btnStartRun";
             this.btnStartRun.Size = new System.Drawing.Size(300, 28);
             this.btnStartRun.TabIndex = 4;
-            this.btnStartRun.Text = "启动运行(D4202)";
+            this.btnStartRun.Text = "启动运行（选中台）";
             this.btnStartRun.UseVisualStyleBackColor = false;
             this.btnStartRun.Click += new System.EventHandler(this.btnStartRun_Click);
-            // 
-            // btnInputLot
-            // 
+            //
+            // btnStopRun（停止运行）
+            //
+            this.btnStopRun.BackColor = System.Drawing.SystemColors.Control;
+            this.btnStopRun.Location = new System.Drawing.Point(15, 134);
+            this.btnStopRun.Name = "btnStopRun";
+            this.btnStopRun.Size = new System.Drawing.Size(300, 28);
+            this.btnStopRun.TabIndex = 6;
+            this.btnStopRun.Text = "停止运行（选中台）";
+            this.btnStopRun.UseVisualStyleBackColor = false;
+            this.btnStopRun.Click += new System.EventHandler(this.btnStopRun_Click);
+            //
+            // btnResetAlarm（报警复位）
+            //
+            this.btnResetAlarm.BackColor = System.Drawing.SystemColors.Control;
+            this.btnResetAlarm.Location = new System.Drawing.Point(15, 163);
+            this.btnResetAlarm.Name = "btnResetAlarm";
+            this.btnResetAlarm.Size = new System.Drawing.Size(300, 28);
+            this.btnResetAlarm.TabIndex = 7;
+            this.btnResetAlarm.Text = "报警复位（选中台）";
+            this.btnResetAlarm.UseVisualStyleBackColor = false;
+            this.btnResetAlarm.Click += new System.EventHandler(this.btnResetAlarm_Click);
+            //
+            // btnStopAll（全部停止/急停）
+            //
+            this.btnStopAll.BackColor = System.Drawing.Color.Crimson;
+            this.btnStopAll.ForeColor = System.Drawing.Color.White;
+            this.btnStopAll.Location = new System.Drawing.Point(15, 192);
+            this.btnStopAll.Name = "btnStopAll";
+            this.btnStopAll.Size = new System.Drawing.Size(300, 28);
+            this.btnStopAll.TabIndex = 8;
+            this.btnStopAll.Text = "全部停止（急停）";
+            this.btnStopAll.UseVisualStyleBackColor = false;
+            this.btnStopAll.Click += new System.EventHandler(this.btnStopAll_Click);
+            //
+            // btnBatchRecipe（批量设置配方）
+            //
+            this.btnBatchRecipe.BackColor = System.Drawing.Color.LimeGreen;
+            this.btnBatchRecipe.ForeColor = System.Drawing.Color.White;
+            this.btnBatchRecipe.Location = new System.Drawing.Point(15, 221);
+            this.btnBatchRecipe.Name = "btnBatchRecipe";
+            this.btnBatchRecipe.Size = new System.Drawing.Size(300, 28);
+            this.btnBatchRecipe.TabIndex = 2;
+            this.btnBatchRecipe.Text = "批量设置配方";
+            this.btnBatchRecipe.UseVisualStyleBackColor = false;
+            this.btnBatchRecipe.Click += new System.EventHandler(this.btnBatchRecipe_Click);
+            //
+            // btnInputLot（录入批号）
+            //
             this.btnInputLot.BackColor = System.Drawing.Color.LimeGreen;
             this.btnInputLot.ForeColor = System.Drawing.Color.White;
-            this.btnInputLot.Location = new System.Drawing.Point(15, 121);
+            this.btnInputLot.Location = new System.Drawing.Point(15, 250);
             this.btnInputLot.Name = "btnInputLot";
             this.btnInputLot.Size = new System.Drawing.Size(300, 28);
             this.btnInputLot.TabIndex = 3;
@@ -444,47 +560,13 @@ namespace BarometerWinform.Views
             this.btnInputLot.UseVisualStyleBackColor = false;
             this.btnInputLot.Click += new System.EventHandler(this.btnInputLot_Click);
             // 
-            // btnBatchRecipe
-            // 
-            this.btnBatchRecipe.BackColor = System.Drawing.Color.LimeGreen;
-            this.btnBatchRecipe.ForeColor = System.Drawing.Color.White;
-            this.btnBatchRecipe.Location = new System.Drawing.Point(15, 87);
-            this.btnBatchRecipe.Name = "btnBatchRecipe";
-            this.btnBatchRecipe.Size = new System.Drawing.Size(300, 28);
-            this.btnBatchRecipe.TabIndex = 2;
-            this.btnBatchRecipe.Text = "批量设置配方";
-            this.btnBatchRecipe.UseVisualStyleBackColor = false;
-            this.btnBatchRecipe.Click += new System.EventHandler(this.btnBatchRecipe_Click);
-            // 
-            // btnVacuum
-            // 
-            this.btnVacuum.BackColor = System.Drawing.SystemColors.Control;
-            this.btnVacuum.Location = new System.Drawing.Point(15, 53);
-            this.btnVacuum.Name = "btnVacuum";
-            this.btnVacuum.Size = new System.Drawing.Size(300, 28);
-            this.btnVacuum.TabIndex = 1;
-            this.btnVacuum.Text = "开启真空(VAC_1)";
-            this.btnVacuum.UseVisualStyleBackColor = false;
-            this.btnVacuum.Click += new System.EventHandler(this.btnVacuum_Click);
-            // 
-            // btnTemperatureControl
-            // 
-            this.btnTemperatureControl.BackColor = System.Drawing.SystemColors.Control;
-            this.btnTemperatureControl.Location = new System.Drawing.Point(15, 19);
-            this.btnTemperatureControl.Name = "btnTemperatureControl";
-            this.btnTemperatureControl.Size = new System.Drawing.Size(300, 28);
-            this.btnTemperatureControl.TabIndex = 0;
-            this.btnTemperatureControl.Text = "温控操作(D4203)";
-            this.btnTemperatureControl.UseVisualStyleBackColor = false;
-            this.btnTemperatureControl.Click += new System.EventHandler(this.btnTemperatureControl_Click);
-            // 
             // groupBoxLog
             // 
             this.groupBoxLog.Controls.Add(this.txtLog);
             this.groupBoxLog.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.groupBoxLog.Location = new System.Drawing.Point(3, 403);
+            this.groupBoxLog.Location = new System.Drawing.Point(3, 543);
             this.groupBoxLog.Name = "groupBoxLog";
-            this.groupBoxLog.Size = new System.Drawing.Size(320, 393);
+            this.groupBoxLog.Size = new System.Drawing.Size(320, 253);
             this.groupBoxLog.TabIndex = 3;
             this.groupBoxLog.TabStop = false;
             this.groupBoxLog.Text = "LOG";
@@ -506,6 +588,8 @@ namespace BarometerWinform.Views
             this.statusStripMain.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.toolStripStatusLabelDeviceCount,
             this.toolStripStatusLabelInterval,
+            this.toolStripStatusLabelTesting,
+            this.toolStripStatusLabelOnline,
             this.toolStripStatusLabelTime});
             this.statusStripMain.Location = new System.Drawing.Point(0, 878);
             this.statusStripMain.Name = "statusStripMain";
@@ -518,15 +602,27 @@ namespace BarometerWinform.Views
             this.toolStripStatusLabelDeviceCount.Name = "toolStripStatusLabelDeviceCount";
             this.toolStripStatusLabelDeviceCount.Size = new System.Drawing.Size(77, 17);
             this.toolStripStatusLabelDeviceCount.Text = "设备数量: 72";
-            // 
+            //
             // toolStripStatusLabelInterval
-            // 
+            //
             this.toolStripStatusLabelInterval.Name = "toolStripStatusLabelInterval";
             this.toolStripStatusLabelInterval.Size = new System.Drawing.Size(108, 17);
             this.toolStripStatusLabelInterval.Text = "采集间隔: 1000ms";
-            // 
+            //
+            // toolStripStatusLabelTesting（V1.10：测试中台数）
+            //
+            this.toolStripStatusLabelTesting.Name = "toolStripStatusLabelTesting";
+            this.toolStripStatusLabelTesting.Size = new System.Drawing.Size(80, 17);
+            this.toolStripStatusLabelTesting.Text = "测试中: 0";
+            //
+            // toolStripStatusLabelOnline（V1.10：在线台数）
+            //
+            this.toolStripStatusLabelOnline.Name = "toolStripStatusLabelOnline";
+            this.toolStripStatusLabelOnline.Size = new System.Drawing.Size(90, 17);
+            this.toolStripStatusLabelOnline.Text = "在线: 0/72";
+            //
             // toolStripStatusLabelTime
-            // 
+            //
             this.toolStripStatusLabelTime.Name = "toolStripStatusLabelTime";
             this.toolStripStatusLabelTime.Size = new System.Drawing.Size(126, 17);
             this.toolStripStatusLabelTime.Text = "2024-01-01 00:00:00";
@@ -544,7 +640,7 @@ namespace BarometerWinform.Views
             this.Controls.Add(this.rootScrollPanel);
             this.MinimumSize = new System.Drawing.Size(800, 600);
             this.Name = "MainForm";
-            this.Text = "老化测试系统V1.00";
+            this.Text = "老化测试系统V1.15";
             this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.MainForm_FormClosing);
             this.Load += new System.EventHandler(this.MainForm_Load);
@@ -590,6 +686,10 @@ namespace BarometerWinform.Views
         private System.Windows.Forms.Label lblPlcStatusLabel;
         /// <summary>PLC连接状态值标签</summary>
         private System.Windows.Forms.Label lblPlcStatus;
+        /// <summary>"送风机运行状态:"标签（V1.10）</summary>
+        private System.Windows.Forms.Label lblFanStateLabel;
+        /// <summary>送风机运行状态值标签（V1.10，绿色=运行中/灰=停止/红=离线）</summary>
+        private System.Windows.Forms.Label lblFanState;
         /// <summary>菜单按钮栏容器</summary>
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelMenu;
         /// <summary>用户权限按钮</summary>
@@ -630,13 +730,21 @@ namespace BarometerWinform.Views
         private System.Windows.Forms.GroupBox groupBoxOperation;
         /// <summary>启动运行按钮</summary>
         private System.Windows.Forms.Button btnStartRun;
+        /// <summary>停止运行按钮（V1.10）</summary>
+        private System.Windows.Forms.Button btnStopRun;
+        /// <summary>报警复位按钮（V1.10）</summary>
+        private System.Windows.Forms.Button btnResetAlarm;
+        /// <summary>全部停止（急停）按钮（V1.10）</summary>
+        private System.Windows.Forms.Button btnStopAll;
         /// <summary>录入批号按钮</summary>
         private System.Windows.Forms.Button btnInputLot;
         /// <summary>批量设置配方按钮</summary>
         private System.Windows.Forms.Button btnBatchRecipe;
         /// <summary>开启真空按钮</summary>
         private System.Windows.Forms.Button btnVacuum;
-        /// <summary>温控操作按钮</summary>
+        /// <summary>送风机定值停止按钮（V1.10）</summary>
+        private System.Windows.Forms.Button btnFanStop;
+        /// <summary>送风机定值启动按钮（由原"温控操作"按钮改造，V1.10）</summary>
         private System.Windows.Forms.Button btnTemperatureControl;
         /// <summary>LOG日志分组</summary>
         private System.Windows.Forms.GroupBox groupBoxLog;
@@ -648,6 +756,10 @@ namespace BarometerWinform.Views
         private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabelDeviceCount;
         /// <summary>采集间隔状态标签</summary>
         private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabelInterval;
+        /// <summary>测试中台数状态标签（V1.10）</summary>
+        private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabelTesting;
+        /// <summary>在线台数状态标签（V1.10）</summary>
+        private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabelOnline;
         /// <summary>当前时间状态标签</summary>
         private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabelTime;
         /// <summary>时间更新定时器</summary>

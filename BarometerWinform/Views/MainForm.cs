@@ -165,10 +165,12 @@ namespace BarometerWinform.Views
             // 3. 初始化设备管理器（连接硬件、启动数据采集）
             _deviceManager = new DeviceManager(_config);
 
-            // 4. 订阅设备管理器事件（批量数据更新、连接状态变更）
+            // 4. 订阅设备管理器事件（批量数据更新、连接状态变更、送风机数据更新）
             // 【修复 M2】改为订阅批量数据更新事件，一次更新所有面板
             _deviceManager.OnBatchDataUpdated += DeviceManager_OnBatchDataUpdated;
             _deviceManager.OnConnectionStatusChanged += DeviceManager_OnConnectionStatusChanged;
+            // 【V1.10 新增】订阅送风机数据更新事件（独立定时器触发）
+            _deviceManager.OnFanDataUpdated += DeviceManager_OnFanDataUpdated;
 
             // 5. 更新权限显示
             lblPermission.Text = $"当前操作权限: {_currentPermission}";
@@ -495,6 +497,59 @@ namespace BarometerWinform.Views
                 config.AlarmWhenPressureHigherThanThreshold = alarmHigher;
             }
 
+            // ===== 冷却送风机配置读取（V1.10 新增） =====
+            if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["FanEnabled"], out bool fanEnabled))
+            {
+                config.FanEnabled = fanEnabled;
+            }
+
+            string fanIpAddress = System.Configuration.ConfigurationManager.AppSettings["FanIpAddress"];
+            if (!string.IsNullOrWhiteSpace(fanIpAddress))
+            {
+                config.FanIpAddress = fanIpAddress;
+            }
+
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["FanPort"], out int fanPort))
+            {
+                config.FanPort = fanPort;
+            }
+
+            if (byte.TryParse(System.Configuration.ConfigurationManager.AppSettings["FanUnitId"], out byte fanUnitId))
+            {
+                config.FanUnitId = fanUnitId;
+            }
+
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["FanTimeoutMs"], out int fanTimeoutMs))
+            {
+                config.FanTimeoutMs = fanTimeoutMs;
+            }
+
+            // ===== 老化测试业务参数读取（V1.10 新增） =====
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["VacuumConfirmTimeoutMs"], out int vacuumConfirmTimeoutMs))
+            {
+                config.VacuumConfirmTimeoutMs = vacuumConfirmTimeoutMs;
+            }
+
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["CommunicationLossAlarmCount"], out int commLossCount))
+            {
+                config.CommunicationLossAlarmCount = commLossCount;
+            }
+
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["MaxTestDurationSeconds"], out int maxTestDurationSeconds))
+            {
+                config.MaxTestDurationSeconds = maxTestDurationSeconds;
+            }
+
+            if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["UseDiAlarmContact"], out bool useDiAlarmContact))
+            {
+                config.UseDiAlarmContact = useDiAlarmContact;
+            }
+
+            if (float.TryParse(System.Configuration.ConfigurationManager.AppSettings["FanTempAlarmLimitC"], out float fanTempAlarmLimitC))
+            {
+                config.FanTempAlarmLimitC = fanTempAlarmLimitC;
+            }
+
             if (config.TotalInputs < config.TotalBarometers)
             {
                 System.Diagnostics.Debug.WriteLine(
@@ -811,6 +866,187 @@ namespace BarometerWinform.Views
                     panel.UpdateData(data);
                 }
             }
+
+            // 【V1.10 新增】顺便更新右侧整机状态汇总（测试中 N 台 / 在线 M / 报警 Z）
+            UpdateRunStatusSummary();
+        }
+
+        /// <summary>
+        /// 送风机数据更新事件处理（【V1.10 新增】）
+        ///
+        /// 【线程安全】此事件在送风机独立定时器的后台线程触发，
+        /// 必须用 BeginInvoke 切到 UI 线程更新控件。
+        ///
+        /// 【易踩的坑（H9）】BeginInvoke(Delegate, params object[] args) 会把参数数组展开。
+        /// 如果直接传 data（FanData 类型），会按数组协变规则被当成 object[] 展开，
+        /// 导致"参数个数不匹配"异常。必须显式包成 new object[] { data }。
+        /// </summary>
+        private void DeviceManager_OnFanDataUpdated(object sender, FanData data)
+        {
+            // 窗体已释放或正在释放时直接返回
+            if (this.IsDisposed || this.Disposing) return;
+
+            try
+            {
+                if (this.InvokeRequired)
+                {
+                    // 用 new object[] { data } 包裹，避免 H9 参数展开陷阱
+                    this.BeginInvoke(
+                        new Action<FanData>(UpdateFanDisplay),
+                        new object[] { data });
+                }
+                else
+                {
+                    UpdateFanDisplay(data);
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                // 窗体已释放，忽略
+            }
+            catch (InvalidOperationException)
+            {
+                // 窗体在 BeginInvoke 前刚好释放，忽略
+            }
+        }
+
+        /// <summary>
+        /// 更新送风机监视区显示（【V1.10 新增】）
+        /// 显示：运行状态 / 当前温度 / 当前湿度 / 设定温度
+        /// data 为 null 表示通讯失败/离线
+        /// </summary>
+        private void UpdateFanDisplay(FanData data)
+        {
+            if (this.IsDisposed) return;
+
+            // 未启用送风机
+            if (!_deviceManager.IsFanEnabled)
+            {
+                lblFanState.Text = "未启用";
+                lblFanState.ForeColor = Color.Gray;
+                txtSetTemp.Text = "---";
+                txtUpperTemp.Text = "---";
+                txtLowerTemp.Text = "---";
+                return;
+            }
+
+            // 通讯失败 / 离线
+            if (data == null)
+            {
+                lblFanState.Text = "离线";
+                lblFanState.ForeColor = Color.Red;
+                txtSetTemp.Text = "---";
+                txtUpperTemp.Text = "---";
+                txtLowerTemp.Text = "---";
+                return;
+            }
+
+            // 运行状态文本 + 颜色
+            string stateText;
+            Color stateColor;
+            switch (data.RunState)
+            {
+                case FanRunState.FixedValueRunning:
+                    stateText = "定值运行中";
+                    stateColor = Color.Green;
+                    break;
+                case FanRunState.ProgramRunning:
+                    stateText = "程式运行中";
+                    stateColor = Color.Green;
+                    break;
+                case FanRunState.FixedValueStopped:
+                case FanRunState.ProgramStopped:
+                    stateText = "已停止";
+                    stateColor = Color.Gray;
+                    break;
+                default:
+                    stateText = "未知";
+                    stateColor = Color.Orange;
+                    break;
+            }
+            lblFanState.Text = stateText;
+            lblFanState.ForeColor = stateColor;
+
+            // 温度 / 湿度 / 设定温度
+            txtSetTemp.Text = $"{data.Temperature:F2} °C";
+            txtUpperTemp.Text = $"{data.Humidity:F2} %";
+            txtLowerTemp.Text = $"{data.TempSetpoint:F2} °C";
+
+            // 【V1.10】送风机温度告警：超过配置上限 → 温度标红并记日志
+            if (_config.FanTempAlarmLimitC > 0 && data.Temperature > _config.FanTempAlarmLimitC)
+            {
+                txtSetTemp.ForeColor = Color.Red;
+                if (data.Temperature > _fanTempAlarmLoggedThreshold)
+                {
+                    // 只在第一次超过新阈值时记日志，避免每秒重复记录
+                    _fanTempAlarmLoggedThreshold = data.Temperature;
+                    WriteLog($"[送风机] 温度 {data.Temperature:F1}°C 超过告警上限 {_config.FanTempAlarmLimitC:F1}°C");
+                }
+            }
+            else
+            {
+                txtSetTemp.ForeColor = Color.Black;
+            }
+        }
+
+        /// <summary>
+        /// 已记录过的送风机温度告警阈值（避免重复写日志）
+        /// </summary>
+        private float _fanTempAlarmLoggedThreshold = 0f;
+
+        /// <summary>
+        /// 更新右侧整机状态汇总（【V1.10 新增】）
+        /// 在批量数据更新后调用（UI 线程）：
+        /// - 顶部运行状态：空闲 / 测试中(N台) / 有报警
+        /// - 状态栏：测试中 N 台、在线 M/72 台
+        /// </summary>
+        private void UpdateRunStatusSummary()
+        {
+            if (this.IsDisposed) return;
+
+            // 从设备管理器获取聚合数据
+            bool[] testingStates = _deviceManager.GetTestingStates();
+            int testingCount = 0;
+            int alarmCount = 0;
+            for (int i = 0; i < testingStates.Length; i++)
+            {
+                if (testingStates[i]) testingCount++;
+            }
+
+            BarometerData[] allData = _deviceManager.GetAllBarometerData();
+            if (allData != null)
+            {
+                foreach (var d in allData)
+                {
+                    if (d != null && d.Status == DeviceStatus.Fault) alarmCount++;
+                }
+            }
+
+            int onlineCount = _deviceManager.GetOnlineCount();
+
+            // 顶部运行状态文本
+            if (alarmCount > 0)
+            {
+                _runStatus = $"报警 {alarmCount} 台";
+                lblRunStatus.Text = _runStatus;
+                lblRunStatus.ForeColor = Color.Red;
+            }
+            else if (testingCount > 0)
+            {
+                _runStatus = $"测试中 {testingCount} 台";
+                lblRunStatus.Text = _runStatus;
+                lblRunStatus.ForeColor = Color.DarkOrange;
+            }
+            else
+            {
+                _runStatus = "空闲";
+                lblRunStatus.Text = _runStatus;
+                lblRunStatus.ForeColor = Color.Green;
+            }
+
+            // 状态栏统计
+            toolStripStatusLabelTesting.Text = $"测试中: {testingCount}";
+            toolStripStatusLabelOnline.Text = $"在线: {onlineCount}/{_config.TotalBarometers}";
         }
 
         /// <summary>
@@ -866,13 +1102,16 @@ namespace BarometerWinform.Views
         }
 
         /// <summary>
-        /// 面板 Set 按钮点击事件处理
-        /// 弹出参数设置窗口（预留功能）
+        /// 面板 Set 按钮点击事件处理（【V1.10】由占位弹窗改为单台手动控制）
+        /// 弹出单台手动控制窗口：实时查看该台 DI 报警触点状态，并可手动开/关阀、载台上电。
+        /// 【用途】现场接线条点对应、排查单台故障时非常有用。
         /// </summary>
         private void Panel_OnSetClicked(object sender, int deviceId)
         {
-            MessageBox.Show($"设备 {deviceId} 的参数设置功能开发中...", "提示",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            using (var form = new DeviceManualForm(_deviceManager, _config, deviceId))
+            {
+                form.ShowDialog(this);
+            }
         }
 
         #region 顶部菜单按钮事件处理（显示下拉菜单）
@@ -1196,14 +1435,16 @@ namespace BarometerWinform.Views
         private void MenuAboutVersion_Click(object sender, EventArgs e)
         {
             MessageBox.Show(
-                "老化测试系统 V1.08\n\n" +
+                "老化测试系统 V1.15\n\n" +
                 "运行环境: .NET Framework 4.7.2\n" +
                 "开发框架: WinForms\n\n" +
                 "功能特性:\n" +
-                "- 支持72个气压表实时监控\n" +
-                "- 动态面板布局，可扩展设备数量\n" +
-                "- 接口化硬件抽象，便于接入真实设备\n" +
-                "- 自适应屏幕分辨率，缩小时显示滚动条\n" +
+                "- 支持72个气压表实时监控（Modbus RTU）\n" +
+                "- GX-CL140 IO 耦合器（Modbus TCP）：真空阀 + 载台上电\n" +
+                "- 冷却送风机接入（Modbus TCP）：定值启动/停止 + 温度湿度监视\n" +
+                "- 老化测试业务流程：启动/停止/报警复位/急停\n" +
+                "- 报警联动：真空越限/通讯失联/真空未建立 → 关阀断电\n" +
+                "- 老化计时自动停止 + 事件 CSV 落盘追溯\n" +
                 "- 用户权限管理（操作员/技术员/管理员）\n\n" +
                 "版权所有 © 2024",
                 "版本说明",
@@ -1218,21 +1459,42 @@ namespace BarometerWinform.Views
         #region 右侧操作按钮事件处理
 
         /// <summary>
-        /// 温控操作按钮点击（预留功能）
+        /// 送风机定值启动按钮点击（【V1.10】由原"温控操作"按钮改造）
+        /// 让送风机按控制屏设定温度运行（厂商自动控温）
         /// </summary>
         private void btnTemperatureControl_Click(object sender, EventArgs e)
         {
-            MessageBox.Show("温控操作功能开发中...", "提示",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            bool ok = _deviceManager.StartFan();
+            WriteLog(ok ? "送风机定值启动命令已发送" : "送风机定值启动失败（请检查通讯）");
         }
 
         /// <summary>
-        /// 开启真空按钮点击（预留功能）
+        /// 送风机定值停止按钮点击（【V1.10 新增】）
+        /// 【注意】如果有任何一台正在测试，采集循环会自动重新启动送风机
+        /// （送风机是环境设备，测试期间必须保持运行）。
+        /// </summary>
+        private void btnFanStop_Click(object sender, EventArgs e)
+        {
+            bool ok = _deviceManager.StopFan();
+            WriteLog(ok ? "送风机定值停止命令已发送" : "送风机定值停止失败（请检查通讯）");
+        }
+
+        /// <summary>
+        /// 开启真空按钮点击（【V1.10】接真实业务）
+        /// 对选中的面板打开真空电磁阀（只做单动作，供预检/手动使用；
+        /// "启动运行"是开真空 + 载台上电的组合快捷入口）
         /// </summary>
         private void btnVacuum_Click(object sender, EventArgs e)
         {
-            MessageBox.Show("开启真空功能开发中...", "提示",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            int[] ids = GetSelectedDeviceIds();
+            if (ids == null) return;
+
+            foreach (int deviceId in ids)
+            {
+                // 真空电磁阀内部编号 = TotalInputs + deviceId
+                _deviceManager.SetOutput(_config.TotalInputs + deviceId, true);
+            }
+            WriteLog($"开启真空（{ids.Length} 台）");
         }
 
         /// <summary>
@@ -1286,9 +1548,11 @@ namespace BarometerWinform.Views
         {
             using (var form = new InputLotForm())
             {
-                // 订阅批号录入完成事件，记录日志
+                // 订阅批号录入完成事件：记录日志 + 通知设备管理器（用于事件落盘追溯）
                 form.OnLotInputCompleted += (sender2, lotNumber) =>
                 {
+                    // 【V1.10】批号写入设备管理器，后续启动/报警/停止日志都会带上批号
+                    _deviceManager.CurrentLotNumber = lotNumber;
                     WriteLog($"[录入批号] 用户录入批号: {lotNumber}");
                 };
 
@@ -1314,17 +1578,123 @@ namespace BarometerWinform.Views
         }
 
         /// <summary>
-        /// 启动运行按钮点击（预留功能）
+        /// 启动运行按钮点击（【V1.10】接真实业务）
+        /// 对选中的面板执行：开真空阀 + 载台上电 + 进入测试中 + 送风机定值启动（首台）
         /// </summary>
         private void btnStartRun_Click(object sender, EventArgs e)
         {
-            _runStatus = "测试中";
-            lblRunStatus.Text = $"{_runStatus}(D4204)";
-            MessageBox.Show("启动运行功能开发中...", "提示",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            int[] ids = GetSelectedDeviceIds();
+            if (ids == null) return;
+
+            DialogResult r = MessageBox.Show(
+                $"确认启动 {ids.Length} 台老化测试？\n\n" +
+                "将执行：\n" +
+                "1. 开启真空电磁阀（建立负压固定产品）\n" +
+                "2. 载台上电（给产品供电）\n" +
+                "3. 送风机定值启动（保持环境温控）\n\n" +
+                "注：开阀后若真空长时间未建立会自动报警断电。",
+                "启动运行",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+            if (r != DialogResult.Yes) return;
+
+            _deviceManager.StartTesting(ids);
+            WriteLog($"启动老化测试（{ids.Length} 台）");
+        }
+
+        /// <summary>
+        /// 停止运行按钮点击（【V1.10 新增】）
+        /// 对选中的面板执行：关真空阀 + 断载台上电 + 退出测试中
+        /// （最后一台停止时送风机自动停止）
+        /// </summary>
+        private void btnStopRun_Click(object sender, EventArgs e)
+        {
+            int[] ids = GetSelectedDeviceIds();
+            if (ids == null) return;
+
+            DialogResult r = MessageBox.Show(
+                $"确认停止 {ids.Length} 台的运行？\n\n将执行：\n1. 关闭真空电磁阀\n2. 断开载台上电",
+                "停止运行",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+            if (r != DialogResult.Yes) return;
+
+            _deviceManager.StopTesting(ids);
+            WriteLog($"停止运行（{ids.Length} 台）");
+        }
+
+        /// <summary>
+        /// 报警复位按钮点击（【V1.10 新增】）
+        /// 对选中的报警/故障面板执行人工复位：清除故障标记，回到空闲，可重新启动。
+        /// 【设计说明】报警后不自动恢复，必须人工确认（防止真空失效原因未确认就重启）。
+        /// </summary>
+        private void btnResetAlarm_Click(object sender, EventArgs e)
+        {
+            int[] ids = GetSelectedDeviceIds();
+            if (ids == null) return;
+
+            DialogResult r = MessageBox.Show(
+                $"确认复位 {ids.Length} 台的报警状态？\n\n" +
+                "将清除故障标记，设备回到空闲状态，可重新启动老化测试。",
+                "报警复位",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+            if (r != DialogResult.Yes) return;
+
+            _deviceManager.ResetDevices(ids);
+            WriteLog($"报警复位（{ids.Length} 台）");
+        }
+
+        /// <summary>
+        /// 全部停止（急停）按钮点击（【V1.10 新增】）
+        /// 一键关闭所有真空阀 + 断开所有载台上电 + 停止送风机，带防误触确认。
+        /// </summary>
+        private void btnStopAll_Click(object sender, EventArgs e)
+        {
+            DialogResult r = MessageBox.Show(
+                "确认【全部停止】？\n\n" +
+                "将执行：\n" +
+                "1. 关闭所有 72 路真空电磁阀\n" +
+                "2. 断开所有 72 路载台上电\n" +
+                "3. 停止送风机\n\n" +
+                "此操作不可撤销，请确认现场安全！",
+                "全部停止（急停）",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+            if (r != DialogResult.Yes) return;
+
+            _deviceManager.StopAll();
+            WriteLog("已执行全部停止（急停）");
         }
 
         #endregion
+
+        /// <summary>
+        /// 获取当前选中的设备编号数组（【V1.10 新增】）
+        /// 遍历所有面板，收集 IsSelected=true 的设备。
+        /// 一个都没选时弹提示并返回 null。
+        /// </summary>
+        /// <returns>选中的设备编号数组；未选择时返回 null</returns>
+        private int[] GetSelectedDeviceIds()
+        {
+            var ids = new List<int>();
+            foreach (var kvp in _panelViews)
+            {
+                if (kvp.Value.IsSelected)
+                {
+                    ids.Add(kvp.Key);
+                }
+            }
+
+            if (ids.Count == 0)
+            {
+                MessageBox.Show("请先在气压表区域选中要操作的设备\n（点击面板或用行全选按钮）",
+                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return null;
+            }
+
+            return ids.ToArray();
+        }
 
         /// <summary>
         /// 时间更新定时器 Tick 事件
@@ -1378,6 +1748,8 @@ namespace BarometerWinform.Views
             {
                 _deviceManager.OnBatchDataUpdated -= DeviceManager_OnBatchDataUpdated;
                 _deviceManager.OnConnectionStatusChanged -= DeviceManager_OnConnectionStatusChanged;
+                // 【V1.10】退订送风机数据更新事件
+                _deviceManager.OnFanDataUpdated -= DeviceManager_OnFanDataUpdated;
             }
 
             // 释放设备管理器（内部会调用 Stop 停止定时器和断开连接）
