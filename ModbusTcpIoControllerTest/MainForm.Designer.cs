@@ -1,4 +1,4 @@
-namespace ModbusTCPTest
+namespace ModbusTcpIoControllerTest
 {
     partial class MainForm
     {

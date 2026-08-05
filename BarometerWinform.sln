@@ -1,10 +1,14 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
-VisualStudioVersion = 18.7.11911.148 stable
+VisualStudioVersion = 18.7.11911.148
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BarometerWinform", "BarometerWinform\BarometerWinform.csproj", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ModbusTCPTest", "ModbusTCPTest\ModbusTCPTest.csproj", "{30FE14FD-7C6A-4D8A-8A2A-F9C664B4D305}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ModbusRtuBarometerTest", "ModbusRtuBarometerTest\ModbusRtuBarometerTest.csproj", "{BF69F7ED-4BEF-46E8-93DD-27750ACBDF42}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ModbusTcpIoControllerTest", "ModbusTcpIoControllerTest\ModbusTcpIoControllerTest.csproj", "{30FE14FD-7C6A-4D8A-8A2A-F9C664B4D305}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ModbusTCPFanControllerTest", "ModbusTCPFanControllerTest\ModbusTCPFanControllerTest.csproj", "{D6C8A2E7-EAC0-454A-9D33-D1BDA29FBB5B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -16,10 +20,18 @@ Global
 		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BF69F7ED-4BEF-46E8-93DD-27750ACBDF42}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BF69F7ED-4BEF-46E8-93DD-27750ACBDF42}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BF69F7ED-4BEF-46E8-93DD-27750ACBDF42}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BF69F7ED-4BEF-46E8-93DD-27750ACBDF42}.Release|Any CPU.Build.0 = Release|Any CPU
 		{30FE14FD-7C6A-4D8A-8A2A-F9C664B4D305}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{30FE14FD-7C6A-4D8A-8A2A-F9C664B4D305}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{30FE14FD-7C6A-4D8A-8A2A-F9C664B4D305}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{30FE14FD-7C6A-4D8A-8A2A-F9C664B4D305}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D6C8A2E7-EAC0-454A-9D33-D1BDA29FBB5B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D6C8A2E7-EAC0-454A-9D33-D1BDA29FBB5B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D6C8A2E7-EAC0-454A-9D33-D1BDA29FBB5B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D6C8A2E7-EAC0-454A-9D33-D1BDA29FBB5B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

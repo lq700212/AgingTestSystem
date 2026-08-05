@@ -3,7 +3,7 @@ using System;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace ModbusTCPTest
+namespace ModbusTcpIoControllerTest
 {
     public partial class MainForm : Form
     {
