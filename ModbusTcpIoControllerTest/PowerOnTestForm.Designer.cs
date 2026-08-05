@@ -1,4 +1,4 @@
-namespace ModbusTCPTest
+namespace ModbusTcpIoControllerTest
 {
     /// <summary>
     /// PowerOnTestForm 的设计器分部类。

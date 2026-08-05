@@ -5,7 +5,7 @@ using System.Drawing.Drawing2D;
 using System.Text;
 using System.Windows.Forms;
 
-namespace ModbusTCPTest
+namespace ModbusTcpIoControllerTest
 {
     /// <summary>
     /// 载台上电（继电器）输出测试窗体。
