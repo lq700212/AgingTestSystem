@@ -34,6 +34,7 @@
             this.btnGetSN = new System.Windows.Forms.Button();
             this.btnBatchSetThreshold = new System.Windows.Forms.Button();
             this.tbThreshold = new Sunny.UI.UITextBox();
+            this.btnSetThreshold = new System.Windows.Forms.Button();
             this.SuspendLayout();
             // 
             // llPressure
@@ -80,7 +81,7 @@
             // btnBatchSetThreshold
             // 
             this.btnBatchSetThreshold.Font = new System.Drawing.Font("宋体", 18F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
-            this.btnBatchSetThreshold.Location = new System.Drawing.Point(118, 263);
+            this.btnBatchSetThreshold.Location = new System.Drawing.Point(118, 308);
             this.btnBatchSetThreshold.Name = "btnBatchSetThreshold";
             this.btnBatchSetThreshold.Size = new System.Drawing.Size(210, 57);
             this.btnBatchSetThreshold.TabIndex = 6;
@@ -92,7 +93,7 @@
             // 
             this.tbThreshold.Cursor = System.Windows.Forms.Cursors.IBeam;
             this.tbThreshold.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
-            this.tbThreshold.Location = new System.Drawing.Point(435, 263);
+            this.tbThreshold.Location = new System.Drawing.Point(426, 274);
             this.tbThreshold.Margin = new System.Windows.Forms.Padding(4, 5, 4, 5);
             this.tbThreshold.MinimumSize = new System.Drawing.Size(1, 16);
             this.tbThreshold.Name = "tbThreshold";
@@ -104,11 +105,23 @@
             this.tbThreshold.TextAlignment = System.Drawing.ContentAlignment.MiddleRight;
             this.tbThreshold.Watermark = "请输入阈值，如 1.234";
             // 
+            // btnSetThreshold
+            // 
+            this.btnSetThreshold.Font = new System.Drawing.Font("宋体", 15.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.btnSetThreshold.Location = new System.Drawing.Point(118, 243);
+            this.btnSetThreshold.Name = "btnSetThreshold";
+            this.btnSetThreshold.Size = new System.Drawing.Size(210, 59);
+            this.btnSetThreshold.TabIndex = 8;
+            this.btnSetThreshold.Text = "设置1号表气压阈值";
+            this.btnSetThreshold.UseVisualStyleBackColor = true;
+            this.btnSetThreshold.Click += new System.EventHandler(this.btnSetThreshold_Click);
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(800, 450);
+            this.Controls.Add(this.btnSetThreshold);
             this.Controls.Add(this.tbThreshold);
             this.Controls.Add(this.btnBatchSetThreshold);
             this.Controls.Add(this.btnGetSN);
@@ -130,6 +143,7 @@
         private System.Windows.Forms.Button btnGetSN;
         private System.Windows.Forms.Button btnBatchSetThreshold;
         private Sunny.UI.UITextBox tbThreshold;
+        private System.Windows.Forms.Button btnSetThreshold;
     }
 }
 
