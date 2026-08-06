@@ -1,5 +1,6 @@
 ﻿
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using BarometerWinform.Interfaces;
 using BarometerWinform.Models;
@@ -150,6 +151,41 @@ namespace BarometerWinform.Services
                 data[i] = ReadData(i + 1);
             }
             return data;
+        }
+
+        /// <summary>
+        /// 模拟写入单台气压表的设备阈值
+        /// Mock 无真实设备，固定返回 true（仅保证接口一致，便于上层联调流程）。
+        /// </summary>
+        public bool SetThreshold(int deviceId, decimal thresholdValue)
+        {
+            // 与 ReadData 一致：未连接 / 越界 时按失败处理，便于上层验证边界逻辑
+            if (!_isConnected || _config == null || deviceId < 1 || deviceId > _config.TotalBarometers)
+            {
+                OnError?.Invoke(this, $"设备编号 {deviceId} 超出合法范围 [1, {_config?.TotalBarometers ?? 0}]");
+                return false;
+            }
+            return true; // Mock 模拟成功
+        }
+
+        /// <summary>
+        /// 模拟批量写入所有气压表的设备阈值
+        /// 逐台调用 <see cref="SetThreshold"/>，返回 deviceId → 是否成功。
+        /// </summary>
+        public Dictionary<int, bool> SetAllThresholds(decimal thresholdValue)
+        {
+            var result = new Dictionary<int, bool>();
+            if (_config == null)
+            {
+                OnError?.Invoke(this, "未连接，请先调用 Connect 方法");
+                return result;
+            }
+
+            for (int i = 1; i <= _config.TotalBarometers; i++)
+            {
+                result[i] = SetThreshold(i, thresholdValue);
+            }
+            return result;
         }
     }
 }

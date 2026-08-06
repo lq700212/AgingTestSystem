@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO.Ports;
 using BarometerWinform.Interfaces;
 using BarometerWinform.Models;
@@ -41,6 +42,13 @@ namespace BarometerWinform.Services
         /// Connect 时赋值，Disconnect 时不置空（方便错误排查时看配置），但 ReadAllData 会判空保护
         /// </summary>
         private DeviceConfig _config;
+
+        /// <summary>
+        /// 阈值寄存器地址（Holding Register 0x0010，功能码 0x06）
+        /// 以 ModbusRtuBarometerTest Demo 实测为准，写入设备内部阈值、驱动硬件报警触点。
+        /// 【注意】这是"设备阈值"寄存器，不是压力寄存器（0x0001）。
+        /// </summary>
+        private const ushort ThresholdRegisterAddress = 0x0010;
 
         /// <summary>
         /// 串口对象（RS485 转 USB 后会表现为一个 COM 口）
@@ -219,6 +227,92 @@ namespace BarometerWinform.Services
                 data[i] = ReadData(i + 1);
             }
             return data;
+        }
+
+        /// <summary>
+        /// 写入单台气压表的设备阈值（Holding Register 0x0010，功能码 0x06）
+        ///
+        /// 【与 Demo 保持一致】ModbusRtuBarometerTest 的 SetThreshold 逻辑：
+        ///   1. 小数位 = 从设备 0x0002 读到（非法则用 BarometerDefaultDecimalPlaces，默认 1）
+        ///   2. 寄存器值 = round(thresholdValue × 10^小数位)，负数按补码写（设备按有符号 short 解释）
+        ///   3. 写 WriteSingleRegister(slaveId=deviceId, 0x0010, 寄存器值)
+        ///
+        /// 【单位提醒】thresholdValue 是"设备单位"（与压力读数同单位同小数位），
+        /// 不是软件报警阈值 AlarmPressureThresholdPa。写前务必确认设备单位。
+        /// </summary>
+        /// <param name="deviceId">气压表编号（1~TotalBarometers）</param>
+        /// <param name="thresholdValue">设备单位阈值（如 -95.0）</param>
+        /// <returns>是否写入成功；设备不响应 / 超时返回 false（不抛异常）</returns>
+        public bool SetThreshold(int deviceId, decimal thresholdValue)
+        {
+            if (!_isConnected || _config == null || _master == null)
+            {
+                OnError?.Invoke(this, "设备未连接");
+                return false;
+            }
+
+            if (deviceId < 1 || deviceId > _config.TotalBarometers)
+            {
+                OnError?.Invoke(this, $"设备编号 {deviceId} 超出合法范围 [1, {_config.TotalBarometers}]");
+                return false;
+            }
+
+            try
+            {
+                lock (_syncRoot)
+                {
+                    // 先读 0x0002 拿小数位（与 ReadData 同一套取值规则：合法 0~4，否则默认）
+                    ushort[] info = _master.ReadInputRegisters((byte)deviceId, 0x0001, 2);
+                    int decimalPos = (info != null && info.Length >= 2 && info[1] <= 4)
+                        ? info[1]
+                        : _config.BarometerDefaultDecimalPlaces;
+
+                    // 阈值 → 寄存器值：round(阈值 × 10^小数位)
+                    // 有符号 short 范围为 -32768~32767；越界说明单位/位数配错，提醒后返回 false
+                    int multiplier = (int)Math.Pow(10, decimalPos);
+                    long scaled = (long)Math.Round(thresholdValue * multiplier);
+                    if (scaled < short.MinValue || scaled > short.MaxValue)
+                    {
+                        OnError?.Invoke(this, $"设备{deviceId}阈值 {thresholdValue}×10^{decimalPos}={scaled} 超出寄存器范围，请确认单位/小数位");
+                        return false;
+                    }
+
+                    _master.WriteSingleRegister((byte)deviceId, ThresholdRegisterAddress, (ushort)scaled);
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                // 写入失败不抛异常（与 ReadData 约定一致），通过 OnError 通知上层
+                OnError?.Invoke(this, $"设备{deviceId}写阈值失败: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 批量写入所有气压表的设备阈值
+        ///
+        /// 逐台调用 <see cref="SetThreshold"/>，单台失败不影响其它台；
+        /// 返回 deviceId → 是否成功，方便上层汇总"哪些台没写进去"。
+        /// 【性能提示】72 台连写 + 坏设备会阻塞较久（每台坏设备约一个读超时），
+        /// 调用方应在后台线程执行，不要直接放在 UI 线程里。
+        /// </summary>
+        /// <param name="thresholdValue">设备单位阈值（与压力读数同单位同小数位）</param>
+        /// <returns>写入结果字典（deviceId → 是否成功）</returns>
+        public Dictionary<int, bool> SetAllThresholds(decimal thresholdValue)
+        {
+            var result = new Dictionary<int, bool>();
+            if (_config == null)
+            {
+                OnError?.Invoke(this, "未连接，请先调用 Connect 方法");
+                return result;
+            }
+
+            for (int i = 1; i <= _config.TotalBarometers; i++)
+            {
+                result[i] = SetThreshold(i, thresholdValue);
+            }
+            return result;
         }
 
         private bool IsAlarm(decimal pressurePa)

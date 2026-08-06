@@ -49,15 +49,22 @@
 ## 4. 类库结构
 
 ### 4.1 `FanCommand` 枚举（命令值）
+寄存器 0x0001 的取值与写入命令共用同一套码值（实测确认），枚举需完整定义 4 个值：
+
 ```csharp
 public enum FanCommand : ushort
 {
-    Stop = 0x0002,           // 定值停止
-    FixedValueStart = 0x0003 // 定值启动
+    ProgramStopped = 0x0000,   // 程式停止
+    ProgramRunning = 0x0001,   // 程式启动
+    Stop = 0x0002,             // 定值停止（"定值停止"按钮写入此值）
+    FixedValueStart = 0x0003   // 定值启动（"定值启动"按钮写入此值）
 }
 ```
 
-> 若需要程式模式，可自行扩展 `ProgramStart = 0x0001` 和 `ProgramStop = 0x0000`。
+> **坑点**：若枚举只定义 `0x0002/0x0003`，设备回 `0x0000/0x0001`（程式模式）时，
+> `((FanCommand)值).ToString()` 会打印**裸数字**（如 `"1"`），UI 显示就成了数字。
+> 正确做法：枚举补全 4 值 + UI 显式 switch 映射中文（见 [FanTestForm.cs 的 GetStateText](../FanTestForm.cs)），
+> 未知值兜底显示 `未知(0xXXXX)`。
 
 ### 4.2 `FanControllerClient` 类（核心通信类）
 
@@ -118,7 +125,7 @@ namespace YourProject
         {
             // 1. 创建客户端实例
             var client = new FanControllerClient(
-                ip: "192.168.1.221",
+                ip: "192.168.1.220",
                 port: 50000,
                 slaveId: 1,
                 timeoutMs: 3000,
@@ -167,7 +174,7 @@ namespace YourProject
 
 ```csharp
 private FanControllerClient _client;
-private readonly string _ip = "192.168.1.221";
+private readonly string _ip = "192.168.1.220";
 private readonly int _port = 50000;
 
 public Form1()
@@ -180,8 +187,9 @@ private async void TimerRefresh_Tick(object sender, EventArgs e)
 {
     timerRefresh.Enabled = false;
     var (state, temp, humidity, tempSet, humSet) = await _client.ReadAllParametersAsync();
-    // 更新UI控件
-    lblState.Text = state == FanCommand.FixedValueStart ? "运行中" : "已停止";
+    // 更新UI控件：状态务必显式映射中文（0x0000~0x0003 共 4 态），
+    // 不能 state.ToString()——未知值会打印裸数字。参考 GetStateText 的做法。
+    lblState.Text = GetStateText(state); // "定值启动 / 定值停止 / 程式启动 / 程式停止 / 未知(0xXXXX)"
     lblTemp.Text = $"{temp:F2} °C";
     // ...
     timerRefresh.Enabled = true;
@@ -219,12 +227,26 @@ Install-Package NModbus -Version 3.0.83
 ## 7. 注意事项
 
 1. **端口号**：根据实际设备配置修改（本例使用 50000，若为标准 Modbus TCP 则使用 502）。
-2. **超时设置**：网络不稳定时可适当增大 `timeoutMs`（如 5000ms）。
+2. **超时设置（含连接超时）**：网络不稳定时可适当增大 `timeoutMs`（如 5000ms）。
+   `timeoutMs` 同时也作为**连接超时**使用——.NET Framework 的 `TcpClient.ConnectAsync` 不受收发超时约束，
+   若 IP/端口填错，系统默认要等约 20 秒才超时；本类在 `EnsureConnectedAsync` 用 `Task.WhenAny` 自设
+   `timeoutMs` 毫秒连接超时，超时立即抛 `TimeoutException`（提示"请检查 IP/端口"），不会长时间假死。
 3. **线程安全**：`FanControllerClient` 内部使用 `SemaphoreSlim` 保证连接过程的线程安全，可在多线程环境中共享同一个实例。
 4. **异常处理**：所有方法可能抛出 `SocketException`、`TimeoutException` 或 `InvalidOperationException`，调用方应捕获并处理。
 5. **日志回调**：建议传入日志委托以便调试，生产环境可记录到文件或日志系统。
 6. **寄存器地址**：请严格遵循寄存器映射表，若设备固件升级后地址变化需相应调整。
 7. **通讯间隔**：避免过于频繁读取（建议 >= 500ms），以免增加设备负担。
+8. **地址防呆（Demo 已实现）**：Demo 界面把 IP/端口做成**可编辑输入框**（默认 `192.168.1.220:50000`），
+   设备地址变化不用改代码；点【连接测试】前先校验格式（合法 IPv4 + 端口 1~65535，填错立刻提示原因）；
+   启动/停止前检测"地址已修改但未应用"，提示先点【连接测试】应用，避免把命令发到旧地址。
+9. **自动识别 IP（V1.2 新增）**：现场送风机控制器可能位于 `192.168.1.220` / `.221` / `.222` 中的任意一个，
+   Demo 连接时**按顺序逐个尝试**候选 IP，第一个连接成功的即为设备真实地址。候选 IP 在
+   `ModbusTCPFanControllerTest/App.config` 的 `FanIpCandidates` 里配置，**配几个就能识别几个**
+   （逗号/分号分隔）。连接成功日志会显示**实际连上的地址**（`实际连接 xxx.xxx.xxx.xxx:50000`）。
+10. **工控机记忆（V1.2 新增）**：连接成功后，Demo 会把"本工控机连上的控制器 IP"写入 exe 同目录下的
+    `FanLastIp.cache`（一行文本）。下次启动**优先用缓存地址直接连**，不用再从候选列表开头试探
+    （省去首连超时）；缓存连不上再回落候选列表（界面填写的 IP → 配置 `FanIpCandidates`），
+    找到新地址后自动更新缓存。
 
 ------
 
@@ -245,6 +267,8 @@ Install-Package NModbus -Version 3.0.83
 | 版本 | 日期    | 说明                                    |
 | :--- | :------ | :-------------------------------------- |
 | 1.0  | 2026-08 | 初始版本，基于实测数据，支持 Modbus TCP |
+| 1.1  | 2026-08 | `FanCommand` 枚举补全 0x0000~0x0003 四值；明确状态显示需显式映射中文（未知值兜底 `未知(0xXXXX)`），避免裸数字 |
+| 1.2  | 2026-08 | **自动识别 IP**：支持候选 IP 列表（读 App.config `FanIpCandidates`，配几个识别几个），连接时按顺序尝试，第一个连上的即设备地址；连接日志显示实际连上的 IP；**工控机记忆**：连接成功后写 `FanLastIp.cache`，下次启动优先用缓存地址直接连 |
 
 ------
 
