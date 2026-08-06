@@ -287,6 +287,27 @@ master.WriteSingleRegister(unitId, 0x2004, next);
 <add key="UseMockCommunication" value="false" />  <!-- false=真实通讯 -->
 ```
 
+### 8.2.1 备用通道映射（现场 DQ 通道烧毁时使用）
+
+现场某个 DQ 输出通道烧毁 / 电压不足（如继电器问题导致输出只有 16V 低于 24V）后，
+把该通道信号改写到备用通道。**开关默认关闭**，多数工作台不受影响；只有烧了通道的现场才开启。
+
+```xml
+<!-- 总开关：false=不启用（默认）；true=启用下面的通道重定向 -->
+<add key="IoBackupChannelMappingEnabled" value="false" />
+<!-- 映射表：源寄存器@源通道->目标寄存器@目标通道，多组用分号分隔。
+     寄存器为十六进制（可带 0x），通道为 0~15（0=第1路/bit0）。
+     示例：0x2000 的 00 通道烧毁 → 改写到 0x2009 的 10 通道；
+           0x2008 的 00 通道烧毁 → 改写到 0x2009 的 11 通道 -->
+<add key="IoBackupChannelMappings" value="0x2000@0->0x2009@10;0x2008@0->0x2009@11" />
+```
+
+启用后：
+- **生产工程** `ModbusTcpIoController` 在写 DO / 读 DO 时自动把被映射的源通道位改写到目标通道，
+  业务侧（输出点编号、UI 显示、报警联动）完全不变。
+- **测试 Demo**（本工程 MainForm / PowerOnTestForm）读同一份 App.config，行为一致，
+  可用于现场验证备用通道接线（观察目标通道指示灯）。
+
 ### 8.3 新增接入步骤（供后续开发参考）
 1. 实现 `IIoController`（或复用 `ModbusTcpIoController`），把"寄存器+bit"换算抽成与 `IoMapBuilder` 一致的映射。
 2. 在 `DeviceManager` 中替换为真实实现（已由 `UseMockCommunication=false` 切换）。

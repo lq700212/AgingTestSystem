@@ -422,6 +422,34 @@ namespace BarometerWinform.Services
         }
 
         /// <summary>
+        /// 写入单台气压表的设备阈值（透传 IBarometerReader.SetThreshold）
+        ///
+        /// 【单位提醒】thresholdValue 是"设备单位"（与压力读数同单位同小数位），
+        /// 不是软件报警阈值 AlarmPressureThresholdPa（Pa）。写前务必确认设备单位。
+        /// </summary>
+        /// <param name="deviceId">气压表编号（1~TotalBarometers）</param>
+        /// <param name="thresholdValue">设备单位阈值（如 -95.0）</param>
+        /// <returns>是否写入成功（设备不响应返回 false）</returns>
+        public bool SetBarometerThreshold(int deviceId, decimal thresholdValue)
+        {
+            return _barometerReader.SetThreshold(deviceId, thresholdValue);
+        }
+
+        /// <summary>
+        /// 批量写入所有气压表的设备阈值（透传 IBarometerReader.SetAllThresholds）
+        ///
+        /// 返回 deviceId → 是否成功，方便上层汇总"哪些台没写进去"。
+        /// 【性能提示】72 台连写 + 坏设备会阻塞较久，调用方应在后台线程执行，
+        /// 不要直接放在 UI 线程里（否则界面会卡住数十秒）。
+        /// </summary>
+        /// <param name="thresholdValue">设备单位阈值（与压力读数同单位同小数位）</param>
+        /// <returns>写入结果字典（deviceId → 是否成功）</returns>
+        public Dictionary<int, bool> SetAllBarometerThresholds(decimal thresholdValue)
+        {
+            return _barometerReader.SetAllThresholds(thresholdValue);
+        }
+
+        /// <summary>
         /// 设置输出点状态
         /// </summary>
         public void SetOutput(int outputId, bool state)

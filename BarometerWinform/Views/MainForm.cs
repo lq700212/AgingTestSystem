@@ -477,6 +477,25 @@ namespace BarometerWinform.Views
                 config.IoOutputRegisterStartAddress = ioOutputStart;
             }
 
+            // 【备用通道映射】总开关：现场某个 DQ 通道烧毁后，把该通道信号改写到备用通道。
+            // 默认 false（多数工作台正常，不受影响）；只有需要的现场才置 true。
+            if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["IoBackupChannelMappingEnabled"], out bool ioBackupEnabled))
+            {
+                config.IoBackupChannelMappingEnabled = ioBackupEnabled;
+            }
+
+            // 备用通道映射表：格式 "0x2000@0->0x2009@10;0x2008@0->0x2009@11"
+            // 解析失败的项会跳过（不影响合法项）；若有解析问题且开关为 true，额外记一条告警日志方便排查。
+            string ioBackupMappingsRaw = System.Configuration.ConfigurationManager.AppSettings["IoBackupChannelMappings"];
+            if (!string.IsNullOrWhiteSpace(ioBackupMappingsRaw))
+            {
+                config.IoBackupChannelMappings = BarometerWinform.Models.IoOutputChannelRemap.ParseAll(ioBackupMappingsRaw, out string parseError);
+                if (config.IoBackupChannelMappingEnabled && !string.IsNullOrEmpty(parseError))
+                {
+                    System.Diagnostics.Trace.TraceWarning($"IoBackupChannelMappings 配置存在未解析项：{parseError}");
+                }
+            }
+
             if (TryParseUShortFromAppSettings("BarometerPressureRegisterAddress", out ushort barometerPressureReg))
             {
                 config.BarometerPressureRegisterAddress = barometerPressureReg;
@@ -523,6 +542,18 @@ namespace BarometerWinform.Views
             {
                 config.FanTimeoutMs = fanTimeoutMs;
             }
+
+            // 送风机 IP 自动识别（V1.12 新增）：
+            // FanAutoDetectEnabled=true 时，连接送风机按顺序尝试 FanIpAddress + FanIpCandidates，
+            // 第一个连上的就是设备真实地址，现场换控制器/IP 不用改配置。
+            if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["FanAutoDetectEnabled"], out bool fanAutoDetect))
+            {
+                config.FanAutoDetectEnabled = fanAutoDetect;
+            }
+
+            // 候选 IP 列表（逗号/分号分隔，自动过滤非法 IP 并去重）
+            string fanIpCandidates = System.Configuration.ConfigurationManager.AppSettings["FanIpCandidates"];
+            config.FanIpCandidates = DeviceConfig.ParseFanIpCandidates(fanIpCandidates);
 
             // ===== 老化测试业务参数读取（V1.10 新增） =====
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["VacuumConfirmTimeoutMs"], out int vacuumConfirmTimeoutMs))

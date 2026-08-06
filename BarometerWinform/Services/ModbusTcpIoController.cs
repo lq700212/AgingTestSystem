@@ -226,6 +226,31 @@ namespace BarometerWinform.Services
             }
         }
 
+        /// <summary>
+        /// 【备用通道映射】把物理通道 (regAddress, bit) 重定向到备用通道。
+        ///
+        /// 现场某个 DQ 通道烧毁 / 电压不足后，把该通道信号改写到备用通道。
+        /// 业务侧输出点编号（outputId）完全不变，只是这里把"物理寄存器 + bit"换了位置。
+        /// 总开关 IoBackupChannelMappingEnabled 关闭时，原样返回（多数工作台行为不变）。
+        /// </summary>
+        /// <param name="regAddress">输入源寄存器地址；输出映射后的寄存器地址（可能被改写）</param>
+        /// <param name="bit">输入源通道号（0~15）；输出映射后的通道号（可能被改写）</param>
+        private void MapOutputChannel(ref ushort regAddress, ref int bit)
+        {
+            if (!_config.IoBackupChannelMappingEnabled || _config.IoBackupChannelMappings == null)
+                return;
+
+            foreach (var remap in _config.IoBackupChannelMappings)
+            {
+                if (remap.SourceRegister == regAddress && remap.SourceChannel == bit)
+                {
+                    regAddress = remap.TargetRegister;
+                    bit = remap.TargetChannel;
+                    return; // 一个源通道只会被映射一次
+                }
+            }
+        }
+
         public void WriteOutput(int outputId, bool state)
         {
             if (!_isConnected || _config == null || _master == null)
@@ -251,6 +276,9 @@ namespace BarometerWinform.Services
                 int bitIndex = outputId - outputStart;
                 ushort regAddress = (ushort)(_config.IoOutputRegisterStartAddress + (bitIndex / 16));
                 int bit = bitIndex % 16;
+
+                // 【备用通道映射】烧毁通道 → 备用通道（开关关闭时原样不动）
+                MapOutputChannel(ref regAddress, ref bit);
 
                 lock (_syncRoot)
                 {
@@ -327,6 +355,10 @@ namespace BarometerWinform.Services
                 ushort regAddress = (ushort)(_config.IoOutputRegisterStartAddress + (bitIndex / 16));
                 int bit = bitIndex % 16;
 
+                // 【备用通道映射】烧毁通道 → 备用通道（开关关闭时原样不动），
+                // 读取也要跟随映射后的物理位置，否则读回来的是烧毁通道的旧值/空值。
+                MapOutputChannel(ref regAddress, ref bit);
+
                 ushort value;
                 lock (_syncRoot)
                 {
@@ -358,6 +390,18 @@ namespace BarometerWinform.Services
             {
                 // 例如：144 路输出 → 需要 9 个寄存器（(144+15)/16 = 9）
                 int regCount = (_config.TotalOutputs + 15) / 16;
+
+                // 【备用通道映射】映射目标可能落在业务输出范围之外（如 0x2009 只用于备用），
+                // 把批量读取范围扩到能覆盖所有映射目标，保证一次读到全部物理通道的真实状态。
+                if (_config.IoBackupChannelMappingEnabled && _config.IoBackupChannelMappings != null)
+                {
+                    foreach (var remap in _config.IoBackupChannelMappings)
+                    {
+                        int need = (remap.TargetRegister - _config.IoOutputRegisterStartAddress) + 1;
+                        if (need > regCount) regCount = need;
+                    }
+                }
+
                 ushort[] regs;
                 lock (_syncRoot)
                 {
@@ -372,8 +416,14 @@ namespace BarometerWinform.Services
                 {
                     int regIndex = i / 16;
                     int bit = i % 16;
-                    if (regIndex >= regs.Length) break;
-                    bool rawState = (regs[regIndex] & (1 << bit)) != 0;
+                    ushort regAddress = (ushort)(_config.IoOutputRegisterStartAddress + regIndex);
+
+                    // 【备用通道映射】按通道重定向后，从已读到的块里取目标寄存器的对应位
+                    MapOutputChannel(ref regAddress, ref bit);
+                    int mappedRegIndex = regAddress - _config.IoOutputRegisterStartAddress;
+                    if (mappedRegIndex < 0 || mappedRegIndex >= regs.Length) break;
+
+                    bool rawState = (regs[mappedRegIndex] & (1 << bit)) != 0;
                     result[i] = _config.InvertOutputs ? !rawState : rawState;
                 }
 

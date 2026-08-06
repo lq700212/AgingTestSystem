@@ -278,6 +278,8 @@
 | `GetFanData()` | 获取送风机最新状态（缓存） |
 | `SetOutput(outputId, state)` | 写单个 IO 输出（供单台手动控制等） |
 | `GetOutput(outputId)` / `GetInput(inputId)` | 读单个 IO 输出/输入状态 |
+| `SetBarometerThreshold(deviceId, v)` | 【V1.15 新增】写单台**设备阈值**（透传 IBarometerReader.SetThreshold，设备单位，非 Pa） |
+| `SetAllBarometerThresholds(v)` | 【V1.15 新增】批量写全部**设备阈值**，返回失败名单（透传 SetAllThresholds，应在后台线程调用） |
 | `GetTestingCount()` / `GetOnlineCount()` | 统计测试中/在线台数（状态栏显示） |
 
 **事件**:
@@ -335,6 +337,8 @@ public interface IBarometerReader
     void Disconnect();
     BarometerData ReadData(int deviceId);
     BarometerData[] ReadAllData();
+    bool SetThreshold(int deviceId, decimal thresholdValue);            // 【V1.15 新增】写单台设备阈值（0x0010，0x06）
+    Dictionary<int, bool> SetAllThresholds(decimal thresholdValue);     // 【V1.15 新增】批量写设备阈值，返回失败名单
     event EventHandler<string> OnError;
 }
 ```
@@ -345,9 +349,16 @@ public interface IBarometerReader
 - 真实实现：`ModbusRtuBarometerReader`（`UseMockCommunication=false` 时使用，Modbus RTU / RS485→USB，19200）
 - 由 `DeviceManager` 依据 `UseMockCommunication` 配置自动切换，无需改代码
 
+**【V1.15 更新 —— 设备阈值写入】**
+
+- 新增 `SetThreshold` / `SetAllThresholds`，与 ModbusRtuBarometerTest Demo 写入逻辑一致（写 Holding Register 0x0010，值 = round(阈值 × 10^小数位)）。
+- **单位注意**：`thresholdValue` 是"设备单位"（与压力读数同单位同小数位），**不是**软件报警阈值 `AlarmPressureThresholdPa`（Pa）。单位未按说明书确认前不要写。
+- `SetAllThresholds` 逐台失败不中断、返回失败名单；72 台连写 + 坏设备会阻塞较久，应在后台线程调用。
+- 实测经验：批量写某台超时通常表示该台设备掉线/损坏（Demo 已提供「批量读取压力」按钮用于定位离线设备）。
+
 **接入其他协议（如需）**:
 
-1. 创建新类实现 `IBarometerReader` 接口
+1. 创建新类实现 `IBarometerReader` 接口（含 `SetThreshold`/`SetAllThresholds`，无设备阈值能力可返回 false/空字典）
 2. 参考 `ModbusRtuBarometerReader` 实现 `Connect`、`ReadData`、`Disconnect`
 3. 在 `DeviceManager` 构造函数中按需替换实现
 
@@ -485,6 +496,8 @@ public interface IFanController : IDisposable
 | `IoUnitId` | byte | 1 | IO 耦合器从站地址（UnitId） |
 | `IoInputRegisterStartAddress` | ushort | 0x1000 | DI 起始寄存器（Input Register 0x04） |
 | `IoOutputRegisterStartAddress` | ushort | 0x2000 | DO 起始寄存器（Holding Register） |
+| `IoBackupChannelMappingEnabled` | bool | false | 备用通道映射总开关（DQ 通道烧毁时置 true，多数工作台默认关） |
+| `IoBackupChannelMappings` | string | `0x2000@0->0x2009@10;0x2008@0->0x2009@11` | 备用通道映射表（源寄存器@源通道->目标寄存器@目标通道，分号分隔） |
 | `BarometerPressureRegisterAddress` | ushort | 0x0001 | 压力寄存器（0x0002 为小数位） |
 | `BarometerDefaultDecimalPlaces` | int | 1 | 小数位默认值 |
 | `BarometerPressureScale` | decimal | 1 | 压力缩放系数 |
@@ -496,7 +509,9 @@ public interface IFanController : IDisposable
 | `PanelColumns` | int | 8 | 面板列数 |
 | `PanelRows` | int | 9 | 面板行数 |
 | `FanEnabled` | bool | true | 是否启用冷却送风机（可选设备，连接失败不影响启动） |
-| `FanIpAddress` | string | 192.168.1.221 | 送风机控制屏 IP |
+| `FanIpAddress` | string | 192.168.1.220 | 送风机控制屏主 IP（自动识别时优先尝试） |
+| `FanAutoDetectEnabled` | bool | true | 送风机 IP 自动识别开关（按顺序尝试 FanIpAddress + FanIpCandidates，第一个连上的即设备地址） |
+| `FanIpCandidates` | string | 192.168.1.220,192.168.1.221,192.168.1.222 | 送风机候选 IP 列表（逗号/分号分隔，**配几个就能识别几个**；仅自动识别开启时生效） |
 | `FanPort` | int | 50000 | 送风机端口（厂商控制屏实测） |
 | `FanUnitId` | byte | 1 | 送风机从站地址 |
 | `FanTimeoutMs` | int | 3000 | 送风机通讯超时（毫秒） |
@@ -714,6 +729,8 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 | `IoUnitId` | IO 耦合器从站地址 | 1 |
 | `IoInputRegisterStartAddress` | DI 起始寄存器（Input Register 0x04） | 0x1000 |
 | `IoOutputRegisterStartAddress` | DO 起始寄存器（Holding Register） | 0x2000 |
+| `IoBackupChannelMappingEnabled` | 备用通道映射总开关（DQ 通道烧毁时置 true） | false |
+| `IoBackupChannelMappings` | 备用通道映射表（源@通道->目标@通道，分号分隔） | `0x2000@0->0x2009@10;0x2008@0->0x2009@11` |
 | `BarometerPressureRegisterAddress` | 压力寄存器（0x0001，0x0002 为小数位） | 0x0001 |
 | `BarometerDefaultDecimalPlaces` | 小数位默认值 | 1 |
 | `BarometerPressureScale` | 压力缩放系数 | 1 |
@@ -722,7 +739,9 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 | `PlcAddress` | GX-CL140 IP | 192.168.1.20 |
 | `PlcPort` | GX-CL140 端口 | 502 |
 | `FanEnabled` | 是否启用冷却送风机（可选设备） | true |
-| `FanIpAddress` | 送风机控制屏 IP | 192.168.1.221 |
+| `FanIpAddress` | 送风机控制屏主 IP（自动识别时优先尝试） | 192.168.1.220 |
+| `FanAutoDetectEnabled` | 送风机 IP 自动识别开关 | true |
+| `FanIpCandidates` | 送风机候选 IP 列表（逗号/分号分隔，配几个识别几个） | 192.168.1.220,192.168.1.221,192.168.1.222 |
 | `FanPort` | 送风机端口（实测 50000） | 50000 |
 | `FanUnitId` | 送风机从站地址 | 1 |
 | `FanTimeoutMs` | 送风机通讯超时（毫秒） | 3000 |
@@ -757,7 +776,7 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 | :--- | :--- | :--- |
 | 气压表通信协议 | 已确认 | Modbus RTU / RS485→USB，19200（ModbusRtuBarometerTest Demo 实测） |
 | IO通信协议 | 已确认 | Modbus TCP，GX-CL140（192.168.1.20:502，ModbusTCPTest Demo 实测） |
-| 送风机通信协议 | 已确认 | Modbus TCP，厂商控制屏（192.168.1.221:50000，ModbusTCPFanControllerTest Demo 实测） |
+| 送风机通信协议 | 已确认 | Modbus TCP，厂商控制屏（192.168.1.220:50000，ModbusTCPFanControllerTest Demo 实测） |
 | PLC连接方式 | 已确认 | 以太网 Modbus TCP |
 | 数据存储方案 | 部分确定 | 事件日志已落盘 CSV（Logs\TestLog_*.csv）；数据库方案待定 |
 
@@ -900,7 +919,7 @@ WinForms 视图层采用 **partial class（分部类）** 机制，每个窗体/
 **【V1.12/V1.15 更新】** 真实通讯实现已内置，接入现场硬件 = 配置 `App.config` + 关闭 Mock，无需改代码：
 
 1. **接好线**：气压表 RS485→USB 串口；GX-CL140 用网线连上位机；送风机控制屏用网线连上位机（如可选）
-2. **改配置**（App.config）：串口 `PortName/BaudRate(19200)`、IO `PlcAddress(192.168.1.20)/PlcPort(502)`、送风机 `FanIpAddress(192.168.1.221)/FanPort(50000)`
+2. **改配置**（App.config）：串口 `PortName/BaudRate(19200)`、IO `PlcAddress(192.168.1.20)/PlcPort(502)`、送风机 `FanIpAddress(192.168.1.220)/FanPort(50000)`（送风机默认开 IP 自动识别，候选 IP 在 `FanIpCandidates` 里配，几个都行）
 3. **关闭 Mock**：`UseMockCommunication=false`
 4. **启动程序**：DeviceManager 会自动使用真实实现（`ModbusRtuBarometerReader` + `ModbusTcpIoController` + `FanControllerClient`）
 5. **按序验证**：先用各测试 Demo 验证单条链路，再整机联动（详见通讯接入说明.md 第 6 节"推荐通线验证顺序"）

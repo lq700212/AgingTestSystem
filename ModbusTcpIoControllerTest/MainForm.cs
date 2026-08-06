@@ -66,19 +66,27 @@ namespace ModbusTcpIoControllerTest
             // 定义要写入的寄存器地址（0x2000 对应数字量输出区域）
             int startAddress = 0x2000;
 
-            // 定义要写入的值（16位，对应16个输出通道）
-            // 例如：0x0001 表示只打开第1路；0x0002 只打开第2路；0x0003 同时打开第1和第2路
-            // 这里我们测试写入 0x0001，即打开第1路输出
-            int valueToWrite = 0x0001;
+            // 定义要写入的通道（0 = 第1路，即 0x2000 的 00 通道）
+            int channel = 0;
 
             try
             {
+                // 【备用通道映射】若 0x2000 的 00 通道烧毁并被映射到备用通道，
+                // 则实际写到目标通道（如 0x2009 的 10 通道），源通道不再写。
+                // 开关在 App.config 的 IoBackupChannelMappingEnabled，默认关闭（多数工作台照旧）。
+                (int mappedReg, int mappedBit) = OutputChannelRemap.Map(startAddress, channel);
+                int mappedValue = 1 << mappedBit;
+
                 // 使用 WriteSingleRegister 方法写入单个寄存器（功能码 0x06）
                 // 参数：寄存器地址，要写入的值（int 类型，但内部会转为 ushort）
-                modbusClient.WriteSingleRegister(startAddress, valueToWrite);
+                modbusClient.WriteSingleRegister(mappedReg, mappedValue);
 
                 // 如果写入成功，设备会返回原样回显，这里显示成功信息
-                MessageBox.Show($"写入成功！\n地址 0x{startAddress:X4} 已写入值 0x{valueToWrite:X4}",
+                bool remapped = (mappedReg != startAddress || mappedBit != channel);
+                string mapHint = remapped
+                    ? $"\n（0x{startAddress:X4} 通道{channel} 已映射到 0x{mappedReg:X4} 通道{mappedBit}）"
+                    : "";
+                MessageBox.Show($"写入成功！\n地址 0x{mappedReg:X4} 已写入值 0x{mappedValue:X4}{mapHint}",
                                 "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
@@ -165,22 +173,22 @@ namespace ModbusTcpIoControllerTest
             // 定义要写入的寄存器地址（0x2000 对应数字量输出区域）
             int startAddress = 0x2000;
 
-            // 定义要写入的值（16位，对应16个输出通道）
-            // 例如：0x0001 表示只打开第1路；0x0002 只打开第2路；0x0003 同时打开第1和第2路
-            // 这里我们测试写入 0x0001，即打开第1路输出
-            for(int i = 0; i < 10; i++)
+            for (int i = 0; i < 10; i++)
             {
-                int valueToWrite = 0x0001;
-                for (int j = 1; j <= 16; j++)
+                for (int j = 0; j < 16; j++)
                 {
-                    if(j > 1)
-                        valueToWrite *= 2;
+                    // 【备用通道映射】当前要写的物理通道 = (startAddress, j)
+                    // 若该通道被映射到备用通道，则实际写到目标通道
+                    // （观察目标模块/通道的指示灯亮起即可验证映射是否生效）。
+                    // 开关在 App.config 的 IoBackupChannelMappingEnabled，默认关闭。
+                    (int mappedReg, int mappedBit) = OutputChannelRemap.Map(startAddress, j);
+                    int mappedValue = 1 << mappedBit;
 
                     try
                     {
                         // 使用 WriteSingleRegister 方法写入单个寄存器（功能码 0x06）
                         // 参数：寄存器地址，要写入的值（int 类型，但内部会转为 ushort）
-                        modbusClient.WriteSingleRegister(startAddress, valueToWrite);
+                        modbusClient.WriteSingleRegister(mappedReg, mappedValue);
                     }
                     catch (Exception ex)
                     {
@@ -188,10 +196,15 @@ namespace ModbusTcpIoControllerTest
                         MessageBox.Show($"写入失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     }
 
-                    Thread.Sleep(500); // 每次写入后等待1秒，避免过快操作
+                    Thread.Sleep(500); // 每次写入后等待0.5秒，避免过快操作
                 }
                 // 循环结束后，将所有通道关闭，写入0x0000
                 modbusClient.WriteSingleRegister(startAddress, 0x0000);
+                // 若该寄存器有通道被映射到备用通道，目标寄存器也要一并清零，避免备用通道残留点亮
+                if (OutputChannelRemap.HasSourceInRegister(startAddress))
+                {
+                    modbusClient.WriteSingleRegister(OutputChannelRemap.TargetRegForSource(startAddress), 0x0000);
+                }
                 // 为下一轮的循环做准备，将起始地址加1，模拟写入下一个寄存器
                 startAddress += 1;
             }

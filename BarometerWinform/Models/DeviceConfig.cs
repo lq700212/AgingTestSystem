@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 
 namespace BarometerWinform.Models
 {
@@ -177,12 +179,32 @@ namespace BarometerWinform.Models
 
         /// <summary>
         /// IO 输出寄存器起始地址（DO 区域起点）
-        /// 
+        ///
         /// 约定：
         /// - 默认 0x2000（来自你提供的 GX-CL140 测试 Demo）
         /// - 当前实现采用 Holding Register + Read/Modify/Write 的方式写单点输出
         /// </summary>
         public ushort IoOutputRegisterStartAddress { get; set; } = 0x2000;
+
+        /// <summary>
+        /// 是否启用 IO 输出"备用通道映射"
+        ///
+        /// 【背景】
+        /// 现场某个 DQ 输出通道烧毁 / 电压不足后，把该通道的信号改写到备用通道。
+        /// 因为本程序会复用到多个工作台，多数工作台没有烧通道，所以做成**开关**：
+        /// - false：不启用（默认），所有工作台行为完全不变
+        /// - true：启用，按 <see cref="IoBackupChannelMappings"/> 把物理读写位置重定向到备用通道
+        ///
+        /// 业务侧（输出点编号、UI 显示、报警联动）在启用后完全不变，
+        /// 只是"写 DO / 读 DO"时自动改写到备用通道。
+        /// </summary>
+        public bool IoBackupChannelMappingEnabled { get; set; } = false;
+
+        /// <summary>
+        /// IO 输出备用通道映射表（IoBackupChannelMappingEnabled = true 时生效）
+        /// 配置格式与解析见 <see cref="IoOutputChannelRemap.ParseAll"/>。
+        /// </summary>
+        public List<IoOutputChannelRemap> IoBackupChannelMappings { get; set; } = new List<IoOutputChannelRemap>();
 
         /// <summary>
         /// 气压表压力值寄存器起始地址（Input Register，功能码 0x04）
@@ -244,9 +266,9 @@ namespace BarometerWinform.Models
 
         /// <summary>
         /// 冷却送风机控制屏 IP 地址
-        /// 以 ModbusTCPFanControllerTest Demo 实测为准：192.168.1.221
+        /// 以现场实际设备为准：192.168.1.220（Demo 默认值同步此地址，改 IP 可在界面直接填）
         /// </summary>
-        public string FanIpAddress { get; set; } = "192.168.1.221";
+        public string FanIpAddress { get; set; } = "192.168.1.220";
 
         /// <summary>
         /// 冷却送风机通讯端口
@@ -265,6 +287,56 @@ namespace BarometerWinform.Models
         /// 同时用于连接超时、读写超时，防止设备掉线时界面卡死
         /// </summary>
         public int FanTimeoutMs { get; set; } = 3000;
+
+        /// <summary>
+        /// 送风机 IP 自动识别开关
+        ///
+        /// 【背景】现场冷却送风机控制器的 IP 可能是 192.168.1.220 / .221 / .222 中的任意一个
+        ///（换工作台、换控制器都会变），如果 IP 写死，换现场就得改配置。
+        /// 所以做成自动识别：
+        /// - true（默认）：连接时按顺序尝试 <see cref="FanIpAddress"/> + <see cref="FanIpCandidates"/>，
+        ///   第一个能连上的 IP 就是设备真实地址，现场不需要改配置。
+        /// - false：只尝试 <see cref="FanIpAddress"/>（与旧版本行为一致）。
+        /// </summary>
+        public bool FanAutoDetectEnabled { get; set; } = true;
+
+        /// <summary>
+        /// 送风机候选 IP 列表（FanAutoDetectEnabled = true 时生效）
+        /// 连接时按顺序逐个尝试，第一个连接成功的 IP 即为设备真实地址。
+        /// 配置里用逗号 / 分号分隔（中英文标点均可），非法 IP 自动忽略，见
+        /// <see cref="ParseFanIpCandidates"/>。
+        /// </summary>
+        public List<string> FanIpCandidates { get; set; } = new List<string>();
+
+        /// <summary>
+        /// 解析配置文件里的候选 IP 列表字符串
+        /// 支持中英文逗号/分号分隔，自动过滤空项与非法 IP，并按原顺序去重。
+        /// </summary>
+        /// <param name="raw">原始配置字符串，如 "192.168.1.220,192.168.1.221,192.168.1.222"</param>
+        /// <returns>解析后的 IP 列表（保持原顺序，无重复）</returns>
+        public static List<string> ParseFanIpCandidates(string raw)
+        {
+            var result = new List<string>();
+            if (string.IsNullOrWhiteSpace(raw)) return result;
+
+            // 兼容中英文逗号/分号分隔（用户可能手输中文标点）
+            char[] separators = { ',', ';', '，', '；' };
+            foreach (string item in raw.Split(separators))
+            {
+                string ip = item?.Trim();
+                if (string.IsNullOrEmpty(ip)) continue;                     // 跳过空项
+                if (!System.Net.IPAddress.TryParse(ip, out _)) continue;    // 跳过非法 IP
+
+                // 去重（按原顺序保留第一次出现的地址）
+                bool exists = false;
+                foreach (string x in result)
+                {
+                    if (string.Equals(x, ip, StringComparison.OrdinalIgnoreCase)) { exists = true; break; }
+                }
+                if (!exists) result.Add(ip);
+            }
+            return result;
+        }
 
         // =====================================================================
         // 老化测试业务参数

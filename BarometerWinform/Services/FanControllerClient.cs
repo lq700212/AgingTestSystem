@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;          // 用于读写"上次连接成功 IP"的磁盘缓存文件
 using System.Net.Sockets;
 using BarometerWinform.Interfaces;
 using BarometerWinform.Models;
@@ -37,6 +39,10 @@ namespace BarometerWinform.Services
     /// 送风机是"可选设备"，现场可能中途断电/断网。
     /// 本类采用"每次操作前检查连接，未连接则自动重连"的策略；
     /// 并用 10 秒重连节流，避免对已断电的设备每秒发起连接导致卡顿。
+    ///
+    /// 【工控机 IP 记忆（V1.16）】
+    /// 自动识别连接成功后，会把"本工控机连上的控制器 IP"写入程序目录下的 FanLastIp.cache；
+    /// 下次启动优先用缓存地址直接连，连不上再回落 FanIpAddress / FanIpCandidates 配置列表。
     /// </summary>
     public class FanControllerClient : IFanController
     {
@@ -73,12 +79,42 @@ namespace BarometerWinform.Services
         private DateTime _lastConnectAttempt = DateTime.MinValue;
 
         /// <summary>
+        /// 最近一次连接成功的 IP 地址（自动识别的结果）
+        /// 用于重连优化：下次连接时优先尝试它，设备地址没变的话一次就连上，不用再逐个试探。
+        /// 若设备换到了别的候选 IP，尝试旧地址失败后会继续试后面的候选并更新本字段。
+        /// 程序重启后优先从磁盘缓存文件恢复（见 <see cref="LoadCachedIp"/>）。
+        /// </summary>
+        private string _activeIp;
+
+        /// <summary>
+        /// 是否已尝试从磁盘缓存恢复 _activeIp
+        /// 防止每次构建候选列表都去读一次磁盘
+        /// </summary>
+        private bool _activeIpLoadedFromDisk;
+
+        /// <summary>
         /// 重连节流间隔（毫秒）
         /// 两次连接尝试之间至少间隔 10 秒，避免对死设备频繁发起连接
         /// </summary>
         private const int ReconnectIntervalMs = 10000;
 
+        /// <summary>
+        /// 磁盘缓存文件名（放在程序 exe 所在目录下）
+        /// 内容 = 一行文本：本工控机最近一次连接成功的送风机 IP。
+        /// 这样每台工控机各自记住"我上次连上了哪个控制器"，下次启动优先用缓存地址，
+        /// 不用再从配置列表开头逐个试探（省去首次连错的 3 秒超时）。
+        /// </summary>
+        private const string IpCacheFileName = "FanLastIp.cache";
+
         public bool IsConnected => _isConnected;
+
+        /// <summary>
+        /// 当前实际连接成功的送风机 IP（自动识别结果）
+        /// 未连接成功时为 null。供界面/日志显示"到底连上了哪台设备"。
+        /// 与配置里的 <see cref="DeviceConfig.FanIpAddress"/> 可能不同
+        ///（比如现场设备实际是 192.168.1.221，而主 IP 配的是 .220）。
+        /// </summary>
+        public string ActiveIp => _activeIp;
 
         public event EventHandler<string> OnError;
 
@@ -98,6 +134,11 @@ namespace BarometerWinform.Services
         /// <summary>
         /// 连接送风机控制屏（实际执行部分）
         /// 必须在 _syncRoot 锁内调用（Connect / EnsureConnected 都会持有锁进入）
+        ///
+        /// 【自动识别 IP（V1.12 新增）】
+        /// 现场冷却送风机控制器的 IP 可能是 192.168.1.220 / .221 / .222 中的任意一个
+        ///（换工作台、换控制器都会变）。为免去每次改配置，这里按顺序逐个尝试候选 IP，
+        /// 第一个连接成功的即为设备真实地址，见 <see cref="BuildCandidateIps"/>。
         /// </summary>
         private bool ConnectInternal()
         {
@@ -106,41 +147,166 @@ namespace BarometerWinform.Services
                 // 0) 先断开旧连接（如果之前连接过），避免重复 Connect 导致句柄泄漏
                 Disconnect();
 
-                // 1) 建立 TCP 连接
-                _client = new TcpClient();
-                _client.SendTimeout = _config.FanTimeoutMs;
-                _client.ReceiveTimeout = _config.FanTimeoutMs;
-
-                // 【重要】TcpClient.Connect 是同步方法，且不受上面 Timeout 属性控制
-                //（它走的是系统 TCP 连接超时，默认可能长达 ~20 秒）。
-                // 如果送风机掉线/网线没插好，直接 Connect 会让启动画面/按钮卡住很久。
-                // 这里改用 BeginConnect + WaitOne 实现"手动超时"：
-                //   - FanTimeoutMs 内连接成功 → EndConnect 完成连接
-                //   - FanTimeoutMs 内没成功 → 抛超时异常，本次连接放弃
-                IAsyncResult connectResult = _client.BeginConnect(_config.FanIpAddress, _config.FanPort, null, null);
-                if (!connectResult.AsyncWaitHandle.WaitOne(_config.FanTimeoutMs))
+                // 1) 组装候选 IP 列表（自动识别核心，见 BuildCandidateIps）
+                List<string> candidates = BuildCandidateIps();
+                if (candidates.Count == 0)
                 {
-                    _client.Close();
-                    throw new TimeoutException($"连接送风机超时（{_config.FanIpAddress}:{_config.FanPort}）");
+                    OnError?.Invoke(this, "送风机连接参数错误：没有可用的 IP 地址，请检查 FanIpAddress/FanIpCandidates 配置");
+                    return false;
                 }
-                _client.EndConnect(connectResult);
 
-                // 2) 创建 Modbus 主站（Master）
-                var factory = new ModbusFactory();
-                _master = factory.CreateMaster(_client);
-                _master.Transport.ReadTimeout = _config.FanTimeoutMs;
-                _master.Transport.WriteTimeout = _config.FanTimeoutMs;
+                // 2) 按顺序逐个尝试候选 IP：第一个连上的就是设备真实地址
+                Exception lastError = null;
+                foreach (string ip in candidates)
+                {
+                    try
+                    {
+                        // 为每个候选 IP 单独创建 TcpClient（上一个失败的已关闭，不能复用）
+                        TcpClient client = new TcpClient();
+                        client.SendTimeout = _config.FanTimeoutMs;
+                        client.ReceiveTimeout = _config.FanTimeoutMs;
 
-                // 3) 标记连接成功
-                _isConnected = true;
-                return true;
+                        // 【重要】TcpClient.Connect 是同步方法，且不受上面 Timeout 属性控制
+                        //（它走的是系统 TCP 连接超时，默认可能长达 ~20 秒）。
+                        // 如果送风机掉线/网线没插好，直接 Connect 会让启动画面/按钮卡住很久。
+                        // 这里改用 BeginConnect + WaitOne 实现"手动超时"：
+                        //   - FanTimeoutMs 内连接成功 → EndConnect 完成连接
+                        //   - FanTimeoutMs 内没成功 → 抛超时异常，继续试下一个候选 IP
+                        IAsyncResult connectResult = client.BeginConnect(ip, _config.FanPort, null, null);
+                        if (!connectResult.AsyncWaitHandle.WaitOne(_config.FanTimeoutMs))
+                        {
+                            client.Close();
+                            client.Dispose();
+                            lastError = new TimeoutException($"连接超时（{_config.FanTimeoutMs}ms）");
+                            continue;   // 本 IP 超时：尝试下一个候选
+                        }
+                        client.EndConnect(connectResult);
+
+                        // 连接成功：绑定当前客户端 + 创建 Modbus 主站（Master）
+                        _client = client;
+                        var factory = new ModbusFactory();
+                        _master = factory.CreateMaster(_client);
+                        _master.Transport.ReadTimeout = _config.FanTimeoutMs;
+                        _master.Transport.WriteTimeout = _config.FanTimeoutMs;
+
+                        _isConnected = true;
+                        _activeIp = ip;      // 记住本次成功的 IP（内存），下次重连优先尝试它
+                        SaveCachedIp(ip);    // 写盘缓存：本工控机"上次连上的控制器 IP"，下次启动直接用它
+                        return true;
+                    }
+                    catch (Exception ex)
+                    {
+                        // 本 IP 连接失败：记下原因，继续尝试下一个候选
+                        lastError = ex;
+                    }
+                }
+
+                // 3) 所有候选 IP 都连不上：通知上层（会显示在 UI 上），并清理资源
+                OnError?.Invoke(this, $"送风机连接失败（已尝试 {candidates.Count} 个 IP: {string.Join(", ", candidates)}）: {lastError?.Message}");
+                Disconnect();
+                return false;
             }
             catch (Exception ex)
             {
-                // 连接失败：通知上层（会显示在 UI 上），并清理资源
+                // 兜底异常：连接失败，通知上层并清理资源
                 OnError?.Invoke(this, $"送风机连接失败: {ex.Message}");
                 Disconnect();
                 return false;
+            }
+        }
+
+        /// <summary>
+        /// 组装本次连接要尝试的候选 IP 列表（自动识别核心）
+        ///
+        /// 顺序约定（越靠前越优先）：
+        ///   1) 自动识别开启时：上次连接成功的 IP（_activeIp，程序重启后从磁盘缓存恢复）
+        ///      ——这就是"工控机记忆"：每台工控机优先用自己上次连上的控制器地址，
+        ///        连不上再回落下面的配置列表，省去从第一个候选开始试探的耗时；
+        ///   2) 配置的主 IP（FanIpAddress）——始终优先尝试；
+        ///   3) FanAutoDetectEnabled=true 时，追加配置的候选 IP 列表（FanIpCandidates）。
+        /// 自动过滤：空字符串 / 非法 IP / 重复项（避免同一个 IP 试两次）。
+        /// </summary>
+        private List<string> BuildCandidateIps()
+        {
+            var list = new List<string>();
+
+            // 局部函数：把"合法且未出现过"的 IP 追加进列表
+            void AddCandidate(string ip)
+            {
+                if (string.IsNullOrWhiteSpace(ip)) return;
+                ip = ip.Trim();
+                if (!System.Net.IPAddress.TryParse(ip, out _)) return;   // 跳过非法 IP
+                foreach (string x in list)
+                {
+                    if (string.Equals(x, ip, StringComparison.OrdinalIgnoreCase)) return;   // 已存在则跳过
+                }
+                list.Add(ip);
+            }
+
+            // 1) 自动识别开启时：优先用"上次连接成功的 IP"（磁盘缓存恢复 / 本次会话内存）
+            if (_config.FanAutoDetectEnabled)
+            {
+                if (!_activeIpLoadedFromDisk)
+                {
+                    _activeIpLoadedFromDisk = true;
+                    _activeIp = _activeIp ?? LoadCachedIp();   // 首次构建时从磁盘恢复缓存
+                }
+                AddCandidate(_activeIp);
+            }
+
+            // 2) 配置的主 IP 始终尝试
+            AddCandidate(_config.FanIpAddress);
+
+            // 3) 自动识别开启时，追加候选 IP 列表
+            if (_config.FanAutoDetectEnabled && _config.FanIpCandidates != null)
+            {
+                foreach (string ip in _config.FanIpCandidates)
+                {
+                    AddCandidate(ip);
+                }
+            }
+
+            return list;
+        }
+
+        /// <summary>
+        /// 读取磁盘缓存的上次连接成功的送风机 IP（仅自动识别开启时使用）
+        /// 缓存文件位置：程序 exe 所在目录下的 <see cref="IpCacheFileName"/>（内容 = 一行 IP 文本）。
+        /// 文件不存在 / 内容非法 → 返回 null（表示无缓存，回落配置列表逐个尝试）。
+        /// 读失败不阻塞连接：任何异常都当作"无缓存"处理。
+        /// </summary>
+        private string LoadCachedIp()
+        {
+            try
+            {
+                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, IpCacheFileName);
+                if (!File.Exists(path)) return null;
+                string content = File.ReadAllText(path).Trim();
+                // 只认合法 IPv4：防止缓存被写坏后一直连错地址
+                return System.Net.IPAddress.TryParse(content, out _) ? content : null;
+            }
+            catch
+            {
+                return null;   // 读缓存失败不阻塞连接
+            }
+        }
+
+        /// <summary>
+        /// 把"本次连接成功的送风机 IP"写入磁盘缓存
+        /// 下次启动时 <see cref="LoadCachedIp"/> 会优先读它，直接连上，不用再从配置列表开头试探。
+        /// 写失败忽略（无写权限 / 磁盘只读等），下次仍回落配置列表。
+        /// </summary>
+        /// <param name="ip">连接成功的 IP 地址</param>
+        private void SaveCachedIp(string ip)
+        {
+            try
+            {
+                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, IpCacheFileName);
+                File.WriteAllText(path, ip);
+            }
+            catch
+            {
+                // 写缓存失败忽略（无写权限 / 磁盘只读等），下次仍回落配置列表
             }
         }
 

@@ -35,6 +35,7 @@
             this.btnBatchSetThreshold = new System.Windows.Forms.Button();
             this.tbThreshold = new Sunny.UI.UITextBox();
             this.btnSetThreshold = new System.Windows.Forms.Button();
+            this.btnBatchRead = new System.Windows.Forms.Button();
             this.SuspendLayout();
             // 
             // llPressure
@@ -106,7 +107,7 @@
             this.tbThreshold.Watermark = "请输入阈值，如 1.234";
             // 
             // btnSetThreshold
-            // 
+            //
             this.btnSetThreshold.Font = new System.Drawing.Font("宋体", 15.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.btnSetThreshold.Location = new System.Drawing.Point(118, 243);
             this.btnSetThreshold.Name = "btnSetThreshold";
@@ -115,12 +116,24 @@
             this.btnSetThreshold.Text = "设置1号表气压阈值";
             this.btnSetThreshold.UseVisualStyleBackColor = true;
             this.btnSetThreshold.Click += new System.EventHandler(this.btnSetThreshold_Click);
-            // 
+            //
+            // btnBatchRead
+            //
+            this.btnBatchRead.Font = new System.Drawing.Font("宋体", 18F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.btnBatchRead.Location = new System.Drawing.Point(118, 371);
+            this.btnBatchRead.Name = "btnBatchRead";
+            this.btnBatchRead.Size = new System.Drawing.Size(210, 50);
+            this.btnBatchRead.TabIndex = 9;
+            this.btnBatchRead.Text = "批量读取压力";
+            this.btnBatchRead.UseVisualStyleBackColor = true;
+            this.btnBatchRead.Click += new System.EventHandler(this.btnBatchRead_Click);
+            //
             // Form1
-            // 
+            //
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(800, 450);
+            this.Controls.Add(this.btnBatchRead);
             this.Controls.Add(this.btnSetThreshold);
             this.Controls.Add(this.tbThreshold);
             this.Controls.Add(this.btnBatchSetThreshold);
@@ -144,6 +157,7 @@
         private System.Windows.Forms.Button btnBatchSetThreshold;
         private Sunny.UI.UITextBox tbThreshold;
         private System.Windows.Forms.Button btnSetThreshold;
+        private System.Windows.Forms.Button btnBatchRead;
     }
 }
 

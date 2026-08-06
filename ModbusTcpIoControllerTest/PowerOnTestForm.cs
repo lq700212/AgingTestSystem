@@ -16,6 +16,10 @@ namespace ModbusTcpIoControllerTest
     ///   程序会自动把同一排里所有"按下(ON)"的按钮对应的位值按位 OR 累加，
     ///   再用 Modbus 功能码 0x06 写入对应的保持寄存器（0x2004~0x2008）。
     ///
+    /// 【备用通道映射】现场若某个载台上电通道烧毁（如 Y200 = 0x2008 的 00 通道），
+    ///   可开启 App.config 的 IoBackupChannelMappingEnabled，把该通道信号改写到备用通道（如 0x2009 的 11 通道）。
+    ///   开关默认关闭，多数工作台行为不变；开启后本窗体自动把被映射通道的位改写到 0x2009。
+    ///
     /// 映射关系（与“通讯接入说明.md”第 4 节一致）：
     ///   第 1 排 → 0x2004 高字节，Y110~Y117，位值 0x0100~0x8000
     ///   第 2 排 → 0x2005 低字节，Y120~Y127，位值 0x0001~0x0080
@@ -48,12 +52,13 @@ namespace ModbusTcpIoControllerTest
         };
 
         /// <summary>
-        /// 5 个寄存器地址（0x2004~0x2008），按寄存器维度去重排列。
-        /// 写入时按这个列表逐个写。
+        /// 6 个寄存器地址：0x2004~0x2008（9 排按钮的寄存器，按寄存器维度去重）+ 0x2009（备用映射目标）。
+        /// 写入时按这个列表逐个写；0x2009 不直接对应任何"排"，只承载被映射过来的通道位。
         /// </summary>
         private static readonly int[] RegAddresses = new int[]
         {
-            0x2004, 0x2005, 0x2006, 0x2007, 0x2008
+            0x2004, 0x2005, 0x2006, 0x2007, 0x2008,
+            0x2009  // 备用通道映射目标寄存器（如 Y200 烧毁后映射到 0x2009 的 11 通道）
         };
 
         /// <summary>
@@ -145,7 +150,7 @@ namespace ModbusTcpIoControllerTest
         private CircleButton[,] buttons = new CircleButton[9, 8];
 
         /// <summary>
-        /// 5 个寄存器当前的值（按位 OR 累积得到）。
+        /// 6 个寄存器当前的值（按位 OR 累积得到）。
         ///
         /// 重要：必须“按寄存器”维护，而不是“按排”维护。
         /// 因为 0x2005/0x2006/0x2007/0x2008 各自被相邻两排共享（低字节+高字节），
@@ -154,8 +159,11 @@ namespace ModbusTcpIoControllerTest
         ///
         /// 0x2004 是特例：只有第 1 排（高字节 Y110~Y117），低字节未使用，
         /// 其 currentRegValues[0] 的低 8 位永远是 0（因为第 1 排位值最小也是 0x0100）。
+        ///
+        /// currentRegValues[5] 对应 0x2009（备用映射目标寄存器），不直接对应任何排，
+        /// 只承载"被映射走的通道"的目标位（如 Y200 烧毁后映射到 0x2009 的 11 通道）。
         /// </summary>
-        private int[] currentRegValues = new int[5];
+        private int[] currentRegValues = new int[6];
 
         /// <summary>
         /// 行标签数组（显示“第 N 排 / 0x200X / 低|高字节 / 当前值”）。
@@ -272,13 +280,38 @@ namespace ModbusTcpIoControllerTest
             for (int r = 0; r < 9; r++)
             {
                 int regIdx = RowToRegIndex[r];
+                string remapNote = GetRemapNote(r); // 备用映射提示（无映射时为 null）
                 rowLabels[r].Text = string.Format(
-                    "第 {0} 排  0x{1:X4}  {2}\n当前值: 0x{3:X4}",
+                    "第 {0} 排  0x{1:X4}  {2}\n当前值: 0x{3:X4}{4}",
                     r + 1,
                     RegAddresses[regIdx],
                     RowByteDesc[r],
-                    currentRegValues[regIdx]);
+                    currentRegValues[regIdx],
+                    remapNote == null ? "" : "\n备用映射: " + remapNote);
             }
+        }
+
+        /// <summary>
+        /// 获取第 r 排里被"备用通道映射"改写到其它寄存器的端子说明（用于行标签显示）。
+        /// 开关关闭或该排无映射时返回 null。
+        /// </summary>
+        private string GetRemapNote(int r)
+        {
+            if (!OutputChannelRemap.Enabled) return null;
+
+            int regIndex = RowToRegIndex[r];
+            int absReg = RegAddresses[regIndex];
+            var notes = new System.Collections.Generic.List<string>();
+            for (int c = 0; c < 8; c++)
+            {
+                int ch = ChannelOf(RowBitValues[r, c]);
+                if (OutputChannelRemap.IsSource(absReg, ch))
+                {
+                    (int dstReg, int dstBit) = OutputChannelRemap.Map(absReg, ch);
+                    notes.Add(string.Format("{0}→0x{1:X4}@{2}", RowIoNames[r, c], dstReg, dstBit));
+                }
+            }
+            return notes.Count > 0 ? string.Join(", ", notes) : null;
         }
 
         // ===================== 按钮点击（核心 toggle 逻辑） =====================
@@ -316,6 +349,10 @@ namespace ModbusTcpIoControllerTest
             //    不能只算当前这一排，否则会把另一排已写入的字节覆盖掉。
             currentRegValues[regIndex] = RecomputeRegValue(regIndex);
 
+            // 【备用通道映射】被映射走的源通道位已从源寄存器剔除，
+            // 它的信号汇总到 0x2009（currentRegValues[5]），下次写入一并下发。
+            currentRegValues[5] = RecomputeRemapRegValue();
+
             // 4) 把合并后的值整体写入对应的寄存器
             WriteRegister(regIndex, row);
 
@@ -334,6 +371,9 @@ namespace ModbusTcpIoControllerTest
         ///
         /// 对于 regIndex=0（0x2004）：
         ///   - 只有第 1 排，低字节天然为 0（第 1 排位值最小为 0x0100），符合“0x2004 仅高字节”的约定。
+        ///
+        /// 【备用通道映射】被映射走的源通道位不再写进源寄存器（它的信号改由 0x2009 承载），
+        /// 所以这里对"是映射源"的通道跳过，避免烧毁通道还继续被写。
         /// </summary>
         /// <param name="regIndex">寄存器索引（0~4，对应 0x2004~0x2008）</param>
         /// <returns>该寄存器当前的 16 位合并值</returns>
@@ -345,15 +385,56 @@ namespace ModbusTcpIoControllerTest
                 // 只处理共享该寄存器的排
                 if (RowToRegIndex[r] != regIndex) continue;
 
+                int absReg = RegAddresses[regIndex];
                 for (int c = 0; c < 8; c++)
                 {
-                    if (buttons[r, c].IsOn)
+                    if (!buttons[r, c].IsOn) continue;
+
+                    // 被映射走的源通道：源寄存器里不再写该位
+                    int ch = ChannelOf(RowBitValues[r, c]);
+                    if (OutputChannelRemap.IsSource(absReg, ch)) continue;
+
+                    value |= RowBitValues[r, c];
+                }
+            }
+            return value;
+        }
+
+        /// <summary>
+        /// 计算"备用映射目标寄存器"（0x2009，currentRegValues[5]）的值。
+        /// 遍历所有 ON 按钮，凡是被映射走的源通道，把其目标通道位累积到 0x2009。
+        /// </summary>
+        /// <returns>0x2009 当前的 16 位合并值</returns>
+        private int RecomputeRemapRegValue()
+        {
+            int value = 0;
+            for (int r = 0; r < 9; r++)
+            {
+                int regIndex = RowToRegIndex[r];
+                int absReg = RegAddresses[regIndex];
+                for (int c = 0; c < 8; c++)
+                {
+                    if (!buttons[r, c].IsOn) continue;
+                    int ch = ChannelOf(RowBitValues[r, c]);
+                    if (OutputChannelRemap.IsSource(absReg, ch))
                     {
-                        value |= RowBitValues[r, c];
+                        (_, int dstBit) = OutputChannelRemap.Map(absReg, ch); // dstReg 不在这里用（它已经在配置里固定为 0x2009）
+                        value |= (1 << dstBit);
                     }
                 }
             }
             return value;
+        }
+
+        /// <summary>
+        /// 由位值反推通道号：0x0001→0（第 1 路），0x0002→1，0x0100→8，0x8000→15。
+        /// </summary>
+        private static int ChannelOf(int bitValue)
+        {
+            int ch = 0;
+            int v = bitValue;
+            while (v > 1) { v >>= 1; ch++; }
+            return ch;
         }
 
         /// <summary>
@@ -386,6 +467,14 @@ namespace ModbusTcpIoControllerTest
             {
                 // 使用 WriteSingleRegister 写单个寄存器（功能码 0x06）
                 modbusClient.WriteSingleRegister(addr, val);
+
+                // 【备用通道映射】被映射走的源通道位已从 val 中剔除，其信号写在 0x2009，
+                // 这里把 0x2009 一并下发（开关关闭时 Enabled=false，自动跳过，多数工作台不受影响）。
+                if (OutputChannelRemap.Enabled)
+                {
+                    modbusClient.WriteSingleRegister(RegAddresses[5], currentRegValues[5]);
+                    AppendLog(string.Format("[备用] 0x{0:X4} = 0x{1:X4}", RegAddresses[5], currentRegValues[5]));
+                }
 
                 // 拼一个简短的日志：列出该寄存器共享的所有排里 ON 的端子，便于现场核对
                 StringBuilder onList = new StringBuilder();
@@ -466,15 +555,15 @@ namespace ModbusTcpIoControllerTest
                 }
             }
 
-            // 2) 5 个寄存器的本地状态全部清零
-            //    （按寄存器维度，不是按排维度）
-            for (int i = 0; i < 5; i++)
+            // 2) 6 个寄存器的本地状态全部清零
+            //    （按寄存器维度，不是按排维度；含备用映射目标 0x2009）
+            for (int i = 0; i < 6; i++)
             {
                 currentRegValues[i] = 0;
             }
             RefreshRowLabels();
 
-            // 3) 把 5 个寄存器全部写 0
+            // 3) 把 6 个寄存器全部写 0（RegAddresses 已含 0x2009）
             //    注意：0x2004 只用高字节，整字写 0 没问题（低字节本来就是 0）
             if (!modbusClient.Connected)
             {
@@ -515,23 +604,23 @@ namespace ModbusTcpIoControllerTest
             modbusClient.UnitIdentifier = 0x01;
             try
             {
-                // 用 ReadHoldingRegisters 一次读 5 个保持寄存器（功能码 0x03）
-                // 起始地址 0x2004，数量 5
-                int[] result = modbusClient.ReadHoldingRegisters(0x2004, 5);
+                // 用 ReadHoldingRegisters 一次读 6 个保持寄存器（功能码 0x03）
+                // 起始地址 0x2004，数量 6（第 6 个 0x2009 是备用映射目标寄存器）
+                int[] result = modbusClient.ReadHoldingRegisters(0x2004, 6);
 
-                // result[0] = 0x2004, result[1] = 0x2005, ... result[4] = 0x2008
+                // result[0] = 0x2004, result[1] = 0x2005, ... result[4] = 0x2008, result[5] = 0x2009
                 //
                 // 【重要坑点】EasyModbus 的 ReadHoldingRegisters 返回 int[]，
                 //   当寄存器的 bit15=1（即值 ≥ 0x8000）时，会被符号扩展成 32 位负数。
                 //   例如 0xFFFF 会被读成 0xFFFFFFFF（int 值 -1）。
                 //   所以必须用 & 0xFFFF 屏蔽高 16 位，还原成 16 位无符号值。
-                for (int i = 0; i < 5; i++)
+                for (int i = 0; i < 6; i++)
                 {
                     result[i] = result[i] & 0xFFFF;
                 }
 
-                // 1) 把 5 个寄存器值存入 currentRegValues
-                for (int i = 0; i < 5; i++)
+                // 1) 把 6 个寄存器值存入 currentRegValues
+                for (int i = 0; i < 6; i++)
                 {
                     currentRegValues[i] = result[i];
                 }
@@ -540,21 +629,34 @@ namespace ModbusTcpIoControllerTest
                 //    同一个寄存器的两排（如第 2 排和第 3 排共享 0x2005），
                 //    各自用自己排的位掩码（低字节 0x0001~0x0080 或 高字节 0x0100~0x8000）
                 //    去判断，互不干扰。
+                //    【备用通道映射】被映射走的源通道，其真实状态在目标寄存器（0x2009）里，
+                //    所以这类通道改读目标位，其余通道照旧读自己的寄存器。
                 for (int r = 0; r < 9; r++)
                 {
                     int regIndex = RowToRegIndex[r];
-                    int regValue = currentRegValues[regIndex];
+                    int absReg = RegAddresses[regIndex];
                     for (int c = 0; c < 8; c++)
                     {
-                        int bit = RowBitValues[r, c];
-                        buttons[r, c].IsOn = (regValue & bit) != 0;
+                        int bitVal = RowBitValues[r, c];
+                        int ch = ChannelOf(bitVal);
+                        if (OutputChannelRemap.IsSource(absReg, ch))
+                        {
+                            (int dstReg, int dstBit) = OutputChannelRemap.Map(absReg, ch);
+                            int dstIdx = dstReg - RegAddresses[0]; // 换算到 currentRegValues 下标
+                            buttons[r, c].IsOn = dstIdx >= 0 && dstIdx < 6 &&
+                                                 (currentRegValues[dstIdx] & (1 << dstBit)) != 0;
+                        }
+                        else
+                        {
+                            buttons[r, c].IsOn = (currentRegValues[regIndex] & bitVal) != 0;
+                        }
                     }
                 }
 
                 RefreshRowLabels();
                 AppendLog(string.Format(
-                    "[读取] 0x2004=0x{0:X4} 0x2005=0x{1:X4} 0x2006=0x{2:X4} 0x2007=0x{3:X4} 0x2008=0x{4:X4}",
-                    result[0], result[1], result[2], result[3], result[4]));
+                    "[读取] 0x2004=0x{0:X4} 0x2005=0x{1:X4} 0x2006=0x{2:X4} 0x2007=0x{3:X4} 0x2008=0x{4:X4} 0x2009=0x{5:X4}",
+                    result[0], result[1], result[2], result[3], result[4], result[5]));
             }
             catch (Exception ex)
             {

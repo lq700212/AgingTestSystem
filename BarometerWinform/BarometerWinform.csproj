@@ -73,6 +73,7 @@
     <Compile Include="Models\IoStatus.cs" />
     <Compile Include="Models\IoPointDefinition.cs" />
     <Compile Include="Models\DeviceConfig.cs" />
+    <Compile Include="Models\IoOutputChannelRemap.cs" />
     <Compile Include="Models\FanData.cs" />
     <Compile Include="Models\RecipeConfig.cs" />
     <Compile Include="Models\UserRole.cs" />
