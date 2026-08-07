@@ -391,5 +391,57 @@ namespace BarometerWinform.Models
         /// 提醒操作员老化箱可能过温（厂商自动控温异常时的人工兜底）。
         /// </summary>
         public float FanTempAlarmLimitC { get; set; } = 0f;
+
+        // =====================================================================
+        // 扫码枪配置（V1.16 新增，参考 SerialScannerTest Demo 实现）
+        // 说明：扫码枪（Honeywell Xenon 1902 等）通过虚拟串口接入，
+        //       扫到的条码内容 + 回车/换行 结尾（一行一条码）。
+        // 相关实现见 Services/ScannerService.cs。
+        // =====================================================================
+
+        /// <summary>
+        /// 是否启用扫码枪
+        ///
+        /// - true：程序启动时自动识别并连接扫码枪串口，扫码结果写入日志 /
+        ///         ID绑定窗体的 SN 输入框自动填充
+        /// - false（默认）：完全不连接扫码枪（现场没装扫码枪时用，避免无谓的 WMI 查询）
+        /// </summary>
+        public bool ScannerEnabled { get; set; } = false;
+
+        /// <summary>
+        /// 扫码枪固定串口（如 "COM10"）
+        ///
+        /// - 留空（默认）：通过 WMI 按 <see cref="ScannerDeviceKeyword"/> 自动识别端口
+        /// - 填了具体端口（如 "COM10"）：直接用固定端口连接（WMI 识别不到时用这个兜底）
+        /// </summary>
+        public string ScannerPort { get; set; } = "";
+
+        /// <summary>
+        /// 扫码枪设备识别关键词（用于 WMI 自动识别串口）
+        /// 对应设备管理器里显示的设备名称中包含的关键字，
+        /// 当前现场扫码枪为 Honeywell Xenon 1902（默认 "Xenon 1902"）。
+        /// </summary>
+        public string ScannerDeviceKeyword { get; set; } = "Xenon 1902";
+
+        /// <summary>
+        /// 扫码枪串口波特率
+        /// 以 SerialScannerTest Demo 实测为准：115200
+        /// </summary>
+        public int ScannerBaudRate { get; set; } = 115200;
+
+        /// <summary>
+        /// 扫码枪串口数据位（默认 8）
+        /// </summary>
+        public int ScannerDataBits { get; set; } = 8;
+
+        /// <summary>
+        /// 扫码枪串口停止位（默认 1）
+        /// </summary>
+        public int ScannerStopBits { get; set; } = 1;
+
+        /// <summary>
+        /// 扫码枪串口校验位（默认 None）
+        /// </summary>
+        public string ScannerParity { get; set; } = "None";
     }
 }

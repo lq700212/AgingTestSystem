@@ -165,7 +165,7 @@ namespace BarometerWinform.Views
             this.lblTitle.Name = "lblTitle";
             this.lblTitle.Size = new System.Drawing.Size(113, 17);
             this.lblTitle.TabIndex = 0;
-            this.lblTitle.Text = "老化测试系统V1.15";
+            this.lblTitle.Text = "老化测试系统V1.16";
             // 
             // lblPermission
             // 
@@ -624,7 +624,7 @@ namespace BarometerWinform.Views
             this.Controls.Add(this.rootScrollPanel);
             this.MinimumSize = new System.Drawing.Size(800, 600);
             this.Name = "MainForm";
-            this.Text = "老化测试系统V1.15";
+            this.Text = "老化测试系统V1.16";
             this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.MainForm_FormClosing);
             this.Load += new System.EventHandler(this.MainForm_Load);

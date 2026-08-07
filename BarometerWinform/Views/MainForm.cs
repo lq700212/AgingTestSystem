@@ -95,6 +95,16 @@ namespace BarometerWinform.Views
         private readonly UserManager _userManager = new UserManager();
 
         /// <summary>
+        /// 【V1.16 新增】扫码枪服务（真实扫码枪接入）
+        /// 参考 SerialScannerTest Demo 实现：WMI 自动识别串口 + 串口读码。
+        /// 作用：
+        /// - 扫码结果写入 LOG 日志
+        /// - ID绑定窗体（IdBindingForm）打开时，扫码结果自动填充 SN 输入框
+        /// 说明：扫码枪是可选设备，App.config 里 ScannerEnabled=false 时不连接。
+        /// </summary>
+        private ScannerService _scanner;
+
+        /// <summary>
         /// 存储所有气压表显示面板
         /// Key: 设备编号，Value: 显示面板控件
         /// 用于快速查找指定设备的面板进行数据更新
@@ -171,6 +181,14 @@ namespace BarometerWinform.Views
             _deviceManager.OnConnectionStatusChanged += DeviceManager_OnConnectionStatusChanged;
             // 【V1.10 新增】订阅送风机数据更新事件（独立定时器触发）
             _deviceManager.OnFanDataUpdated += DeviceManager_OnFanDataUpdated;
+
+            // 4.5 【V1.16 新增】初始化扫码枪服务（真实扫码枪接入，参考 SerialScannerTest Demo）
+            // 注意：必须在 UI 线程创建，这样扫码事件会自动封送到 UI 线程，订阅者可直接更新控件
+            _scanner = new ScannerService(_config);
+            // 扫码完成 → 写日志；ID绑定窗体打开时由其自行订阅同一服务（见 IdBindingForm）
+            _scanner.OnBarcodeScanned += Scanner_OnBarcodeScanned;
+            // 连接状态变化（连接成功/未找到端口/错误）→ 写日志
+            _scanner.OnStatusChanged += Scanner_OnStatusChanged;
 
             // 5. 更新权限显示
             lblPermission.Text = $"当前操作权限: {_currentPermission}";
@@ -581,6 +599,48 @@ namespace BarometerWinform.Views
                 config.FanTempAlarmLimitC = fanTempAlarmLimitC;
             }
 
+            // ===== 扫码枪配置读取（V1.16 新增，参考 SerialScannerTest Demo） =====
+            // 扫码枪是可选设备：默认关闭，现场需要扫码（如 ID 绑定扫 SN）时在 App.config 打开
+            if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["ScannerEnabled"], out bool scannerEnabled))
+            {
+                config.ScannerEnabled = scannerEnabled;
+            }
+
+            // 固定串口：留空表示按关键词 WMI 自动识别
+            string scannerPort = System.Configuration.ConfigurationManager.AppSettings["ScannerPort"];
+            if (!string.IsNullOrWhiteSpace(scannerPort))
+            {
+                config.ScannerPort = scannerPort.Trim();
+            }
+
+            // 设备识别关键词（设备管理器显示的名称关键字，默认 Honeywell Xenon 1902）
+            string scannerDeviceKeyword = System.Configuration.ConfigurationManager.AppSettings["ScannerDeviceKeyword"];
+            if (!string.IsNullOrWhiteSpace(scannerDeviceKeyword))
+            {
+                config.ScannerDeviceKeyword = scannerDeviceKeyword.Trim();
+            }
+
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["ScannerBaudRate"], out int scannerBaudRate))
+            {
+                config.ScannerBaudRate = scannerBaudRate;
+            }
+
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["ScannerDataBits"], out int scannerDataBits))
+            {
+                config.ScannerDataBits = scannerDataBits;
+            }
+
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["ScannerStopBits"], out int scannerStopBits))
+            {
+                config.ScannerStopBits = scannerStopBits;
+            }
+
+            string scannerParity = System.Configuration.ConfigurationManager.AppSettings["ScannerParity"];
+            if (!string.IsNullOrWhiteSpace(scannerParity))
+            {
+                config.ScannerParity = scannerParity;
+            }
+
             if (config.TotalInputs < config.TotalBarometers)
             {
                 System.Diagnostics.Debug.WriteLine(
@@ -648,6 +708,10 @@ namespace BarometerWinform.Views
                 _plcConnected = true;
                 UpdateConnectionStatus();
             }
+
+            // 【V1.16 新增】启动扫码枪服务（自动识别串口并连接；未启用/未插入时定时重连）
+            // 扫码枪是可选设备，内部已做"ScannerEnabled=false 直接跳过"处理，不影响整机启动
+            _scanner?.Start();
 
             // 启动定时器更新状态栏时间显示
             timerTime.Start();
@@ -1404,6 +1468,12 @@ namespace BarometerWinform.Views
 
         /// <summary>
         /// 扫码模拟 → 弹出扫码模拟窗体
+        ///
+        /// 【V1.16 说明】
+        /// 真实扫码枪接入已实现（ScannerService，程序启动时自动连接），
+        /// 本"扫码模拟"窗体保留用于：没有扫码枪时的开发/调试、模拟扫码输入。
+        /// 两者都会把扫码结果写入 LOG 日志；真实扫码枪在 ID绑定窗体打开时
+        /// 还会自动填充 SN 输入框。
         /// </summary>
         private void MenuTestScan_Click(object sender, EventArgs e)
         {
@@ -1431,7 +1501,7 @@ namespace BarometerWinform.Views
         private void MenuAboutVersion_Click(object sender, EventArgs e)
         {
             MessageBox.Show(
-                "老化测试系统 V1.15\n\n" +
+                "老化测试系统 V1.16\n\n" +
                 "运行环境: .NET Framework 4.7.2\n" +
                 "开发框架: WinForms\n\n" +
                 "功能特性:\n" +
@@ -1542,7 +1612,8 @@ namespace BarometerWinform.Views
         /// </summary>
         private void btnInputLot_Click(object sender, EventArgs e)
         {
-            using (var form = new InputLotForm())
+            // 【V1.16】传入扫码枪服务：ID绑定窗体打开时，扫码结果自动填充 SN 输入框
+            using (var form = new InputLotForm(_scanner))
             {
                 // 订阅批号录入完成事件：记录日志 + 通知设备管理器（用于事件落盘追溯）
                 form.OnLotInputCompleted += (sender2, lotNumber) =>
@@ -1701,6 +1772,34 @@ namespace BarometerWinform.Views
             toolStripStatusLabelTime.Text = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
         }
 
+        // ===================== 扫码枪事件处理（V1.16 新增） =====================
+
+        /// <summary>
+        /// 扫码完成事件处理（已封送到 UI 线程，可直接操作控件）
+        /// 扫码结果写入 LOG 日志，供操作追溯
+        /// </summary>
+        /// <param name="sender">扫码枪服务</param>
+        /// <param name="barcode">扫到的条码内容</param>
+        private void Scanner_OnBarcodeScanned(object sender, string barcode)
+        {
+            // 写日志（条码内容可能含敏感字符，仅记录内容即可）
+            WriteLog($"[扫码枪] 读码成功: {barcode}");
+
+            // 【预留】如需根据扫码内容匹配设备/配方，可在这里扩展业务
+            // TODO: 根据扫码内容匹配设备/配方，触发对应业务流程
+        }
+
+        /// <summary>
+        /// 扫码枪连接状态变化事件处理（已封送到 UI 线程）
+        /// 把连接成功/未找到端口/错误等状态写入 LOG 日志
+        /// </summary>
+        /// <param name="sender">扫码枪服务</param>
+        /// <param name="message">状态描述文本</param>
+        private void Scanner_OnStatusChanged(object sender, string message)
+        {
+            WriteLog($"[扫码枪] {message}");
+        }
+
         /// <summary>
         /// 写入日志到右侧 LOG 文本框
         /// 自动添加时间戳，最新日志显示在末尾并自动滚动
@@ -1750,6 +1849,16 @@ namespace BarometerWinform.Views
 
             // 释放设备管理器（内部会调用 Stop 停止定时器和断开连接）
             _deviceManager?.Dispose();
+
+            // 【V1.16 新增】释放扫码枪服务（停止重连定时器 + 关闭串口）
+            // 顺序很重要：先取消事件订阅，再 Dispose，避免回调到已释放的 UI
+            if (_scanner != null)
+            {
+                _scanner.OnBarcodeScanned -= Scanner_OnBarcodeScanned;
+                _scanner.OnStatusChanged -= Scanner_OnStatusChanged;
+                _scanner.Dispose();
+                _scanner = null;
+            }
 
             // 注意：下拉菜单改为动态创建的弹出窗体（Form），点击菜单项或失去焦点后自动关闭
             // 不需要在这里手动释放，Form.Close 会触发 Dispose
