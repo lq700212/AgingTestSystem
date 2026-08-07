@@ -170,7 +170,8 @@ namespace BarometerWinform.Services
 
         /// <summary>
         /// 获取指定气压表的IO点映射(1输入 + 2输出)
-        /// 供 BarometerPanelView 显示IO功能名和物理地址使用
+        /// 供单台手动控制窗体（DeviceManualForm）显示IO功能名和物理地址使用
+        /// 【V1.16】工位面板（WorkstationPanelView）已不再显示物理地址，不再调用本方法
         /// </summary>
         /// <param name="deviceId">气压表编号(1 ~ TotalBarometers)</param>
         /// <param name="totalBarometers">气压表总数</param>

@@ -25,6 +25,30 @@ namespace BarometerWinform.Services
     /// 6) 人工复位：报警/故障台复位回到空闲，可重新启动
     /// 7) 事件落盘：启动/停止/报警/复位/急停等写入 CSV 日志，供历史记录与追溯
     ///
+    /// 【V1.16 门禁解耦 + 自动恢复】
+    /// 1) 启动门禁解耦：只要"气压表串口"连通就启动采集；IO 耦合器 / 送风机是可选设备，
+    ///    断开不再拖垮整机（原实现要求气压表 + 耦合器全部成功，耦合器连不上会把
+    ///    气压表和送风机一起回滚 → 整个界面无数据）。
+    /// 2) 气压表串口 CH340 自动识别：配置端口不存在时自动识别 CH340，现场免改配置。
+    /// 3) IO 耦合器自动重连：每 5 秒后台尝试，重启耦合器后自动恢复阀/载台电控制。
+    /// 4) 批量写阈值暂停采集：SetAllBarometerThresholds 期间停掉采集定时器，
+    ///    避免与批量写争抢串口总线导致写超时。
+    /// 5) 启动诊断：每一步连接结果经 OnDiagnostic 上报，UI 写 LOG，现场一眼看到
+    ///    "哪一步连不上"（含实际使用的串口/耦合器/送风机 IP）。
+    ///
+    /// 【V1.16.2 心跳机制（静默自愈）】
+    /// 现场需求：连接后做心跳，中途断连状态能及时更新、及时提醒"哪个设备断了"；
+    /// 同时希望自动重连，但"不要一直重试连接"（怕刷日志/占资源）——两者看似矛盾。
+    /// 本版本的统一解法（三个原则）：
+    /// 1) 心跳 = 后台轮询（耦合器/气压表随 1s 采集、送风机 2s 轮询、扫码枪串口事件），
+    ///    断连在 1~3 秒内被感知，状态标签即时更新；
+    /// 2) 日志只记"边沿"：连上 / 断开 各提示一次（带设备名，明确"哪里断了"），
+    ///    连续失败的中间过程【静默】，不再刷日志；
+    /// 3) 后台【静默持续重连】：不再"重试几次就放弃"，而是按节流一直重试，
+    ///    设备插上/恢复后自动连回，全程不打扰操作员；用户操作需要某设备时
+    ///    按需重连一次，仍连不上才弹窗"xxx未连接，请先连接"（兜底）。
+    /// 所有重连都跑在后台线程，互不阻塞、不影响 72 台采集主链路（性能安全）。
+    ///
     /// 【线程安全说明】
     /// - System.Timers.Timer 的 Elapsed 在后台线程触发
     /// - _barometerDataCache / _fanDataCache 用 _cacheLock 保护
@@ -82,6 +106,49 @@ namespace BarometerWinform.Services
         /// Demo 文档建议读取间隔 &gt;= 500ms，这里用 2000ms 减少无谓通讯
         /// </summary>
         private const int FanPollIntervalMs = 2000;
+
+        /// <summary>
+        /// IO 耦合器自动重连节流间隔（毫秒）
+        /// 【V1.16 新增】门禁解耦后，耦合器断开不影响压力采集；但它每 5 秒尝试重连一次，
+        /// 现场重启耦合器 / 插拔网线后，几秒内自动恢复"阀 / 载台电"控制，不用重启程序。
+        /// </summary>
+        private const int IoReconnectIntervalMs = 5000;
+
+        /// <summary>
+        /// 上次尝试重连 IO 耦合器的时间（用于节流，防止对已断开的设备频繁发起连接）
+        /// </summary>
+        private DateTime _lastIoConnectAttempt = DateTime.MinValue;
+
+        /// <summary>
+        /// 上一次上报的 IO 耦合器连接状态（边沿检测）
+        /// 【V1.16.1】每次采集周期比对当前状态与上次上报值，只在"连上/断开"边沿
+        /// 触发一次 OnConnectionStatusChanged，避免每个周期重复刷 UI。
+        /// 初始值为 false（构造函数里耦合器还没连接）。
+        /// </summary>
+        private bool _lastIoConnected;
+
+        /// <summary>
+        /// 气压表串口自动重连节流间隔（毫秒，【V1.16.2 新增】）
+        /// 串口断开后至少间隔 5 秒重试一次，避免对已拔出的适配器频繁重连。
+        /// </summary>
+        private const int BarometerReconnectIntervalMs = 5000;
+
+        /// <summary>
+        /// 上次尝试重连气压表串口的时间（【V1.16.2 新增】，用于节流）
+        /// </summary>
+        private DateTime _lastBarometerReconnectAttempt = DateTime.MinValue;
+
+        /// <summary>
+        /// 上一次气压表串口连接状态（【V1.16.2 新增】，边沿检测）
+        /// 由"已连接 → 未连接"时提示一次"气压表串口已断开"，避免每个采集周期刷日志。
+        /// </summary>
+        private bool _barometerWasConnected;
+
+        /// <summary>
+        /// 上一次送风机连接状态（【V1.16.2 新增】，边沿检测）
+        /// 由"已连接 → 未连接"时提示一次"送风机已断开"，避免每个轮询周期刷日志。
+        /// </summary>
+        private bool _lastFanConnected;
 
         /// <summary>
         /// 存储所有气压表的最新数据
@@ -182,8 +249,10 @@ namespace BarometerWinform.Services
         public event EventHandler<BarometerData[]> OnBatchDataUpdated;
 
         /// <summary>
-        /// 连接状态变更事件（语义 = 气压表 + IO 耦合器的连接状态）
-        /// 送风机是可选设备，其连接状态不并入本事件（见 <see cref="OnFanDataUpdated"/>）
+        /// 连接状态变更事件（【V1.16.1】语义 = IO 耦合器是否连接）
+        /// 顶部"通讯连接状态"只判断耦合器（阀 / 载台电控制）是否连通：
+        /// - true = 耦合器已连上；false = 耦合器未连上（气压表 / 送风机状态不并入本事件）。
+        /// 送风机是可选设备，其连接状态见 <see cref="OnFanDataUpdated"/>。
         /// </summary>
         public event EventHandler<bool> OnConnectionStatusChanged;
 
@@ -193,6 +262,20 @@ namespace BarometerWinform.Services
         /// 【注意】在后台线程触发，UI 层需用 BeginInvoke 切到 UI 线程
         /// </summary>
         public event EventHandler<FanData> OnFanDataUpdated;
+
+        /// <summary>
+        /// 启动/连接诊断事件（【V1.16 新增】）
+        /// 启动时逐步上报：实际使用的气压表串口、IO 耦合器连接结果、送风机连接结果、
+        /// 耦合器自动重连成功等，UI 层把内容写进 LOG，让现场一眼看到"到底哪一步连不上"。
+        /// 【注意】在后台线程触发，UI 层需用 BeginInvoke 切到 UI 线程写日志。
+        /// </summary>
+        public event EventHandler<string> OnDiagnostic;
+
+        /// <summary>
+        /// 上次启动失败的诊断信息（【V1.16 新增】）
+        /// 供 MainForm 启动失败时把原因写到 LOG/提示，避免"只显示未连接却不知道原因"。
+        /// </summary>
+        public string LastStartupError { get; private set; } = "";
 
         /// <summary>
         /// 当前批号（用于日志追溯）
@@ -207,6 +290,13 @@ namespace BarometerWinform.Services
         /// 是否启用了送风机
         /// </summary>
         public bool IsFanEnabled => _config.FanEnabled;
+
+        /// <summary>
+        /// IO 耦合器当前是否已连接（【V1.16.1 新增】）
+        /// 顶部"通讯连接状态"标签的数据源：只反映耦合器（阀 / 载台电控制）是否连通。
+        /// 后台读/写失败时会自动置 false，TryReconnectIo 自动重连成功后置 true。
+        /// </summary>
+        public bool IsIoConnected => _ioController.IsConnected;
 
         /// <summary>
         /// 初始化设备管理器
@@ -292,68 +382,97 @@ namespace BarometerWinform.Services
         ///
         /// 【V1.10 说明】送风机是可选设备：连接失败不影响整机启动，
         /// 只记日志（送风机独立定时器会周期尝试自动重连）。
+        ///
+        /// 【V1.16 门禁解耦】只要求"气压表串口"连通；IO 耦合器/送风机是可选设备，
+        /// 断开不影响压力采集。返回值 = 气压表是否连通。
         /// </summary>
-        /// <returns>是否启动成功（成功 = 气压表 + IO 耦合器都已连接）</returns>
+        /// <returns>是否启动成功（成功 = 气压表串口已连接）</returns>
         public bool Start()
         {
             try
             {
-                // 连接气压表读取器
+                // 收集启动失败原因，最后汇总进 LastStartupError（供 MainForm 提示）
+                var startupErrors = new List<string>();
+
+                // ===== 连接各设备（气压表=主设备；耦合器/送风机=可选设备） =====
+
+                // 连接气压表读取器（主设备：串口连不上则无法采集压力数据）
                 bool barometerConnected = _barometerReader.Connect(_config);
+                if (barometerConnected)
+                {
+                    Diagnostic($"气压表串口已连接：{(_barometerReader.CurrentPortName ?? _config.PortName)}");
+                }
+                else
+                {
+                    string msg =
+                        $"气压表串口连接失败（配置端口 {_config.PortName} 不存在且未识别到 CH340，请检查 RS485 适配器/驱动）";
+                    startupErrors.Add(msg);
+                    Diagnostic(msg);
+                }
 
-                // 连接IO控制器
+                // 连接IO耦合器（可选：断开不影响压力采集，仅阀/载台电控制不可用，会自动重连）
                 bool ioConnected = _ioController.Connect(_config);
+                if (ioConnected)
+                {
+                    Diagnostic($"IO耦合器已连接：{_config.PlcAddress}:{_config.PlcPort}");
+                }
+                else
+                {
+                    string msg =
+                        $"IO耦合器 {_config.PlcAddress}:{_config.PlcPort} 连接失败（不影响气压表采集，控制阀/载台电暂不可用，将自动重连）";
+                    startupErrors.Add(msg);
+                    Diagnostic(msg);
+                }
 
-                // 尝试连接送风机（独立 try/catch 隔离，失败不影响主闸门）
+                // 尝试连接送风机（独立 try/catch 隔离，失败只记诊断）
                 TryConnectFan();
 
-                // 主设备全部连接成功才继续
-                if (barometerConnected && ioConnected)
+                // 汇总启动失败原因（若都成功则保持空字符串）
+                LastStartupError = string.Join("；", startupErrors);
+
+                // ===== 门禁解耦（V1.16 核心修复） =====
+                // 原来要求"气压表 + 耦合器全部成功"才启动采集；耦合器连不上时会把
+                // 气压表和送风机一起回滚、定时器也不启动 → 整个界面无数据。
+                // 现在：只要气压表连通就开始采集（压力数据优先）；耦合器/送风机断开
+                // 不影响主链路，各自在后台自动重连。
+                if (barometerConnected)
                 {
                     // 先采集一次数据（同步调用，确保首次数据立即可用）
                     CollectData();
 
                     // 启动数据采集定时器
                     _collectTimer.Start();
-
-                    // 启动送风机独立轮询定时器
-                    if (_fanTimer != null) _fanTimer.Start();
-
-                    // 触发连接状态变更事件
-                    OnConnectionStatusChanged?.Invoke(this, true);
-
-                    return true;
                 }
 
-                // 【修复 H2】部分连接失败时回滚已建立的连接，避免资源泄漏
-                if (barometerConnected)
-                {
-                    _barometerReader.Disconnect();
-                }
-                if (ioConnected)
-                {
-                    _ioController.Disconnect();
-                }
-                if (_fanController != null)
-                {
-                    _fanController.Disconnect();
-                }
+                // 送风机独立轮询定时器：无论主设备是否连通都启动
+                //（送风机是独立 TCP 设备，可以单独工作）
+                if (_fanTimer != null) _fanTimer.Start();
 
-                // 触发连接状态变更事件（连接失败）
-                OnConnectionStatusChanged?.Invoke(this, false);
+                // 触发连接状态变更事件（【V1.16.1】语义：IO 耦合器是否连接）
+                // 顶部"通讯连接状态"只判断耦合器（阀 / 载台电控制）是否连通，
+                // 不再用气压表串口状态冒充耦合器状态。
+                _lastIoConnected = ioConnected;
+                OnConnectionStatusChanged?.Invoke(this, ioConnected);
 
-                return false;
+                // 【V1.16.2 心跳】初始化边沿检测的"上一次"状态：
+                // 之后某个设备中途断开时，能正确识别"已连接 → 未连接"边沿并提示一次。
+                _barometerWasConnected = barometerConnected;
+                _lastFanConnected = _fanController != null && _fanController.IsConnected;
+
+                return barometerConnected;
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"设备管理器启动失败: {ex.Message}");
+                LastStartupError = $"设备管理器启动异常：{ex.Message}";
                 return false;
             }
         }
 
         /// <summary>
         /// 尝试连接送风机（可选设备）
-        /// 独立 try/catch：连接失败只记日志，不影响"气压表+IO"的主启动闸门
+        /// 独立 try/catch：连接失败只记诊断，不影响整机启动。
+        /// 送风机连接失败后，其独立定时器的 EnsureConnected 会按节流自动重连。
         /// </summary>
         private void TryConnectFan()
         {
@@ -361,13 +480,146 @@ namespace BarometerWinform.Services
             {
                 if (_fanController != null && !_fanController.IsConnected)
                 {
-                    _fanController.Connect(_config);
+                    bool ok = _fanController.Connect(_config);
+                    Diagnostic(ok
+                        ? $"冷却送风机已连接：{(_fanController.ActiveIp ?? _config.FanIpAddress)}:{_config.FanPort}"
+                        : "冷却送风机连接失败（已尝试候选 IP），将按节流自动重连，请检查送风机 IP/网线");
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"送风机连接失败（不影响整机启动）: {ex.Message}");
+                Diagnostic($"冷却送风机连接异常：{ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// 上报诊断信息（【V1.16 新增】）
+        /// 触发 OnDiagnostic 事件 + 写 Debug 输出。
+        /// 【注意】可能在后台线程调用，UI 层订阅后需用 BeginInvoke 切回 UI 线程。
+        /// </summary>
+        /// <param name="message">诊断文本</param>
+        private void Diagnostic(string message)
+        {
+            System.Diagnostics.Debug.WriteLine($"[诊断] {message}");
+            OnDiagnostic?.Invoke(this, message);
+        }
+
+        /// <summary>
+        /// IO 耦合器心跳 + 自动重连（【V1.16 新增】【V1.16.2 心跳机制】）
+        ///
+        /// 门禁解耦后，耦合器断开只影响"阀 / 载台电"控制，不影响压力采集。
+        /// 本方法在每个采集周期调用：
+        /// - 状态边沿检测：连上/断开各上报一次 OnConnectionStatusChanged（顶部标签实时更新），
+        ///   并在"已连接 → 断开"边沿记一次日志，明确提醒"哪个设备断了"；
+        /// - 未连接时按节流（5 秒）在后台线程静默重连，连上后提示一次；失败过程不刷日志。
+        /// 现场重启耦合器 / 插拔网线后，几秒内自动恢复控制，不用重启程序。
+        /// </summary>
+        private void TryReconnectIo()
+        {
+            // ===== 状态边沿检测 =====
+            // 每个采集周期比对一次"当前耦合器连接状态"与"上次上报的状态"：
+            // 连上 → 上报 true，断开（读/写失败自动置 false）→ 上报 false，
+            // 顶部"通讯连接状态"标签据此实时显示耦合器是否连接。
+            bool ioConnectedNow = _ioController.IsConnected;
+            if (ioConnectedNow != _lastIoConnected)
+            {
+                _lastIoConnected = ioConnectedNow;
+                OnConnectionStatusChanged?.Invoke(this, ioConnectedNow);
+
+                // 【V1.16.2 心跳】只在"已连接 → 断开"边沿提示一次"哪里断了"；
+                // 重连成功由下面 Connect 成功分支提示（避免每个采集周期刷日志）。
+                if (!ioConnectedNow)
+                {
+                    Diagnostic("IO耦合器已断开（通讯异常），正在后台自动重连...");
+                }
+            }
+
+            // 已连接则无需处理
+            if (ioConnectedNow) return;
+
+            // 节流：两次重连尝试至少间隔 5 秒，避免对已断开的设备频繁发起连接
+            if ((DateTime.Now - _lastIoConnectAttempt).TotalMilliseconds < IoReconnectIntervalMs) return;
+            _lastIoConnectAttempt = DateTime.Now;
+
+            // 在后台线程执行连接（耦合器 TCP 超时最长约 3 秒），不阻塞采集循环
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                bool ok = _ioController.Connect(_config);
+                if (ok)
+                {
+                    Diagnostic($"IO耦合器已自动重连：{_config.PlcAddress}:{_config.PlcPort}");
+                    // 重连成功 → 上报"已连接"（边沿检测会在下一采集周期覆盖，这里立即上报更及时）
+                    _lastIoConnected = true;
+                    OnConnectionStatusChanged?.Invoke(this, true);
+                }
+                // 连接失败：静默（V1.16.2 心跳机制下后台继续按节流重试，不再报"自动重连已停止"）
+            });
+        }
+
+        /// <summary>
+        /// IO 耦合器按需连接（【V1.16.1 新增】）
+        /// 用户操作需要耦合器时（上电/开阀/启动停止测试等）调用：
+        /// 已连接直接返回 true；未连接则立即重连一次（即使自动重连已放弃），
+        /// 连上则复位自动重连状态，连不上返回 false（由调用方弹窗提示"耦合器未连接，请先连接"）。
+        /// 【注意】在调用线程同步执行，耦合器 TCP 超时最长约 3 秒。
+        /// </summary>
+        /// <returns>当前是否可用（已连接）</returns>
+        public bool EnsureIoConnected()
+        {
+            if (_ioController.IsConnected) return true;
+
+            bool ok = _ioController.Connect(_config);
+            if (ok)
+            {
+                // 按需连上：更新状态并上报（心跳机制下后台会持续静默重连，无需复位计数）
+                _lastIoConnected = true;
+                OnConnectionStatusChanged?.Invoke(this, true);
+                Diagnostic($"IO耦合器已连接：{_config.PlcAddress}:{_config.PlcPort}");
+            }
+            return ok;
+        }
+
+        /// <summary>
+        /// 气压表串口心跳 + 后台自动重连（【V1.16.2 新增】）
+        /// 每个采集周期调用一次：
+        /// - 状态边沿：气压表由"已连接 → 未连接"时，记一次"气压表串口已断开"日志，
+        ///   明确提醒操作员哪个设备断了（ModbusRtuBarometerReader 检测到端口级故障
+        ///   会自动把 IsConnected 置 false，本方法据此感知）；
+        /// - 未连接时按节流（5 秒）在后台线程重连，连上后提示一次；失败过程静默不刷日志。
+        /// 【性能】重连在 Task.Run 后台执行，不阻塞 72 台采集主链路；串口未连接时
+        /// ReadAllData 几乎零开销，不影响其它设备（耦合器/送风机各自独立重连）。
+        /// </summary>
+        private void TryReconnectBarometer()
+        {
+            bool baroConnected = _barometerReader.IsConnected;
+
+            // 边沿：已连接 → 未连接，提示一次"哪里断了"
+            if (_barometerWasConnected && !baroConnected)
+            {
+                _barometerWasConnected = false;
+                Diagnostic("气压表串口已断开（RS485 适配器被拔出/掉线），正在后台自动重连...");
+            }
+            if (baroConnected)
+            {
+                _barometerWasConnected = true;
+                return;
+            }
+
+            // 节流：至少间隔 5 秒，避免对已断开的串口频繁重连
+            if ((DateTime.Now - _lastBarometerReconnectAttempt).TotalMilliseconds < BarometerReconnectIntervalMs) return;
+            _lastBarometerReconnectAttempt = DateTime.Now;
+
+            // 后台线程重连（打开串口 + 建 Modbus 主站，约几十毫秒），不阻塞采集循环
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                bool ok = _barometerReader.Connect(_config);
+                if (ok)
+                {
+                    _barometerWasConnected = true;
+                    Diagnostic($"气压表串口已重连：{(_barometerReader.CurrentPortName ?? _config.PortName)}");
+                }
+                // 重连失败：静默（后台继续按节流重试）
+            });
         }
 
         /// <summary>
@@ -441,12 +693,29 @@ namespace BarometerWinform.Services
         /// 返回 deviceId → 是否成功，方便上层汇总"哪些台没写进去"。
         /// 【性能提示】72 台连写 + 坏设备会阻塞较久，调用方应在后台线程执行，
         /// 不要直接放在 UI 线程里（否则界面会卡住数十秒）。
+        ///
+        /// 【V1.16 修复】批量写期间【暂停主采集定时器】：
+        /// 原来批量写和 1s 采集定时器会争抢同一条 RS485 串口总线，导致写帧大量超时
+        /// （现场表现为"保存失败 N 台"）。这里在批量写期间停掉采集，写完再恢复，
+        /// 与 Demo 的 BatchSetThreshold（独占总线批量写）行为对齐。
         /// </summary>
         /// <param name="thresholdValue">设备单位阈值（与压力读数同单位同小数位）</param>
         /// <returns>写入结果字典（deviceId → 是否成功）</returns>
         public Dictionary<int, bool> SetAllBarometerThresholds(decimal thresholdValue)
         {
-            return _barometerReader.SetAllThresholds(thresholdValue);
+            // 记住采集定时器当前是否在跑，批量写结束后按原状态恢复
+            bool timerWasRunning = _collectTimer.Enabled;
+            _collectTimer.Stop();
+
+            try
+            {
+                return _barometerReader.SetAllThresholds(thresholdValue);
+            }
+            finally
+            {
+                // 无论成功失败都要恢复采集（try/finally 保证）
+                if (timerWasRunning) _collectTimer.Start();
+            }
         }
 
         /// <summary>
@@ -508,10 +777,15 @@ namespace BarometerWinform.Services
         /// <summary>
         /// 手动定值启动送风机
         /// 幂等：多次调用只下发一次命令（用 _fanRunning 做状态记忆）
+        /// 【V1.16.1】未连接时先按需重连一次，连不上返回 false（上层弹窗提示"送风机未连接"）。
         /// </summary>
         public bool StartFan()
         {
             if (_fanController == null) return false;
+            if (!_fanController.IsConnected && !_fanController.ReconnectNow())
+            {
+                return false;   // 按需重连失败：送风机不可用
+            }
             _fanRunning = true;
             return _fanController.StartFixedValue();
         }
@@ -520,12 +794,35 @@ namespace BarometerWinform.Services
         /// 手动定值停止送风机
         /// 【注意】如果有任何一台正在测试，下一次采集循环会自动重新启动送风机
         /// （送风机是环境设备，测试期间必须保持运行）。
+        /// 【V1.16.1】未连接时先按需重连一次，连不上返回 false（上层弹窗提示）。
         /// </summary>
         public bool StopFan()
         {
             if (_fanController == null) return false;
+            if (!_fanController.IsConnected && !_fanController.ReconnectNow())
+            {
+                return false;
+            }
             _fanRunning = false;
             return _fanController.Stop();
+        }
+
+        /// <summary>
+        /// 送风机当前是否已连接（【V1.16.1 新增】）
+        /// 供 UI 判断是否需要在启动测试前提示"送风机未连接"。
+        /// </summary>
+        public bool IsFanConnected => _fanController != null && _fanController.IsConnected;
+
+        /// <summary>
+        /// 送风机按需重连（【V1.16.1 新增】）
+        /// 用户操作需要送风机时调用：已连接直接返回 true，未连接立即重连一次。
+        /// </summary>
+        /// <returns>重连后是否已连接</returns>
+        public bool ReconnectFan()
+        {
+            if (_fanController == null) return false;
+            if (_fanController.IsConnected) return true;
+            return _fanController.ReconnectNow();
         }
 
         /// <summary>
@@ -559,6 +856,23 @@ namespace BarometerWinform.Services
         private void PollFanData()
         {
             FanData data = _fanController.ReadStatus();
+
+            // 【V1.16.2 送风机心跳】连接状态边沿检测：只在"连上 / 断开"各提示一次，
+            // 明确提醒操作员"哪个设备断了"；连续失败过程不刷日志。
+            //（读失败时 FanControllerClient 已把 IsConnected 置 false，data 为 null）
+            bool fanConnected = _fanController.IsConnected;
+            if (fanConnected != _lastFanConnected)
+            {
+                _lastFanConnected = fanConnected;
+                if (fanConnected)
+                {
+                    Diagnostic($"冷却送风机已重连：{(_fanController.ActiveIp ?? _config.FanIpAddress)}:{_config.FanPort}");
+                }
+                else
+                {
+                    Diagnostic("冷却送风机已断开（通讯异常），正在后台自动重连...");
+                }
+            }
 
             // 缓存最新数据（读失败时 data 为 null，UI 据此显示"离线"）
             lock (_cacheLock)
@@ -598,7 +912,12 @@ namespace BarometerWinform.Services
             {
                 // 首台进入测试：启动送风机
                 _fanRunning = true;
-                _fanController.StartFixedValue();
+                if (!_fanController.StartFixedValue())
+                {
+                    // 【V1.16.2 心跳】送风机未连上：明确告知操作员（安全提示：
+                    // 测试期间没有环境温控，后台会静默重连，恢复后送风机自动重新启动）
+                    Diagnostic("送风机未连接，无法启动环境温控，正在后台自动重连（测试期间温度不受控！）");
+                }
             }
             else if (!anyTesting && _fanRunning)
             {
@@ -886,10 +1205,20 @@ namespace BarometerWinform.Services
         {
             try
             {
+                // ===== IO 耦合器心跳 + 自动重连（V1.16 / V1.16.2）=====
+                // 门禁解耦后，耦合器断开时每 5 秒在后台静默重连；已连接则本调用几乎无开销。
+                TryReconnectIo();
+
+                // ===== 气压表串口心跳 + 自动重连（V1.16.2）=====
+                // 串口断开时 1 秒内感知并提示 + 后台静默重连；已连接则本调用几乎无开销。
+                TryReconnectBarometer();
+
                 // 读取所有气压表数据
+                //（串口断开时返回"全 null 数组"，让下面的逐台循环继续累加失败次数、
+                //   触发"通讯故障"关阀断电的安全兜底——见 ModbusRtuBarometerReader.ReadAllData）
                 var allData = _barometerReader.ReadAllData();
 
-                // 防御性检查
+                // 防御性检查（_config 未初始化时返回空数组 → 结束本轮）
                 if (allData == null || allData.Length == 0) return;
 
                 // 批量读取 IO 状态

@@ -98,14 +98,15 @@
     <Compile Include="Services\ScannerService.cs" />
     <Compile Include="Services\FanControllerClient.cs" />
     <Compile Include="Services\IoMapBuilder.cs" />
+    <Compile Include="Services\SerialPortHelper.cs" />
     <Compile Include="Services\TestEventLogger.cs" />
     <Compile Include="Services\DeviceManager.cs" />
     <Compile Include="Services\UserManager.cs" />
-    <Compile Include="Views\BarometerPanelView.cs">
+    <Compile Include="Views\WorkstationPanelView.cs">
       <SubType>UserControl</SubType>
     </Compile>
-    <Compile Include="Views\BarometerPanelView.Designer.cs">
-      <DependentUpon>BarometerPanelView.cs</DependentUpon>
+    <Compile Include="Views\WorkstationPanelView.Designer.cs">
+      <DependentUpon>WorkstationPanelView.cs</DependentUpon>
     </Compile>
     <Compile Include="Views\MainForm.cs">
       <SubType>Form</SubType>

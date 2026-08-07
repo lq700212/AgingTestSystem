@@ -59,6 +59,11 @@ namespace BarometerWinform.Services
 
         public bool IsConnected => _isConnected;
 
+        /// <summary>
+        /// 实际连接成功的送风机 IP（模拟实现：无真实设备，返回配置里的主 IP）
+        /// </summary>
+        public string ActiveIp => _config?.FanIpAddress;
+
         public event EventHandler<string> OnError;
 
         public bool Connect(DeviceConfig config)
@@ -73,6 +78,17 @@ namespace BarometerWinform.Services
         public void Disconnect()
         {
             _isConnected = false;
+        }
+
+        /// <summary>
+        /// 按需重连（【V1.16.1 新增】接口成员）
+        /// 模拟实现：直接返回"已连接"（Mock 没有真实掉线概念，重新 Connect 即恢复）。
+        /// </summary>
+        public bool ReconnectNow()
+        {
+            if (_isConnected) return true;
+            Connect(_config);
+            return _isConnected;
         }
 
         /// <summary>

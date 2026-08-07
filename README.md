@@ -39,7 +39,7 @@
 ┌─────────────────────────────────────────────────────────────────────┐
 │                          MainForm (主视图)                           │
 │  ┌─────────────┐  ┌──────────────────────────────┐  ┌─────────────┐ │
-│  │   菜单栏     │  │     BarometerPanelView × N   │  │   操作面板    │ │
+│  │   菜单栏     │  │    WorkstationPanelView × N  │  │   操作面板    │ │
 │  │ (6个按钮)    │  │        (子视图/动态加载)       │   │ (9个按钮)    │ │
 │  │  ↓ 下拉菜单  │  └──────────────────────────────┘   └─────────────┘ │
 │  └──────┬──────┘                                                    │
@@ -74,7 +74,7 @@
 
 | 层级 | 名称 | 职责 | 关键文件 |
 | :--- | :--- | :--- | :--- |
-| **视图层** | Views | 负责主UI展示和用户交互 | MainForm.cs, BarometerPanelView.cs |
+| **视图层** | Views | 负责主UI展示和用户交互 | MainForm.cs, WorkstationPanelView.cs |
 | **对话框层** | Dialogs | 菜单按钮弹出的子窗体 | RecipeManagerForm.cs, DeviceManualForm.cs 等 |
 | **服务层** | Services | 负责业务逻辑和硬件通信（气压表 / IO / 送风机） | DeviceManager.cs, ModbusRtuBarometerReader.cs, ModbusTcpIoController.cs, FanControllerClient.cs, MockFanController.cs, TestEventLogger.cs 等 |
 | **接口层** | Interfaces | 定义硬件通信标准接口 | IBarometerReader.cs, IIoController.cs, IFanController.cs |
@@ -94,13 +94,13 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ 标题栏: 老化测试系统V1.16 | 权限: 操作员 | PLC状态: 已连接           │
+│ 标题栏: 老化测试系统V1.16 | 权限: 操作员 | 通讯连接: 未连接          │
 ├─────────────────────────────────────────────────────────────────┤
 │ 菜单按钮: 用户权限 | 参数设置 | LOG记录 | TEST | 关于              │
 ├──────────────────────────────────────┬──────────────────────────┤
 │                                      │ 运行状态                  │
 │         气压表显示区域                  │ 送风机监视                  │
-│      (9列 × 8行 = 72个面板)            │ (状态/当前温度/当前湿度/设定) │
+│      (9列 × 8行 = 72个面板)            │ (状态/设置温度/当前温度)      │
 │       每个面板带 Set 按钮               │ 操作                      │
 │                                      │ (送风机启停/开启真空/启动/   │
 │                                      │  停止/复位/急停/配方/批号)  │
@@ -114,7 +114,7 @@
 
 | 方法 | 功能 |
 | :--- | :--- |
-| `CreateBarometerPanels()` | 动态创建气压表显示面板 + 行全选按钮 Set(SEL_N)，清空前先 Dispose 旧控件（修复 H5） |
+| `CreateWorkstationPanels()` | 动态创建工位显示面板（V1.16 更名）+ 行全选按钮 Set(SEL_N)，清空前先 Dispose 旧控件（修复 H5） |
 | `DeviceManager_OnBatchDataUpdated()` | 处理批量数据更新事件，使用 BeginInvoke 异步切换到 UI 线程（修复 H1/M2） |
 | `UpdateAllPanels(allData)` | 一次调用完成所有面板更新，减少 UI 线程切换次数 |
 | `BtnSelectRow_Click()` | 行全选按钮点击事件，切换该行所有面板选中状态 |
@@ -123,54 +123,63 @@
 | `UpdateButtonPermissionStates()` | 【新增】根据当前权限启用/禁用参数设置按钮 |
 | `WriteLog()` | 写入日志到右侧 LOG 文本框（带时间戳，限制最大长度避免 GDI 耗尽，修复 M8） |
 | `UpdateStatusBar()` | 更新底部状态栏 |
-| `UpdateConnectionStatus()` | 更新 PLC 连接状态显示（修复 H1，含 IsDisposed 检查和异常捕获） |
+| `UpdateConnectionStatus()` | 更新通讯连接状态显示（V1.16.1：只反映 IO 耦合器是否连接；修复 H1，含 IsDisposed 检查和异常捕获） |
 | `LoadConfig()` | 从 App.config 加载所有配置项（修复 H7，含一致性校验） |
 | `DeviceManager_OnFanDataUpdated()` | 处理送风机数据更新事件（BeginInvoke 异步切到 UI 线程） |
-| `UpdateFanDisplay(data)` | 更新送风机监视区显示（状态/温度/湿度/设定值） |
+| `UpdateFanDisplay(data)` | 更新送风机监视区显示（V1.16.1：状态/设置温度/当前温度，状态带颜色；V1.16.2：当前温度颜色按设置温度对比——高于设置温度→红、不高于→绿，超告警上限的安全日志保留；V1.16.3：温度显示控件由 ReadOnly TextBox 改为 Label（lblUpperTemp/lblSetTemp），避免文本框选中态覆盖 ForeColor，颜色一定生效） |
 | `UpdateRunStatusSummary()` | 更新状态栏"测试中/在线"统计 |
 | `GetSelectedDeviceIds()` | 获取选中的设备编号列表，未选中时弹出提示 |
 | `Scanner_OnBarcodeScanned()` | 【V1.16】扫码完成事件处理，扫码结果写 LOG 日志 |
 | `Scanner_OnStatusChanged()` | 【V1.16】扫码枪连接状态变化处理（连接成功/未找到端口/错误），写 LOG 日志 |
 
-#### 3.1.2 BarometerPanelView（气压表显示面板）
+#### 3.1.2 WorkstationPanelView（工位显示面板）
 
-**职责**: 单个气压表的显示窗口，展示真空压力、序列号、配方、IO状态等信息。
+**职责**: 单个工位的显示窗口（V1.16 更名自 BarometerPanelView：本质是 72 个工位，每个工位配一台气压表）。
+展示真空压力、上电状态、真空开启状态、工作状态、序列号、配方、延时等信息，并可手动控制"载台上电"。
 
-**布局结构**:
+**布局结构（V1.16 重设计）**:
 
 ```
 ┌──────────────────────────────┐
-│ NO.1                    空闲  │
-│ ┌──────┐ ┌──────┐ ┌──────┐   │
-│ │ L1_1 │ │OP1_1 │ │OP1_3 │   │  ← IO状态显示（绿=导通）
-│ ├──────┤ ├──────┤ ├──────┤   │
-│ │INT1_1│ │ L1_2 │ │OP1_4 │   │
-│ └──────┘ └──────┘ └──────┘   │
-│ 真空压力: -52300 Pa            │
-│ SN:      SN0001              │
-│ 配方:    配方1                 │
-│                   ┌──────┐   │
-│ 延时开启: 00:10:30  │ Set  │   │
-│ 延时到达: 00:20:15  │      │   │
-│                   └──────┘   │
+│ NO.1                                  │  ← 设备编号
+│ [上电状态灯] [上电/下电按钮]           │  ← 上电灯=纯色(绿=上电/灰=下电)；按钮控制载台上电
+│ 真空压力 [值] [真空开启灯] [工作状态]   │  ← 压力值只读；真空灯=纯色；工作状态文字
+│ SN:      [_________]                 │
+│ 配方:    [_________]                 │
+│ 延时开启 [__:__:__]      ┌────┐      │
+│ 延时到达 [__:__:__]      │ Set│      │
+│                          └────┘      │
 └──────────────────────────────┘
 ```
+
+**状态约定**:
+- 上电状态灯 / 真空开启灯：纯色无文字（绿=ON，灰=OFF），鼠标悬停有 ToolTip 说明。
+- 上电/下电按钮：文字显示"要执行的动作"（未上电=上电，已上电=下电）；测试中/故障时禁用。
+- 工作状态：空闲且未上电=IDLE；空闲但已上电=SELECT；测试中=BUSY；故障=FAULT。
 
 **关键方法**:
 
 | 方法 | 功能 |
 | :--- | :--- |
-| `UpdateData(data)` | 更新面板显示数据 |
-| `UpdateIoStatus(data)` | 更新IO状态显示 |
-| `UpdateStatusColor(status)` | 根据状态更新背景色 |
-| `UpdateSelectionStyle()` | 根据选中状态更新背景色（选中=浅蓝，未选中=状态色） |
-| `btnSet_Click` | Set 按钮点击事件（合并后），触发 OnSetClicked 通知主窗体 |
+| `UpdateData(data)` | 更新面板显示数据（压力/SN/配方/延时 + 状态灯 + 按钮文字 + 工作状态） |
+| `UpdateStatusLight(ctrl, isActive)` | 更新纯色状态灯颜色（绿=开，灰=关） |
+| `UpdateWorkState(status, carrierPower)` | 更新工作状态文字与颜色（IDLE/SELECT/BUSY/FAULT） |
+| `UpdateStatusColor(status)` | 根据状态更新背景色（空闲=白/测试中=浅黄/故障=浅粉） |
+| `btnSet_Click` | Set 按钮点击事件，触发 OnSetClicked 通知主窗体打开手动控制窗 |
+| `btnPower_Click` | 上电/下电按钮点击事件（V1.16 新增），触发 OnPowerToggled 通知主窗体切换载台上电 |
+
+**关键事件（V1.16 新增）**:
+
+| 事件 | 说明 |
+| :--- | :--- |
+| `OnSetClicked(int)` | 点击 Set 按钮 → 主窗体打开单台手动控制窗体 |
+| `OnPowerToggled(int)` | 点击上电/下电按钮 → 主窗体切换该工位载台上电输出 |
 
 **关键属性**:
 
 | 属性 | 类型 | 说明 |
 | :--- | :--- | :--- |
-| `DeviceId` | int | 设备编号（从1开始，运行时赋值） |
+| `DeviceId` | int | 设备（工位）编号（从1开始，运行时赋值） |
 | `IsSelected` | bool | 是否被选中（由主窗体行全选按钮控制，选中时浅蓝高亮） |
 
 #### 3.1.3 顶部菜单按钮下拉菜单
@@ -219,7 +228,7 @@
 
 | 窗体 | 功能 | 已实现 | 预留项 |
 | :--- | :--- | :--- | :--- |
-| `CommonParameterForm` | 负压阈值设置 | 【V1.16】所有控件居中显示：负压值设定输入框 + 保存设置按钮；后台线程批量写入所有气压表阈值寄存器（0x0010，参考 ModbusRtuBarometerTest Demo 的 BatchSetThreshold），写入完成汇总成功/失败台数（失败列出台号，窗口保持打开便于重试） | — |
+| `CommonParameterForm` | 公共参数窗口（负压阈值设置） | 【V1.16】标题"公共参数窗口"，所有控件居中显示：负压值设定输入框 + 保存设置按钮；后台线程批量写入所有气压表阈值寄存器（0x0010，参考 Demo 的 BatchSetThreshold，写入期间暂停采集防串口争抢、每台 50ms 间隔），写入完成汇总成功/失败台数（失败列出台号，窗口保持打开便于重试；串口未连接时提示"未连接任何气压表"）。【V1.16.1】阈值换算固定 1 位小数（不再读设备 0x0002，实测该寄存器不可靠，否则设 -95 会写成 -9.5） | — |
 | `RecipeManagerForm` | 配方管理 | 左右分栏布局：左侧配方列表（序号+配方名称），右侧配方设置（配方名称、延时时间、启动时间、极限温度），底部添加/更新/删除按钮和保存设置按钮 | 新增/编辑/删除/持久化待实现 |
 | `HistoryRecordForm` | 历史记录查询 | 【V1.15】日期范围查询 + 读取 Logs\TestLog_*.csv 真实事件日志（自动跨 CSV 解析、跳过表头），"导出"按钮打开 Logs 文件夹 | Mock 数据已移除 |
 | `LoginForm` | 用户登录 | 用户名/密码输入、登录验证、Enter/Esc 键支持 | 密码哈希存储（当前明文） |
@@ -329,9 +338,10 @@
 
 1. **WMI 自动识别串口**: 通过 `System.Management` 查询 `Win32_PnPEntity`，筛选设备名称包含 `"COM"` 和关键词（默认 `Xenon 1902`）的设备，自动定位端口
 2. **串口读码**: 监听 `SerialPort.DataReceived`，按换行符把串口数据切分成一条条完整条码（兼容 CR/LF/CRLF 结尾）
-3. **断线自动重连**: 未插入/中途掉线时，UI 线程定时器每 3 秒自动重试连接，现场无需手动重开
-4. **线程安全事件**: 扫码/状态事件通过 `SynchronizationContext` 封送到 UI 线程，订阅者可直接更新控件
-5. **配置化**: `ScannerEnabled` 关闭时不连接（现场没装扫码枪时不影响整机启动）
+3. **断线自动重连（静默心跳）**: 未插入/中途掉线时，UI 线程定时器每 3 秒后台静默重试连接（【V1.16.2】不再"重试几次就放弃"，失败过程不刷日志，只在连上/断开边沿各提示一次）；打开"录入批号"窗口时按需重连（`TryReconnectNow`），仍连不上弹窗提示"扫码枪未连接，请先连接"
+4. **端口存活心跳（V1.16.3 重写：动态搜索确认设备是否真在）**: 拔掉 USB 虚拟串口时 `SerialPort` 的 `ErrorReceived`/`DataReceived` 事件在端口安静时【不一定触发】；原方案查 `GetPortNames()`（注册表 COM 列表在应用持有句柄时可能残留）和 `ReadExisting()` 探测（多数 USB 转串口驱动被拔后静默返回空串、不抛异常）都不可靠。V1.16.3 改为：重连定时器每次 Tick 先执行 `CheckConnectionAlive()`，动态识别模式下**重新跑一遍连接建立时那套 WMI 设备关键词搜索**（`FindMatchingPorts()`）——设备被拔掉后 PnP 节点消失、WMI 搜不到该串口 → 判定断连（WMI 反映物理设备是否真在，不受注册表残留/打开句柄影响）；WMI 查询失败时退回 I/O 探测兜底，不误判断连。判定成立即断连、提示一次"已断开"，随后静默重连恢复
+5. **线程安全事件**: 扫码/状态事件通过 `SynchronizationContext` 封送到 UI 线程，订阅者可直接更新控件
+6. **配置化**: `ScannerEnabled` 关闭时不连接（现场没装扫码枪时不影响整机启动）
 
 **事件**:
 
@@ -346,7 +356,9 @@
 | :--- | :--- |
 | `Start()` | 启动服务（未启用则跳过；启用则启动重连定时器并立即尝试连接） |
 | `Stop()` | 停止服务（停定时器 + 关串口） |
-| `FindScannerPort()` | WMI 按关键词自动定位扫码枪 COM 口 |
+| `FindScannerPort()` | WMI 按关键词自动定位扫码枪 COM 口（基于 `FindMatchingPorts()` 取第一个匹配） |
+| `FindMatchingPorts()` | WMI 按关键词搜索匹配串口列表（null=查询失败 / 空列表=设备已不在 / 非空=设备还在）；连接建立与心跳断连判定共用 |
+| `CheckConnectionAlive()` | 心跳：重新跑 WMI 动态搜索确认扫码枪设备是否真在，判定断连并提示一次（V1.16.3） |
 | `SerialPort_DataReceived()` | 串口数据接收，按行切分成条码并触发事件 |
 | `Dispose()` | 释放资源（停定时器 + 关串口 + 清事件引用） |
 
@@ -385,6 +397,9 @@ public interface IBarometerReader
 **【V1.15 更新 —— 设备阈值写入】**
 
 - 新增 `SetThreshold` / `SetAllThresholds`，与 ModbusRtuBarometerTest Demo 写入逻辑一致（写 Holding Register 0x0010，值 = round(阈值 × 10^小数位)）。
+- 【V1.16.1 修复】小数位**固定用配置 `BarometerDefaultDecimalPlaces`（=1）**，不再读设备 0x0002 ——
+  现场实测 72 台中 47 台的 0x0002 返回 0（不可靠），旧逻辑按 0 位小数换算会把 -95 写成寄存器 -95，
+  仪表（实际 1 位小数）显示 -9.5。压力读取 `ReadData` 同样固定 1 位小数，两处与仪表显示完全一致。
 - **单位注意**：`thresholdValue` 是"设备单位"（与压力读数同单位同小数位），**不是**软件报警阈值 `AlarmPressureThresholdPa`（Pa）。单位未按说明书确认前不要写。
 - `SetAllThresholds` 逐台失败不中断、返回失败名单；72 台连写 + 坏设备会阻塞较久，应在后台线程调用。
 - 实测经验：批量写某台超时通常表示该台设备掉线/损坏（Demo 已提供「批量读取压力」按钮用于定位离线设备）。
@@ -466,6 +481,7 @@ public interface IFanController : IDisposable
 **实现**：
 - Mock：`MockFanController`（`FanEnabled=true` 且无设备时演示用）
 - 真实：`FanControllerClient`（Modbus TCP，同步版，带锁 + 断线重连节流 + 连接超时）
+- 【V1.16.2】断线后后台静默持续重连（10 秒节流，失败过程不刷日志，只在连上/断开边沿提示一次）；定值启动/停止按钮按需重连（`ReconnectNow`），连不上弹窗提示"送风机未连接，请先连接"
 - 送风机是"可选设备"，连接失败不影响整机启动；用独立定时器轮询（2s），不阻塞 72 台气压表采集
 
 ---
@@ -515,7 +531,7 @@ public interface IFanController : IDisposable
 | `TotalBarometers` | int | 72 | 气压表总数 |
 | `TotalInputs` | int | 80 | IO输入总数（GX-CL140 接 3 个输入模块，80DI） |
 | `TotalOutputs` | int | 160 | IO输出总数（GX-CL140 接 5 个输出模块，160DO） |
-| `PortName` | string | COM1 | 串口（气压表 RTU，RS485→USB） |
+| `PortName` | string | COM9 | 串口（气压表 RTU，RS485→USB；V1.16 起连接成功会缓存到 BarometerPort.cache，下次优先用缓存端口，缓存失效自动重新识别 CH340） |
 | `BaudRate` | int | 19200 | 波特率（ModbusRtuBarometerTest Demo 实测） |
 | `DataBits` | int | 8 | 数据位 |
 | `StopBits` | int | 1 | 停止位 |
@@ -531,8 +547,8 @@ public interface IFanController : IDisposable
 | `IoOutputRegisterStartAddress` | ushort | 0x2000 | DO 起始寄存器（Holding Register） |
 | `IoBackupChannelMappingEnabled` | bool | false | 备用通道映射总开关（DQ 通道烧毁时置 true，多数工作台默认关） |
 | `IoBackupChannelMappings` | string | `0x2000@0->0x2009@10;0x2008@0->0x2009@11` | 备用通道映射表（源寄存器@源通道->目标寄存器@目标通道，分号分隔） |
-| `BarometerPressureRegisterAddress` | ushort | 0x0001 | 压力寄存器（0x0002 为小数位） |
-| `BarometerDefaultDecimalPlaces` | int | 1 | 小数位默认值 |
+| `BarometerPressureRegisterAddress` | ushort | 0x0001 | 压力寄存器（0x0002 为小数位，实测不可靠，转换不再使用） |
+| `BarometerDefaultDecimalPlaces` | int | 1 | 小数位默认值（压力读取与阈值写入统一使用，不再读设备 0x0002；换气压表时按新表实际小数位改这里即可） |
 | `BarometerPressureScale` | decimal | 1 | 压力缩放系数 |
 | `AlarmPressureThresholdPa` | decimal | -95000 | 报警压力阈值（Pa） |
 | `AlarmWhenPressureHigherThanThreshold` | bool | true | 压力高于阈值报警 |
@@ -751,7 +767,7 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 | `CollectInterval` | 数据采集间隔（毫秒） | 1000 |
 | `PanelColumns` | 主视图面板列数 | 8 |
 | `PanelRows` | 主视图面板行数 | 9 |
-| `PortName` | 串口（气压表 RTU） | COM1 |
+| `PortName` | 串口（气压表 RTU；V1.16 起连接成功缓存到 BarometerPort.cache，下次优先用缓存端口） | COM9 |
 | `BaudRate` | 波特率（Demo 实测 19200） | 19200 |
 | `DataBits` | 数据位 | 8 |
 | `StopBits` | 停止位 | 1 |
@@ -763,8 +779,8 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 | `IoOutputRegisterStartAddress` | DO 起始寄存器（Holding Register） | 0x2000 |
 | `IoBackupChannelMappingEnabled` | 备用通道映射总开关（DQ 通道烧毁时置 true） | false |
 | `IoBackupChannelMappings` | 备用通道映射表（源@通道->目标@通道，分号分隔） | `0x2000@0->0x2009@10;0x2008@0->0x2009@11` |
-| `BarometerPressureRegisterAddress` | 压力寄存器（0x0001，0x0002 为小数位） | 0x0001 |
-| `BarometerDefaultDecimalPlaces` | 小数位默认值 | 1 |
+| `BarometerPressureRegisterAddress` | 压力寄存器（0x0001，0x0002 为小数位，实测不可靠，转换不再使用） | 0x0001 |
+| `BarometerDefaultDecimalPlaces` | 小数位默认值（压力读取与阈值写入统一使用，不读 0x0002；换气压表时按新表改这里） | 1 |
 | `BarometerPressureScale` | 压力缩放系数 | 1 |
 | `AlarmPressureThresholdPa` | 报警压力阈值（Pa） | -95000 |
 | `AlarmWhenPressureHigherThanThreshold` | 压力高于阈值报警 | true |
@@ -813,8 +829,8 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 | :--- | :--- | :--- |
 | 气压表通信协议 | 已确认 | Modbus RTU / RS485→USB，19200（ModbusRtuBarometerTest Demo 实测） |
 | IO通信协议 | 已确认 | Modbus TCP，GX-CL140（192.168.1.20:502，ModbusTCPTest Demo 实测） |
-| 送风机通信协议 | 已确认 | Modbus TCP，厂商控制屏（192.168.1.220:50000，ModbusTCPFanControllerTest Demo 实测） |
-| PLC连接方式 | 已确认 | 以太网 Modbus TCP |
+| 送风机通信协议 | 已确认 | Modbus TCP，厂商控制屏（192.168.1.220:50000，ModbusTCPFanControllerTest Demo 实测；自动识别候选 .220/.221/.222） |
+| IO耦合器连接方式 | 已确认 | 以太网 Modbus TCP，GX-CL140 模组（现场无 PLC；V1.16 起耦合器断开不影响气压表采集；V1.16.2 断线后后台静默持续重连，只在连上/断开边沿提示一次，操作时按需重连并弹窗提示） |
 | 数据存储方案 | 部分确定 | 事件日志已落盘 CSV（Logs\TestLog_*.csv）；数据库方案待定 |
 
 ### 5.2 预留的功能接口
@@ -822,12 +838,12 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 | 功能 | 状态 | 文件位置 | 说明 |
 | :--- | :--- | :--- | :--- |
 | 用户权限管理 | 已实现 | MainForm.cs / UserManager.cs / LoginForm.cs / UserManagementForm.cs | 下拉菜单（操作员/技术员/管理员）+ 登录窗体 + 用户管理（管理员修改他人账号）；用户数据持久化到 Users.json（V1.13） |
-| 参数设置-公共参数 | 已实现（V1.16） | MainForm.cs / CommonParameterForm | 设置所有气压表负压阈值：输入负压值 → 后台线程批量写入气压表阈值寄存器（0x0010）→ 汇总成功/失败台数 |
+| 参数设置-公共参数 | 已实现（V1.16） | MainForm.cs / CommonParameterForm | 公共参数窗口：输入负压值 → 后台线程批量写入所有气压表阈值寄存器（0x0010，写入期间暂停采集防串口争抢，阈值换算固定 1 位小数）→ 汇总成功/失败台数；串口未连接时提示"未连接任何气压表" |
 | 参数设置-配方管理 | 部分实现 | MainForm.cs / RecipeManagerForm | 配方列表显示已实现，新增/编辑/删除逻辑待实现 |
 | LOG记录-历史记录 | 已实现（V1.15） | MainForm.cs / HistoryRecordForm | 读取 Logs\TestLog_*.csv 真实事件日志，按日期查询 |
 | 关于-版本说明 | 已实现 | MainForm.cs | 版本信息弹窗已实现 |
 | 行全选按钮 Set(SEL_N) | 已实现 | MainForm.cs | 点击切换该行所有面板选中状态（浅蓝高亮） |
-| 面板批量操作 | 已实现（V1.15） | MainForm.cs / BarometerPanelView | 选中面板后执行：开启真空 / 启动运行 / 停止运行 / 报警复位 |
+| 面板批量操作 | 已实现（V1.15） | MainForm.cs / WorkstationPanelView | 选中面板后执行：开启真空 / 启动运行 / 停止运行 / 报警复位 |
 | 送风机定值启动 | 已实现（V1.15） | MainForm.cs / FanControllerClient.cs | 送风机 Modbus TCP 接入，定值启动/停止 + 温度湿度监视 |
 | 送风机定值停止 | 已实现（V1.15） | MainForm.cs / FanControllerClient.cs | 手动停止；有台测试时自动保持运行 |
 | 开启真空（选中台） | 已实现（V1.15） | MainForm.cs | 对选中面板打开真空电磁阀（单动作，预检用） |
@@ -896,8 +912,8 @@ BarometerWinform/
 │   ├── Views/                              # 视图层
 │   │   ├── MainForm.cs                     # 主窗体（业务逻辑）
 │   │   ├── MainForm.Designer.cs            # 主窗体（设计器代码，含 rootScrollPanel 滚动容器）
-│   │   ├── BarometerPanelView.cs           # 气压表显示面板（业务逻辑）
-│   │   └── BarometerPanelView.Designer.cs  # 气压表显示面板（设计器代码）
+│   │   ├── WorkstationPanelView.cs         # 工位显示面板（业务逻辑，V1.16 更名）
+│   │   └── WorkstationPanelView.Designer.cs# 工位显示面板（设计器代码）
 │   └── Dialogs/                            # 对话框窗体层（菜单按钮弹出窗体）
 │       ├── CommonParameterForm.cs                 # 公共参数设置窗体
 │       ├── CommonParameterForm.Designer.cs
@@ -928,8 +944,8 @@ WinForms 视图层采用 **partial class（分部类）** 机制，每个窗体/
 | :--- | :--- | :--- |
 | `MainForm.cs` | 业务逻辑 | 事件处理、数据绑定、业务方法 |
 | `MainForm.Designer.cs` | 设计器代码 | 控件创建、布局属性、Dispose 方法 |
-| `BarometerPanelView.cs` | 业务逻辑 | 数据更新、状态切换、事件处理 |
-| `BarometerPanelView.Designer.cs` | 设计器代码 | 控件创建、布局属性、Dispose 方法 |
+| `WorkstationPanelView.cs` | 业务逻辑 | 数据更新、状态切换、事件处理（V1.16 更名自 BarometerPanelView） |
+| `WorkstationPanelView.Designer.cs` | 设计器代码 | 控件创建、布局属性、Dispose 方法 |
 
 **为什么需要拆分？**
 
@@ -1015,7 +1031,7 @@ public class MyIoController : IIoController
    - `.vs\`（VS的缓存目录，隐藏文件夹）
 3. **重新打开 Visual Studio**
 4. **执行"生成"→"重新生成解决方案"**（快捷键：Ctrl+Shift+B）
-5. **双击 MainForm.cs 或 BarometerPanelView.cs 打开设计器**
+5. **双击 MainForm.cs 或 WorkstationPanelView.cs 打开设计器**
 
 ### 8.2.1 关于 .cs 文件编码（重要）
 
@@ -1050,14 +1066,14 @@ Get-ChildItem -Path $projectRoot -Recurse -Filter "*.cs" -File |
 
 **已修复的基类声明**：
 为增强设计器兼容性，以下文件的基类声明已改为使用完整命名空间路径：
-- `BarometerPanelView.cs`：`: UserControl` → `: System.Windows.Forms.UserControl`
+- `WorkstationPanelView.cs`（原 BarometerPanelView.cs）：`: UserControl` → `: System.Windows.Forms.UserControl`
 - `MainForm.cs`：`: Form` → `: System.Windows.Forms.Form`
 
 ### 8.3 版本更新
 
 - 当前版本: V1.16
 - 更新日志:
-  - V1.16 (2026-08-07): 接入真实扫码枪（ScannerService，参考 SerialScannerTest Demo）。WMI 自动识别串口（Honeywell Xenon 1902）+ 串口读码 + 断线自动重连；扫码结果写入 LOG 日志；ID绑定窗体打开时扫码自动识别"工位号"（恰好2位数字，如 01~72）/"产品SN" 并填入对应输入框，两条都齐后自动加入产品列表（乱序扫码也能正确配对）；修复ID绑定Excel导出样式（仅表头列名加粗+居中换行，不加灰底，数据行普通字体）；公共参数窗体简化为"负压阈值设置"（居中界面：负压值设定输入框 + 保存设置按钮，后台线程批量写入所有气压表阈值寄存器 0x0010，参考 ModbusRtuBarometerTest Demo 的 BatchSetThreshold，汇总成功/失败台数）；新增扫码枪配置项（ScannerEnabled/ScannerPort/ScannerDeviceKeyword 等，默认关闭）；移除 TEST 菜单按钮及扫码模拟窗体（ScanSimulationForm），扫码枪测试用真实扫码枪（LOG 看结果）
+  - V1.16 (2026-08-07): 接入真实扫码枪（ScannerService，参考 SerialScannerTest Demo）。WMI 自动识别串口（Honeywell Xenon 1902）+ 串口读码 + 断线自动重连；扫码结果写入 LOG 日志；ID绑定窗体打开时扫码自动识别"工位号"（恰好2位数字，如 01~72）/"产品SN" 并填入对应输入框，两条都齐后自动加入产品列表（乱序扫码也能正确配对）；修复ID绑定Excel导出样式（仅表头列名加粗+居中换行，不加灰底，数据行普通字体）；公共参数窗体简化为"负压阈值设置"（居中界面：负压值设定输入框 + 保存设置按钮，后台线程批量写入所有气压表阈值寄存器 0x0010，参考 ModbusRtuBarometerTest Demo 的 BatchSetThreshold，汇总成功/失败台数）；新增扫码枪配置项（ScannerEnabled/ScannerPort/ScannerDeviceKeyword 等，默认关闭）；移除 TEST 菜单按钮及扫码模拟窗体（ScanSimulationForm），扫码枪测试用真实扫码枪（LOG 看结果）；【同日】通讯连接修复：新增 CH340 串口自动识别（SerialPortHelper，气压表 RS485 适配器免配端口，App.config 端口改为实测 COM9，连接成功后端口缓存到 BarometerPort.cache、下次启动优先用缓存端口、缓存失效再自动重新识别——与送风机 FanLastIp.cache 同款"工控机记忆"机制）、DeviceManager 启动门禁解耦（只要气压表串口连通就启动采集，IO 耦合器/送风机断开不再拖垮整机）、新增启动/连接诊断写 LOG（OnDiagnostic）、IO 耦合器后台自动重连、ModbusTcpIoController 连接超时修复、公共参数批量写期间暂停采集防串口争抢 + 串口未连接明确提示；送风机监视区改为三项温度（设置温度/上部温度/下部温度，不显示湿度，上部温度=控制屏当前温度，下部温度为保留项）；顶部"通讯连接状态"控件更名（lblCommStatusLabel/lblCommStatus，现场无 PLC，用 GX-CL140 ModbusTCP 模组）；工位面板更名+重设计（BarometerPanelView → WorkstationPanelView：NO.x、上电状态灯、上电/下电按钮、真空压力、真空开启灯、工作状态 IDLE/SELECT/BUSY/FAULT、SN、配方、延时、Set 按钮，新增 OnPowerToggled 上电控制）；【同日V1.16.1】现场四项修复：①负压阈值 -95 写成 -9.5（0x0002 小数位寄存器实测 47/72 台不可靠返回 0，压力读取与阈值写入统一固定 1 位小数，写→读回实测验证 -95→寄存器-950→读回-95.0）；②顶部通讯连接状态改为只判断 IO 耦合器是否连接（OnConnectionStatusChanged 事件语义调整，耦合器断网读/写失败自动识别断开、自动重连后刷新）；③送风机监视区"上部温度"改"当前温度"、删除"下部温度"行；④送风机状态文字+颜色（未连接=红 / 定值启动·已连接=绿 / 定值停止=灰）；【同日V1.16.1】连接失败重试策略优化：扫码枪/耦合器/送风机自动重连连续失败 5 次后停止（不再无限空转），需要操作时按需重连（扫码枪 TryReconnectNow / 耦合器 EnsureIoConnected / 送风机 ReconnectNow / 气压表 SetAllThresholds 自动按需 Connect），仍连不上弹窗"xxx未连接，请先连接"；气压表小数位由配置 BarometerDefaultDecimalPlaces 统一控制（压力读取与阈值写入同源、不读 0x0002，换气压表改配置即可，写→读回实测验证通过）；【同日V1.16.2】连接心跳机制（静默自愈）：断连后状态 1~3 秒内更新并在日志提示一次"哪个设备断了"（耦合器/气压表随 1s 采集心跳、送风机 2s 轮询心跳、气压表新增串口级故障识别 IsPortLevelFailure——把"RS485 适配器被拔"和"单台表无响应"区分开、只有端口级异常才判定串口断开）、后台静默持续重连（取代上一版"重试 5 次就放弃"，失败过程不再刷日志，只在连上/断开边沿各提示一次）、操作时按需重连+弹窗兜底保留、测试期间送风机未连明确提示"温度不受控"；按需重连完全异步（耦合器/送风机按钮点下去先弹"连接中..."提示窗体、后台重连不卡界面，MainForm 改用 async/await + Task.Run）；底部状态栏新增"扫码枪"连接状态（已连接=绿/未连接=红/未启用=灰），与顶部"通讯连接状态"（耦合器）、送风机状态标签构成四设备状态总览；修复扫码枪断连状态不更新（拔掉 USB 虚拟串口时 SerialPort 的 ErrorReceived/DataReceived 在端口安静时不一定触发，重连定时器新增端口存活心跳 CheckConnectionAlive 双重判定——每 3 秒①核对当前端口是否仍在系统串口列表 GetPortNames、②对已打开句柄主动 ReadExisting() 探测【句柄失效时读取会抛异常，覆盖驱动在应用持有句柄时保留 COM 条目的情况】，任一判定成立即断连、提示一次"已断开"并静默恢复）；送风机"当前温度（上部温度）"颜色改为按设置温度对比（高于设置温度→红、不高于→绿，原按固定告警上限 FanTempAlarmLimitC 判断，超上限安全日志保留但不再覆盖颜色）
   - V1.15 (2026-08-06): 业务串联 + 冷却送风机接入。新增送风机接口/实现/Mock/数据模型（Modbus TCP，定值启动/停止 + 温度湿度监视）；DeviceManager 增加测试状态机（启动/停止/报警复位/全部停止）、真空建立确认、通讯失联报警、老化计时自动停止、送风机全局生命周期（首台启动/末台停止）；新增事件 CSV 落盘（TestEventLogger）+ 历史记录读真实日志；新增单台手动控制对话框；右侧面板新增送风机监视区与业务操作按钮。详见 CHANGELOG.md
   - V1.14 (2026-08-03): 接入真实通讯链路（气压表 Modbus RTU + IO Modbus TCP），DeviceManager 支持 UseMockCommunication 切换；新增报警阈值参数并实现“报警边沿→关阀/断载台电”联动；新增 CHANGELOG.md 与 通讯接入说明.md 文档
   - V1.13 (2026-07-24): 用户数据持久化到 JSON 文件（Users.json）；新增 LoadUsersFromFile/SaveUsersToFile 方法；程序启动时自动加载用户数据，修改用户名/密码后自动保存；UserAccount 新增无参构造函数用于 JSON 反序列化；添加 Newtonsoft.Json NuGet 包引用；文档更新持久化方案说明
@@ -1259,7 +1275,7 @@ this.BeginInvoke(
 #### H10 - 设计器报"无法设计基类 System.Void" / "未能加载基类"
 
 **问题文件**：
-- [Views/BarometerPanelView.cs](file:///e:/Project/BarometerWinform/BarometerWinform/Views/BarometerPanelView.cs)
+- [Views/WorkstationPanelView.cs](file:///e:/Project/BarometerWinform/BarometerWinform/Views/WorkstationPanelView.cs)（原 BarometerPanelView.cs，V1.16 更名）
 - [Views/MainForm.cs](file:///e:/Project/BarometerWinform/BarometerWinform/Views/MainForm.cs)
 
 **问题原因**：

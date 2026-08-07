@@ -75,26 +75,70 @@ namespace BarometerWinform.Services
 
         public event EventHandler<string> OnError;
 
+        /// <summary>
+        /// 连接层错误判定（【V1.16.1 新增】）
+        /// 读/写请求抛出"连接层异常"（Socket 异常 / IO 异常 / 超时）说明耦合器已断开
+        /// （Modbus 异常响应不算断开——那说明设备在线、只是报功能码错误）。
+        /// 一旦判定断开就把 _isConnected 置 false，让上层（DeviceManager.TryReconnectIo）
+        /// 能感知并自动重连，顶部"通讯连接状态"标签也能如实显示"未连接"，
+        /// 而不是网络断了还一直显示"已连接"。
+        /// </summary>
+        /// <param name="ex">读/写时捕获到的异常</param>
+        private void MarkDisconnectedOnFailure(Exception ex)
+        {
+            if (ex is SocketException || ex is System.IO.IOException || ex is TimeoutException)
+            {
+                _isConnected = false;
+            }
+        }
+
         public bool Connect(DeviceConfig config)
         {
             _config = config;
+            // 用 _syncRoot 串行化"连接/断开/读写"，防止后台自动重连与采集线程
+            // 并发访问 _client/_master 导致空引用（C# lock 可重入，内部再调 Disconnect 不冲突）
+            lock (_syncRoot)
+            {
+                return ConnectInternal();
+            }
+        }
+
+        /// <summary>
+        /// 连接的实际执行部分（必须在 _syncRoot 锁内调用）
+        /// </summary>
+        private bool ConnectInternal()
+        {
             try
             {
                 // 0) 先断开旧连接（如果之前连接过）
                 Disconnect();
 
-                // 1) 建立 TCP 连接
-                //    注意：TcpClient.Connect 是同步阻塞的，这里放在后台采集线程里调用，避免卡 UI。
+                // 1) 建立 TCP 连接（带手动超时）
+                //    【修复】TcpClient.Connect 是同步阻塞的，且不受 SendTimeout/ReceiveTimeout
+                //    约束，IP 填错时系统默认要等约 20 秒才超时——这会让启动画面卡住。
+                //    这里改用 BeginConnect + WaitOne 实现"手动超时"：TcpReceiveTimeoutMs
+                //    内连不上立即放弃并给出明确提示。
                 _client = new TcpClient();
-                _client.SendTimeout = config.TcpSendTimeoutMs;
-                _client.ReceiveTimeout = config.TcpReceiveTimeoutMs;
-                _client.Connect(config.PlcAddress, config.PlcPort);
+                _client.SendTimeout = _config.TcpSendTimeoutMs;
+                _client.ReceiveTimeout = _config.TcpReceiveTimeoutMs;
+
+                IAsyncResult connectResult = _client.BeginConnect(_config.PlcAddress, _config.PlcPort, null, null);
+                if (!connectResult.AsyncWaitHandle.WaitOne(_config.TcpReceiveTimeoutMs))
+                {
+                    _client.Close();
+                    _client.Dispose();
+                    _client = null;
+                    OnError?.Invoke(this,
+                        $"耦合器 {_config.PlcAddress}:{_config.PlcPort} 连接超时（{_config.TcpReceiveTimeoutMs}ms），请检查 IP/网线");
+                    return false;
+                }
+                _client.EndConnect(connectResult);
 
                 // 2) 创建 Modbus 主站（Master）
                 var factory = new ModbusFactory();
                 _master = factory.CreateMaster(_client);
-                _master.Transport.ReadTimeout = config.TcpReceiveTimeoutMs;
-                _master.Transport.WriteTimeout = config.TcpSendTimeoutMs;
+                _master.Transport.ReadTimeout = _config.TcpReceiveTimeoutMs;
+                _master.Transport.WriteTimeout = _config.TcpSendTimeoutMs;
 
                 // 3) 标记连接成功
                 _isConnected = true;
@@ -111,23 +155,27 @@ namespace BarometerWinform.Services
 
         public void Disconnect()
         {
-            // 断开连接时，先把状态置为 false
-            _isConnected = false;
-            try
+            // 用 _syncRoot 串行化（与 Connect/读写一致），防止后台重连与采集线程并发访问
+            lock (_syncRoot)
             {
-                if (_client != null)
+                // 断开连接时，先把状态置为 false
+                _isConnected = false;
+                try
                 {
-                    // Close 会关闭网络连接并释放 Socket 资源
-                    _client.Close();
+                    if (_client != null)
+                    {
+                        // Close 会关闭网络连接并释放 Socket 资源
+                        _client.Close();
+                    }
                 }
-            }
-            catch
-            {
-            }
-            finally
-            {
-                _client = null;
-                _master = null;
+                catch
+                {
+                }
+                finally
+                {
+                    _client = null;
+                    _master = null;
+                }
             }
         }
 
@@ -178,6 +226,8 @@ namespace BarometerWinform.Services
             }
             catch (Exception ex)
             {
+                // 连接层异常（超时/断网）→ 标记断开，让上层感知并自动重连
+                MarkDisconnectedOnFailure(ex);
                 OnError?.Invoke(this, ex.Message);
                 return false;
             }
@@ -221,6 +271,8 @@ namespace BarometerWinform.Services
             }
             catch (Exception ex)
             {
+                // 连接层异常（超时/断网）→ 标记断开，让上层感知并自动重连
+                MarkDisconnectedOnFailure(ex);
                 OnError?.Invoke(this, ex.Message);
                 return new bool[0];
             }
@@ -302,6 +354,8 @@ namespace BarometerWinform.Services
             }
             catch (Exception ex)
             {
+                // 连接层异常（超时/断网）→ 标记断开，让上层感知并自动重连
+                MarkDisconnectedOnFailure(ex);
                 OnError?.Invoke(this, ex.Message);
             }
         }
@@ -373,6 +427,8 @@ namespace BarometerWinform.Services
             }
             catch (Exception ex)
             {
+                // 连接层异常（超时/断网）→ 标记断开，让上层感知并自动重连
+                MarkDisconnectedOnFailure(ex);
                 OnError?.Invoke(this, ex.Message);
                 return false;
             }
@@ -431,6 +487,8 @@ namespace BarometerWinform.Services
             }
             catch (Exception ex)
             {
+                // 连接层异常（超时/断网）→ 标记断开，让上层感知并自动重连
+                MarkDisconnectedOnFailure(ex);
                 OnError?.Invoke(this, ex.Message);
                 return new bool[0];
             }

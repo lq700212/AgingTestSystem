@@ -40,6 +40,11 @@ namespace BarometerWinform.Services
 
         public bool IsConnected => _isConnected;
 
+        /// <summary>
+        /// 当前实际使用的串口名称（模拟实现：返回配置里填的端口）
+        /// </summary>
+        public string CurrentPortName => _config?.PortName;
+
         public event EventHandler<string> OnError;
 
         public bool Connect(DeviceConfig config)
@@ -141,8 +146,10 @@ namespace BarometerWinform.Services
 
             if (!_isConnected)
             {
-                OnError?.Invoke(this, "设备未连接");
-                return new BarometerData[0];
+                // 【V1.16.2 对齐真实实现】返回"全 null 数组"，让 DeviceManager 的
+                // 逐台循环能累加失败次数并触发"通讯故障"联动（与真实串口断开行为一致）
+                OnError?.Invoke(this, "设备未连接（等待自动重连）");
+                return new BarometerData[_config.TotalBarometers];
             }
 
             var data = new BarometerData[_config.TotalBarometers];
@@ -171,11 +178,12 @@ namespace BarometerWinform.Services
         /// <summary>
         /// 模拟批量写入所有气压表的设备阈值
         /// 逐台调用 <see cref="SetThreshold"/>，返回 deviceId → 是否成功。
+        /// 【V1.16 对齐】串口未连接时返回空字典，让上层走"未连接"提示分支。
         /// </summary>
         public Dictionary<int, bool> SetAllThresholds(decimal thresholdValue)
         {
             var result = new Dictionary<int, bool>();
-            if (_config == null)
+            if (_config == null || !_isConnected)
             {
                 OnError?.Invoke(this, "未连接，请先调用 Connect 方法");
                 return result;

@@ -37,10 +37,11 @@
             // lblTitle
             // 
             this.lblTitle.AutoSize = true;
-            this.lblTitle.Font = new System.Drawing.Font("Microsoft YaHei", 10F, System.Drawing.FontStyle.Bold);
-            this.lblTitle.Location = new System.Drawing.Point(20, 20);
+            this.lblTitle.Font = new System.Drawing.Font("微软雅黑", 10F, System.Drawing.FontStyle.Bold);
+            this.lblTitle.Location = new System.Drawing.Point(15, 15);
+            this.lblTitle.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.lblTitle.Name = "lblTitle";
-            this.lblTitle.Size = new System.Drawing.Size(144, 24);
+            this.lblTitle.Size = new System.Drawing.Size(107, 19);
             this.lblTitle.TabIndex = 0;
             this.lblTitle.Text = "扫描数据接收区";
             // 
@@ -48,31 +49,34 @@
             // 
             this.txtReceive.BackColor = System.Drawing.Color.WhiteSmoke;
             this.txtReceive.Font = new System.Drawing.Font("Consolas", 10F);
-            this.txtReceive.Location = new System.Drawing.Point(20, 50);
+            this.txtReceive.Location = new System.Drawing.Point(15, 38);
+            this.txtReceive.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
             this.txtReceive.Multiline = true;
             this.txtReceive.Name = "txtReceive";
             this.txtReceive.ReadOnly = true;
             this.txtReceive.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.txtReceive.Size = new System.Drawing.Size(540, 280);
+            this.txtReceive.Size = new System.Drawing.Size(406, 211);
             this.txtReceive.TabIndex = 1;
             // 
             // lblStatus
             // 
             this.lblStatus.AutoSize = true;
-            this.lblStatus.Font = new System.Drawing.Font("Microsoft YaHei", 9F);
+            this.lblStatus.Font = new System.Drawing.Font("微软雅黑", 9F);
             this.lblStatus.ForeColor = System.Drawing.Color.DarkBlue;
-            this.lblStatus.Location = new System.Drawing.Point(20, 350);
+            this.lblStatus.Location = new System.Drawing.Point(15, 262);
+            this.lblStatus.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
             this.lblStatus.Name = "lblStatus";
-            this.lblStatus.Size = new System.Drawing.Size(87, 20);
+            this.lblStatus.Size = new System.Drawing.Size(65, 17);
             this.lblStatus.TabIndex = 2;
             this.lblStatus.Text = "等待连接...";
             // 
             // btnClear
             // 
             this.btnClear.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.btnClear.Location = new System.Drawing.Point(480, 345);
+            this.btnClear.Location = new System.Drawing.Point(339, 259);
+            this.btnClear.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
             this.btnClear.Name = "btnClear";
-            this.btnClear.Size = new System.Drawing.Size(80, 30);
+            this.btnClear.Size = new System.Drawing.Size(81, 22);
             this.btnClear.TabIndex = 3;
             this.btnClear.Text = "清空显示";
             this.btnClear.UseVisualStyleBackColor = true;
@@ -80,13 +84,14 @@
             // 
             // Form1
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(582, 403);
+            this.ClientSize = new System.Drawing.Size(436, 302);
             this.Controls.Add(this.btnClear);
             this.Controls.Add(this.lblStatus);
             this.Controls.Add(this.txtReceive);
             this.Controls.Add(this.lblTitle);
+            this.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
             this.Name = "Form1";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Honeywell 扫码枪测试 Demo";
@@ -94,6 +99,7 @@
             this.Load += new System.EventHandler(this.Form1_Load);
             this.ResumeLayout(false);
             this.PerformLayout();
+
         }
 
         #endregion
