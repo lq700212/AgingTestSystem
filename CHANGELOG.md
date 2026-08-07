@@ -1,5 +1,96 @@
 # CHANGELOG
 
+## [2026-08-07] 公共参数窗体改为设置所有气压表负压阈值
+
+### 问题
+- 原"公共参数"窗体误做成"采集间隔 + 软件报警阈值（Pa）"的通用参数设置，
+  与实际需求（设置所有气压表的设备负压阈值）不符，界面冗余。
+
+### 改动（CommonParameterForm.cs / CommonParameterForm.Designer.cs / MainForm.cs）
+- 窗体简化为"负压阈值设置"，界面全部居中显示：负压值设定标签 + 输入框 + 保存设置按钮。
+- 保存逻辑参考 ModbusRtuBarometerTest Demo 的 `BatchSetThreshold`：
+  - 校验输入（非空、必须是数字）；
+  - 后台线程调用 `DeviceManager.SetAllBarometerThresholds` 批量写入所有气压表阈值寄存器（Holding Register 0x0010，功能码 0x06，驱动设备硬件报警触点）；
+  - 写入完成切回 UI 线程汇总：全部成功 → 提示后关闭；部分失败 → 列出失败台号，窗口保持打开便于重试。
+- 构造函数由 `CommonParameterForm(DeviceConfig)` 改为 `CommonParameterForm(DeviceManager)`（MainForm 同步更新调用与日志）。
+
+### 使用说明
+- 主界面 参数设置 → 公共参数：输入负压值（默认 -95，单位与气压表读数一致）→ 点击"保存设置"，
+  等待后台批量写入完成，查看成功/失败台数汇总。
+
+## [2026-08-07] 修复ID绑定Excel导出样式（仅表头加粗）
+
+### 问题
+- 保存ID绑定文档时，Excel 里"内容加粗、列名没加粗"，与期望（列名加粗、内容普通）相反。
+
+### 原因（IdBindingForm.cs `CreateHeaderFormat`）
+- 原实现只创建了 1 个"加粗"单元格格式并返回 `Count()`=1：
+  - 表头行引用了样式索引 1，但实际只有索引 0，索引 1 不存在；
+  - 数据行不指定样式，默认命中索引 0，恰好是那个"加粗"格式。
+- 结果就是内容加粗、列名没加粗。
+
+### 改动（IdBindingForm.cs）
+- 按 OOXML 规范重建样式表，含两套单元格格式：
+  - **格式 0：普通样式**（数据行用，不加粗、无填充）
+  - **格式 1：表头样式**（列名用，加粗 + 居中换行，不加灰底）
+- 补齐规范要求的 字体/填充/边框/单元格样式引用（cellStyleXfs） 及各项 count。
+- 数据行 `CreateRow(..., 0)` 显式用普通格式，表头行用 `CreateHeaderFormat()` 返回的索引 1。
+- 方法注释补充"原实现为何加粗反了"的说明，便于后续维护。
+
+### 使用说明
+- 保存ID绑定Excel后，第一行列名加粗并居中换行（白色背景、无灰底），下方数据行内容为普通字体。
+
+## [2026-08-07] 录入批号支持扫码自动识别工位号与产品SN（防错机制）
+
+### 问题
+- 此前 ID 绑定的扫码只处理"产品SN"：工位编号需要手动输入（扫码时若工位编号未填，
+  只把条码当 SN 填入并聚焦工位编号让用户补录）。
+- 现场实际是"工位编号"和"产品SN"都由扫码枪扫入，且工人可能不按
+  "先扫工位号、后扫SN"的固定顺序操作，需要防错机制保证乱序也能正常录入。
+
+### 改动（IdBindingForm.cs / InputLotForm.cs 注释）
+- 扫码结果按格式自动区分条码类型：
+  - **恰好 2 位数字**（现场实测 01~72）→ 判断为**工位号** → 填入"工位编号"输入框
+  - **其他内容**（产品SN一般不止 2 位）→ 判断为**产品SN** → 填入"SN"输入框
+- 工位号和 SN 都扫齐后，自动调用"加入产品列表"（等效按回车）。
+  原有逻辑保留：加入前检查重复工位号（重复则覆盖确认）→ 加入列表 →
+  清空工位号/SN 输入框 → 聚焦工位编号。
+- 防错效果：不区分先后顺序，先扫工位号或先扫 SN 都能正确配对录入。
+- 新增 `IsStationNumber()` 静态辅助方法（恰好2位且均为数字）。
+
+### 使用说明
+- ID 绑定窗口打开后直接用扫码枪扫即可：工位号（2位数字）、产品SN（非2位数字）
+  各扫一次，两条都齐后自动加入产品列表。
+- 同一工位号重复绑定会弹"覆盖确认"对话框，选"是"则用新 SN 覆盖。
+- 注意：若产品SN恰好只有 2 位数字，会被识别为工位号（现场 SN 一般不止 2 位，
+  该判断规则是按现场实际情况设计的防错机制）。
+
+## [2026-08-07] 移除 TEST 菜单按钮与扫码模拟窗体（ScanSimulationForm）
+
+### 问题
+- 真实扫码枪已接入（ScannerService，V1.16），扫码模拟窗体只用于"无硬件时手动模拟"，
+  现场实际扫码流程是：主窗体 LOG 看读码结果 / 打开"录入批号 → ID绑定"扫 SN 自动填充，
+  模拟窗体没有留着的意义。
+
+### 改动（删除按钮 + 窗体 + 相关逻辑）
+- 删除 `Dialogs/ScanSimulationForm.cs`、`Dialogs/ScanSimulationForm.Designer.cs`
+  两个文件及其 [csproj](file:///e:/Project/BarometerWinform/BarometerWinform/BarometerWinform.csproj) 编译项。
+- [MainForm.Designer.cs](file:///e:/Project/BarometerWinform/BarometerWinform/Views/MainForm.Designer.cs)
+  — 删除菜单栏 `btnTest` 按钮（控件声明 / 布局列 / 属性配置 / 字段声明），
+  菜单容器 `tableLayoutPanelMenu` 由 5 列调整为 4 列（每个按钮均分 25%），
+  关于按钮由第 4 列顺延到第 3 列。
+- [MainForm.cs](file:///e:/Project/BarometerWinform/BarometerWinform/Views/MainForm.cs)
+  — 删除 `btnTest_Click` 与 `MenuTestScan_Click` 事件处理方法及 "TEST菜单项" 区域；
+  同步更新头部布局注释（菜单栏去掉 [TEST]）。
+- [ScannerService.cs](file:///e:/Project/BarometerWinform/BarometerWinform/Services/ScannerService.cs)
+  — 注释去掉对扫码模拟窗体的引用。
+
+### 使用说明
+- 主菜单栏现在是 4 个按钮：用户权限 / 参数设置 / LOG记录 / 关于。
+- 扫码枪测试用真实扫码枪：启动后 LOG 显示"扫码枪已连接: COMx"，扫码后 LOG 记录
+  "读码成功"；或打开"录入批号 → ID绑定"扫 SN 自动填充。
+- 没有扫码枪时不再有模拟窗体，可把 `ScannerEnabled` 设为 `false` 跳过扫码功能。
+
 ## [2026-08-07] 启动流程暂时去掉 mForm_Progress 启动进度页
 
 ### 改动
@@ -50,8 +141,7 @@
   `ScannerDeviceKeyword` 与设备管理器里的名称一致（默认 `Xenon 1902`），
   程序启动后自动识别串口并连接，LOG 日志会显示"扫码枪已连接: COMx"。
 - WMI 识别不到时：可在 `ScannerPort` 里直接填端口（如 `COM10`）用固定端口。
-- 没有扫码枪：保持 `ScannerEnabled=false`（默认），扫码功能不影响整机启动，
-  仍可用 TEST 菜单的"扫码模拟"窗体手动模拟扫码调试。
+- 没有扫码枪：保持 `ScannerEnabled=false`（默认），扫码功能不影响整机启动。
 - 扫码流程：主窗体 LOG 记录每次读码；打开"录入批号 → ID绑定"后扫码，
   SN 自动填充，工位编号已录入则自动加入产品列表。
 

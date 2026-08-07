@@ -36,24 +36,29 @@ namespace BarometerWinform.Dialogs
     /// └─────────────────────────────────────────────────────────────┘
     ///
     /// 【绑定顺序】
-    /// 1. 先输入/扫描工位编号（手动输入）
-    /// 2. 再输入/扫描产品SN（扫码枪输入）
-    /// 3. 输入完成后自动将工位编号和SN移入产品列表
-    /// 4. 移入前检查是否有重复的工位，如果有进行覆盖操作
-    /// 5. 覆盖后清除输入栏的工位编号和SN
+    /// 1. 扫码枪扫"工位号"（恰好 2 位数字，如 01~72，自动识别为工位号）
+    /// 2. 扫码枪扫"产品SN"（一般不止 2 位，自动识别为SN）
+    /// 3. 工位号和SN 都扫齐后，自动将两者移入产品列表（不要求固定先后顺序）
+    /// 4. 移入前检查是否有重复的工位，如果有进行覆盖确认操作
+    /// 5. 移入后清除输入栏的工位编号和SN
+    ///
+    /// 【防错机制（V1.16 更新）】
+    /// 扫码枪扫出的条码通过格式自动区分是"工位号"还是"产品SN"：
+    /// 恰好 2 位数字 → 工位号；其他内容 → 产品SN。
+    /// 因此即使工人没按"先工位号、后SN"的顺序扫，系统也能正确配对录入。
     ///
     /// 【数据流转】
     /// 1. 录入批号窗口确定后弹出此窗口，批号自动填充
-    /// 2. 用户输入工位编号和SN，点击回车或等待自动检测
-    /// 3. 系统验证输入并添加到产品列表
+    /// 2. 扫码枪扫码 → 自动识别工位号/SN → 填入对应输入框
+    /// 3. 两条都齐后系统自动验证输入并添加到产品列表
     /// 4. 用户可继续添加更多产品，或点击保存完成绑定
     /// 5. 触发 OnBindingCompleted 事件，通知主窗体绑定完成
     ///
     /// 【输入校验规则】
     /// - 批号：自动从录入批号窗口传入，不可编辑
-    /// - 工位编号：不能为空，允许数字和字母
-    /// - SN：不能为空，允许数字和字母
-    /// - 产品列表：同一工位编号只能绑定一个SN，重复则覆盖
+    /// - 工位编号：扫码枪自动识别（恰好 2 位数字）或手动输入，不能为空
+    /// - SN：扫码枪自动识别（非 2 位数字）或手动输入，不能为空
+    /// - 产品列表：同一工位编号只能绑定一个SN，重复则覆盖确认
     /// </summary>
     public partial class IdBindingForm : Form
     {
@@ -98,9 +103,11 @@ namespace BarometerWinform.Dialogs
         /// <summary>
         /// 【V1.16 新增】扫码枪服务引用
         /// 由录入批号窗体（InputLotForm）传入。
-        /// 当扫码枪扫到条码时，自动填充 SN 输入框：
-        /// - 工位编号已输入 → 自动加入产品列表（等效按回车）
-        /// - 工位编号未输入 → 先填入 SN，聚焦工位编号让用户补录
+        /// 【V1.16 更新】扫码枪扫到条码时自动识别是"工位号"还是"产品SN"并填入对应输入框：
+        /// - 恰好 2 位数字（如 01~72）→ 判断为工位号 → 填入"工位编号"输入框
+        /// - 其他内容（产品SN一般不止 2 位）→ 判断为产品SN → 填入"SN"输入框
+        /// 工位号和 SN 都填齐后自动加入产品列表（等效按回车）。
+        /// 通过格式自动区分，即使乱序扫码也能正确配对。
         /// 可能为 null（未启用扫码枪），使用前需要判空。
         /// </summary>
         private readonly ScannerService _scanner;
@@ -224,11 +231,11 @@ namespace BarometerWinform.Dialogs
                 $"[ID绑定] 已添加产品绑定: 工位={stationNo}, SN={sn}");
         }
 
-        // ===================== 扫码枪 SN 自动填充（V1.16 新增） =====================
+        // ============ 扫码枪工位号/SN 自动识别填充（V1.16 新增，V1.16 更新支持工位号） ============
 
         /// <summary>
         /// 扫码完成事件处理（已由 ScannerService 封送到 UI 线程，可直接操作控件）
-        /// 把扫到的条码当作产品 SN 处理
+        /// 把扫到的条码按格式自动识别为"工位号"或"产品SN"并填入对应输入框
         /// </summary>
         /// <param name="sender">扫码枪服务</param>
         /// <param name="barcode">扫到的条码内容</param>
@@ -238,16 +245,24 @@ namespace BarometerWinform.Dialogs
         }
 
         /// <summary>
-        /// 处理扫码结果（填充 SN 输入框 / 自动加入产品列表）
+        /// 处理扫码结果（自动区分工位号 / 产品SN，两条都齐后自动加入产品列表）
         ///
-        /// 【处理规则】（与界面"先工位编号、后SN"的录入顺序一致）
-        /// 1. 工位编号已输入 → 条码填入 SN 框，并自动执行"加入产品列表"（等效按回车）
-        /// 2. 工位编号未输入 → 只把条码填入 SN 框，并聚焦工位编号，
-        ///    提示用户先录入工位编号后再扫码（避免把 SN 绑到错误的工位上）
+        /// 【条码识别规则】（V1.16 防错机制）
+        /// 扫码枪扫到的条码可能是"工位号"或"产品SN"，通过格式自动区分：
+        /// - 恰好 2 位数字（现场实测 01~72）→ 判断为工位号 → 填入"工位编号"输入框
+        /// - 其他内容（产品SN一般不止 2 位）→ 判断为产品SN → 填入"SN"输入框
         ///
-        /// 【说明】
-        /// 真实扫码枪扫一个条码只产生一次事件，因此这里不处理"条码=工位编号"的情况，
-        /// 工位编号建议手动输入（人工确认），SN 用扫码枪扫（速度快、不易错）。
+        /// 【防错效果】
+        /// 规范顺序是"先扫工位号、再扫产品SN"，但工人可能没按顺序扫。
+        /// 由于工位号/SN 能按"恰好 2 位数字"自动区分，无论先扫哪一条：
+        /// 两条都齐后，自动把工位号和产品SN 一起移入产品列表（等效按回车），
+        /// 中间不需要人工判断当前扫的是哪一类，实现"乱序也能正常录入"。
+        ///
+        /// 【处理流程】
+        /// 1. 扫码 → 判断是工位号还是产品SN → 填入对应输入框
+        /// 2. 工位号和 SN 都齐了 → 自动调用 AddToProductList()
+        /// 3. AddToProductList 内部：检查重复工位号（重复则确认覆盖）→
+        ///    加入产品列表 → 清空工位号/SN 输入框 → 聚焦工位编号
         /// </summary>
         /// <param name="barcode">扫到的条码内容</param>
         private void HandleScannedBarcode(string barcode)
@@ -256,22 +271,46 @@ namespace BarometerWinform.Dialogs
             if (string.IsNullOrWhiteSpace(barcode)) return;
 
             // 统一去掉首尾空白
-            string sn = barcode.Trim();
+            string value = barcode.Trim();
 
             // 写入调试日志，方便现场排查
-            System.Diagnostics.Debug.WriteLine($"[ID绑定] 扫码枪读码: {sn}");
+            System.Diagnostics.Debug.WriteLine($"[ID绑定] 扫码枪读码: {value}");
 
-            // 工位编号还没输入：先填入 SN 框，聚焦工位编号让用户补录
-            if (string.IsNullOrWhiteSpace(txtStationNo.Text))
+            // 自动区分条码类型并填入对应输入框：
+            // 恰好 2 位数字 → 工位号；其他内容 → 产品SN
+            if (IsStationNumber(value))
             {
-                txtSn.Text = sn;
-                txtStationNo.Focus();
-                return;
+                txtStationNo.Text = value;
+            }
+            else
+            {
+                txtSn.Text = value;
             }
 
-            // 工位编号已输入：填入 SN 框并自动加入产品列表（等效用户按回车）
-            txtSn.Text = sn;
-            AddToProductList();
+            // 工位号和 SN 都齐了 → 自动加入产品列表（等效用户按回车）
+            // 不区分先后顺序：先扫工位号或先扫SN 都能正确配对
+            if (!string.IsNullOrWhiteSpace(txtStationNo.Text) &&
+                !string.IsNullOrWhiteSpace(txtSn.Text))
+            {
+                AddToProductList();
+            }
+        }
+
+        /// <summary>
+        /// 判断条码是否为工位号
+        ///
+        /// 【规则】恰好 2 位且都是数字（如 "01"~"72"）→ 工位号
+        /// 产品SN一般不止 2 位，因此可用"恰好 2 位数字"作为判别依据。
+        /// </summary>
+        /// <param name="value">扫码内容（已去除首尾空白）</param>
+        /// <returns>是工位号返回 true，否则返回 false</returns>
+        private static bool IsStationNumber(string value)
+        {
+            // 长度必须恰好 2 位，且两位都是数字
+            return value != null &&
+                   value.Length == 2 &&
+                   char.IsDigit(value[0]) &&
+                   char.IsDigit(value[1]);
         }
 
         /// <summary>
@@ -412,6 +451,8 @@ namespace BarometerWinform.Dialogs
                         sheetData.Append(headerRow);
 
                         // 创建数据行
+                        // 数据行使用样式索引 0（普通样式：不加粗、无灰底），
+                        // 只有表头（列名）使用样式索引 1（加粗 + 灰底）。
                         int rowIndex = 1;
                         foreach (var binding in _productBindings)
                         {
@@ -423,7 +464,7 @@ namespace BarometerWinform.Dialogs
                                 binding.DelayTime,
                                 binding.StartTime
                             };
-                            Row dataRow = CreateRow(rowIndex, rowData, null);
+                            Row dataRow = CreateRow(rowIndex, rowData, 0);
                             sheetData.Append(dataRow);
                             rowIndex++;
                         }
@@ -457,12 +498,21 @@ namespace BarometerWinform.Dialogs
         }
 
         /// <summary>
-        /// 创建表头单元格格式（加粗、居中）
+        /// 创建样式表（表头加粗居中换行，数据行普通样式）
+        ///
+        /// 【修复说明】原实现只建了 1 个"加粗"格式并返回 Count()=1，导致：
+        /// - 表头行引用样式索引 1（实际只有索引 0，索引 1 不存在）
+        /// - 数据行不指定样式 → 默认命中索引 0，恰好是那个"加粗"格式
+        /// 结果是"内容加粗、列名没加粗"，与预期相反。
+        /// 现按 OOXML 规范建完整样式表，两个格式：
+        /// - 格式 0：普通样式（数据行用，不加粗、无填充）
+        /// - 格式 1：表头样式（列名用，加粗 + 居中换行，不加灰底）
         /// </summary>
         /// <param name="document">SpreadsheetDocument对象</param>
-        /// <returns>表头样式索引</returns>
+        /// <returns>表头样式索引（固定为 1）</returns>
         private uint CreateHeaderFormat(SpreadsheetDocument document)
         {
+            // 获取或创建工作簿样式部件（存放 字体/填充/边框/单元格格式 的容器）
             WorkbookStylesPart stylesPart = document.WorkbookPart.GetPartsOfType<WorkbookStylesPart>().FirstOrDefault();
             if (stylesPart == null)
             {
@@ -472,6 +522,8 @@ namespace BarometerWinform.Dialogs
 
             Stylesheet stylesheet = stylesPart.Stylesheet;
 
+            // ==================== 字体（Fonts） ====================
+            // 字体索引0：普通字体（数据行用，不加粗）
             Fonts fonts = stylesheet.Elements<Fonts>().FirstOrDefault();
             if (fonts == null)
             {
@@ -479,6 +531,12 @@ namespace BarometerWinform.Dialogs
                 stylesheet.Append(fonts);
             }
 
+            Font normalFont = new Font();
+            normalFont.FontSize = new FontSize { Val = 11 };
+            normalFont.FontName = new FontName { Val = "微软雅黑" };
+            fonts.Append(normalFont);
+
+            // 字体索引1：加粗字体（表头列名用）
             Font headerFont = new Font();
             headerFont.Bold = new Bold();
             headerFont.FontSize = new FontSize { Val = 11 };
@@ -486,6 +544,9 @@ namespace BarometerWinform.Dialogs
             headerFont.FontName = new FontName { Val = "微软雅黑" };
             fonts.Append(headerFont);
 
+            // ==================== 填充（Fills） ====================
+            // 填充索引0：无填充（OOXML 规范要求索引0为"无图案"，数据行和表头都用它，
+            // 表头不加灰底，保持白色背景，只靠加粗和居中换行来区分列名）
             Fills fills = stylesheet.Elements<Fills>().FirstOrDefault();
             if (fills == null)
             {
@@ -493,13 +554,32 @@ namespace BarometerWinform.Dialogs
                 stylesheet.Append(fills);
             }
 
-            Fill headerFill = new Fill();
-            PatternFill patternFill = new PatternFill();
-            patternFill.PatternType = PatternValues.Solid;
-            patternFill.ForegroundColor = new ForegroundColor { Rgb = "D9D9D9" };
-            headerFill.PatternFill = patternFill;
-            fills.Append(headerFill);
+            Fill noneFill = new Fill();
+            PatternFill nonePattern = new PatternFill { PatternType = PatternValues.None };
+            noneFill.PatternFill = nonePattern;
+            fills.Append(noneFill);
 
+            // ==================== 边框（Borders，OOXML 要求至少1个） ====================
+            // 边框索引0：无边框（整表都不画边框）
+            Borders borders = stylesheet.Elements<Borders>().FirstOrDefault();
+            if (borders == null)
+            {
+                borders = new Borders();
+                stylesheet.Append(borders);
+            }
+            borders.Append(new Border());
+
+            // ==================== 单元格样式引用（cellStyleXfs，OOXML 要求至少1个） ====================
+            // 索引0：默认单元格样式
+            CellStyleFormats cellStyleFormats = stylesheet.Elements<CellStyleFormats>().FirstOrDefault();
+            if (cellStyleFormats == null)
+            {
+                cellStyleFormats = new CellStyleFormats();
+                stylesheet.Append(cellStyleFormats);
+            }
+            cellStyleFormats.Append(new CellFormat());
+
+            // ==================== 单元格格式（CellFormats / cellXfs，实际生效） ====================
             CellFormats cellFormats = stylesheet.Elements<CellFormats>().FirstOrDefault();
             if (cellFormats == null)
             {
@@ -507,14 +587,21 @@ namespace BarometerWinform.Dialogs
                 stylesheet.Append(cellFormats);
             }
 
-            uint fontId = (uint)fonts.Elements<Font>().Count();
-            uint fillId = (uint)fills.Elements<Fill>().Count();
+            // 格式索引0：普通格式（数据行用：不加粗、无灰底）
+            CellFormat normalFormat = new CellFormat();
+            normalFormat.FontId = UInt32Value.FromUInt32(0);   // 指向普通字体
+            normalFormat.FillId = UInt32Value.FromUInt32(0);   // 指向无填充
+            normalFormat.ApplyFont = BooleanValue.FromBoolean(true);
+            normalFormat.ApplyFill = BooleanValue.FromBoolean(true);
+            cellFormats.Append(normalFormat);
 
+            // 格式索引1：表头格式（列名用：加粗 + 居中换行，不加灰底）
             CellFormat headerFormat = new CellFormat();
-            headerFormat.FontId = UInt32Value.FromUInt32(fontId);
-            headerFormat.FillId = UInt32Value.FromUInt32(fillId);
+            headerFormat.FontId = UInt32Value.FromUInt32(1);   // 指向加粗字体
+            headerFormat.FillId = UInt32Value.FromUInt32(0);   // 指向无填充（不加灰底）
             headerFormat.ApplyFont = BooleanValue.FromBoolean(true);
             headerFormat.ApplyFill = BooleanValue.FromBoolean(true);
+            headerFormat.ApplyAlignment = BooleanValue.FromBoolean(true);
 
             Alignment headerAlignment = new Alignment();
             headerAlignment.Horizontal = HorizontalAlignmentValues.Center;
@@ -524,13 +611,17 @@ namespace BarometerWinform.Dialogs
 
             cellFormats.Append(headerFormat);
 
+            // ==================== 统计数量（OOXML 要求 count 与实际元素数一致） ====================
             fonts.Count = UInt32Value.FromUInt32((uint)fonts.Elements<Font>().Count());
             fills.Count = UInt32Value.FromUInt32((uint)fills.Elements<Fill>().Count());
+            borders.Count = UInt32Value.FromUInt32((uint)borders.Elements<Border>().Count());
+            cellStyleFormats.Count = UInt32Value.FromUInt32((uint)cellStyleFormats.Elements<CellFormat>().Count());
             cellFormats.Count = UInt32Value.FromUInt32((uint)cellFormats.Elements<CellFormat>().Count());
 
             stylesheet.Save();
 
-            return (uint)cellFormats.Elements<CellFormat>().Count();
+            // 表头样式索引固定为 1（格式0=普通，格式1=表头）
+            return 1;
         }
 
         /// <summary>

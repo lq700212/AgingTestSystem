@@ -56,7 +56,6 @@ namespace BarometerWinform.Views
             this.btnUserPermission = new System.Windows.Forms.Button();
             this.btnParameter = new System.Windows.Forms.Button();
             this.btnLog = new System.Windows.Forms.Button();
-            this.btnTest = new System.Windows.Forms.Button();
             this.btnAbout = new System.Windows.Forms.Button();
             this.splitContainerMain = new System.Windows.Forms.SplitContainer();
             this.tableLayoutPanelRight = new System.Windows.Forms.TableLayoutPanel();
@@ -196,17 +195,15 @@ namespace BarometerWinform.Views
             // 
             // tableLayoutPanelMenu
             // 
-            this.tableLayoutPanelMenu.ColumnCount = 5;
-            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
-            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
-            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
-            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
-            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
+            this.tableLayoutPanelMenu.ColumnCount = 4;
+            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
+            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
+            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
+            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
             this.tableLayoutPanelMenu.Controls.Add(this.btnUserPermission, 0, 0);
             this.tableLayoutPanelMenu.Controls.Add(this.btnParameter, 1, 0);
             this.tableLayoutPanelMenu.Controls.Add(this.btnLog, 2, 0);
-            this.tableLayoutPanelMenu.Controls.Add(this.btnTest, 3, 0);
-            this.tableLayoutPanelMenu.Controls.Add(this.btnAbout, 4, 0);
+            this.tableLayoutPanelMenu.Controls.Add(this.btnAbout, 3, 0);
             this.tableLayoutPanelMenu.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tableLayoutPanelMenu.Location = new System.Drawing.Point(3, 33);
             this.tableLayoutPanelMenu.Name = "tableLayoutPanelMenu";
@@ -250,21 +247,9 @@ namespace BarometerWinform.Views
             this.btnLog.Text = "LOG记录";
             this.btnLog.UseVisualStyleBackColor = false;
             this.btnLog.Click += new System.EventHandler(this.btnLog_Click);
-            // 
-            // btnTest
-            // 
-            this.btnTest.BackColor = System.Drawing.Color.LimeGreen;
-            this.btnTest.ForeColor = System.Drawing.Color.White;
-            this.btnTest.Location = new System.Drawing.Point(837, 3);
-            this.btnTest.Name = "btnTest";
-            this.btnTest.Size = new System.Drawing.Size(226, 28);
-            this.btnTest.TabIndex = 3;
-            this.btnTest.Text = "TEST";
-            this.btnTest.UseVisualStyleBackColor = false;
-            this.btnTest.Click += new System.EventHandler(this.btnTest_Click);
-            // 
+            //
             // btnAbout
-            // 
+            //
             this.btnAbout.BackColor = System.Drawing.Color.LimeGreen;
             this.btnAbout.ForeColor = System.Drawing.Color.White;
             this.btnAbout.Location = new System.Drawing.Point(1115, 3);
@@ -682,8 +667,6 @@ namespace BarometerWinform.Views
         private System.Windows.Forms.Button btnParameter;
         /// <summary>LOG记录按钮</summary>
         private System.Windows.Forms.Button btnLog;
-        /// <summary>TEST按钮</summary>
-        private System.Windows.Forms.Button btnTest;
         /// <summary>关于按钮</summary>
         private System.Windows.Forms.Button btnAbout;
         /// <summary>中间分割容器（左:气压表 右:操作面板）</summary>
