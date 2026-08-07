@@ -96,7 +96,7 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │ 标题栏: 老化测试系统V1.16 | 权限: 操作员 | 通讯连接: 未连接          │
 ├─────────────────────────────────────────────────────────────────┤
-│ 菜单按钮: 用户权限 | 参数设置 | LOG记录 | TEST | 关于              │
+│ 菜单按钮: 用户权限 | 参数设置 | LOG记录 | 帮助              │
 ├──────────────────────────────────────┬──────────────────────────┤
 │                                      │ 运行状态                  │
 │         气压表显示区域                  │ 送风机监视                  │
@@ -210,14 +210,15 @@
 | 用户权限 | 操作员 / 技术员 / 管理员 / 用户管理* | 弹出 LoginForm 输入用户名密码后切换权限；*用户管理仅管理员可见 | 任意权限 |
 | 参数设置 | 公共参数 / 配方管理 | 分别弹出 CommonParameterForm / RecipeManagerForm | 技术员或管理员 |
 | LOG记录 | 历史记录 | 弹出 HistoryRecordForm | 任意权限 |
-| 关于 | 版本说明 | 弹出版本信息 MessageBox | 任意权限 |
+| 帮助 | 设置* / 关于 | "设置"→弹出 SettingsForm（单页按分类标题条查看/编辑 App.config 全部配置项，写回 exe.config 重启生效）；"关于"→弹出版本信息 MessageBox | *设置仅管理员可见（非管理员隐藏）；关于任意权限 |
 
 **关键方法**（MainForm.cs）:
 
 | 方法 | 功能 |
 | :--- | :--- |
-| `InitializeMenuDropdowns()` | 初始化6个下拉菜单及其菜单项 |
-| `ShowMenuBelowButton(menu, button)` | 在按钮下方显示下拉菜单 |
+| `ShowDropdownPopup(hostButton, items)` | 在主按钮下方显示无边框下拉菜单（Form + TableLayoutPanel + Button 列表，尺寸和主按钮一致） |
+| `MenuHelpSettings_Click()` | 【V1.17】"帮助→设置"：弹出 SettingsForm（表格查看/编辑 App.config 全部配置项） |
+| `MenuHelpAbout_Click()` | 【V1.17】"帮助→关于"：弹出版本信息对话框 |
 | `TryLoginAndSwitchPermission(role)` | 【新增】弹出 LoginForm 登录窗体，校验通过后切换权限 |
 | `UpdateButtonPermissionStates()` | 【新增】根据当前权限启用/禁用按钮 |
 | `WriteLog(message)` | 写入日志到右侧 LOG 文本框 |
@@ -236,6 +237,7 @@
 | `BatchRecipeForm` | 批量设置配方 | 配方名称、延时时间1/2（时:分:秒）、启动时间（时:分:秒）、极限温度输入，加入队列功能，配方队列管理 | 配方批量应用到选中面板待实现 |
 | `InputLotForm` | 录入批号 | 批号输入框、红色背景注释提示、确定/取消按钮、Enter键支持、输入校验，确定后弹出ID绑定界面 | 批号持久化、关联生产记录待实现 |
 | `IdBindingForm` | ID绑定 | 批号显示（只读）、工位编号输入框、SN输入框、红色背景注释说明、产品列表显示（带滚动条）、保存按钮、重复工位覆盖确认、Enter键支持、Excel文档生成（命名规则：批号_日期_时间.xlsx）；【V1.16】扫码枪自动识别工位号（恰好2位数字）/产品SN 填入对应输入框，两条都齐后自动加入产品列表（乱序扫码也能正确配对） | ID绑定数据持久化待实现 |
+| `SettingsForm` | 【V1.17】系统设置（仅管理员） | 单页纵向展示 App.config 全部配置项（不用选项卡），按业务分类用标题分隔条隔开（基础配置 / 气压表串口通讯 / IO耦合器（Modbus TCP）/ 气压表寄存器 / 报警参数 / 冷却送风机 / 老化测试业务 / 扫码枪），每类一个表格三列：设置名称（key，只读）/ 说明（中文，只读）/ 设置值（可编辑输入）；页面可滚动，界面用 SunnyUI 控件（UILine 标题 / UIDataGridView 表格 / UIButton 按钮）；"保存设置"前按类型校验（整数/小数/布尔/十六进制寄存器地址，如 0x1000），不合法项整批拦截并列出；保存用 ConfigurationManager.OpenExeConfiguration 写回 exe.config 并刷新 appSettings 缓存，提示重启程序后生效 | 配置修改后需重启生效（设备参数启动时一次性加载） |
 
 **BatchRecipeForm 事件**:
 - `OnRecipeAdded` 事件：配方加入队列时触发，主窗体订阅此事件记录日志。
@@ -841,7 +843,8 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 | 参数设置-公共参数 | 已实现（V1.16） | MainForm.cs / CommonParameterForm | 公共参数窗口：输入负压值 → 后台线程批量写入所有气压表阈值寄存器（0x0010，写入期间暂停采集防串口争抢，阈值换算固定 1 位小数）→ 汇总成功/失败台数；串口未连接时提示"未连接任何气压表" |
 | 参数设置-配方管理 | 部分实现 | MainForm.cs / RecipeManagerForm | 配方列表显示已实现，新增/编辑/删除逻辑待实现 |
 | LOG记录-历史记录 | 已实现（V1.15） | MainForm.cs / HistoryRecordForm | 读取 Logs\TestLog_*.csv 真实事件日志，按日期查询 |
-| 关于-版本说明 | 已实现 | MainForm.cs | 版本信息弹窗已实现 |
+| 帮助-设置 | 已实现（V1.17，仅管理员） | MainForm.cs / SettingsForm | 管理员登录后"帮助"下拉菜单才显示"设置"；弹出系统设置窗口，单页纵向按业务分类标题条隔开展示 App.config 全部配置项（设置名称/说明/设置值），可直接编辑并写回 exe.config（重启生效），保存前按类型校验 |
+| 帮助-关于 | 已实现 | MainForm.cs | 版本信息弹窗已实现 |
 | 行全选按钮 Set(SEL_N) | 已实现 | MainForm.cs | 点击切换该行所有面板选中状态（浅蓝高亮） |
 | 面板批量操作 | 已实现（V1.15） | MainForm.cs / WorkstationPanelView | 选中面板后执行：开启真空 / 启动运行 / 停止运行 / 报警复位 |
 | 送风机定值启动 | 已实现（V1.15） | MainForm.cs / FanControllerClient.cs | 送风机 Modbus TCP 接入，定值启动/停止 + 温度湿度监视 |
@@ -858,7 +861,7 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 | 老化计时自动停止 | 已实现（V1.15） | DeviceManager.cs | 真空确认后开始计时，到达 MaxTestDurationSeconds 自动停止并记日志 |
 | 报警事件落盘 | 已实现（V1.15） | TestEventLogger.cs | 启动/停止/报警/复位/急停/真空建立 写入 Logs\TestLog_yyyyMMdd.csv |
 | 日志持久化 | 部分实现（V1.15） | TestEventLogger.cs | 事件日志已落盘 CSV；界面 LOG 文本框仍未写文件 |
-| 配置持久化 | 预留 | Dialogs/*Form.cs | 各设置窗体的配置仅内存生效，未保存到文件 |
+| 配置持久化 | 部分实现（V1.17） | Dialogs/SettingsForm.cs | "帮助→设置"可查看/编辑 App.config 全部配置项并写回 exe.config（重启生效）；其余设置窗体（配方管理等）的配置仍仅内存生效 |
 
 ### 5.3 硬件接入待确认项
 
@@ -932,7 +935,9 @@ BarometerWinform/
 │       ├── IdBindingForm.cs                        # 【新增】ID绑定窗体（批号绑定工位和SN）
 │       ├── IdBindingForm.Designer.cs
 │       ├── DeviceManualForm.cs                     # 【V1.15新增】单台手动控制（面板 Set 按钮打开）
-│       └── DeviceManualForm.Designer.cs
+│       ├── DeviceManualForm.Designer.cs
+│       ├── SettingsForm.cs                         # 【V1.17新增】系统设置（帮助→设置，编辑 App.config 全部配置项）
+│       └── SettingsForm.Designer.cs
 └── README.md                                 # 本文档（使用/架构说明）
 ```
 
@@ -1071,8 +1076,9 @@ Get-ChildItem -Path $projectRoot -Recurse -Filter "*.cs" -File |
 
 ### 8.3 版本更新
 
-- 当前版本: V1.16
+- 当前版本: V1.17
 - 更新日志:
+  - V1.17 (2026-08-07): 主窗体"关于"按钮更名"帮助"（控件 btnAbout → btnHelp），点击下拉菜单为【设置 / 关于】："设置"仅管理员可见（非管理员隐藏，并在入口再做兜底校验），弹出新增的系统设置窗口（SettingsForm，单页纵向按业务分类标题条隔开展示 App.config 全部配置项——基础配置 / 气压表串口通讯 / IO耦合器 / 气压表寄存器 / 报警参数 / 冷却送风机 / 老化测试业务 / 扫码枪，每类一个表格：设置名称/中文说明/设置值，可直接编辑，保存前按类型校验——整数/小数/布尔/十六进制寄存器地址，写回 exe.config 并刷新缓存、重启生效；界面使用 SunnyUI 控件呈现）；"关于"保留原版本信息弹窗。详见 CHANGELOG.md
   - V1.16 (2026-08-07): 接入真实扫码枪（ScannerService，参考 SerialScannerTest Demo）。WMI 自动识别串口（Honeywell Xenon 1902）+ 串口读码 + 断线自动重连；扫码结果写入 LOG 日志；ID绑定窗体打开时扫码自动识别"工位号"（恰好2位数字，如 01~72）/"产品SN" 并填入对应输入框，两条都齐后自动加入产品列表（乱序扫码也能正确配对）；修复ID绑定Excel导出样式（仅表头列名加粗+居中换行，不加灰底，数据行普通字体）；公共参数窗体简化为"负压阈值设置"（居中界面：负压值设定输入框 + 保存设置按钮，后台线程批量写入所有气压表阈值寄存器 0x0010，参考 ModbusRtuBarometerTest Demo 的 BatchSetThreshold，汇总成功/失败台数）；新增扫码枪配置项（ScannerEnabled/ScannerPort/ScannerDeviceKeyword 等，默认关闭）；移除 TEST 菜单按钮及扫码模拟窗体（ScanSimulationForm），扫码枪测试用真实扫码枪（LOG 看结果）；【同日】通讯连接修复：新增 CH340 串口自动识别（SerialPortHelper，气压表 RS485 适配器免配端口，App.config 端口改为实测 COM9，连接成功后端口缓存到 BarometerPort.cache、下次启动优先用缓存端口、缓存失效再自动重新识别——与送风机 FanLastIp.cache 同款"工控机记忆"机制）、DeviceManager 启动门禁解耦（只要气压表串口连通就启动采集，IO 耦合器/送风机断开不再拖垮整机）、新增启动/连接诊断写 LOG（OnDiagnostic）、IO 耦合器后台自动重连、ModbusTcpIoController 连接超时修复、公共参数批量写期间暂停采集防串口争抢 + 串口未连接明确提示；送风机监视区改为三项温度（设置温度/上部温度/下部温度，不显示湿度，上部温度=控制屏当前温度，下部温度为保留项）；顶部"通讯连接状态"控件更名（lblCommStatusLabel/lblCommStatus，现场无 PLC，用 GX-CL140 ModbusTCP 模组）；工位面板更名+重设计（BarometerPanelView → WorkstationPanelView：NO.x、上电状态灯、上电/下电按钮、真空压力、真空开启灯、工作状态 IDLE/SELECT/BUSY/FAULT、SN、配方、延时、Set 按钮，新增 OnPowerToggled 上电控制）；【同日V1.16.1】现场四项修复：①负压阈值 -95 写成 -9.5（0x0002 小数位寄存器实测 47/72 台不可靠返回 0，压力读取与阈值写入统一固定 1 位小数，写→读回实测验证 -95→寄存器-950→读回-95.0）；②顶部通讯连接状态改为只判断 IO 耦合器是否连接（OnConnectionStatusChanged 事件语义调整，耦合器断网读/写失败自动识别断开、自动重连后刷新）；③送风机监视区"上部温度"改"当前温度"、删除"下部温度"行；④送风机状态文字+颜色（未连接=红 / 定值启动·已连接=绿 / 定值停止=灰）；【同日V1.16.1】连接失败重试策略优化：扫码枪/耦合器/送风机自动重连连续失败 5 次后停止（不再无限空转），需要操作时按需重连（扫码枪 TryReconnectNow / 耦合器 EnsureIoConnected / 送风机 ReconnectNow / 气压表 SetAllThresholds 自动按需 Connect），仍连不上弹窗"xxx未连接，请先连接"；气压表小数位由配置 BarometerDefaultDecimalPlaces 统一控制（压力读取与阈值写入同源、不读 0x0002，换气压表改配置即可，写→读回实测验证通过）；【同日V1.16.2】连接心跳机制（静默自愈）：断连后状态 1~3 秒内更新并在日志提示一次"哪个设备断了"（耦合器/气压表随 1s 采集心跳、送风机 2s 轮询心跳、气压表新增串口级故障识别 IsPortLevelFailure——把"RS485 适配器被拔"和"单台表无响应"区分开、只有端口级异常才判定串口断开）、后台静默持续重连（取代上一版"重试 5 次就放弃"，失败过程不再刷日志，只在连上/断开边沿各提示一次）、操作时按需重连+弹窗兜底保留、测试期间送风机未连明确提示"温度不受控"；按需重连完全异步（耦合器/送风机按钮点下去先弹"连接中..."提示窗体、后台重连不卡界面，MainForm 改用 async/await + Task.Run）；底部状态栏新增"扫码枪"连接状态（已连接=绿/未连接=红/未启用=灰），与顶部"通讯连接状态"（耦合器）、送风机状态标签构成四设备状态总览；修复扫码枪断连状态不更新（拔掉 USB 虚拟串口时 SerialPort 的 ErrorReceived/DataReceived 在端口安静时不一定触发，重连定时器新增端口存活心跳 CheckConnectionAlive 双重判定——每 3 秒①核对当前端口是否仍在系统串口列表 GetPortNames、②对已打开句柄主动 ReadExisting() 探测【句柄失效时读取会抛异常，覆盖驱动在应用持有句柄时保留 COM 条目的情况】，任一判定成立即断连、提示一次"已断开"并静默恢复）；送风机"当前温度（上部温度）"颜色改为按设置温度对比（高于设置温度→红、不高于→绿，原按固定告警上限 FanTempAlarmLimitC 判断，超上限安全日志保留但不再覆盖颜色）
   - V1.15 (2026-08-06): 业务串联 + 冷却送风机接入。新增送风机接口/实现/Mock/数据模型（Modbus TCP，定值启动/停止 + 温度湿度监视）；DeviceManager 增加测试状态机（启动/停止/报警复位/全部停止）、真空建立确认、通讯失联报警、老化计时自动停止、送风机全局生命周期（首台启动/末台停止）；新增事件 CSV 落盘（TestEventLogger）+ 历史记录读真实日志；新增单台手动控制对话框；右侧面板新增送风机监视区与业务操作按钮。详见 CHANGELOG.md
   - V1.14 (2026-08-03): 接入真实通讯链路（气压表 Modbus RTU + IO Modbus TCP），DeviceManager 支持 UseMockCommunication 切换；新增报警阈值参数并实现“报警边沿→关阀/断载台电”联动；新增 CHANGELOG.md 与 通讯接入说明.md 文档

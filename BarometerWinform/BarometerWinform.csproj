@@ -193,6 +193,12 @@
     <Compile Include="Dialogs\DeviceManualForm.Designer.cs">
       <DependentUpon>DeviceManualForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="Dialogs\SettingsForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Dialogs\SettingsForm.Designer.cs">
+      <DependentUpon>SettingsForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="Program.cs" />
   </ItemGroup>
   <ItemGroup>
