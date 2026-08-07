@@ -1,4 +1,4 @@
-namespace BarometerWinform.Views
+﻿namespace BarometerWinform.Views
 {
     /// <summary>
     /// 主窗体 —— 设计器自动生成部分
@@ -56,7 +56,7 @@ namespace BarometerWinform.Views
             this.btnUserPermission = new System.Windows.Forms.Button();
             this.btnParameter = new System.Windows.Forms.Button();
             this.btnLog = new System.Windows.Forms.Button();
-            this.btnAbout = new System.Windows.Forms.Button();
+            this.btnHelp = new System.Windows.Forms.Button();
             this.splitContainerMain = new System.Windows.Forms.SplitContainer();
             this.tableLayoutPanelRight = new System.Windows.Forms.TableLayoutPanel();
             this.groupBoxStatus = new System.Windows.Forms.GroupBox();
@@ -202,7 +202,7 @@ namespace BarometerWinform.Views
             this.tableLayoutPanelMenu.Controls.Add(this.btnUserPermission, 0, 0);
             this.tableLayoutPanelMenu.Controls.Add(this.btnParameter, 1, 0);
             this.tableLayoutPanelMenu.Controls.Add(this.btnLog, 2, 0);
-            this.tableLayoutPanelMenu.Controls.Add(this.btnAbout, 3, 0);
+            this.tableLayoutPanelMenu.Controls.Add(this.btnHelp, 3, 0);
             this.tableLayoutPanelMenu.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tableLayoutPanelMenu.Location = new System.Drawing.Point(3, 33);
             this.tableLayoutPanelMenu.Name = "tableLayoutPanelMenu";
@@ -247,17 +247,17 @@ namespace BarometerWinform.Views
             this.btnLog.UseVisualStyleBackColor = false;
             this.btnLog.Click += new System.EventHandler(this.btnLog_Click);
             // 
-            // btnAbout
+            // btnHelp
             // 
-            this.btnAbout.BackColor = System.Drawing.Color.LimeGreen;
-            this.btnAbout.ForeColor = System.Drawing.Color.White;
-            this.btnAbout.Location = new System.Drawing.Point(1047, 3);
-            this.btnAbout.Name = "btnAbout";
-            this.btnAbout.Size = new System.Drawing.Size(228, 28);
-            this.btnAbout.TabIndex = 4;
-            this.btnAbout.Text = "关于";
-            this.btnAbout.UseVisualStyleBackColor = false;
-            this.btnAbout.Click += new System.EventHandler(this.btnAbout_Click);
+            this.btnHelp.BackColor = System.Drawing.Color.LimeGreen;
+            this.btnHelp.ForeColor = System.Drawing.Color.White;
+            this.btnHelp.Location = new System.Drawing.Point(1047, 3);
+            this.btnHelp.Name = "btnHelp";
+            this.btnHelp.Size = new System.Drawing.Size(228, 28);
+            this.btnHelp.TabIndex = 4;
+            this.btnHelp.Text = "帮助";
+            this.btnHelp.UseVisualStyleBackColor = false;
+            this.btnHelp.Click += new System.EventHandler(this.btnHelp_Click);
             // 
             // splitContainerMain
             // 
@@ -651,8 +651,8 @@ namespace BarometerWinform.Views
         private System.Windows.Forms.Button btnParameter;
         /// <summary>LOG记录按钮</summary>
         private System.Windows.Forms.Button btnLog;
-        /// <summary>关于按钮</summary>
-        private System.Windows.Forms.Button btnAbout;
+        /// <summary>帮助按钮（下拉：设置 / 关于）</summary>
+        private System.Windows.Forms.Button btnHelp;
         /// <summary>中间分割容器（左:气压表 右:操作面板）</summary>
         private System.Windows.Forms.SplitContainer splitContainerMain;
         /// <summary>右侧布局容器</summary>

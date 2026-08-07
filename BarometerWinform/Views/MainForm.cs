@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Threading.Tasks;
@@ -35,7 +35,7 @@ namespace BarometerWinform.Views
     /// ┌─────────────────────────────────────────────────────────┐
     /// │ 老化测试系统V1.00  │ 当前操作权限: 操作员 │ PLC连接状态: 已连接 │
     /// ├─────────────────────────────────────────────────────────┤
-    /// │ [用户权限] [参数设置] [LOG记录] [关于] │
+        /// │ [用户权限] [参数设置] [LOG记录] [帮助] │
     /// ├──────────────────────────────┬──────────────────────────┤
     /// │                              │ 运行状态                 │
     /// │                              │ ┌────────────────────┐   │
@@ -1493,15 +1493,24 @@ namespace BarometerWinform.Views
         }
 
         /// <summary>
-        /// 关于按钮点击 → 显示关于下拉菜单
-        /// 菜单项：版本说明
+        /// 帮助按钮点击 → 显示帮助下拉菜单
+        /// 菜单项：
+        /// - 设置：仅管理员可见（V1.17 权限控制，非管理员自动隐藏）
+        /// - 关于：所有权限可见
         /// </summary>
-        private void btnAbout_Click(object sender, EventArgs e)
+        private void btnHelp_Click(object sender, EventArgs e)
         {
-            ShowDropdownPopup(btnAbout, new (string, EventHandler)[]
+            var items = new List<(string Text, EventHandler ClickHandler)>();
+
+            // 【V1.17 权限控制】"系统设置"只对管理员开放，非管理员时该菜单项直接隐藏
+            if (_userManager.HasPermission(UserRole.Administrator))
             {
-                ("版本说明", MenuAboutVersion_Click)
-            });
+                items.Add(("设置", MenuHelpSettings_Click));
+            }
+
+            items.Add(("关于", MenuHelpAbout_Click));
+
+            ShowDropdownPopup(btnHelp, items.ToArray());
         }
 
         #endregion
@@ -1686,12 +1695,33 @@ namespace BarometerWinform.Views
 
         #endregion
 
-        #region 关于菜单项
+        #region 帮助菜单项
 
         /// <summary>
-        /// 版本说明 → 弹出版本信息对话框
+        /// 设置 → 弹出"系统设置"窗口，查看并编辑 App.config 中的全部配置项
+        ///
+        /// 【V1.17 权限控制】仅管理员可打开。菜单项在非管理员下已隐藏，
+        /// 这里再加一道兜底校验，防止权限被绕过（如权限刚降级时窗口仍在）。
         /// </summary>
-        private void MenuAboutVersion_Click(object sender, EventArgs e)
+        private void MenuHelpSettings_Click(object sender, EventArgs e)
+        {
+            if (!_userManager.HasPermission(UserRole.Administrator))
+            {
+                MessageBox.Show("系统设置仅管理员可用，请先在【用户权限】中切换为管理员权限。",
+                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            using (var form = new SettingsForm(_config))
+            {
+                form.ShowDialog(this);
+            }
+        }
+
+        /// <summary>
+        /// 关于 → 弹出版本信息对话框
+        /// </summary>
+        private void MenuHelpAbout_Click(object sender, EventArgs e)
         {
             MessageBox.Show(
                 "老化测试系统 V1.16\n\n" +

@@ -1,5 +1,60 @@
 # CHANGELOG
 
+## [2026-08-07] 帮助菜单（设置 / 关于）+ 系统设置窗口（按分类展示，仅管理员）（V1.17）
+
+### 问题
+- App.config 配置项多达 50 个（设备数量 / 串口 / Modbus 地址 / 送风机 / 扫码枪 / 老化业务参数等），
+  现场人员调整参数只能手动编辑 XML，不直观、容易写错格式或值。
+- 系统参数属于高权限操作，不能让操作员/技术员随意改动，必须限制为管理员可用。
+
+### 改动
+**1) 主窗体"关于"按钮更名"帮助"（MainForm.Designer.cs）**
+- 控件 `btnAbout` → `btnHelp`（字段声明 / 布局 / 事件全部更名），按钮文字 "关于" → "帮助"。
+
+**2) 帮助下拉菜单改为两个条目 + 权限控制（MainForm.cs）**
+- `btnHelp_Click` 弹出下拉菜单：**设置**（新增）/ **关于**（原"版本说明"逻辑，处理函数更名 `MenuHelpAbout_Click`）。
+- **权限控制**：`btnHelp_Click` 里先判断 `_userManager.HasPermission(UserRole.Administrator)`，
+  只有管理员才把"设置"加进菜单，**非管理员该选项直接隐藏**（只显示"关于"）。
+- 新增 `MenuHelpSettings_Click`：弹出系统设置窗口；入口处再做一次管理员兜底校验
+  （防止权限刚降级、窗口仍被打开），非管理员弹提示并返回。
+
+**3) 新增系统设置窗口（Dialogs/SettingsForm.cs + SettingsForm.Designer.cs）——单页分类展示（不使用选项卡）**
+- **单页纵向布局**：不用选项卡切换，所有分类在一个可滚动面板（pnlScroll，AutoScroll）里
+  从上到下依次排列，一眼看全；页面超高时自动出现滚动条。
+- 每个分类用一条**标题分隔线**（SunnyUI `UILine`，蓝色文字 + 水平线）隔开，其下紧跟
+  该分类的配置表格（SunnyUI `UIDataGridView`，蓝色主题、斑马纹）。
+- 分类与 key 顺序集中在 `_categories` 维护；`SetupSections()` 动态创建
+  "标题条 + 表格"，`LayoutSections()` 按 Y 坐标纵向排布、按行数自动计算表格高度，
+  并设置滚动内容总高。新增配置项只需在 `_descriptions` 加说明 + 在 `_categories`
+  对应分类加 key，无需改界面布局。
+- 每个表格三列：
+  - 设置名称（配置项 key，只读）
+  - 说明（每个配置项的中文含义，只读）
+  - 设置值（可直接编辑输入）
+- 顶部提示条、底部按钮栏也用 SunnyUI 控件（`UIPanel` / `UIButton`），
+  与主程序风格一致、观感更佳。
+- 值来源为运行时的 `ConfigurationManager.AppSettings`（与程序启动加载取值一致），
+  配置缺失时用内存中 `DeviceConfig` 的属性值兜底。
+- **保存前按类型校验**：整数（TotalBarometers/BaudRate/超时等）、字节（IoUnitId/FanUnitId）、
+  十六进制寄存器地址（IoInputRegisterStartAddress/IoOutputRegisterStartAddress/
+  BarometerPressureRegisterAddress，支持 `0x1000` 与十进制两种写法）、小数（压力阈值/缩放系数）、
+  布尔（Mock/取反/开关类）——不合法项整批拦截并列出，避免写坏配置文件。
+- **保存写回 exe.config**：`ConfigurationManager.OpenExeConfiguration(ConfigurationUserLevel.None)`
+  改写 appSettings 对应键值并 `Save(ConfigurationSaveMode.Modified)`，随后
+  `RefreshSection("appSettings")`；提示"设置已保存，重启程序后生效"。
+- 窗体顶部提示条提示"以下为 App.config 中的全部配置项（按业务分类排列）……
+  保存后重启生效"，底部 [保存设置] / [关闭] 按钮（SunnyUI UIButton）。
+
+**4) 工程文件（BarometerWinform.csproj）**
+- 注册 `Dialogs/SettingsForm.cs`（SubType=Form）与 `Dialogs/SettingsForm.Designer.cs`（DependentUpon）。
+- 新文件统一保存为 UTF-8 with BOM（满足 VS 设计器编码要求）。
+
+### 使用说明
+- 权限：只有**管理员**登录后，点 **帮助** 才会看到"设置"项；操作员/技术员只看到"关于"。
+- 主界面点 **帮助 → 设置**：在单页里按分类标题条找到对应配置（可直接滚动画面向下找），
+  → 点【保存设置】→ 提示"重启程序后生效"。改错类型（如布尔项填了非 true/false）会整批列出不合法项，不会写坏配置。
+- 主界面点 **帮助 → 关于**：弹出版本信息（与原"版本说明"一致）。
+
 ## [2026-08-07] 扫码枪断连检测再补强：多消息类型 + 周期"关句柄重搜"兜底（V1.16.6）
 
 **问题**
