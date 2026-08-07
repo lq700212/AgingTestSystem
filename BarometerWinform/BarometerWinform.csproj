@@ -130,12 +130,6 @@
     <EmbeddedResource Include="Views\mForm_Progress.resx">
       <DependentUpon>mForm_Progress.cs</DependentUpon>
     </EmbeddedResource>
-    <Compile Include="Dialogs\CommunicationSettingForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="Dialogs\CommunicationSettingForm.Designer.cs">
-      <DependentUpon>CommunicationSettingForm.cs</DependentUpon>
-    </Compile>
     <Compile Include="Dialogs\CommonParameterForm.cs">
       <SubType>Form</SubType>
     </Compile>

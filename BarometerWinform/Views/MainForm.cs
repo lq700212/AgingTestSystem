@@ -17,7 +17,7 @@ using BarometerWinform.Services;
 // - 登录成功 → 切换权限，更新顶部标签
 // - 登录失败 → 弹出错误提示窗口
 // - 管理员权限下，下拉菜单额外显示"用户管理"选项
-// - 通讯设置和参数设置按钮需要技术员或管理员权限才能操作
+// - 参数设置按钮需要技术员或管理员权限才能操作
 
 namespace BarometerWinform.Views
 {
@@ -34,7 +34,7 @@ namespace BarometerWinform.Views
     /// ┌─────────────────────────────────────────────────────────┐
     /// │ 老化测试系统V1.00  │ 当前操作权限: 操作员 │ PLC连接状态: 已连接 │
     /// ├─────────────────────────────────────────────────────────┤
-    /// │ [用户权限] [通信设置] [参数设置] [LOG记录] [TEST] [关于] │
+    /// │ [用户权限] [参数设置] [LOG记录] [TEST] [关于] │
     /// ├──────────────────────────────┬──────────────────────────┤
     /// │                              │ 运行状态                 │
     /// │                              │ ┌────────────────────┐   │
@@ -179,7 +179,7 @@ namespace BarometerWinform.Views
             UpdateStatusBar();
 
             // 【新增】7. 初始化按钮权限状态
-            // 默认未登录（操作员权限），通讯设置和参数设置按钮不可用
+            // 默认未登录（操作员权限），参数设置按钮不可用
             UpdateButtonPermissionStates();
 
             // 注意：下拉菜单不再需要预先初始化
@@ -1173,18 +1173,6 @@ namespace BarometerWinform.Views
         }
 
         /// <summary>
-        /// 通信设置按钮点击 → 显示通讯设置下拉菜单
-        /// 菜单项：PLC通讯设置
-        /// </summary>
-        private void btnCommunication_Click(object sender, EventArgs e)
-        {
-            ShowDropdownPopup(btnCommunication, new (string, EventHandler)[]
-            {
-                ("PLC通讯设置", MenuCommPlc_Click)
-            });
-        }
-
-        /// <summary>
         /// 参数设置按钮点击 → 显示参数设置下拉菜单
         /// 菜单项：公共参数 / 配方管理
         /// </summary>
@@ -1345,7 +1333,6 @@ namespace BarometerWinform.Views
         /// 【新增】根据当前权限更新按钮可用状态
         ///
         /// 【权限规则】
-        /// - 通讯设置（btnCommunication）：技术员或管理员可操作
         /// - 参数设置（btnParameter）：技术员或管理员可操作（包含配方管理）
         /// - 其他按钮：所有权限均可操作
         ///
@@ -1358,33 +1345,11 @@ namespace BarometerWinform.Views
             // 检查是否拥有技术员及以上权限
             bool canAccessSettings = _userManager.HasPermission(UserRole.Technician);
 
-            // 通讯设置按钮
-            btnCommunication.Enabled = canAccessSettings;
             // 参数设置按钮（包含配方管理）
             btnParameter.Enabled = canAccessSettings;
 
             // 【预留】其他需要权限控制的按钮可在此处添加
             // TODO: 根据业务需求补充其他按钮的权限控制
-        }
-
-        #endregion
-
-        #region 通讯设置菜单项
-
-        /// <summary>
-        /// PLC通讯设置 → 弹出PLC通讯设置窗体
-        /// </summary>
-        private void MenuCommPlc_Click(object sender, EventArgs e)
-        {
-            using (var form = new CommunicationSettingForm(_config))
-            {
-                if (form.ShowDialog(this) == DialogResult.OK)
-                {
-                    WriteLog("PLC通讯设置已更新（仅在内存中生效）");
-                    // 【预留】保存后应重启设备管理器使配置生效
-                    // TODO: 实现 _deviceManager 重启逻辑或重新加载配置
-                }
-            }
         }
 
         #endregion

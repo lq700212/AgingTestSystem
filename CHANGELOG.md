@@ -1,5 +1,32 @@
 # CHANGELOG
 
+## [2026-08-06] 移除"通信设置"按钮与 PLC 通讯设置窗体（项目无 PLC，改用 GX-CL140-S 耦合器通讯）
+
+### 问题
+- 现场没有 PLC，整个项目是通过 **GX-CL140-S 耦合器**（Modbus TCP）替代 PLC 进行通讯的。
+- 主窗体菜单栏的"通信设置"按钮只弹出一个 **PLC 通讯设置窗体**（CommunicationSettingForm），
+  该窗体配置的是 PLC 的 IP/端口/串口参数，对当前项目毫无用处，属于遗留死功能。
+
+### 改动（删除按钮 + 相关逻辑）
+- [MainForm.Designer.cs](file:///e:/Project/BarometerWinform/BarometerWinform/Views/MainForm.Designer.cs)
+  — 删除菜单栏 `btnCommunication` 按钮（控件声明 / 布局列 / 属性配置 / 字段声明），
+  菜单容器 `tableLayoutPanelMenu` 由 6 列调整为 5 列（每个按钮均分 20%），其余按钮 TabIndex 顺延。
+- [MainForm.cs](file:///e:/Project/BarometerWinform/BarometerWinform/Views/MainForm.cs)
+  — 删除 `btnCommunication_Click` 与 `MenuCommPlc_Click` 两个事件处理方法；
+  删除"通讯设置菜单项"区域；`UpdateButtonPermissionStates` 中移除通讯设置按钮的权限控制；
+  同步更新头部布局注释与权限注释。
+- 删除 `Dialogs/CommunicationSettingForm.cs`、`Dialogs/CommunicationSettingForm.Designer.cs`
+  两个文件及其 [csproj](file:///e:/Project/BarometerWinform/BarometerWinform/BarometerWinform.csproj) 编译项。
+- **保留不动**：`DeviceConfig.PlcAddress/PlcPort/PortName/BaudRate` 等配置项及其
+  App.config 读取逻辑——`PlcAddress/PlcPort` 仍被
+  [ModbusTcpIoController.cs](file:///e:/Project/BarometerWinform/BarometerWinform/Services/ModbusTcpIoController.cs)
+  用来连接 GX-CL140-S 耦合器，`PortName/BaudRate` 仍被气压表串口读取使用。
+
+### 使用说明
+- 主界面菜单栏现在为：`用户权限 | 参数设置 | LOG记录 | TEST | 关于` 5 个按钮。
+- 通讯参数的修改不再通过界面窗体进行，直接在 `App.config` 中改
+  `PlcAddress`（耦合器 IP）/ `PlcPort`（默认 502）等即可。
+
 ## [2026-08-06] 送风机 IP 自动识别（候选 IP 动态可配置 + 工控机缓存记忆）
 
 ### 问题

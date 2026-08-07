@@ -47,8 +47,8 @@
           ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                 Dialogs (对话框窗体层)                                │
-│  CommunicationSettingForm │ CommonParameterForm │ RecipeManagerForm │
-│  HistoryRecordForm │ ScanSimulationForm │ DeviceManualForm (V1.15)  │
+│  CommonParameterForm │ RecipeManagerForm │ HistoryRecordForm   │
+│  ScanSimulationForm │ DeviceManualForm (V1.15)                 │
 └─────────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
@@ -74,7 +74,7 @@
 | 层级 | 名称 | 职责 | 关键文件 |
 | :--- | :--- | :--- | :--- |
 | **视图层** | Views | 负责主UI展示和用户交互 | MainForm.cs, BarometerPanelView.cs |
-| **对话框层** | Dialogs | 菜单按钮弹出的子窗体 | CommunicationSettingForm.cs, RecipeManagerForm.cs, DeviceManualForm.cs 等 |
+| **对话框层** | Dialogs | 菜单按钮弹出的子窗体 | RecipeManagerForm.cs, DeviceManualForm.cs 等 |
 | **服务层** | Services | 负责业务逻辑和硬件通信（气压表 / IO / 送风机） | DeviceManager.cs, ModbusRtuBarometerReader.cs, ModbusTcpIoController.cs, FanControllerClient.cs, MockFanController.cs, TestEventLogger.cs 等 |
 | **接口层** | Interfaces | 定义硬件通信标准接口 | IBarometerReader.cs, IIoController.cs, IFanController.cs |
 | **模型层** | Models | 定义数据结构和配置参数 | BarometerData.cs, FanData.cs, IoStatus.cs, DeviceConfig.cs, RecipeConfig.cs |
@@ -95,7 +95,7 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │ 标题栏: 老化测试系统V1.15 | 权限: 操作员 | PLC状态: 已连接           │
 ├─────────────────────────────────────────────────────────────────┤
-│ 菜单按钮: 用户权限 | 通信设置 | 参数设置 | LOG记录 | TEST | 关于      │
+│ 菜单按钮: 用户权限 | 参数设置 | LOG记录 | TEST | 关于              │
 ├──────────────────────────────────────┬──────────────────────────┤
 │                                      │ 运行状态                  │
 │         气压表显示区域                  │ 送风机监视                  │
@@ -119,7 +119,7 @@
 | `BtnSelectRow_Click()` | 行全选按钮点击事件，切换该行所有面板选中状态 |
 | `ShowDropdownPopup()` | 在主按钮下方显示下拉菜单（无边框Form + Button列表，尺寸和主按钮一致） |
 | `TryLoginAndSwitchPermission(role)` | 【新增】弹出 LoginForm 登录窗体，校验通过后切换权限 |
-| `UpdateButtonPermissionStates()` | 【新增】根据当前权限启用/禁用通讯设置和参数设置按钮 |
+| `UpdateButtonPermissionStates()` | 【新增】根据当前权限启用/禁用参数设置按钮 |
 | `WriteLog()` | 写入日志到右侧 LOG 文本框（带时间戳，限制最大长度避免 GDI 耗尽，修复 M8） |
 | `UpdateStatusBar()` | 更新底部状态栏 |
 | `UpdateConnectionStatus()` | 更新 PLC 连接状态显示（修复 H1，含 IsDisposed 检查和异常捕获） |
@@ -191,12 +191,11 @@
 - 不改变原有布局结构
 - ContextMenuStrip 灵活控制显示位置
 
-**6个菜单按钮的下拉菜单项**:
+**5个菜单按钮的下拉菜单项**:
 
 | 菜单按钮 | 下拉菜单项 | 触发的窗体/动作 | 权限要求 |
 | :--- | :--- | :--- | :--- |
 | 用户权限 | 操作员 / 技术员 / 管理员 / 用户管理* | 弹出 LoginForm 输入用户名密码后切换权限；*用户管理仅管理员可见 | 任意权限 |
-| 通信设置 | PLC通讯设置 | 弹出 CommunicationSettingForm | 技术员或管理员 |
 | 参数设置 | 公共参数 / 配方管理 | 分别弹出 CommonParameterForm / RecipeManagerForm | 技术员或管理员 |
 | LOG记录 | 历史记录 | 弹出 HistoryRecordForm | 任意权限 |
 | TEST | 扫码模拟 | 弹出 ScanSimulationForm | 任意权限 |
@@ -218,7 +217,6 @@
 
 | 窗体 | 功能 | 已实现 | 预留项 |
 | :--- | :--- | :--- | :--- |
-| `CommunicationSettingForm` | PLC通讯设置 | IP/端口/协议/串口参数配置 | 测试连接、参数持久化 |
 | `CommonParameterForm` | 公共参数设置 | 采集间隔 + 报警压力阈值（写回内存配置） | 参数持久化待实现 |
 | `RecipeManagerForm` | 配方管理 | 左右分栏布局：左侧配方列表（序号+配方名称），右侧配方设置（配方名称、延时时间、启动时间、极限温度），底部添加/更新/删除按钮和保存设置按钮 | 新增/编辑/删除/持久化待实现 |
 | `HistoryRecordForm` | 历史记录查询 | 【V1.15】日期范围查询 + 读取 Logs\TestLog_*.csv 真实事件日志（自动跨 CSV 解析、跳过表头），"导出"按钮打开 Logs 文件夹 | Mock 数据已移除 |
@@ -537,7 +535,7 @@ public interface IFanController : IDisposable
 | 枚举值 | 数值 | 说明 |
 | :--- | :--- | :--- |
 | `Operator` | 0 | 操作员（基础权限，未登录状态） |
-| `Technician` | 1 | 技术员（可操作通讯设置和配方参数） |
+| `Technician` | 1 | 技术员（可操作参数设置和配方参数） |
 | `Administrator` | 2 | 管理员（最高权限，可管理其他用户账号） |
 
 **权限规则**：数值越大权限越高，`HasPermission(requiredRole)` 通过 `CurrentUser.Role >= requiredRole` 判断。
@@ -635,7 +633,6 @@ public interface IFanController : IDisposable
 
 | 按钮 | 权限要求 | 行为 |
 | :--- | :--- | :--- |
-| `btnCommunication`（通信设置） | 技术员或管理员 | 无权限时按钮变灰（Enabled=false） |
 | `btnParameter`（参数设置） | 技术员或管理员 | 无权限时按钮变灰（Enabled=false） |
 | 其他按钮 | 任意权限 | 始终可用 |
 
@@ -785,7 +782,6 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 | 功能 | 状态 | 文件位置 | 说明 |
 | :--- | :--- | :--- | :--- |
 | 用户权限管理 | 已实现 | MainForm.cs / UserManager.cs / LoginForm.cs / UserManagementForm.cs | 下拉菜单（操作员/技术员/管理员）+ 登录窗体 + 用户管理（管理员修改他人账号）；用户数据持久化到 Users.json（V1.13） |
-| 通信设置 | 部分实现 | MainForm.cs / CommunicationSettingForm | PLC通讯设置窗体已实现，参数持久化与测试连接待实现 |
 | 参数设置-公共参数 | 部分实现 | MainForm.cs / CommonParameterForm | 公共参数窗体已实现，参数项需现场确认补充 |
 | 参数设置-配方管理 | 部分实现 | MainForm.cs / RecipeManagerForm | 配方列表显示已实现，新增/编辑/删除逻辑待实现 |
 | LOG记录-历史记录 | 已实现（V1.15） | MainForm.cs / HistoryRecordForm | 读取 Logs\TestLog_*.csv 真实事件日志，按日期查询 |
@@ -863,8 +859,6 @@ BarometerWinform/
 │   │   ├── BarometerPanelView.cs           # 气压表显示面板（业务逻辑）
 │   │   └── BarometerPanelView.Designer.cs  # 气压表显示面板（设计器代码）
 │   └── Dialogs/                            # 对话框窗体层（菜单按钮弹出窗体）
-│       ├── CommunicationSettingForm.cs            # PLC通讯设置窗体
-│       ├── CommunicationSettingForm.Designer.cs
 │       ├── CommonParameterForm.cs                 # 公共参数设置窗体
 │       ├── CommonParameterForm.Designer.cs
 │       ├── RecipeManagerForm.cs                   # 配方管理窗体
@@ -1097,7 +1091,7 @@ Get-ChildItem -Path $projectRoot -Recurse -Filter "*.cs" -File |
 | H3 | Dispose 期间触发事件回调到已释放的 UI | DeviceManager.cs | _disposed 改为 volatile，Dispose 时先置 true 再 Stop，Stop 中检查 ! disposed 跳过事件 |
 | H4 | 事件订阅未取消，导致内存泄漏 | MainForm.cs | FormClosing 中先 -= 取消订阅再 Dispose |
 | H5 | Controls.Clear() 不 Dispose 旧控件，GDI 句柄泄漏 | MainForm.cs | Clear 前先 foreach Dispose 所有子控件 |
-| H6 | NumericUpDown 赋值未做范围校验，抛 ArgumentOutOfRangeException | CommonParameterForm.cs / CommunicationSettingForm.cs | 新增 ClampToNumericRange 辅助方法 |
+| H6 | NumericUpDown 赋值未做范围校验，抛 ArgumentOutOfRangeException | CommonParameterForm.cs | 新增 ClampToNumericRange 辅助方法 |
 | H7 | LoadConfig 未读取所有 App.config 配置项 | MainForm.cs | 补全 PanelColumns/Rows/Inputs/Outputs/PlcAddress/Port/PlcPort 等读取 + 一致性校验 |
 | H8 | 选中色遮蔽故障告警（故障应始终红色） | BarometerPanelView.cs | UpdateStatusColor 中故障状态优先级最高，直接返回红色 |
 
@@ -1151,7 +1145,6 @@ Get-ChildItem -Path $projectRoot -Recurse -Filter "*.cs" -File |
 | Views/MainForm.Designer.cs | L5, M10 |
 | Views/BarometerPanelView.cs | H8, L7, L8, L10, M11 |
 | Dialogs/CommonParameterForm.cs | H6 |
-| Dialogs/CommunicationSettingForm.cs | H6 |
 | Dialogs/RecipeManagerForm.cs | M12 |
 | Dialogs/HistoryRecordForm.cs | M13 |
 | Dialogs/ScanSimulationForm.cs | M14 |
