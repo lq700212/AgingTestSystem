@@ -1,4 +1,4 @@
-namespace BarometerWinform.Views
+﻿namespace BarometerWinform.Views
 {
     /// <summary>
     /// 工位显示面板 —— 设计器自动生成部分
@@ -10,11 +10,11 @@ namespace BarometerWinform.Views
     /// 【V1.16 重设计（依据现场草图）】
     /// 面板显示的是"工位"（每个工位对应一台气压表）：
     /// ┌──────────────────────────────┐
-    /// │ NO.1                                  │  ← 设备编号
-    /// │ [上电状态灯] [上电/下电按钮]           │  ← 上电灯=纯色(绿=上电/灰=下电)；按钮控制载台上电
+    /// │ NO.1                  [□✓]   │  ← 设备编号 + 选中指示（右上角，V1.19）
+    /// │ 上电   [状态灯]                 │  ← 标题与下方各标题左对齐；状态灯与内容列左对齐（V1.19.3）
     /// │ 真空压力 [值] [真空开启灯] [工作状态]   │  ← 压力值只读；真空灯=纯色；工作状态文字
-    /// │ SN:      [_________]                 │
-    /// │ 配方:    [_________]                 │
+    /// │ SN:    [SN值 Label]                 │  ← V1.19.3：内容改为 Label 显示
+    /// │ 配方:  [配方值 Label]               │
     /// │ 延时开启 [__:__:__]      ┌────┐      │
     /// │ 延时到达 [__:__:__]      │ Set│      │
     /// │                          └────┘      │
@@ -56,16 +56,17 @@ namespace BarometerWinform.Views
         {
             this.components = new System.ComponentModel.Container();
             this.lblDeviceId = new System.Windows.Forms.Label();
+            this.lblPower = new System.Windows.Forms.Label();
             this.boxPower = new System.Windows.Forms.Label();
-            this.btnPower = new System.Windows.Forms.Button();
+            this.btnSelect = new System.Windows.Forms.Button();
             this.lblVacuum = new System.Windows.Forms.Label();
             this.txtPressure = new System.Windows.Forms.TextBox();
             this.boxVacuumOpen = new System.Windows.Forms.Label();
             this.boxWorkState = new System.Windows.Forms.Label();
             this.lblSN = new System.Windows.Forms.Label();
-            this.txtSN = new System.Windows.Forms.TextBox();
+            this.lblSNValue = new System.Windows.Forms.Label();
             this.lblRecipe = new System.Windows.Forms.Label();
-            this.txtRecipe = new System.Windows.Forms.TextBox();
+            this.lblRecipeValue = new System.Windows.Forms.Label();
             this.lblDelayStart = new System.Windows.Forms.Label();
             this.txtDelayStart = new System.Windows.Forms.TextBox();
             this.lblDelayArrive = new System.Windows.Forms.Label();
@@ -84,11 +85,23 @@ namespace BarometerWinform.Views
             this.lblDeviceId.TabIndex = 0;
             this.lblDeviceId.Text = "NO.1";
             //
+            // lblPower - "上电"标题（V1.19.3 新增）
+            // 与下方各标题（真空压力/SN/配方/延时...）左对齐（x=3），
+            // 上电状态灯（boxPower）则与各内容显示左对齐（x=57）。
+            //
+            this.lblPower.AutoSize = true;
+            this.lblPower.Location = new System.Drawing.Point(3, 38);
+            this.lblPower.Name = "lblPower";
+            this.lblPower.Size = new System.Drawing.Size(29, 12);
+            this.lblPower.TabIndex = 1;
+            this.lblPower.Text = "上电";
+            //
             // boxPower - 上电状态灯（纯色，无文字）
             // 载台上电输出：ON=绿色，OFF=灰色。颜色在业务代码里更新。
+            // V1.19.3：与内容列左对齐（x=57），前面加"上电"标题。
             //
             this.boxPower.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.boxPower.Location = new System.Drawing.Point(6, 26);
+            this.boxPower.Location = new System.Drawing.Point(57, 26);
             this.boxPower.Name = "boxPower";
             this.boxPower.Size = new System.Drawing.Size(55, 36);
             this.boxPower.AutoSize = false;
@@ -97,17 +110,26 @@ namespace BarometerWinform.Views
             this.boxPower.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             this.boxPower.BackColor = System.Drawing.Color.LightGray;
             //
-            // btnPower - 上电/下电按钮（控制载台上电）
-            // 文字显示"要执行的动作"：未上电显示"上电"（点击上电），已上电显示"下电"（点击下电）。
-            // 测试中/故障时禁用（业务代码里设置）。
+            // btnSelect - 选中指示框（右上角，V1.19；样式 V1.19.5 更新、交互 V1.19.6）
+            // 原 btnPower（上电/下电控制按钮）改为选中指示：
+            // - 选中：绿底（ForestGreen）+ 白色"✓"；未选中：空心方框（黑框白底，无文字）。
+            // - V1.19.5 起平时全部隐藏，有任一工位被选中时所有面板同时显示框
+            //   （显示/隐藏由主窗体通过 SetSelectionBoxVisible 统一协调）；
+            //   选中触发方式：面板空白区域"长按约 0.8 秒"；选中框显示时单击空白区域或点击本框
+            //   切换"选中/未选中"（V1.19.6，整表唯一选中项被切为未选中时全部隐藏）。
             //
-            this.btnPower.Location = new System.Drawing.Point(65, 26);
-            this.btnPower.Name = "btnPower";
-            this.btnPower.Size = new System.Drawing.Size(85, 36);
-            this.btnPower.TabIndex = 2;
-            this.btnPower.Text = "上电";
-            this.btnPower.UseVisualStyleBackColor = true;
-            this.btnPower.Click += new System.EventHandler(this.btnPower_Click);
+            this.btnSelect.FlatAppearance.BorderColor = System.Drawing.Color.Black;
+            this.btnSelect.FlatAppearance.BorderSize = 1;
+            this.btnSelect.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnSelect.Location = new System.Drawing.Point(212, 4);
+            this.btnSelect.Name = "btnSelect";
+            this.btnSelect.Size = new System.Drawing.Size(23, 23);
+            this.btnSelect.TabIndex = 2;
+            this.btnSelect.Text = "";
+            // 【V1.19.5】选中框默认隐藏：运行时有任一工位被选中时才由主窗体统一显示（有选中才显示）
+            this.btnSelect.Visible = false;
+            this.btnSelect.UseVisualStyleBackColor = false;
+            this.btnSelect.Click += new System.EventHandler(this.btnSelect_Click);
             //
             // lblVacuum - "真空压力"标签
             //
@@ -140,8 +162,9 @@ namespace BarometerWinform.Views
             this.boxVacuumOpen.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             this.boxVacuumOpen.BackColor = System.Drawing.Color.LightGray;
             //
-            // boxWorkState - 工作状态显示（IDLE / SELECT / BUSY / FAULT）
-            // 空闲且未上电=IDLE；空闲但已上电=SELECT；测试中=BUSY；故障=FAULT。
+            // boxWorkState - 工作状态显示（空闲/选中/繁忙/故障）
+            // 空闲且未上电=空闲；空闲但已上电=选中；测试中=繁忙；故障=故障。
+            // （V1.19.2：是否选中不再影响工作状态文字，选中仅由右上角选中指示体现）
             //
             this.boxWorkState.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
             this.boxWorkState.Location = new System.Drawing.Point(176, 67);
@@ -149,7 +172,7 @@ namespace BarometerWinform.Views
             this.boxWorkState.Size = new System.Drawing.Size(60, 21);
             this.boxWorkState.AutoSize = false;
             this.boxWorkState.TabIndex = 6;
-            this.boxWorkState.Text = "IDLE";
+            this.boxWorkState.Text = "空闲";
             this.boxWorkState.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             this.boxWorkState.BackColor = System.Drawing.Color.LightGray;
             //
@@ -162,13 +185,18 @@ namespace BarometerWinform.Views
             this.lblSN.TabIndex = 7;
             this.lblSN.Text = "SN:";
             //
-            // txtSN - 序列号显示框（只读）
+            // lblSNValue - 序列号显示标签（V1.19.3：由只读 TextBox 改为 Label）
+            // 纯展示控件：加边框 + 白底，观感与只读文本框一致，但不参与焦点/光标。
             //
-            this.txtSN.Location = new System.Drawing.Point(57, 93);
-            this.txtSN.Name = "txtSN";
-            this.txtSN.ReadOnly = true;
-            this.txtSN.Size = new System.Drawing.Size(140, 21);
-            this.txtSN.TabIndex = 8;
+            this.lblSNValue.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lblSNValue.BackColor = System.Drawing.Color.White;
+            this.lblSNValue.Location = new System.Drawing.Point(57, 93);
+            this.lblSNValue.Name = "lblSNValue";
+            this.lblSNValue.Size = new System.Drawing.Size(140, 21);
+            this.lblSNValue.AutoSize = false;
+            this.lblSNValue.TabIndex = 8;
+            this.lblSNValue.Text = "";
+            this.lblSNValue.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             //
             // lblRecipe - "配方"标签
             //
@@ -179,13 +207,17 @@ namespace BarometerWinform.Views
             this.lblRecipe.TabIndex = 9;
             this.lblRecipe.Text = "配方:";
             //
-            // txtRecipe - 配方名称显示框（只读）
+            // lblRecipeValue - 配方名称显示标签（V1.19.3：由只读 TextBox 改为 Label）
             //
-            this.txtRecipe.Location = new System.Drawing.Point(57, 118);
-            this.txtRecipe.Name = "txtRecipe";
-            this.txtRecipe.ReadOnly = true;
-            this.txtRecipe.Size = new System.Drawing.Size(140, 21);
-            this.txtRecipe.TabIndex = 10;
+            this.lblRecipeValue.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lblRecipeValue.BackColor = System.Drawing.Color.White;
+            this.lblRecipeValue.Location = new System.Drawing.Point(57, 118);
+            this.lblRecipeValue.Name = "lblRecipeValue";
+            this.lblRecipeValue.Size = new System.Drawing.Size(140, 21);
+            this.lblRecipeValue.AutoSize = false;
+            this.lblRecipeValue.TabIndex = 10;
+            this.lblRecipeValue.Text = "";
+            this.lblRecipeValue.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             //
             // lblDelayStart - "延时开启"标签
             //
@@ -223,8 +255,8 @@ namespace BarometerWinform.Views
             this.txtDelayArrive.TabIndex = 14;
             this.txtDelayArrive.Text = "00:00:00";
             //
-            // btnSet - 延时设置按钮（合并开启和到达两个 Set 按钮）
-            // 点击后由主窗体弹出单台手动控制窗口（DeviceManualForm）。
+            // btnSet - 工位设置按钮（V1.18 更名：Set → 设置）
+            // 点击后由主窗体弹出工位设置窗口（StationSettingsForm）。
             //
             this.btnSet.BackColor = System.Drawing.Color.LimeGreen;
             this.btnSet.ForeColor = System.Drawing.Color.White;
@@ -232,7 +264,7 @@ namespace BarometerWinform.Views
             this.btnSet.Name = "btnSet";
             this.btnSet.Size = new System.Drawing.Size(60, 50);
             this.btnSet.TabIndex = 15;
-            this.btnSet.Text = "Set";
+            this.btnSet.Text = "设置";
             this.btnSet.UseVisualStyleBackColor = false;
             this.btnSet.Click += new System.EventHandler(this.btnSet_Click);
             //
@@ -246,16 +278,17 @@ namespace BarometerWinform.Views
             this.Controls.Add(this.lblDelayArrive);
             this.Controls.Add(this.txtDelayStart);
             this.Controls.Add(this.lblDelayStart);
-            this.Controls.Add(this.txtRecipe);
+            this.Controls.Add(this.lblRecipeValue);
             this.Controls.Add(this.lblRecipe);
-            this.Controls.Add(this.txtSN);
+            this.Controls.Add(this.lblSNValue);
             this.Controls.Add(this.lblSN);
             this.Controls.Add(this.boxWorkState);
             this.Controls.Add(this.boxVacuumOpen);
             this.Controls.Add(this.txtPressure);
             this.Controls.Add(this.lblVacuum);
-            this.Controls.Add(this.btnPower);
+            this.Controls.Add(this.btnSelect);
             this.Controls.Add(this.boxPower);
+            this.Controls.Add(this.lblPower);
             this.Controls.Add(this.lblDeviceId);
             this.Name = "WorkstationPanelView";
             this.Size = new System.Drawing.Size(240, 225);
@@ -265,6 +298,8 @@ namespace BarometerWinform.Views
             // 为"纯色状态灯"加上鼠标悬停提示，方便操作员理解灯的含义
             this.toolTipPanel.SetToolTip(this.boxPower, "上电状态：绿=已上电，灰=未上电");
             this.toolTipPanel.SetToolTip(this.boxVacuumOpen, "真空开启状态：绿=开启，灰=关闭");
+            this.toolTipPanel.SetToolTip(this.boxWorkState, "工作状态（V1.19.4 配色）：空闲=浅灰 / 选中(已上电待测试)=橙 / 繁忙(测试中)=绿 / 故障=红");
+            this.toolTipPanel.SetToolTip(this.btnSelect, "选中指示（V1.19.6）：空白处长按约0.8秒=选中(绿✓)；有选中后单击空白处或本框=切换选中/取消；整表唯一选中项被取消时全部隐藏");
         }
 
         #endregion
@@ -274,26 +309,28 @@ namespace BarometerWinform.Views
 
         /// <summary>设备编号标签（左上角）</summary>
         private System.Windows.Forms.Label lblDeviceId;
+        /// <summary>"上电"标题（与下方各标题左对齐，V1.19.3 新增）</summary>
+        private System.Windows.Forms.Label lblPower;
         /// <summary>上电状态灯（纯色：绿=已上电，灰=未上电）</summary>
         private System.Windows.Forms.Label boxPower;
-        /// <summary>上电/下电按钮（控制载台上电）</summary>
-        private System.Windows.Forms.Button btnPower;
+        /// <summary>选中指示/切换按钮（右上角，原 btnPower 改为选中指示，V1.19）</summary>
+        private System.Windows.Forms.Button btnSelect;
         /// <summary>"真空压力"标签</summary>
         private System.Windows.Forms.Label lblVacuum;
         /// <summary>真空压力值显示框（只读）</summary>
         private System.Windows.Forms.TextBox txtPressure;
         /// <summary>真空开启状态灯（纯色：绿=开启，灰=关闭）</summary>
         private System.Windows.Forms.Label boxVacuumOpen;
-        /// <summary>工作状态显示（IDLE/SELECT/BUSY/FAULT）</summary>
+        /// <summary>工作状态显示（空闲/选中/繁忙/故障，V1.19.4 起带"信号灯"配色）</summary>
         private System.Windows.Forms.Label boxWorkState;
         /// <summary>"SN:"标签</summary>
         private System.Windows.Forms.Label lblSN;
-        /// <summary>序列号显示框（只读）</summary>
-        private System.Windows.Forms.TextBox txtSN;
+        /// <summary>序列号显示标签（V1.19.3：由只读 TextBox 改为 Label）</summary>
+        private System.Windows.Forms.Label lblSNValue;
         /// <summary>"配方:"标签</summary>
         private System.Windows.Forms.Label lblRecipe;
-        /// <summary>配方名称显示框（只读）</summary>
-        private System.Windows.Forms.TextBox txtRecipe;
+        /// <summary>配方名称显示标签（V1.19.3：由只读 TextBox 改为 Label）</summary>
+        private System.Windows.Forms.Label lblRecipeValue;
         /// <summary>"延时开启"标签</summary>
         private System.Windows.Forms.Label lblDelayStart;
         /// <summary>延时开启时间显示框（只读）</summary>
@@ -302,7 +339,7 @@ namespace BarometerWinform.Views
         private System.Windows.Forms.Label lblDelayArrive;
         /// <summary>延时到达时间显示框（只读）</summary>
         private System.Windows.Forms.TextBox txtDelayArrive;
-        /// <summary>延时设置按钮（弹出单台手动控制窗口）</summary>
+        /// <summary>工位设置按钮（点击弹出工位设置窗口，V1.18 更名：Set → 设置）</summary>
         private System.Windows.Forms.Button btnSet;
         /// <summary>纯色状态灯的悬停提示</summary>
         private System.Windows.Forms.ToolTip toolTipPanel;

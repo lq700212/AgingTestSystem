@@ -113,6 +113,14 @@ namespace BarometerWinform.Views
         private readonly Dictionary<int, WorkstationPanelView> _panelViews = new Dictionary<int, WorkstationPanelView>();
 
         /// <summary>
+        /// 每行的"全选/取消"按钮（行索引 → 按钮，【V1.19 新增】）
+        /// 供 UpdateRowSelectButton 在任意单个面板选中状态变化时刷新按钮文字：
+        /// 仅当该行所有面板都选中时按钮才显示"取消"，否则显示"全选"。
+        /// 行索引从 0 开始，与 _panelViews 按 (deviceId-1)/cols 换算的行号一致。
+        /// </summary>
+        private readonly Dictionary<int, Button> _rowSelectButtons = new Dictionary<int, Button>();
+
+        /// <summary>
         /// 当前操作权限（中文显示名：操作员/技术员/管理员）
         /// 初始为"操作员"（未登录状态），登录成功后更新为对应角色名
         /// </summary>
@@ -197,8 +205,8 @@ namespace BarometerWinform.Views
             // 连接状态变化（连接成功/未找到端口/错误）→ 写日志
             _scanner.OnStatusChanged += Scanner_OnStatusChanged;
 
-            // 5. 更新权限显示
-            lblPermission.Text = $"当前操作权限: {_currentPermission}";
+            // 5. 更新权限显示（V1.19.7：角色名着色——管理员=红/技术员=天蓝/操作员=绿）
+            UpdatePermissionDisplay(_currentPermission);
 
             // 6. 更新状态栏信息
             UpdateStatusBar();
@@ -812,32 +820,47 @@ namespace BarometerWinform.Views
                 panel.Margin = new Padding(2);
                 panel.Padding = new Padding(2);
 
-                // 订阅面板的 Set 按钮点击事件（打开单台手动控制窗体）
+                // 订阅面板的"设置"按钮点击事件（V1.18：打开工位设置窗口）
                 panel.OnSetClicked += Panel_OnSetClicked;
 
-                // 【V1.16】订阅工位上电按钮点击事件（手动控制载台上电）
-                panel.OnPowerToggled += Panel_OnPowerToggled;
+                // 【V1.19】订阅面板选中状态变化事件：
+                // 任一面板被单独选中/取消（V1.19.5：空白处长按约0.8秒选中 / 单击空白处或点击选中框取消）时，
+                // 立即刷新所在行的"全选/取消"按钮文字——只要该行有一台被取消，
+                // 按钮就从"取消"恢复为"全选"；
+                // 同时刷新所有面板选中框的显示/隐藏（V1.19.5：有任一选中→全部显示，全未选中→全部隐藏）。
+                // 【注意】row 是每轮 for 循环新建的局部变量，闭包捕获安全，无循环变量污染。
+                int row = i / cols;
+                panel.IsSelectedChanged += (s, e2) =>
+                {
+                    UpdateRowSelectButton(row);
+                    UpdateSelectionBoxVisibility();
+                };
 
                 // 保存到字典，便于后续按设备编号查找更新
                 _panelViews[deviceId] = panel;
 
                 // 计算面板在网格中的行列位置
-                int row = i / cols;
                 int col = i % cols;
 
                 // 添加到 TableLayoutPanel 的指定单元格
                 tableLayoutPanel.Controls.Add(panel, col, row);
             }
 
+            // 【V1.19.5】初始刷新一次选中框显示状态（启动时全部未选中 → 全部隐藏）
+            UpdateSelectionBoxVisibility();
+
             // 在每行最后一列添加"行全选"按钮
-            // 按钮名格式：Set(SEL_1)、Set(SEL_2) ... Set(SEL_N)，N = PanelRows
+            // 【V1.18】按钮名由 Set(SEL_N) 改为"全选"：点击后该行所有工位面板被选中
+            // （选中状态通过右上角选中指示体现；V1.19.2 起面板背景色/工作状态不再变化）。
+            // 按钮样式：浅灰背景（V1.19.4 由深灰 Gray 改为浅灰 LightGray，与面板上电状态灯 boxPower 同色，
+            // 深灰显得笨重不好看；浅灰下文字改黑色以保证对比度）。
             for (int row = 0; row < rows; row++)
             {
                 var btnSelectRow = new Button();
                 btnSelectRow.Name = $"btnSelectRow_{row + 1}";              // 控件名（用于代码查找）
-                btnSelectRow.Text = $"Set(SEL_{row + 1})";                  // 显示文本，如 Set(SEL_1)
-                btnSelectRow.BackColor = Color.DodgerBlue;                  // 背景色：道奇蓝（醒目）
-                btnSelectRow.ForeColor = Color.White;                       // 文字颜色：白色
+                btnSelectRow.Text = "全选";                                  // 显示文本（V1.18 更名）
+                btnSelectRow.BackColor = Color.LightGray;                   // 背景色：浅灰（V1.19.4 与 boxPower 同色）
+                btnSelectRow.ForeColor = Color.Black;                       // 文字颜色：黑色（浅灰底保证对比度）
                 btnSelectRow.Dock = DockStyle.Fill;                         // 填满单元格（自动随窗体缩放）
                 btnSelectRow.Margin = new Padding(2);                       // 外边距，避免按钮贴边
                 btnSelectRow.FlatStyle = FlatStyle.Flat;                    // 扁平化样式，更现代
@@ -847,6 +870,9 @@ namespace BarometerWinform.Views
                 // 【注意】不能直接用 row，否则所有按钮的点击事件都会拿到循环结束后的 row 值
                 int capturedRow = row;
                 btnSelectRow.Click += (sender, e) => BtnSelectRow_Click(sender, e, capturedRow);
+
+                // 【V1.19】保存该行按钮引用，供 UpdateRowSelectButton 在选中状态变化时刷新文字
+                _rowSelectButtons[capturedRow] = btnSelectRow;
 
                 // 添加到最后一列（列索引 = cols）的对应行
                 tableLayoutPanel.Controls.Add(btnSelectRow, cols, row);
@@ -858,13 +884,21 @@ namespace BarometerWinform.Views
         }
 
         /// <summary>
-        /// 行全选按钮点击事件
-        /// 切换该行所有工位面板的选中状态
-        /// 如果当前行有未选中的面板，则全部选中；如果已全部选中，则全部取消选中
+        /// 行全选按钮点击事件（【V1.18】按钮名由 Set(SEL_N) 改为"全选"）
+        /// 选中该行所有工位面板（V1.19.2 起选中仅通过右上角选中指示体现，
+        /// 不再改变面板背景色与工作状态文字）。
+        ///
+        /// 【V1.19】按钮文字改为"实时反映该行当前选中状态"：
+        /// - 该行所有面板都选中 → 按钮显示"取消"（此时点击执行整行取消选中）；
+        /// - 只要有一台被单独取消选中 → 按钮立即恢复显示"全选"（此时点击执行整行全部选中）。
+        /// 注意：按钮文字不是由本次点击简单取反，而是通过 UpdateRowSelectButton
+        /// 重新计算该行所有面板的选中状态得来——任一面板被单独选中/取消（点击面板本身、
+        /// 点击右上角选中指示）都会触发 IsSelectedChanged 事件刷新按钮文字。
         ///
         /// 【预留说明】
-        /// 当前仅切换选中状态（视觉高亮），具体的批量操作（如批量设置配方、批量启动等）
-        /// 待业务流程明确后实现，可通过遍历 _panelViews 找到所有 IsSelected=true 的面板执行批量操作
+        /// 当前仅切换选中状态（选中指示 ✓ 显示/隐藏；V1.19.2 起面板背景色不再叠加高亮），
+        /// 具体的批量操作（如批量设置配方、批量启动等）待业务流程明确后实现，
+        /// 可通过遍历 _panelViews 找到所有 IsSelected=true 的面板执行批量操作。
         /// </summary>
         /// <param name="sender">触发事件的按钮</param>
         /// <param name="e">事件参数</param>
@@ -899,9 +933,85 @@ namespace BarometerWinform.Views
                 }
             }
 
+            // 【V1.19】按钮文字交由 UpdateRowSelectButton 统一刷新：
+            // 逐个设置 panel.IsSelected 时会触发 IsSelectedChanged 事件，
+            // 该事件已在每次变化时调用 UpdateRowSelectButton 刷新按钮文字，
+            // 这里再调用一次兜底，确保文字与最终状态一致。
+            UpdateRowSelectButton(rowIndex);
+
             // 写入日志
             string action = newSelectionState ? "全选" : "取消全选";
             WriteLog($"第 {rowIndex + 1} 行 {action}（设备 {rowStartDeviceId}-{rowEndDeviceId}）");
+        }
+
+        /// <summary>
+        /// 刷新指定行的"全选/取消"按钮文字（【V1.19 新增】）
+        ///
+        /// 【规则】按钮文字实时反映该行当前选中状态：
+        /// - 该行**所有**工位面板都处于选中状态 → 按钮显示"取消"（点击整行取消选中）；
+        /// - 只要有一台未被选中（含被单独取消）→ 按钮显示"全选"（点击整行全部选中）。
+        ///
+        /// 【触发时机】在以下任一时刻调用：
+        /// 1) 单个面板选中状态变化：主窗体订阅了每个面板的 IsSelectedChanged 事件
+        ///    （面板点击本身 / 点击右上角选中指示都会触发），事件处理器按所在行调用本方法；
+        /// 2) 行全选按钮点击后：BtnSelectRow_Click 末尾调用本方法兜底刷新。
+        /// </summary>
+        /// <param name="rowIndex">行索引（从0开始）</param>
+        private void UpdateRowSelectButton(int rowIndex)
+        {
+            // 找不到该行按钮（例如行按钮尚未创建）则直接返回
+            if (!_rowSelectButtons.TryGetValue(rowIndex, out Button btnSelectRow)) return;
+
+            int cols = _config.PanelColumns;
+            int rowStartDeviceId = rowIndex * cols + 1;  // 该行第一个设备编号
+            int rowEndDeviceId = rowStartDeviceId + cols - 1;  // 该行最后一个设备编号
+
+            // 检查该行是否所有面板都已选中（TryGetValue 跳过不存在的面板，保证最后一行兼容）
+            bool allSelected = true;
+            for (int deviceId = rowStartDeviceId; deviceId <= rowEndDeviceId; deviceId++)
+            {
+                if (_panelViews.TryGetValue(deviceId, out WorkstationPanelView panel))
+                {
+                    if (!panel.IsSelected)
+                    {
+                        allSelected = false;
+                        break;
+                    }
+                }
+            }
+
+            // 全部选中 → "取消"；否则 → "全选"
+            btnSelectRow.Text = allSelected ? "取消" : "全选";
+        }
+
+        /// <summary>
+        /// 刷新所有面板选中框的显示/隐藏（【V1.19.5】）
+        ///
+        /// 【规则】选中框"平时全隐藏，有选中才显示"：
+        /// - 只要有任一工位被选中 → 所有面板都显示选中框（选中项=绿底白✓，未选中项=空心白框）；
+        /// - 全部未选中 → 所有面板隐藏选中框。
+        ///
+        /// 【触发时机】在任一工位选中状态变化时（面板 IsSelectedChanged 事件）调用，
+        /// 让"长按选中某台"或"行全选"后，其余项也能同步显示各自的选中框状态。
+        /// </summary>
+        private void UpdateSelectionBoxVisibility()
+        {
+            // 判断是否存在至少一个已选中的工位
+            bool anySelected = false;
+            foreach (var panel in _panelViews.Values)
+            {
+                if (panel.IsSelected)
+                {
+                    anySelected = true;
+                    break;
+                }
+            }
+
+            // 通知每个面板按"是否有选中"刷新选中框显示/隐藏
+            foreach (var panel in _panelViews.Values)
+            {
+                panel.SetSelectionBoxVisible(anySelected);
+            }
         }
 
         /// <summary>
@@ -1276,26 +1386,17 @@ namespace BarometerWinform.Views
         }
 
         /// <summary>
-        /// 面板 Set 按钮点击事件处理（【V1.10】由占位弹窗改为单台手动控制）
-        /// 弹出单台手动控制窗口：实时查看该台 DI 报警触点状态，并可手动开/关阀、载台上电。
-        /// 【用途】现场接线条点对应、排查单台故障时非常有用。
+        /// 面板"设置"按钮点击事件处理（【V1.18】由单台手动控制改为工位设置窗口）
+        /// 弹出工位设置窗口：查看/设置该工位的状态、SN、配方、延时时间、启动时间、极限温度。
         /// </summary>
         private void Panel_OnSetClicked(object sender, int deviceId)
         {
-            using (var form = new DeviceManualForm(_deviceManager, _config, deviceId))
+            using (var form = new StationSettingsForm(_deviceManager, _config, deviceId))
             {
                 form.ShowDialog(this);
             }
         }
 
-        /// <summary>
-        /// 工位上电按钮点击事件处理（【V1.16 新增】）
-        /// 面板上的"上电/下电"按钮点击后，切换该工位的载台上电输出：
-        /// - 当前未上电 → 上电（OutputStatus[1] 置 true）
-        /// - 当前已上电 → 下电（OutputStatus[1] 置 false）
-        /// 载台上电输出内部编号 = TotalInputs + TotalBarometers + deviceId
-        /// （与 DeviceManager.StartTesting / StopTesting 的编号约定一致）
-        /// </summary>
         /// <summary>
         /// "连接中..."提示窗体（【V1.16.2 新增】）
         /// 异步按需重连期间显示：告诉操作员正在连接哪个设备，同时禁用主窗体，
@@ -1417,27 +1518,6 @@ namespace BarometerWinform.Views
                 HideConnecting();
             }
             return ok;
-        }
-
-        private async void Panel_OnPowerToggled(object sender, int deviceId)
-        {
-            if (deviceId < 1 || deviceId > _config.TotalBarometers) return;
-
-            // 【V1.16.2】载台上电需要耦合器：先异步连接（弹"连接中"），连不上弹窗提示
-            if (!await EnsureIoReadyAsync()) return;
-
-            // 取该工位当前载台上电状态（来自面板缓存的数据，避免再读一次 IO）
-            bool currentPower = false;
-            if (_panelViews.TryGetValue(deviceId, out WorkstationPanelView panel) && panel.GetCurrentData() != null)
-            {
-                var d = panel.GetCurrentData();
-                currentPower = d.OutputStatus != null && d.OutputStatus.Length >= 2 && d.OutputStatus[1];
-            }
-
-            // 取反：当前上电则下电，当前下电则上电
-            bool nextPower = !currentPower;
-            _deviceManager.SetOutput(_config.TotalInputs + _config.TotalBarometers + deviceId, nextPower);
-            WriteLog($"工位 NO.{deviceId} 载台上电: {(nextPower ? "上电" : "下电")}");
         }
 
         #region 顶部菜单按钮事件处理（显示下拉菜单）
@@ -1585,7 +1665,8 @@ namespace BarometerWinform.Views
                     // 登录成功，更新权限显示
                     string roleName = GetRoleDisplayName(targetRole);
                     _currentPermission = roleName;
-                    lblPermission.Text = $"当前操作权限: {roleName}";
+                    // V1.19.7：角色名着色（管理员=红/技术员=天蓝/操作员=绿）
+                    UpdatePermissionDisplay(roleName);
 
                     // 更新按钮可用状态（根据权限启用/禁用）
                     UpdateButtonPermissionStates();
@@ -1619,6 +1700,39 @@ namespace BarometerWinform.Views
                 default:
                     return role.ToString();
             }
+        }
+
+        /// <summary>
+        /// 更新权限显示（【V1.19.7】）
+        /// 拆为"前缀 + 角色名"两个标签（panelPermission 内 FlowLayoutPanel 水平排列）：
+        /// 前缀 lblPermissionPrefix 固定默认黑字；角色名 lblPermissionRole 按权限设置 ForeColor：
+        /// - 管理员 → 红色（Red）
+        /// - 技术员 → 天蓝色（SkyBlue）
+        /// - 操作员 → 绿色（Green）
+        /// - 未知角色 → 默认文字色
+        /// </summary>
+        /// <param name="roleName">角色中文名（操作员/技术员/管理员）</param>
+        private void UpdatePermissionDisplay(string roleName)
+        {
+            Color roleColor;
+            switch (roleName)
+            {
+                case "管理员":
+                    roleColor = Color.Red;
+                    break;
+                case "技术员":
+                    roleColor = Color.SkyBlue;
+                    break;
+                case "操作员":
+                    roleColor = Color.Green;
+                    break;
+                default:
+                    roleColor = SystemColors.ControlText;
+                    break;
+            }
+
+            lblPermissionRole.Text = roleName;
+            lblPermissionRole.ForeColor = roleColor;
         }
 
         /// <summary>

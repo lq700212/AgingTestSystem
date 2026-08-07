@@ -11,7 +11,7 @@
     /// │           用户账号管理                    │
     /// ├──────────────────────────────────────────┤
     /// │ 角色:        [操作员 ▼]                  │
-    /// │ 当前用户名:  operator                    │
+    /// │ 当前角色:    操作员                       │
     /// │ 新用户名:    [____________________]     │
     /// │ 新密码:      [____________________]     │
     /// │ 确认密码:    [____________________]     │
@@ -53,7 +53,6 @@
             this.txtConfirmPassword = new System.Windows.Forms.TextBox();
             this.btnApply = new System.Windows.Forms.Button();
             this.btnClose = new System.Windows.Forms.Button();
-            this.lblTip = new System.Windows.Forms.Label();
             this.SuspendLayout();
             //
             // lblTitle - 标题
@@ -90,7 +89,7 @@
             this.cboRole.TabIndex = 2;
             this.cboRole.SelectedIndexChanged += new System.EventHandler(this.cboRole_SelectedIndexChanged);
             //
-            // lblCurrentUsername - "当前用户名:"标签
+            // lblCurrentUsername - "当前角色:"标签
             //
             this.lblCurrentUsername.AutoSize = true;
             this.lblCurrentUsername.Font = new System.Drawing.Font("微软雅黑", 9F);
@@ -98,18 +97,19 @@
             this.lblCurrentUsername.Name = "lblCurrentUsername";
             this.lblCurrentUsername.Size = new System.Drawing.Size(84, 17);
             this.lblCurrentUsername.TabIndex = 3;
-            this.lblCurrentUsername.Text = "当前用户名:";
+            this.lblCurrentUsername.Text = "当前角色:";
             //
-            // lblCurrentUsernameValue - 当前用户名值（只读显示）
+            // lblCurrentUsernameValue - 当前角色名（只读显示，V1.19.7 起显示中文角色名并按角色着色：
+            // 技术员=蓝色、操作员=绿色，运行时由 UpdateRoleDisplay 设置）
             //
             this.lblCurrentUsernameValue.AutoSize = true;
             this.lblCurrentUsernameValue.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Bold);
-            this.lblCurrentUsernameValue.ForeColor = System.Drawing.Color.Blue;
+            this.lblCurrentUsernameValue.ForeColor = System.Drawing.Color.Green;
             this.lblCurrentUsernameValue.Location = new System.Drawing.Point(120, 105);
             this.lblCurrentUsernameValue.Name = "lblCurrentUsernameValue";
-            this.lblCurrentUsernameValue.Size = new System.Drawing.Size(0, 17);
+            this.lblCurrentUsernameValue.Size = new System.Drawing.Size(39, 17);
             this.lblCurrentUsernameValue.TabIndex = 4;
-            this.lblCurrentUsernameValue.Text = "(未加载)";
+            this.lblCurrentUsernameValue.Text = "操作员";
             //
             // lblNewUsername - "新用户名:"标签
             //
@@ -195,17 +195,6 @@
             this.btnClose.UseVisualStyleBackColor = false;
             this.btnClose.Click += new System.EventHandler(this.btnClose_Click);
             //
-            // lblTip - 操作提示
-            //
-            this.lblTip.AutoSize = true;
-            this.lblTip.Font = new System.Drawing.Font("微软雅黑", 8F);
-            this.lblTip.ForeColor = System.Drawing.Color.Gray;
-            this.lblTip.Location = new System.Drawing.Point(30, 315);
-            this.lblTip.Name = "lblTip";
-            this.lblTip.Size = new System.Drawing.Size(308, 15);
-            this.lblTip.TabIndex = 13;
-            this.lblTip.Text = "提示：留空的字段不修改；新密码和确认密码必须一致。";
-            //
             // UserManagementForm - 窗体属性
             //
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
@@ -215,8 +204,7 @@
             this.MinimizeBox = false;
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
-            this.ClientSize = new System.Drawing.Size(400, 365);
-            this.Controls.Add(this.lblTip);
+            this.ClientSize = new System.Drawing.Size(400, 330);
             this.Controls.Add(this.btnClose);
             this.Controls.Add(this.btnApply);
             this.Controls.Add(this.txtConfirmPassword);
@@ -253,6 +241,5 @@
         private System.Windows.Forms.TextBox txtConfirmPassword;
         private System.Windows.Forms.Button btnApply;
         private System.Windows.Forms.Button btnClose;
-        private System.Windows.Forms.Label lblTip;
     }
 }

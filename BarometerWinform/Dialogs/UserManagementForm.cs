@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Drawing;
 using System.Windows.Forms;
 using BarometerWinform.Models;
 using BarometerWinform.Services;
@@ -54,34 +55,52 @@ namespace BarometerWinform.Dialogs
 
         /// <summary>
         /// 角色下拉框选择变更事件
-        /// 加载所选角色的当前用户名
+        /// 显示所选角色的中文名（并按角色着色），同时重置输入框
         /// </summary>
         private void cboRole_SelectedIndexChanged(object sender, EventArgs e)
         {
             // 获取选中的角色
             UserRole role = GetSelectedRole();
-            if (role == UserRole.Administrator)
-            {
-                // 防御性处理：管理员不允许修改自己的账号
-                lblCurrentUsernameValue.Text = "(不可修改)";
-                return;
-            }
 
-            // 从用户管理器获取该角色的当前用户名
-            UserAccount account = _userManager.GetAccount(role);
-            if (account != null)
-            {
-                lblCurrentUsernameValue.Text = account.Username;
-            }
-            else
-            {
-                lblCurrentUsernameValue.Text = "(未找到)";
-            }
+            // 显示角色中文名并按角色着色（V1.19.7：技术员=蓝色，操作员=绿色）
+            UpdateRoleDisplay(role);
 
             // 清空输入框（切换角色时重置输入）
             txtNewUsername.Clear();
             txtNewPassword.Clear();
             txtConfirmPassword.Clear();
+        }
+
+        /// <summary>
+        /// 更新"当前角色"显示（【V1.19.7】）
+        /// 显示角色中文名并按角色着色，替代原先显示用户名：
+        /// - 技术员 → 蓝色（Blue）
+        /// - 操作员 → 绿色（Green）
+        /// - 管理员 → 红色（Red，防御性分支）
+        /// - 其他 → 默认文字色
+        /// </summary>
+        /// <param name="role">当前选中的角色</param>
+        private void UpdateRoleDisplay(UserRole role)
+        {
+            switch (role)
+            {
+                case UserRole.Technician:
+                    lblCurrentUsernameValue.Text = "技术员";
+                    lblCurrentUsernameValue.ForeColor = Color.Blue;
+                    break;
+                case UserRole.Operator:
+                    lblCurrentUsernameValue.Text = "操作员";
+                    lblCurrentUsernameValue.ForeColor = Color.Green;
+                    break;
+                case UserRole.Administrator:
+                    lblCurrentUsernameValue.Text = "管理员";
+                    lblCurrentUsernameValue.ForeColor = Color.Red;
+                    break;
+                default:
+                    lblCurrentUsernameValue.Text = "(未知)";
+                    lblCurrentUsernameValue.ForeColor = SystemColors.ControlText;
+                    break;
+            }
         }
 
         /// <summary>
@@ -202,12 +221,8 @@ namespace BarometerWinform.Dialogs
                 MessageBox.Show(lastMessage, "修改成功",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-                // 刷新当前用户名显示
-                UserAccount account = _userManager.GetAccount(targetRole);
-                if (account != null)
-                {
-                    lblCurrentUsernameValue.Text = account.Username;
-                }
+                // 刷新当前角色显示（V1.19.7：显示中文角色名并按角色着色）
+                UpdateRoleDisplay(targetRole);
 
                 // 清空输入框，方便继续修改其他角色
                 txtNewUsername.Clear();
