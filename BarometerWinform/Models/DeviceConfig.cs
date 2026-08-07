@@ -443,5 +443,12 @@ namespace BarometerWinform.Models
         /// 扫码枪串口校验位（默认 None）
         /// </summary>
         public string ScannerParity { get; set; } = "None";
+
+        /// <summary>
+        /// 扫码枪心跳调试日志开关（默认 false）
+        /// true 时每个心跳周期把端口搜索的实际结果（GetPortNames / WMI 匹配 / 判定）
+        /// 通过状态事件打到 LOG，用于现场排查"断连识别不到"问题。
+        /// </summary>
+        public bool ScannerDebugLog { get; set; } = false;
     }
 }

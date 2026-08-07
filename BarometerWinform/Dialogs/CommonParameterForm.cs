@@ -7,7 +7,8 @@ using BarometerWinform.Services;
 namespace BarometerWinform.Dialogs
 {
     /// <summary>
-    /// 负压阈值设置窗体（业务逻辑部分）
+    /// 公共参数窗口（设置所有气压表负压阈值）—— 业务逻辑部分
+    /// 界面标题为"公共参数窗口"，其唯一功能是设置所有气压表的负压阈值。
     ///
     /// 【功能说明】
     /// 设置所有气压表的"负压阈值"（设备阈值），一次性批量写入全部气压表。
@@ -178,10 +179,10 @@ namespace BarometerWinform.Dialogs
                 return;
             }
 
-            // 空结果：说明一个都没连上（SetAllThresholds 未连接时返回空字典）
+            // 空结果：说明一个都没连上（SetAllThresholds 按需重连后仍连不上返回空字典）
             if (result.Count == 0)
             {
-                MessageBox.Show("未连接任何气压表，请先检查通讯连接", "提示",
+                MessageBox.Show("气压表未连接，请先连接（请检查串口/驱动后重试）", "提示",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -219,7 +220,9 @@ namespace BarometerWinform.Dialogs
                 $"设置完成！成功 {successCount} 台，失败 {failedList.Count} 台。\r\n" +
                 $"失败台号：{failedText}\r\n\r\n" +
                 "提示：失败通常表示该台气压表断电 / 掉线 / 从站地址拨错 / 损坏，\r\n" +
-                "请检查硬件后点击【保存设置】重试。",
+                "请检查硬件后点击【保存设置】重试。\r\n\r\n" +
+                "【小数位核对】若仪表本机显示值与设定值差 10 倍，\r\n" +
+                "请核对 App.config 的 BarometerDefaultDecimalPlaces 是否与仪表实际小数位一致。",
                 "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }

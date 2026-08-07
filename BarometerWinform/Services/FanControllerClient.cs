@@ -35,10 +35,11 @@ namespace BarometerWinform.Services
     /// 采集线程（DeviceManager 定时器）和 UI 线程（按钮点击）可能并发调用本类，
     /// 锁保证同一时刻只有一个线程在发 Modbus 请求，避免帧交叉。
     ///
-    /// 【断线自愈】
+    /// 【断线自愈（V1.16.2 心跳机制）】
     /// 送风机是"可选设备"，现场可能中途断电/断网。
-    /// 本类采用"每次操作前检查连接，未连接则自动重连"的策略；
-    /// 并用 10 秒重连节流，避免对已断电的设备每秒发起连接导致卡顿。
+    /// 本类采用"每次操作前检查连接，未连接则自动重连"的策略，后台静默持续重连；
+    /// 用 10 秒重连节流，避免对已断电的设备频繁发起连接导致卡顿。
+    /// 失败过程不刷日志，只由 DeviceManager 记"连上/断开"边沿（见 DeviceManager.PollFanData）。
     ///
     /// 【工控机 IP 记忆（V1.16）】
     /// 自动识别连接成功后，会把"本工控机连上的控制器 IP"写入程序目录下的 FanLastIp.cache；
@@ -345,6 +346,10 @@ namespace BarometerWinform.Services
         /// <summary>
         /// 确保连接已建立；未连接则尝试（节流后）自动重连
         /// 必须在 _syncRoot 锁内调用
+        ///
+        /// 【V1.16.2 心跳自愈】不再设"重试上限"：后台静默持续重连（10 秒节流），
+        /// 日志由 DeviceManager 只记"连上/断开"边沿，失败过程不刷日志。
+        /// 需要送风机时上层可调用 <see cref="ReconnectNow"/> 立即重连。
         /// </summary>
         /// <returns>true 表示当前可用（已连接），false 表示不可用</returns>
         private bool EnsureConnected()
@@ -363,7 +368,21 @@ namespace BarometerWinform.Services
             }
 
             // 记录本次尝试时间，然后尝试连接
+            //（连接成功与否由上层通过 IsConnected 感知，这里不额外记日志）
             _lastConnectAttempt = DateTime.Now;
+            return Connect(_config);
+        }
+
+        /// <summary>
+        /// 按需重连（【V1.16.1 新增】【V1.16.2 简化】）
+        /// 用户点击"定值启动/定值停止"等需要送风机的操作时，由上层调用本方法立即重连一次
+        /// （不等后台 10 秒节流，保证按钮响应及时）。
+        /// </summary>
+        /// <returns>重连后是否已连接</returns>
+        public bool ReconnectNow()
+        {
+            // 已连接直接可用
+            if (_isConnected) return true;
             return Connect(_config);
         }
 

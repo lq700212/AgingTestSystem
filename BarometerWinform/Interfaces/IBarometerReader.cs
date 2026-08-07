@@ -29,6 +29,12 @@ namespace BarometerWinform.Interfaces
         bool IsConnected { get; }
 
         /// <summary>
+        /// 当前实际使用的串口名称（自动识别或配置的结果；未连接时为空）
+        /// 供日志/诊断显示"气压表到底连在哪个 COM 口"，方便现场排查。
+        /// </summary>
+        string CurrentPortName { get; }
+
+        /// <summary>
         /// 连接气压表设备
         /// </summary>
         /// <param name="config">设备配置参数</param>

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using BarometerWinform.Dialogs;
 using BarometerWinform.Models;
@@ -38,10 +39,10 @@ namespace BarometerWinform.Views
     /// ├──────────────────────────────┬──────────────────────────┤
     /// │                              │ 运行状态                 │
     /// │                              │ ┌────────────────────┐   │
-    /// │   气压表显示区域             │ │ 空闲/测试中(D4204)  │   │
-    /// │   (动态加载72个面板)         │ └────────────────────┘   │
+    /// │   工位显示区域               │ │ 空闲/测试中(D4204)  │   │
+    /// │   (动态加载72个工位面板)      │ └────────────────────┘   │
     /// │                              │                         │
-    /// │   BarometerPanelView × 72    │ 监视                    │
+    /// │   WorkstationPanelView × 72    │ 监视                    │
     /// │   (9列 × 8行布局)           │ 设置温度: [D4700]       │
     /// │                              │ 上部温度: [D4702]       │
     /// │                              │ 下部温度: [D4704]       │
@@ -60,7 +61,7 @@ namespace BarometerWinform.Views
     /// 【修复 H10】设计器报错"未能加载基类 System.Windows.Forms.Form"
     ///
     /// 【问题原因】
-    /// 与 BarometerPanelView.cs 同样的问题：.cs 文件包含中文字符但没有 UTF-8 BOM，
+    /// 与 WorkstationPanelView.cs 同样的问题：.cs 文件包含中文字符但没有 UTF-8 BOM，
     /// VS 设计器的 CodeDom 解析器无法正确识别文件编码，
     /// 导致中文注释乱码，进而无法正确解析类声明和 using 语句，
     /// 设计器找不到 System.Windows.Forms.Form 基类，报"未能加载基类"错误。
@@ -105,11 +106,11 @@ namespace BarometerWinform.Views
         private ScannerService _scanner;
 
         /// <summary>
-        /// 存储所有气压表显示面板
+        /// 存储所有工位显示面板
         /// Key: 设备编号，Value: 显示面板控件
         /// 用于快速查找指定设备的面板进行数据更新
         /// </summary>
-        private readonly Dictionary<int, BarometerPanelView> _panelViews = new Dictionary<int, BarometerPanelView>();
+        private readonly Dictionary<int, WorkstationPanelView> _panelViews = new Dictionary<int, WorkstationPanelView>();
 
         /// <summary>
         /// 当前操作权限（中文显示名：操作员/技术员/管理员）
@@ -118,10 +119,11 @@ namespace BarometerWinform.Views
         private string _currentPermission = "操作员";
 
         /// <summary>
-        /// PLC连接状态
+        /// 通讯连接状态（V1.16 更名：现场无 PLC，改为通讯连接状态）
         /// true=已连接，false=未连接
+        /// 语义：气压表主链路是否连通（耦合器/送风机断开时单独在 LOG 诊断，不影响本状态）
         /// </summary>
-        private bool _plcConnected = false;
+        private bool _commConnected = false;
 
         /// <summary>
         /// 运行状态文本
@@ -143,15 +145,16 @@ namespace BarometerWinform.Views
         // ===== 布局相关常量（修复 L6：避免魔法数字散落代码各处） =====
         /// <summary>行全选按钮列的固定宽度（像素）</summary>
         private const int RowSelectButtonColumnWidth = 80;
-        /// <summary>气压表面板的行高（像素），包含面板高度和上下边距</summary>
-        private const int PanelRowHeight = 220;
+        /// <summary>工位面板的行高（像素），包含面板高度和上下边距（V1.16 加高容纳新布局）</summary>
+        private const int PanelRowHeight = 245;
         /// <summary>
-        /// 气压表面板的列宽（像素）= 面板设计宽度210 + 左右边距4 + 边框余量6
+        /// 工位面板的列宽（像素）= 面板设计宽度240 + 左右边距4 + 边框余量1
         /// 【说明】使用绝对列宽而非百分比，确保每个单元格足够宽容纳面板内容，
         ///        避免窗口缩小时面板被压缩导致内容显示不全。
         ///        窗口宽度不够时由 TableLayoutPanel.AutoScroll 显示水平滚动条。
+        ///        V1.16 工位面板重新设计后加宽到 245。
         /// </summary>
-        private const int PanelColumnWidth = 220;
+        private const int PanelColumnWidth = 245;
         /// <summary>日志文本框的最大字符数，超过时自动裁剪旧内容（修复 M8）</summary>
         private const int MaxLogTextLength = 100_000;
         /// <summary>日志裁剪后保留的字符数（保留最近一半内容）</summary>
@@ -181,6 +184,10 @@ namespace BarometerWinform.Views
             _deviceManager.OnConnectionStatusChanged += DeviceManager_OnConnectionStatusChanged;
             // 【V1.10 新增】订阅送风机数据更新事件（独立定时器触发）
             _deviceManager.OnFanDataUpdated += DeviceManager_OnFanDataUpdated;
+
+            // 【V1.16 新增】订阅启动/连接诊断事件（气压表串口、耦合器、送风机连接结果）
+            // 后台线程触发，处理器内部用 BeginInvoke 切回 UI 线程写 LOG
+            _deviceManager.OnDiagnostic += DeviceManager_OnDiagnostic;
 
             // 4.5 【V1.16 新增】初始化扫码枪服务（真实扫码枪接入，参考 SerialScannerTest Demo）
             // 注意：必须在 UI 线程创建，这样扫码事件会自动封送到 UI 线程，订阅者可直接更新控件
@@ -641,6 +648,12 @@ namespace BarometerWinform.Views
                 config.ScannerParity = scannerParity;
             }
 
+            // 【V1.16.3】扫码枪心跳调试日志开关（排查"断连识别不到"用）
+            if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["ScannerDebugLog"], out bool scannerDebugLog))
+            {
+                config.ScannerDebugLog = scannerDebugLog;
+            }
+
             if (config.TotalInputs < config.TotalBarometers)
             {
                 System.Diagnostics.Debug.WriteLine(
@@ -698,38 +711,49 @@ namespace BarometerWinform.Views
         /// </summary>
         private void MainForm_Load(object sender, EventArgs e)
         {
-            // 动态创建气压表显示面板（根据配置的设备数量）
-            CreateBarometerPanels();
+            // 动态创建工位显示面板（根据配置的设备数量）
+            CreateWorkstationPanels();
 
             // 启动设备管理器（开始数据采集）
+            // 【V1.16】Start 只要求"气压表串口"连通；耦合器/送风机断开不影响压力采集，
+            // 具体哪一步连不上会通过 OnDiagnostic 事件写进 LOG。
             bool started = _deviceManager.Start();
-            if (started)
+            if (!started)
             {
-                _plcConnected = true;
-                UpdateConnectionStatus();
+                // 启动失败（气压表串口没连上）：把原因写到 LOG，方便现场排查
+                WriteLog($"设备启动失败：{_deviceManager.LastStartupError}");
             }
+
+            // 【V1.16.1】顶部"通讯连接状态"只反映 IO 耦合器（阀/载台电控制）是否连接，
+            // 不再用"气压表串口是否连上"冒充。Start() 内部已同步触发
+            // OnConnectionStatusChanged 事件（数据源 = 耦合器），这里再按实际状态兜底刷新一次。
+            _commConnected = _deviceManager.IsIoConnected;
+            UpdateConnectionStatus();
 
             // 【V1.16 新增】启动扫码枪服务（自动识别串口并连接；未启用/未插入时定时重连）
             // 扫码枪是可选设备，内部已做"ScannerEnabled=false 直接跳过"处理，不影响整机启动
             _scanner?.Start();
+
+            // 【V1.16.2】刷新状态栏"扫码枪"连接状态（已连接/未连接/未启用）
+            RefreshScannerStatus();
 
             // 启动定时器更新状态栏时间显示
             timerTime.Start();
         }
 
         /// <summary>
-        /// 动态创建气压表显示面板
-        /// 根据配置的设备数量（默认72个）创建对应的显示面板
+        /// 动态创建工位显示面板（V1.16 更名：本质是 72 个工位，每个工位对应一台气压表）
+        /// 根据配置的设备数量（默认72个）创建对应的工位面板
         /// 面板按行列网格布局排列在中间区域
         ///
         /// 【布局说明】
         /// 使用 TableLayoutPanel 实现网格布局（8列×9行=72个面板 + 1列行全选按钮）
-        /// 共 9 列：前 8 列放气压表面板（固定宽度），最后 1 列放行全选按钮（固定宽度）
+        /// 共 9 列：前 8 列放工位面板（固定宽度），最后 1 列放行全选按钮（固定宽度）
         /// 直接将 TableLayoutPanel 添加到 splitContainerMain.Panel1
         /// 【注意】不能放在 FlowLayoutPanel 中，因为 FlowLayoutPanel
         /// 不尊重子控件的 Dock=Fill 属性，会导致 TableLayoutPanel 尺寸为0
         /// </summary>
-        private void CreateBarometerPanels()
+        private void CreateWorkstationPanels()
         {
             // 【修复 H5】清空前先 Dispose 旧控件，避免控件资源泄漏
             // Controls.Clear() 只移除父子关系，不会释放控件资源
@@ -751,14 +775,14 @@ namespace BarometerWinform.Views
             int rows = _config.PanelRows;
             int cols = _config.PanelColumns;
 
-            // 列数 = 气压表列数 + 1（额外一列用于放置行全选按钮）
+            // 列数 = 工位列数 + 1（额外一列用于放置行全选按钮）
             tableLayoutPanel.ColumnCount = cols + 1;
             tableLayoutPanel.RowCount = rows;
 
             // 设置前 cols 列宽（绝对值，确保每个单元格足够宽容纳面板内容）
             // 【修复】之前用百分比列宽，窗口缩小时单元格会压缩到~107px，
-            //        远小于面板设计宽度210px，导致面板重叠、内容被裁剪。
-            //        改用绝对列宽220px，确保单元格始终足够宽。
+            //        远小于面板设计宽度，导致面板重叠、内容被裁剪。
+            //        改用绝对列宽（V1.16 工位面板加宽到 245），确保单元格始终足够宽。
             for (int i = 0; i < cols; i++)
             {
                 tableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, PanelColumnWidth));
@@ -766,21 +790,20 @@ namespace BarometerWinform.Views
             // 最后一列：行全选按钮列，使用绝对宽度
             tableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, RowSelectButtonColumnWidth));
 
-            // 设置行高（绝对值，每个面板高度固定215+边距）
+            // 设置行高（绝对值，每个面板高度固定 + 边距）
             // 使用 Absolute 固定行高，确保面板完整显示
             for (int i = 0; i < rows; i++)
             {
                 tableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, PanelRowHeight));
             }
 
-            // 循环创建每个气压表面板
+            // 循环创建每个工位面板
             for (int i = 0; i < _config.TotalBarometers; i++)
             {
                 int deviceId = i + 1;  // 设备编号从1开始
 
-                // 创建面板实例（带设备编号、气压表总数、IO输入通道总数）
-                // TotalInputs 参与“输出点内部编号”的计算（outputId 从 TotalInputs+1 开始）
-                var panel = new BarometerPanelView(deviceId, _config.TotalBarometers, _config.TotalInputs);
+                // 创建面板实例（只需设备编号；载台上电输出编号由主窗体用 _config 计算）
+                var panel = new WorkstationPanelView(deviceId);
 
                 // 【修复】设置 Dock=Fill 让面板填满单元格，避免与相邻面板重叠
                 panel.Dock = DockStyle.Fill;
@@ -789,8 +812,11 @@ namespace BarometerWinform.Views
                 panel.Margin = new Padding(2);
                 panel.Padding = new Padding(2);
 
-                // 订阅面板的 Set 按钮点击事件
+                // 订阅面板的 Set 按钮点击事件（打开单台手动控制窗体）
                 panel.OnSetClicked += Panel_OnSetClicked;
+
+                // 【V1.16】订阅工位上电按钮点击事件（手动控制载台上电）
+                panel.OnPowerToggled += Panel_OnPowerToggled;
 
                 // 保存到字典，便于后续按设备编号查找更新
                 _panelViews[deviceId] = panel;
@@ -833,7 +859,7 @@ namespace BarometerWinform.Views
 
         /// <summary>
         /// 行全选按钮点击事件
-        /// 切换该行所有气压表面板的选中状态
+        /// 切换该行所有工位面板的选中状态
         /// 如果当前行有未选中的面板，则全部选中；如果已全部选中，则全部取消选中
         ///
         /// 【预留说明】
@@ -853,7 +879,7 @@ namespace BarometerWinform.Views
             bool allSelected = true;
             for (int deviceId = rowStartDeviceId; deviceId <= rowEndDeviceId; deviceId++)
             {
-                if (_panelViews.TryGetValue(deviceId, out BarometerPanelView panel))
+                if (_panelViews.TryGetValue(deviceId, out WorkstationPanelView panel))
                 {
                     if (!panel.IsSelected)
                     {
@@ -867,7 +893,7 @@ namespace BarometerWinform.Views
             bool newSelectionState = !allSelected;
             for (int deviceId = rowStartDeviceId; deviceId <= rowEndDeviceId; deviceId++)
             {
-                if (_panelViews.TryGetValue(deviceId, out BarometerPanelView panel))
+                if (_panelViews.TryGetValue(deviceId, out WorkstationPanelView panel))
                 {
                     panel.IsSelected = newSelectionState;
                 }
@@ -956,7 +982,7 @@ namespace BarometerWinform.Views
 
             foreach (var data in allData)
             {
-                if (data != null && _panelViews.TryGetValue(data.DeviceId, out BarometerPanelView panel))
+                if (data != null && _panelViews.TryGetValue(data.DeviceId, out WorkstationPanelView panel))
                 {
                     panel.UpdateData(data);
                 }
@@ -1006,81 +1032,100 @@ namespace BarometerWinform.Views
         }
 
         /// <summary>
-        /// 更新送风机监视区显示（【V1.10 新增】）
-        /// 显示：运行状态 / 当前温度 / 当前湿度 / 设定温度
-        /// data 为 null 表示通讯失败/离线
+        /// 更新送风机监视区显示（【V1.10 新增】【V1.16 调整显示项】【V1.16.1 再调整】）
+        /// 显示：运行状态 / 设置温度（控制屏设定值） / 当前温度（控制屏当前温度，唯一探头）。
+        /// 下部温度已按需求删除（后续加装下部探头再加）。送风机这边不关注湿度。
+        /// data 为 null 表示通讯失败/离线。
+        ///
+        /// 【运行状态文字颜色约定（V1.16.1）】
+        /// - 未连接（通讯失败/离线）= 红
+        /// - 定值启动 / 程式运行中 / 已连接 = 绿（在转/在线都是绿色）
+        /// - 定值停止 / 程式停止 = 灰
+        /// - 未启用（配置关掉送风机）= 灰
         /// </summary>
         private void UpdateFanDisplay(FanData data)
         {
             if (this.IsDisposed) return;
 
-            // 未启用送风机
+            // 未启用送风机（配置 FanEnabled=false）
             if (!_deviceManager.IsFanEnabled)
             {
                 lblFanState.Text = "未启用";
                 lblFanState.ForeColor = Color.Gray;
-                txtSetTemp.Text = "---";
-                txtUpperTemp.Text = "---";
-                txtLowerTemp.Text = "---";
+                lblSetTemp.Text = "---";
+                lblUpperTemp.Text = "---";
                 return;
             }
 
-            // 通讯失败 / 离线
+            // 通讯失败 / 离线 → "未连接"（红）
             if (data == null)
             {
-                lblFanState.Text = "离线";
+                lblFanState.Text = "未连接";
                 lblFanState.ForeColor = Color.Red;
-                txtSetTemp.Text = "---";
-                txtUpperTemp.Text = "---";
-                txtLowerTemp.Text = "---";
+                lblSetTemp.Text = "---";
+                lblUpperTemp.Text = "---";
                 return;
             }
 
-            // 运行状态文本 + 颜色
+            // 运行状态文本 + 颜色（V1.16.1：按用户需求统一为 定值启动/定值停止/已连接 等）
             string stateText;
             Color stateColor;
             switch (data.RunState)
             {
                 case FanRunState.FixedValueRunning:
-                    stateText = "定值运行中";
+                    stateText = "定值启动";     // 定值运行中 → 显示"定值启动"（绿）
                     stateColor = Color.Green;
                     break;
                 case FanRunState.ProgramRunning:
-                    stateText = "程式运行中";
+                    stateText = "程式运行中";   // 程式模式运行（绿，与"在转=绿色"一致）
                     stateColor = Color.Green;
                     break;
                 case FanRunState.FixedValueStopped:
+                    stateText = "定值停止";     // 定值停止（灰）
+                    stateColor = Color.Gray;
+                    break;
                 case FanRunState.ProgramStopped:
-                    stateText = "已停止";
+                    stateText = "程式停止";     // 程式模式停止（灰）
                     stateColor = Color.Gray;
                     break;
                 default:
-                    stateText = "未知";
-                    stateColor = Color.Orange;
+                    stateText = "已连接";       // 在线但状态未知 → 归为"已连接"（绿）
+                    stateColor = Color.Green;
                     break;
             }
             lblFanState.Text = stateText;
             lblFanState.ForeColor = stateColor;
 
-            // 温度 / 湿度 / 设定温度
-            txtSetTemp.Text = $"{data.Temperature:F2} °C";
-            txtUpperTemp.Text = $"{data.Humidity:F2} %";
-            txtLowerTemp.Text = $"{data.TempSetpoint:F2} °C";
+            // ===== 两项温度显示（V1.16.1：下部温度已删除） =====
+            // 设置温度 = 控制屏的温度设定值（厂商控制屏设定，上位机只读）
+            lblSetTemp.Text = $"{data.TempSetpoint:F2} °C";
 
-            // 【V1.10】送风机温度告警：超过配置上限 → 温度标红并记日志
+            // 当前温度 = 控制屏当前温度（目前唯一探头，数据源就是设备的当前温度寄存器）
+            lblUpperTemp.Text = $"{data.Temperature:F2} °C";
+
+            // 【V1.16.3】当前温度颜色按"与设置温度的偏差"显示（控件由 TextBox 改为 Label，
+            // 避免 ReadOnly 文本框获得焦点/文字选中时 ForeColor 被高亮色覆盖而不生效）：
+            // 高于设置温度（lblSetTemp）→ 红（偏热，风扇需加强降温）；不高于 → 绿（正常/已到温）。
+            // 原来按固定告警上限 FanTempAlarmLimitC 判断，现场更关心相对"设置温度"的高低。
+            if (data.Temperature > data.TempSetpoint)
+            {
+                lblUpperTemp.ForeColor = Color.Red;
+            }
+            else
+            {
+                lblUpperTemp.ForeColor = Color.Green;
+            }
+
+            // 【V1.10 保留】送风机温度安全告警：超过配置上限 FanTempAlarmLimitC →
+            // 仅记日志提示（不覆盖上面按设置温度显示的颜色）。
             if (_config.FanTempAlarmLimitC > 0 && data.Temperature > _config.FanTempAlarmLimitC)
             {
-                txtSetTemp.ForeColor = Color.Red;
                 if (data.Temperature > _fanTempAlarmLoggedThreshold)
                 {
                     // 只在第一次超过新阈值时记日志，避免每秒重复记录
                     _fanTempAlarmLoggedThreshold = data.Temperature;
-                    WriteLog($"[送风机] 温度 {data.Temperature:F1}°C 超过告警上限 {_config.FanTempAlarmLimitC:F1}°C");
+                    WriteLog($"[送风机] 上部温度 {data.Temperature:F1}°C 超过告警上限 {_config.FanTempAlarmLimitC:F1}°C");
                 }
-            }
-            else
-            {
-                txtSetTemp.ForeColor = Color.Black;
             }
         }
 
@@ -1149,12 +1194,46 @@ namespace BarometerWinform.Views
         /// </summary>
         private void DeviceManager_OnConnectionStatusChanged(object sender, bool isConnected)
         {
-            _plcConnected = isConnected;
+            _commConnected = isConnected;
             UpdateConnectionStatus();
         }
 
         /// <summary>
-        /// 更新顶部 PLC 连接状态显示
+        /// 设备管理器启动/连接诊断事件处理（【V1.16 新增】）
+        /// 把连接诊断（实际气压表串口、耦合器连接结果、送风机连接结果、自动重连成功等）
+        /// 写到 LOG 面板，让现场一眼看到"到底哪一步连不上"。
+        /// 【线程安全】后台线程触发，用 BeginInvoke 切回 UI 线程写日志。
+        /// </summary>
+        private void DeviceManager_OnDiagnostic(object sender, string message)
+        {
+            // 窗体已释放或正在释放时直接返回
+            if (this.IsDisposed || this.Disposing) return;
+
+            try
+            {
+                if (this.InvokeRequired)
+                {
+                    this.BeginInvoke(new Action<string>(WriteLog), message);
+                }
+                else
+                {
+                    WriteLog(message);
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                // 窗体已释放，忽略
+            }
+            catch (InvalidOperationException)
+            {
+                // 窗体在 BeginInvoke 前刚好释放，忽略
+            }
+        }
+
+        /// <summary>
+        /// 更新顶部"通讯连接状态"显示
+        /// 【V1.16.1】语义 = IO 耦合器（阀 / 载台电控制）是否连接，不再反映气压表串口。
+        /// 数据来源 _commConnected（由 DeviceManager.OnConnectionStatusChanged 事件驱动）。
         /// 【修复 H1】增加 IsDisposed 检查，使用 BeginInvoke 异步切换
         /// </summary>
         private void UpdateConnectionStatus()
@@ -1171,8 +1250,8 @@ namespace BarometerWinform.Views
                     return;
                 }
 
-                lblPlcStatus.Text = _plcConnected ? "已连接" : "未连接";
-                lblPlcStatus.ForeColor = _plcConnected ? Color.Green : Color.Red;
+                lblCommStatus.Text = _commConnected ? "已连接" : "未连接";
+                lblCommStatus.ForeColor = _commConnected ? Color.Green : Color.Red;
             }
             catch (ObjectDisposedException)
             {
@@ -1207,6 +1286,158 @@ namespace BarometerWinform.Views
             {
                 form.ShowDialog(this);
             }
+        }
+
+        /// <summary>
+        /// 工位上电按钮点击事件处理（【V1.16 新增】）
+        /// 面板上的"上电/下电"按钮点击后，切换该工位的载台上电输出：
+        /// - 当前未上电 → 上电（OutputStatus[1] 置 true）
+        /// - 当前已上电 → 下电（OutputStatus[1] 置 false）
+        /// 载台上电输出内部编号 = TotalInputs + TotalBarometers + deviceId
+        /// （与 DeviceManager.StartTesting / StopTesting 的编号约定一致）
+        /// </summary>
+        /// <summary>
+        /// "连接中..."提示窗体（【V1.16.2 新增】）
+        /// 异步按需重连期间显示：告诉操作员正在连接哪个设备，同时禁用主窗体，
+        /// 防止连接期间重复点击其它按钮造成并发连接。
+        /// </summary>
+        private Form _connectingForm;
+
+        /// <summary>
+        /// 显示"连接中..."提示并禁用主窗体（【V1.16.2 新增】）
+        /// 仅在异步重连开始时调用；结束时由 <see cref="HideConnecting"/> 恢复。
+        /// </summary>
+        /// <param name="deviceName">设备名（如"耦合器"/"送风机"），用于提示文案</param>
+        private void ShowConnecting(string deviceName)
+        {
+            if (_connectingForm != null) return;
+
+            _connectingForm = new Form
+            {
+                StartPosition = FormStartPosition.CenterParent,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                ControlBox = false,           // 不显示关闭按钮（连接期间不可取消）
+                ShowInTaskbar = false,
+                ClientSize = new Size(300, 80),
+                Text = "连接中"
+            };
+            _connectingForm.Controls.Add(new Label
+            {
+                Text = $"正在连接{deviceName}，请稍候...",
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter
+            });
+
+            // 禁用主窗体，防止连接期间重复点击（连接只影响自身，后台采集照常进行）
+            this.Enabled = false;
+            _connectingForm.Show(this);
+        }
+
+        /// <summary>
+        /// 关闭"连接中..."提示并恢复主窗体（【V1.16.2 新增】）
+        /// 在 async 方法的 finally 中调用，保证无论成功失败都恢复。
+        /// </summary>
+        private void HideConnecting()
+        {
+            if (_connectingForm != null)
+            {
+                try { _connectingForm.Close(); } catch { /* 窗体已关闭则忽略 */ }
+                _connectingForm.Dispose();
+                _connectingForm = null;
+            }
+
+            // 主窗体可能正在被关闭（用户点了退出），此时不能再操作
+            if (!this.IsDisposed && !this.Disposing)
+            {
+                this.Enabled = true;
+            }
+        }
+
+        /// <summary>
+        /// 确保 IO 耦合器已连接（【V1.16.2】完全异步版，替代原同步 EnsureIoReady）
+        /// 用户操作需要耦合器时先调用：未连接则后台异步重连一次，
+        /// 期间弹"正在连接耦合器..."提示（不卡界面）；连不上则弹窗提示并返回 false。
+        /// </summary>
+        /// <returns>true = 耦合器可用，可继续执行操作</returns>
+        private async Task<bool> EnsureIoReadyAsync()
+        {
+            // 已连接直接可用（无任何等待/提示）
+            if (_deviceManager.IsIoConnected) return true;
+
+            ShowConnecting("耦合器");
+            bool ok;
+            try
+            {
+                ok = await Task.Run(() => _deviceManager.EnsureIoConnected());
+            }
+            catch (Exception ex)
+            {
+                // 防御：连接实现内部已捕获异常，正常情况下不会走到这里
+                WriteLog($"耦合器连接异常: {ex.Message}");
+                ok = false;
+            }
+            finally
+            {
+                HideConnecting();
+            }
+
+            if (!ok)
+            {
+                MessageBox.Show("耦合器未连接，请先连接（阀/载台上电等操作暂不可用）", "提示",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            return ok;
+        }
+
+        /// <summary>
+        /// 确保送风机已连接（【V1.16.2】异步版）
+        /// 需要送风机的操作（定值启动/停止、启动测试）先调用：未连接则后台异步重连一次，
+        /// 期间弹"正在连接送风机..."提示；连不上返回 false（由调用方决定是否阻断/提示）。
+        /// </summary>
+        /// <returns>true = 送风机可用</returns>
+        private async Task<bool> EnsureFanReadyAsync()
+        {
+            // 未启用送风机（App.config FanEnabled=false）：不弹"连接中"，直接按不可用处理
+            if (!_deviceManager.IsFanEnabled) return false;
+            if (_deviceManager.IsFanConnected) return true;
+
+            ShowConnecting("送风机");
+            bool ok;
+            try
+            {
+                ok = await Task.Run(() => _deviceManager.ReconnectFan());
+            }
+            catch (Exception ex)
+            {
+                WriteLog($"送风机连接异常: {ex.Message}");
+                ok = false;
+            }
+            finally
+            {
+                HideConnecting();
+            }
+            return ok;
+        }
+
+        private async void Panel_OnPowerToggled(object sender, int deviceId)
+        {
+            if (deviceId < 1 || deviceId > _config.TotalBarometers) return;
+
+            // 【V1.16.2】载台上电需要耦合器：先异步连接（弹"连接中"），连不上弹窗提示
+            if (!await EnsureIoReadyAsync()) return;
+
+            // 取该工位当前载台上电状态（来自面板缓存的数据，避免再读一次 IO）
+            bool currentPower = false;
+            if (_panelViews.TryGetValue(deviceId, out WorkstationPanelView panel) && panel.GetCurrentData() != null)
+            {
+                var d = panel.GetCurrentData();
+                currentPower = d.OutputStatus != null && d.OutputStatus.Length >= 2 && d.OutputStatus[1];
+            }
+
+            // 取反：当前上电则下电，当前下电则上电
+            bool nextPower = !currentPower;
+            _deviceManager.SetOutput(_config.TotalInputs + _config.TotalBarometers + deviceId, nextPower);
+            WriteLog($"工位 NO.{deviceId} 载台上电: {(nextPower ? "上电" : "下电")}");
         }
 
         #region 顶部菜单按钮事件处理（显示下拉菜单）
@@ -1409,10 +1640,11 @@ namespace BarometerWinform.Views
         #region 参数设置菜单项
 
         /// <summary>
-        /// 公共参数 → 弹出负压阈值设置窗体
+        /// 公共参数窗口 → 弹出"设置所有气压表负压阈值"窗口
         ///
-        /// 【V1.16 更新】公共参数窗体从"采集间隔+报警阈值"简化为"设置所有气压表负压阈值"：
+        /// 【V1.16 更新】公共参数窗口从"采集间隔+报警阈值"简化为"设置所有气压表负压阈值"：
         /// 传入 _deviceManager，由窗体在后台线程逐台写入气压表阈值寄存器（0x0010），
+        /// 写入期间 DeviceManager 会暂停主采集定时器（避免与批量写争抢串口总线），
         /// 写入完成汇总成功/失败台数后返回。
         /// </summary>
         private void MenuParamCommon_Click(object sender, EventArgs e)
@@ -1489,10 +1721,28 @@ namespace BarometerWinform.Views
         /// 送风机定值启动按钮点击（【V1.10】由原"温控操作"按钮改造）
         /// 让送风机按控制屏设定温度运行（厂商自动控温）
         /// </summary>
-        private void btnTemperatureControl_Click(object sender, EventArgs e)
+        private async void btnTemperatureControl_Click(object sender, EventArgs e)
         {
+            // 【V1.16.2】送风机未连时先异步按需重连（弹"连接中"），连不上弹窗提示
+            if (_deviceManager.IsFanEnabled && !_deviceManager.IsFanConnected)
+            {
+                if (!await EnsureFanReadyAsync())
+                {
+                    MessageBox.Show("送风机未连接，请先连接（定值启动失败）", "提示",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+            }
+
+            // 已连上，命令直接下发（StartFan 内部已连接则不再重复连接）
             bool ok = _deviceManager.StartFan();
-            WriteLog(ok ? "送风机定值启动命令已发送" : "送风机定值启动失败（请检查通讯）");
+            if (!ok)
+            {
+                MessageBox.Show("送风机未连接，请先连接（定值启动失败）", "提示",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            WriteLog("送风机定值启动命令已发送");
         }
 
         /// <summary>
@@ -1500,10 +1750,28 @@ namespace BarometerWinform.Views
         /// 【注意】如果有任何一台正在测试，采集循环会自动重新启动送风机
         /// （送风机是环境设备，测试期间必须保持运行）。
         /// </summary>
-        private void btnFanStop_Click(object sender, EventArgs e)
+        private async void btnFanStop_Click(object sender, EventArgs e)
         {
+            // 【V1.16.2】送风机未连时先异步按需重连（弹"连接中"），连不上弹窗提示
+            if (_deviceManager.IsFanEnabled && !_deviceManager.IsFanConnected)
+            {
+                if (!await EnsureFanReadyAsync())
+                {
+                    MessageBox.Show("送风机未连接，请先连接（定值停止失败）", "提示",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+            }
+
+            // 已连上，命令直接下发（StopFan 内部已连接则不再重复连接）
             bool ok = _deviceManager.StopFan();
-            WriteLog(ok ? "送风机定值停止命令已发送" : "送风机定值停止失败（请检查通讯）");
+            if (!ok)
+            {
+                MessageBox.Show("送风机未连接，请先连接（定值停止失败）", "提示",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            WriteLog("送风机定值停止命令已发送");
         }
 
         /// <summary>
@@ -1511,10 +1779,13 @@ namespace BarometerWinform.Views
         /// 对选中的面板打开真空电磁阀（只做单动作，供预检/手动使用；
         /// "启动运行"是开真空 + 载台上电的组合快捷入口）
         /// </summary>
-        private void btnVacuum_Click(object sender, EventArgs e)
+        private async void btnVacuum_Click(object sender, EventArgs e)
         {
             int[] ids = GetSelectedDeviceIds();
             if (ids == null) return;
+
+            // 【V1.16.2】开真空阀需要耦合器：先异步连接（弹"连接中"），连不上弹窗提示
+            if (!await EnsureIoReadyAsync()) return;
 
             foreach (int deviceId in ids)
             {
@@ -1547,14 +1818,14 @@ namespace BarometerWinform.Views
                     var recipeQueue = form.GetRecipeQueue();
                     if (recipeQueue.Count > 0)
                     {
-                        // 【预留】实际项目中应将配方队列应用到选中的气压表面板
+                        // 【预留】实际项目中应将配方队列应用到选中的工位面板
                         // 当前简化为提示信息，显示队列中的配方数量
                         WriteLog($"[批量设置配方] 窗口关闭，队列中共有 {recipeQueue.Count} 个配方");
                         MessageBox.Show(
                             $"批量设置配方窗口已关闭！\n\n" +
                             $"配方队列中共有 {recipeQueue.Count} 个配方待处理。\n\n" +
                             $"【预留功能】\n" +
-                            $"后续实现：将队列中的配方批量应用到所有选中的气压表面板",
+                            $"后续实现：将队列中的配方批量应用到所有选中的工位面板",
                             "批量设置配方",
                             MessageBoxButtons.OK,
                             MessageBoxIcon.Information);
@@ -1573,6 +1844,20 @@ namespace BarometerWinform.Views
         /// </summary>
         private void btnInputLot_Click(object sender, EventArgs e)
         {
+            // 【V1.16.1】扫码枪按需重连：打开"录入批号"前重连一次；
+            // 仍连不上则提示（扫码枪是可选设备，不影响手动输入批号/SN）。
+            // 【V1.16.2】重连后刷新状态栏扫码枪状态。
+            if (_config.ScannerEnabled && _scanner != null && !_scanner.IsConnected)
+            {
+                bool scannerOk = _scanner.TryReconnectNow();
+                RefreshScannerStatus();
+                if (!scannerOk)
+                {
+                    MessageBox.Show("扫码枪未连接，请先连接（不影响手动输入批号/SN）", "提示",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }
+
             // 【V1.16】传入扫码枪服务：ID绑定窗体打开时，扫码结果自动填充 SN 输入框
             using (var form = new InputLotForm(_scanner))
             {
@@ -1608,8 +1893,9 @@ namespace BarometerWinform.Views
         /// <summary>
         /// 启动运行按钮点击（【V1.10】接真实业务）
         /// 对选中的面板执行：开真空阀 + 载台上电 + 进入测试中 + 送风机定值启动（首台）
+        /// 【V1.16.2】异步：连接耦合器/送风机时弹"连接中"，不卡界面
         /// </summary>
-        private void btnStartRun_Click(object sender, EventArgs e)
+        private async void btnStartRun_Click(object sender, EventArgs e)
         {
             int[] ids = GetSelectedDeviceIds();
             if (ids == null) return;
@@ -1626,6 +1912,21 @@ namespace BarometerWinform.Views
                 MessageBoxIcon.Question);
             if (r != DialogResult.Yes) return;
 
+            // 【V1.16.2】启动测试需要耦合器（开阀+载台上电）：先异步连接（弹"连接中"），连不上弹窗提示
+            if (!await EnsureIoReadyAsync()) return;
+
+            // 【V1.16.2】启动测试依赖送风机保持温控：送风机没连上时给一次异步按需重连
+            //（弹"连接中"），仍连不上则提示（不阻断测试，但操作员要知道没有温控）。
+            if (_deviceManager.IsFanEnabled && !_deviceManager.IsFanConnected)
+            {
+                bool fanOk = await EnsureFanReadyAsync();
+                if (!fanOk)
+                {
+                    MessageBox.Show("送风机未连接，请先连接（测试仍会启动，但老化过程没有环境温控）", "提示",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }
+
             _deviceManager.StartTesting(ids);
             WriteLog($"启动老化测试（{ids.Length} 台）");
         }
@@ -1635,7 +1936,7 @@ namespace BarometerWinform.Views
         /// 对选中的面板执行：关真空阀 + 断载台上电 + 退出测试中
         /// （最后一台停止时送风机自动停止）
         /// </summary>
-        private void btnStopRun_Click(object sender, EventArgs e)
+        private async void btnStopRun_Click(object sender, EventArgs e)
         {
             int[] ids = GetSelectedDeviceIds();
             if (ids == null) return;
@@ -1646,6 +1947,9 @@ namespace BarometerWinform.Views
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question);
             if (r != DialogResult.Yes) return;
+
+            // 【V1.16.2】停止测试需要耦合器（关阀+断载台电）：先异步连接，连不上弹窗提示
+            if (!await EnsureIoReadyAsync()) return;
 
             _deviceManager.StopTesting(ids);
             WriteLog($"停止运行（{ids.Length} 台）");
@@ -1677,7 +1981,7 @@ namespace BarometerWinform.Views
         /// 全部停止（急停）按钮点击（【V1.10 新增】）
         /// 一键关闭所有真空阀 + 断开所有载台上电 + 停止送风机，带防误触确认。
         /// </summary>
-        private void btnStopAll_Click(object sender, EventArgs e)
+        private async void btnStopAll_Click(object sender, EventArgs e)
         {
             DialogResult r = MessageBox.Show(
                 "确认【全部停止】？\n\n" +
@@ -1690,6 +1994,10 @@ namespace BarometerWinform.Views
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning);
             if (r != DialogResult.Yes) return;
+
+            // 【V1.16.2】急停需要耦合器（关阀+断载台电）：先异步连接；连不上要明确告诉
+            // 操作员，否则可能误以为阀门已关闭（安全提示）。
+            if (!await EnsureIoReadyAsync()) return;
 
             _deviceManager.StopAll();
             WriteLog("已执行全部停止（急停）");
@@ -1759,6 +2067,54 @@ namespace BarometerWinform.Views
         private void Scanner_OnStatusChanged(object sender, string message)
         {
             WriteLog($"[扫码枪] {message}");
+
+            // 【V1.16.2】扫码枪连接状态变化 → 刷新状态栏显示（已连接/未连接/未启用）
+            RefreshScannerStatus();
+        }
+
+        /// <summary>
+        /// 刷新状态栏"扫码枪"连接状态（【V1.16.2 新增】）
+        /// 让操作员在底部状态栏一眼看到扫码枪当前连接状态：
+        /// - 已连接 = 绿；未连接 = 红；未启用（App.config 关掉）= 灰。
+        /// 与顶部"通讯连接状态"（耦合器）、送风机状态标签一起，
+        /// 构成完整的设备连接状态总览（四个设备断了哪个一眼可见）。
+        /// </summary>
+        private void RefreshScannerStatus()
+        {
+            if (this.IsDisposed || this.Disposing) return;
+
+            try
+            {
+                if (this.InvokeRequired)
+                {
+                    this.BeginInvoke(new Action(RefreshScannerStatus));
+                    return;
+                }
+
+                if (!_config.ScannerEnabled || _scanner == null)
+                {
+                    toolStripStatusLabelScanner.Text = "扫码枪: 未启用";
+                    toolStripStatusLabelScanner.ForeColor = Color.Gray;
+                }
+                else if (_scanner.IsConnected)
+                {
+                    toolStripStatusLabelScanner.Text = "扫码枪: 已连接";
+                    toolStripStatusLabelScanner.ForeColor = Color.Green;
+                }
+                else
+                {
+                    toolStripStatusLabelScanner.Text = "扫码枪: 未连接";
+                    toolStripStatusLabelScanner.ForeColor = Color.Red;
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                // 窗体已释放，忽略
+            }
+            catch (InvalidOperationException)
+            {
+                // 窗体释放中，忽略
+            }
         }
 
         /// <summary>
@@ -1806,6 +2162,8 @@ namespace BarometerWinform.Views
                 _deviceManager.OnConnectionStatusChanged -= DeviceManager_OnConnectionStatusChanged;
                 // 【V1.10】退订送风机数据更新事件
                 _deviceManager.OnFanDataUpdated -= DeviceManager_OnFanDataUpdated;
+                // 【V1.16】退订启动/连接诊断事件
+                _deviceManager.OnDiagnostic -= DeviceManager_OnDiagnostic;
             }
 
             // 释放设备管理器（内部会调用 Stop 停止定时器和断开连接）

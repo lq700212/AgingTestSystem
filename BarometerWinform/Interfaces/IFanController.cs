@@ -32,6 +32,12 @@ namespace BarometerWinform.Interfaces
         bool IsConnected { get; }
 
         /// <summary>
+        /// 当前实际连接成功的送风机 IP（自动识别结果）
+        /// 供日志/诊断显示"到底连上了哪台设备"；未连接成功时为 null。
+        /// </summary>
+        string ActiveIp { get; }
+
+        /// <summary>
         /// 连接送风机控制屏
         /// </summary>
         /// <param name="config">设备配置（含 FanIpAddress / FanPort / FanUnitId / FanTimeoutMs）</param>
@@ -42,6 +48,14 @@ namespace BarometerWinform.Interfaces
         /// 断开连接
         /// </summary>
         void Disconnect();
+
+        /// <summary>
+        /// 按需重连（【V1.16.1 新增】）
+        /// 用户操作需要送风机时调用：已连接直接返回 true，未连接立即重连一次。
+        /// 自动重连在连续失败达上限后会放弃，靠本方法给用户操作一次"重新尝试"的机会。
+        /// </summary>
+        /// <returns>重连后是否已连接</returns>
+        bool ReconnectNow();
 
         /// <summary>
         /// 读取送风机当前状态（状态 + 温度 + 湿度 + 设定值）
