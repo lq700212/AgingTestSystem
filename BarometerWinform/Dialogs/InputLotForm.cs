@@ -50,7 +50,8 @@ namespace BarometerWinform.Dialogs
         /// <summary>
         /// 【V1.16 新增】扫码枪服务引用
         /// 由主窗体传入，继续传递给 ID绑定窗体（IdBindingForm），
-        /// 使 ID 绑定界面打开时扫码结果能自动填充 SN 输入框。
+        /// 使 ID 绑定界面打开时扫码结果能自动识别"工位号"（恰好2位数字）
+        /// 和"产品SN"并填入对应输入框（V1.16 更新支持工位号扫码）。
         /// 可能为 null（未启用扫码枪），使用前需要判空。
         /// </summary>
         private readonly ScannerService _scanner;
@@ -140,7 +141,7 @@ namespace BarometerWinform.Dialogs
             }
 
             // 批号验证通过，弹出ID绑定界面
-            // 【V1.16】把扫码枪服务传进去：ID绑定窗体打开时，扫码结果自动填充 SN 输入框
+            // 【V1.16】把扫码枪服务传进去：ID绑定窗体打开时，扫码结果自动识别工位号/SN 并填入输入框（V1.16 更新支持工位号扫码）
             using (var bindingForm = new IdBindingForm(lotNumber, _scanner))
             {
                 // 订阅ID绑定完成事件

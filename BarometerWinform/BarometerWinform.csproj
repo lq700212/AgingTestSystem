@@ -122,6 +122,9 @@
     <EmbeddedResource Include="Dialogs\BatchRecipeForm.resx">
       <DependentUpon>BatchRecipeForm.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="Dialogs\CommonParameterForm.resx">
+      <DependentUpon>CommonParameterForm.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Dialogs\InputLotForm.resx">
       <DependentUpon>InputLotForm.cs</DependentUpon>
     </EmbeddedResource>
@@ -152,12 +155,6 @@
     </Compile>
     <Compile Include="Dialogs\HistoryRecordForm.Designer.cs">
       <DependentUpon>HistoryRecordForm.cs</DependentUpon>
-    </Compile>
-    <Compile Include="Dialogs\ScanSimulationForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="Dialogs\ScanSimulationForm.Designer.cs">
-      <DependentUpon>ScanSimulationForm.cs</DependentUpon>
     </Compile>
     <Compile Include="Dialogs\LoginForm.cs">
       <SubType>Form</SubType>

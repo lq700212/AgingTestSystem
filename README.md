@@ -20,7 +20,7 @@
 | 用户权限管理 | 操作员/技术员/管理员登录与权限控制 | 已实现 |
 | 参数配置 | 采集间隔、报警阈值、配方管理等 | 部分实现（配置持久化待完成） |
 | 数据记录 | 事件日志 CSV 落盘 + 历史记录查询 | 已实现（V1.15，TestEventLogger） |
-| 扫码枪读码 | 真实扫码枪接入（串口读码，SN 自动填充） | 已实现（V1.16，ScannerService） |
+| 扫码枪读码 | 真实扫码枪接入（串口读码，工位号/SN 自动识别填充） | 已实现（V1.16，ScannerService） |
 
 ### 1.2 技术栈
 
@@ -49,7 +49,7 @@
 ┌─────────────────────────────────────────────────────────────────────┐
 │                 Dialogs (对话框窗体层)                                │
 │  CommonParameterForm │ RecipeManagerForm │ HistoryRecordForm   │
-│  ScanSimulationForm │ DeviceManualForm (V1.15)                 │
+│  InputLotForm │ IdBindingForm │ DeviceManualForm (V1.15)       │
 └─────────────────────────────────────────────────────────────────────┘
                                 │
                                 ▼
@@ -194,14 +194,13 @@
 - 不改变原有布局结构
 - ContextMenuStrip 灵活控制显示位置
 
-**5个菜单按钮的下拉菜单项**:
+**4个菜单按钮的下拉菜单项**:
 
 | 菜单按钮 | 下拉菜单项 | 触发的窗体/动作 | 权限要求 |
 | :--- | :--- | :--- | :--- |
 | 用户权限 | 操作员 / 技术员 / 管理员 / 用户管理* | 弹出 LoginForm 输入用户名密码后切换权限；*用户管理仅管理员可见 | 任意权限 |
 | 参数设置 | 公共参数 / 配方管理 | 分别弹出 CommonParameterForm / RecipeManagerForm | 技术员或管理员 |
 | LOG记录 | 历史记录 | 弹出 HistoryRecordForm | 任意权限 |
-| TEST | 扫码模拟 | 弹出 ScanSimulationForm（无扫码枪时的模拟调试） | 任意权限 |
 | 关于 | 版本说明 | 弹出版本信息 MessageBox | 任意权限 |
 
 **关键方法**（MainForm.cs）:
@@ -220,18 +219,14 @@
 
 | 窗体 | 功能 | 已实现 | 预留项 |
 | :--- | :--- | :--- | :--- |
-| `CommonParameterForm` | 公共参数设置 | 采集间隔 + 报警压力阈值（写回内存配置） | 参数持久化待实现 |
+| `CommonParameterForm` | 负压阈值设置 | 【V1.16】所有控件居中显示：负压值设定输入框 + 保存设置按钮；后台线程批量写入所有气压表阈值寄存器（0x0010，参考 ModbusRtuBarometerTest Demo 的 BatchSetThreshold），写入完成汇总成功/失败台数（失败列出台号，窗口保持打开便于重试） | — |
 | `RecipeManagerForm` | 配方管理 | 左右分栏布局：左侧配方列表（序号+配方名称），右侧配方设置（配方名称、延时时间、启动时间、极限温度），底部添加/更新/删除按钮和保存设置按钮 | 新增/编辑/删除/持久化待实现 |
 | `HistoryRecordForm` | 历史记录查询 | 【V1.15】日期范围查询 + 读取 Logs\TestLog_*.csv 真实事件日志（自动跨 CSV 解析、跳过表头），"导出"按钮打开 Logs 文件夹 | Mock 数据已移除 |
-| `ScanSimulationForm` | 扫码模拟 | 条码输入并触发事件（无扫码枪时的模拟调试） | 【V1.16】真实扫码枪接入已由 ScannerService 实现，本窗体保留用于调试 |
 | `LoginForm` | 用户登录 | 用户名/密码输入、登录验证、Enter/Esc 键支持 | 密码哈希存储（当前明文） |
 | `UserManagementForm` | 用户账号管理（仅管理员） | 修改操作员/技术员的用户名和密码，用户数据持久化到 Users.json 文件 | 新增/删除账号 |
 | `BatchRecipeForm` | 批量设置配方 | 配方名称、延时时间1/2（时:分:秒）、启动时间（时:分:秒）、极限温度输入，加入队列功能，配方队列管理 | 配方批量应用到选中面板待实现 |
 | `InputLotForm` | 录入批号 | 批号输入框、红色背景注释提示、确定/取消按钮、Enter键支持、输入校验，确定后弹出ID绑定界面 | 批号持久化、关联生产记录待实现 |
-| `IdBindingForm` | ID绑定 | 批号显示（只读）、工位编号输入框、SN输入框、红色背景注释说明、产品列表显示（带滚动条）、保存按钮、重复工位覆盖确认、Enter键支持、Excel文档生成（命名规则：批号_日期_时间.xlsx） | ID绑定数据持久化待实现 |
-
-**ScanSimulationForm 事件**:
-- `OnScanCompleted` 事件：扫码完成时触发，主窗体订阅此事件处理扫码结果。
+| `IdBindingForm` | ID绑定 | 批号显示（只读）、工位编号输入框、SN输入框、红色背景注释说明、产品列表显示（带滚动条）、保存按钮、重复工位覆盖确认、Enter键支持、Excel文档生成（命名规则：批号_日期_时间.xlsx）；【V1.16】扫码枪自动识别工位号（恰好2位数字）/产品SN 填入对应输入框，两条都齐后自动加入产品列表（乱序扫码也能正确配对） | ID绑定数据持久化待实现 |
 
 **BatchRecipeForm 事件**:
 - `OnRecipeAdded` 事件：配方加入队列时触发，主窗体订阅此事件记录日志。
@@ -357,7 +352,7 @@
 
 **业务接入点**:
 - 主窗体 `MainForm_Load` 时启动；`MainForm_FormClosing` 时释放
-- 扫码结果由主窗体写 LOG 日志；ID绑定窗体（`IdBindingForm`）打开时订阅同一服务，扫码自动填充 SN 输入框（工位编号已录则自动加入产品列表）
+- 扫码结果由主窗体写 LOG 日志；ID绑定窗体（`IdBindingForm`）打开时订阅同一服务，扫码自动识别"工位号"（恰好2位数字，如 01~72）/"产品SN" 并填入对应输入框，两条都齐后自动加入产品列表（乱序扫码也能正确配对，V1.16 更新支持工位号扫码）
 
 ---
 
@@ -827,10 +822,9 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 | 功能 | 状态 | 文件位置 | 说明 |
 | :--- | :--- | :--- | :--- |
 | 用户权限管理 | 已实现 | MainForm.cs / UserManager.cs / LoginForm.cs / UserManagementForm.cs | 下拉菜单（操作员/技术员/管理员）+ 登录窗体 + 用户管理（管理员修改他人账号）；用户数据持久化到 Users.json（V1.13） |
-| 参数设置-公共参数 | 部分实现 | MainForm.cs / CommonParameterForm | 公共参数窗体已实现，参数项需现场确认补充 |
+| 参数设置-公共参数 | 已实现（V1.16） | MainForm.cs / CommonParameterForm | 设置所有气压表负压阈值：输入负压值 → 后台线程批量写入气压表阈值寄存器（0x0010）→ 汇总成功/失败台数 |
 | 参数设置-配方管理 | 部分实现 | MainForm.cs / RecipeManagerForm | 配方列表显示已实现，新增/编辑/删除逻辑待实现 |
 | LOG记录-历史记录 | 已实现（V1.15） | MainForm.cs / HistoryRecordForm | 读取 Logs\TestLog_*.csv 真实事件日志，按日期查询 |
-| TEST-扫码模拟 | 已实现（V1.16） | MainForm.cs / ScanSimulationForm / ScannerService.cs | 真实扫码枪接入已实现：WMI 自动识别串口 + 串口读码 + 断线重连；扫码结果写 LOG、ID绑定窗体自动填充 SN；扫码模拟窗体保留用于无硬件调试 |
 | 关于-版本说明 | 已实现 | MainForm.cs | 版本信息弹窗已实现 |
 | 行全选按钮 Set(SEL_N) | 已实现 | MainForm.cs | 点击切换该行所有面板选中状态（浅蓝高亮） |
 | 面板批量操作 | 已实现（V1.15） | MainForm.cs / BarometerPanelView | 选中面板后执行：开启真空 / 启动运行 / 停止运行 / 报警复位 |
@@ -844,7 +838,7 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 | 单台手动控制 | 已实现（V1.15） | Dialogs/DeviceManualForm.cs | 面板 Set 按钮打开，点动阀/载台电 + 实时 DI 状态 |
 | 批量设置配方 | 已实现 | MainForm.cs / BatchRecipeForm.cs | 批量设置配方窗口已实现，支持配方名称、延时时间1/2、启动时间、极限温度输入，以及配方队列管理；配方批量应用到选中面板待实现 |
 | 录入批号 | 已实现 | MainForm.cs / InputLotForm.cs | 录入批号窗口已实现，支持手动输入批号、输入校验、Enter键确认；确定后弹出ID绑定界面；批号写入 DeviceManager 供日志追溯 |
-| ID绑定 | 已实现 | InputLotForm.cs / IdBindingForm.cs | ID绑定窗口已实现，支持工位编号和SN输入、产品列表显示、重复工位覆盖确认、保存功能；保存时自动生成Excel文档（命名规则：批号_日期_时间.xlsx），包含批号、工位号、SN、配方名称、延时时间、启动时间列；ID绑定数据持久化待实现 |
+| ID绑定 | 已实现 | InputLotForm.cs / IdBindingForm.cs | ID绑定窗口已实现，支持工位编号和SN输入、产品列表显示、重复工位覆盖确认、保存功能；【V1.16】扫码枪自动识别工位号（恰好2位数字）/产品SN 填入对应输入框，两条都齐后自动加入产品列表（乱序扫码正确配对）；保存时自动生成Excel文档（命名规则：批号_日期_时间.xlsx），包含批号、工位号、SN、配方名称、延时时间、启动时间列；ID绑定数据持久化待实现 |
 | 老化计时自动停止 | 已实现（V1.15） | DeviceManager.cs | 真空确认后开始计时，到达 MaxTestDurationSeconds 自动停止并记日志 |
 | 报警事件落盘 | 已实现（V1.15） | TestEventLogger.cs | 启动/停止/报警/复位/急停/真空建立 写入 Logs\TestLog_yyyyMMdd.csv |
 | 日志持久化 | 部分实现（V1.15） | TestEventLogger.cs | 事件日志已落盘 CSV；界面 LOG 文本框仍未写文件 |
@@ -911,8 +905,6 @@ BarometerWinform/
 │       ├── RecipeManagerForm.Designer.cs
 │       ├── HistoryRecordForm.cs                   # 历史记录查询窗体
 │       ├── HistoryRecordForm.Designer.cs
-│       ├── ScanSimulationForm.cs                  # 扫码模拟窗体
-│       ├── ScanSimulationForm.Designer.cs
 │       ├── LoginForm.cs                           # 【新增】用户登录窗体
 │       ├── LoginForm.Designer.cs
 │       ├── UserManagementForm.cs                   # 【新增】用户账号管理窗体（仅管理员）
@@ -1065,7 +1057,7 @@ Get-ChildItem -Path $projectRoot -Recurse -Filter "*.cs" -File |
 
 - 当前版本: V1.16
 - 更新日志:
-  - V1.16 (2026-08-07): 接入真实扫码枪（ScannerService，参考 SerialScannerTest Demo）。WMI 自动识别串口（Honeywell Xenon 1902）+ 串口读码 + 断线自动重连；扫码结果写入 LOG 日志；ID绑定窗体打开时扫码自动填充 SN 输入框（工位已录则自动加入列表）；新增扫码枪配置项（ScannerEnabled/ScannerPort/ScannerDeviceKeyword 等，默认关闭）；保留扫码模拟窗体用于无硬件调试
+  - V1.16 (2026-08-07): 接入真实扫码枪（ScannerService，参考 SerialScannerTest Demo）。WMI 自动识别串口（Honeywell Xenon 1902）+ 串口读码 + 断线自动重连；扫码结果写入 LOG 日志；ID绑定窗体打开时扫码自动识别"工位号"（恰好2位数字，如 01~72）/"产品SN" 并填入对应输入框，两条都齐后自动加入产品列表（乱序扫码也能正确配对）；修复ID绑定Excel导出样式（仅表头列名加粗+居中换行，不加灰底，数据行普通字体）；公共参数窗体简化为"负压阈值设置"（居中界面：负压值设定输入框 + 保存设置按钮，后台线程批量写入所有气压表阈值寄存器 0x0010，参考 ModbusRtuBarometerTest Demo 的 BatchSetThreshold，汇总成功/失败台数）；新增扫码枪配置项（ScannerEnabled/ScannerPort/ScannerDeviceKeyword 等，默认关闭）；移除 TEST 菜单按钮及扫码模拟窗体（ScanSimulationForm），扫码枪测试用真实扫码枪（LOG 看结果）
   - V1.15 (2026-08-06): 业务串联 + 冷却送风机接入。新增送风机接口/实现/Mock/数据模型（Modbus TCP，定值启动/停止 + 温度湿度监视）；DeviceManager 增加测试状态机（启动/停止/报警复位/全部停止）、真空建立确认、通讯失联报警、老化计时自动停止、送风机全局生命周期（首台启动/末台停止）；新增事件 CSV 落盘（TestEventLogger）+ 历史记录读真实日志；新增单台手动控制对话框；右侧面板新增送风机监视区与业务操作按钮。详见 CHANGELOG.md
   - V1.14 (2026-08-03): 接入真实通讯链路（气压表 Modbus RTU + IO Modbus TCP），DeviceManager 支持 UseMockCommunication 切换；新增报警阈值参数并实现“报警边沿→关阀/断载台电”联动；新增 CHANGELOG.md 与 通讯接入说明.md 文档
   - V1.13 (2026-07-24): 用户数据持久化到 JSON 文件（Users.json）；新增 LoadUsersFromFile/SaveUsersToFile 方法；程序启动时自动加载用户数据，修改用户名/密码后自动保存；UserAccount 新增无参构造函数用于 JSON 反序列化；添加 Newtonsoft.Json NuGet 包引用；文档更新持久化方案说明

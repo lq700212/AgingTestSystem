@@ -34,7 +34,7 @@ namespace BarometerWinform.Views
     /// ┌─────────────────────────────────────────────────────────┐
     /// │ 老化测试系统V1.00  │ 当前操作权限: 操作员 │ PLC连接状态: 已连接 │
     /// ├─────────────────────────────────────────────────────────┤
-    /// │ [用户权限] [参数设置] [LOG记录] [TEST] [关于] │
+    /// │ [用户权限] [参数设置] [LOG记录] [关于] │
     /// ├──────────────────────────────┬──────────────────────────┤
     /// │                              │ 运行状态                 │
     /// │                              │ ┌────────────────────┐   │
@@ -1262,18 +1262,6 @@ namespace BarometerWinform.Views
         }
 
         /// <summary>
-        /// TEST按钮点击 → 显示TEST下拉菜单
-        /// 菜单项：扫码模拟
-        /// </summary>
-        private void btnTest_Click(object sender, EventArgs e)
-        {
-            ShowDropdownPopup(btnTest, new (string, EventHandler)[]
-            {
-                ("扫码模拟", MenuTestScan_Click)
-            });
-        }
-
-        /// <summary>
         /// 关于按钮点击 → 显示关于下拉菜单
         /// 菜单项：版本说明
         /// </summary>
@@ -1421,17 +1409,19 @@ namespace BarometerWinform.Views
         #region 参数设置菜单项
 
         /// <summary>
-        /// 公共参数 → 弹出公共参数设置窗体
+        /// 公共参数 → 弹出负压阈值设置窗体
+        ///
+        /// 【V1.16 更新】公共参数窗体从"采集间隔+报警阈值"简化为"设置所有气压表负压阈值"：
+        /// 传入 _deviceManager，由窗体在后台线程逐台写入气压表阈值寄存器（0x0010），
+        /// 写入完成汇总成功/失败台数后返回。
         /// </summary>
         private void MenuParamCommon_Click(object sender, EventArgs e)
         {
-            using (var form = new CommonParameterForm(_config))
+            using (var form = new CommonParameterForm(_deviceManager))
             {
                 if (form.ShowDialog(this) == DialogResult.OK)
                 {
-                    WriteLog($"公共参数已更新，采集间隔: {_config.CollectInterval}ms");
-                    // 【预留】保存后应更新设备管理器的采集间隔
-                    // TODO: 实现 _deviceManager 更新采集间隔的逻辑
+                    WriteLog("所有气压表负压阈值设置完成");
                 }
             }
         }
@@ -1458,35 +1448,6 @@ namespace BarometerWinform.Views
         {
             using (var form = new HistoryRecordForm())
             {
-                form.ShowDialog(this);
-            }
-        }
-
-        #endregion
-
-        #region TEST菜单项
-
-        /// <summary>
-        /// 扫码模拟 → 弹出扫码模拟窗体
-        ///
-        /// 【V1.16 说明】
-        /// 真实扫码枪接入已实现（ScannerService，程序启动时自动连接），
-        /// 本"扫码模拟"窗体保留用于：没有扫码枪时的开发/调试、模拟扫码输入。
-        /// 两者都会把扫码结果写入 LOG 日志；真实扫码枪在 ID绑定窗体打开时
-        /// 还会自动填充 SN 输入框。
-        /// </summary>
-        private void MenuTestScan_Click(object sender, EventArgs e)
-        {
-            using (var form = new ScanSimulationForm())
-            {
-                // 订阅扫码完成事件，将扫码结果写入日志
-                form.OnScanCompleted += (sender2, barcode) =>
-                {
-                    WriteLog($"[扫码模拟] 扫码内容: {barcode}");
-                    // 【预留】实际项目中应根据业务处理扫码结果
-                    // TODO: 根据扫码内容匹配设备/配方，触发对应业务流程
-                };
-
                 form.ShowDialog(this);
             }
         }

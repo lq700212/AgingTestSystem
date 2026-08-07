@@ -12,8 +12,7 @@ namespace BarometerWinform.Services
     /// 扫码枪服务（真实扫码枪接入）
     ///
     /// 【功能说明】
-    /// 参考 SerialScannerTest Demo（Honeywell Xenon 1902 扫码枪串口测试）实现，
-    /// 把之前"扫码模拟窗体（ScanSimulationForm）"里预留的真实扫码枪逻辑补上：
+    /// 参考 SerialScannerTest Demo（Honeywell Xenon 1902 扫码枪串口测试）实现真实扫码枪逻辑：
     /// - 自动识别扫码枪串口（WMI 查询设备名称包含关键词的 COM 口）
     /// - 打开串口并监听数据，把收到的串口数据按行解析成一条条码
     /// - 通过事件 OnBarcodeScanned 通知上层业务（写日志 / ID绑定SN自动填充等）
