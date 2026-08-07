@@ -20,6 +20,7 @@
 | 用户权限管理 | 操作员/技术员/管理员登录与权限控制 | 已实现 |
 | 参数配置 | 采集间隔、报警阈值、配方管理等 | 部分实现（配置持久化待完成） |
 | 数据记录 | 事件日志 CSV 落盘 + 历史记录查询 | 已实现（V1.15，TestEventLogger） |
+| 扫码枪读码 | 真实扫码枪接入（串口读码，SN 自动填充） | 已实现（V1.16，ScannerService） |
 
 ### 1.2 技术栈
 
@@ -93,7 +94,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ 标题栏: 老化测试系统V1.15 | 权限: 操作员 | PLC状态: 已连接           │
+│ 标题栏: 老化测试系统V1.16 | 权限: 操作员 | PLC状态: 已连接           │
 ├─────────────────────────────────────────────────────────────────┤
 │ 菜单按钮: 用户权限 | 参数设置 | LOG记录 | TEST | 关于              │
 ├──────────────────────────────────────┬──────────────────────────┤
@@ -128,6 +129,8 @@
 | `UpdateFanDisplay(data)` | 更新送风机监视区显示（状态/温度/湿度/设定值） |
 | `UpdateRunStatusSummary()` | 更新状态栏"测试中/在线"统计 |
 | `GetSelectedDeviceIds()` | 获取选中的设备编号列表，未选中时弹出提示 |
+| `Scanner_OnBarcodeScanned()` | 【V1.16】扫码完成事件处理，扫码结果写 LOG 日志 |
+| `Scanner_OnStatusChanged()` | 【V1.16】扫码枪连接状态变化处理（连接成功/未找到端口/错误），写 LOG 日志 |
 
 #### 3.1.2 BarometerPanelView（气压表显示面板）
 
@@ -198,7 +201,7 @@
 | 用户权限 | 操作员 / 技术员 / 管理员 / 用户管理* | 弹出 LoginForm 输入用户名密码后切换权限；*用户管理仅管理员可见 | 任意权限 |
 | 参数设置 | 公共参数 / 配方管理 | 分别弹出 CommonParameterForm / RecipeManagerForm | 技术员或管理员 |
 | LOG记录 | 历史记录 | 弹出 HistoryRecordForm | 任意权限 |
-| TEST | 扫码模拟 | 弹出 ScanSimulationForm | 任意权限 |
+| TEST | 扫码模拟 | 弹出 ScanSimulationForm（无扫码枪时的模拟调试） | 任意权限 |
 | 关于 | 版本说明 | 弹出版本信息 MessageBox | 任意权限 |
 
 **关键方法**（MainForm.cs）:
@@ -220,7 +223,7 @@
 | `CommonParameterForm` | 公共参数设置 | 采集间隔 + 报警压力阈值（写回内存配置） | 参数持久化待实现 |
 | `RecipeManagerForm` | 配方管理 | 左右分栏布局：左侧配方列表（序号+配方名称），右侧配方设置（配方名称、延时时间、启动时间、极限温度），底部添加/更新/删除按钮和保存设置按钮 | 新增/编辑/删除/持久化待实现 |
 | `HistoryRecordForm` | 历史记录查询 | 【V1.15】日期范围查询 + 读取 Logs\TestLog_*.csv 真实事件日志（自动跨 CSV 解析、跳过表头），"导出"按钮打开 Logs 文件夹 | Mock 数据已移除 |
-| `ScanSimulationForm` | 扫码模拟 | 条码输入并触发事件 | 真实扫码枪接入 |
+| `ScanSimulationForm` | 扫码模拟 | 条码输入并触发事件（无扫码枪时的模拟调试） | 【V1.16】真实扫码枪接入已由 ScannerService 实现，本窗体保留用于调试 |
 | `LoginForm` | 用户登录 | 用户名/密码输入、登录验证、Enter/Esc 键支持 | 密码哈希存储（当前明文） |
 | `UserManagementForm` | 用户账号管理（仅管理员） | 修改操作员/技术员的用户名和密码，用户数据持久化到 Users.json 文件 | 新增/删除账号 |
 | `BatchRecipeForm` | 批量设置配方 | 配方名称、延时时间1/2（时:分:秒）、启动时间（时:分:秒）、极限温度输入，加入队列功能，配方队列管理 | 配方批量应用到选中面板待实现 |
@@ -318,6 +321,43 @@
 | 真空负压表-N | N (1~72) | X + octal(N-1) | N=1→X000, N=72→X107 |
 | 真空电磁阀-N | 72+N (73~144) | Y + octal(N-1) | N=1→Y000, N=72→Y107 |
 | 载台上电-N | 144+N (145~216) | Y + octal(72+N-1) | N=1→Y110, N=72→Y217 |
+
+---
+
+#### 3.2.3 ScannerService（扫码枪服务）【V1.16 新增】
+
+**职责**: 接入真实扫码枪（Honeywell Xenon 1902 等，虚拟串口模式），自动识别串口并读取条码。
+
+**实现来源**: 参考 `SerialScannerTest` 测试 Demo 的串口读码逻辑，并按照本项目的服务模式封装。
+
+**核心功能**:
+
+1. **WMI 自动识别串口**: 通过 `System.Management` 查询 `Win32_PnPEntity`，筛选设备名称包含 `"COM"` 和关键词（默认 `Xenon 1902`）的设备，自动定位端口
+2. **串口读码**: 监听 `SerialPort.DataReceived`，按换行符把串口数据切分成一条条完整条码（兼容 CR/LF/CRLF 结尾）
+3. **断线自动重连**: 未插入/中途掉线时，UI 线程定时器每 3 秒自动重试连接，现场无需手动重开
+4. **线程安全事件**: 扫码/状态事件通过 `SynchronizationContext` 封送到 UI 线程，订阅者可直接更新控件
+5. **配置化**: `ScannerEnabled` 关闭时不连接（现场没装扫码枪时不影响整机启动）
+
+**事件**:
+
+| 事件 | 触发时机 |
+| :--- | :--- |
+| `OnBarcodeScanned` | 扫到一条完整条码时触发，参数为条码内容（已在 UI 线程） |
+| `OnStatusChanged` | 连接成功/未找到端口/连接失败/串口错误时触发，参数为中文状态文本（已在 UI 线程） |
+
+**关键方法**:
+
+| 方法 | 功能 |
+| :--- | :--- |
+| `Start()` | 启动服务（未启用则跳过；启用则启动重连定时器并立即尝试连接） |
+| `Stop()` | 停止服务（停定时器 + 关串口） |
+| `FindScannerPort()` | WMI 按关键词自动定位扫码枪 COM 口 |
+| `SerialPort_DataReceived()` | 串口数据接收，按行切分成条码并触发事件 |
+| `Dispose()` | 释放资源（停定时器 + 关串口 + 清事件引用） |
+
+**业务接入点**:
+- 主窗体 `MainForm_Load` 时启动；`MainForm_FormClosing` 时释放
+- 扫码结果由主窗体写 LOG 日志；ID绑定窗体（`IdBindingForm`）打开时订阅同一服务，扫码自动填充 SN 输入框（工位编号已录则自动加入产品列表）
 
 ---
 
@@ -747,6 +787,11 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 | `MaxTestDurationSeconds` | 老化测试最大时长（秒，0=不限） | 0 |
 | `UseDiAlarmContact` | 是否把 DI 报警触点并入报警判定（需现场确认电平后开） | false |
 | `FanTempAlarmLimitC` | 送风机温度告警上限（°C，0=不启用） | 0 |
+| `ScannerEnabled` | 【V1.16】是否启用扫码枪（false=不连接，现场没装扫码枪时用） | false |
+| `ScannerPort` | 【V1.16】扫码枪固定串口（留空=按关键词 WMI 自动识别） | 空 |
+| `ScannerDeviceKeyword` | 【V1.16】扫码枪设备识别关键词（设备管理器显示的名称关键字） | Xenon 1902 |
+| `ScannerBaudRate` | 【V1.16】扫码枪串口波特率（Demo 实测 115200） | 115200 |
+| `ScannerDataBits` / `ScannerStopBits` / `ScannerParity` | 【V1.16】扫码枪串口数据位/停止位/校验位 | 8 / 1 / None |
 
 ### 4.2 动态扩展说明
 
@@ -785,7 +830,7 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 | 参数设置-公共参数 | 部分实现 | MainForm.cs / CommonParameterForm | 公共参数窗体已实现，参数项需现场确认补充 |
 | 参数设置-配方管理 | 部分实现 | MainForm.cs / RecipeManagerForm | 配方列表显示已实现，新增/编辑/删除逻辑待实现 |
 | LOG记录-历史记录 | 已实现（V1.15） | MainForm.cs / HistoryRecordForm | 读取 Logs\TestLog_*.csv 真实事件日志，按日期查询 |
-| TEST-扫码模拟 | 部分实现 | MainForm.cs / ScanSimulationForm | 扫码模拟窗体已实现，真实扫码枪接入待实现 |
+| TEST-扫码模拟 | 已实现（V1.16） | MainForm.cs / ScanSimulationForm / ScannerService.cs | 真实扫码枪接入已实现：WMI 自动识别串口 + 串口读码 + 断线重连；扫码结果写 LOG、ID绑定窗体自动填充 SN；扫码模拟窗体保留用于无硬件调试 |
 | 关于-版本说明 | 已实现 | MainForm.cs | 版本信息弹窗已实现 |
 | 行全选按钮 Set(SEL_N) | 已实现 | MainForm.cs | 点击切换该行所有面板选中状态（浅蓝高亮） |
 | 面板批量操作 | 已实现（V1.15） | MainForm.cs / BarometerPanelView | 选中面板后执行：开启真空 / 启动运行 / 停止运行 / 报警复位 |
@@ -850,6 +895,7 @@ BarometerWinform/
 │   │   ├── IoMapBuilder.cs                 # 【V1.09新增】IO映射表构建器（八进制地址转换）
 │   │   ├── FanControllerClient.cs          # 【V1.15新增】送风机 Modbus TCP 真实实现
 │   │   ├── MockFanController.cs            # 【V1.15新增】送风机 Mock
+│   │   ├── ScannerService.cs               # 【V1.16新增】扫码枪服务（WMI识别串口+串口读码+重连）
 │   │   ├── TestEventLogger.cs              # 【V1.15新增】测试事件 CSV 落盘
 │   │   ├── DeviceManager.cs                # 设备管理器（业务编排核心）
 │   │   └── UserManager.cs                  # 【新增】用户管理服务（登录/改密/权限校验）
@@ -1017,8 +1063,9 @@ Get-ChildItem -Path $projectRoot -Recurse -Filter "*.cs" -File |
 
 ### 8.3 版本更新
 
-- 当前版本: V1.15
+- 当前版本: V1.16
 - 更新日志:
+  - V1.16 (2026-08-07): 接入真实扫码枪（ScannerService，参考 SerialScannerTest Demo）。WMI 自动识别串口（Honeywell Xenon 1902）+ 串口读码 + 断线自动重连；扫码结果写入 LOG 日志；ID绑定窗体打开时扫码自动填充 SN 输入框（工位已录则自动加入列表）；新增扫码枪配置项（ScannerEnabled/ScannerPort/ScannerDeviceKeyword 等，默认关闭）；保留扫码模拟窗体用于无硬件调试
   - V1.15 (2026-08-06): 业务串联 + 冷却送风机接入。新增送风机接口/实现/Mock/数据模型（Modbus TCP，定值启动/停止 + 温度湿度监视）；DeviceManager 增加测试状态机（启动/停止/报警复位/全部停止）、真空建立确认、通讯失联报警、老化计时自动停止、送风机全局生命周期（首台启动/末台停止）；新增事件 CSV 落盘（TestEventLogger）+ 历史记录读真实日志；新增单台手动控制对话框；右侧面板新增送风机监视区与业务操作按钮。详见 CHANGELOG.md
   - V1.14 (2026-08-03): 接入真实通讯链路（气压表 Modbus RTU + IO Modbus TCP），DeviceManager 支持 UseMockCommunication 切换；新增报警阈值参数并实现“报警边沿→关阀/断载台电”联动；新增 CHANGELOG.md 与 通讯接入说明.md 文档
   - V1.13 (2026-07-24): 用户数据持久化到 JSON 文件（Users.json）；新增 LoadUsersFromFile/SaveUsersToFile 方法；程序启动时自动加载用户数据，修改用户名/密码后自动保存；UserAccount 新增无参构造函数用于 JSON 反序列化；添加 Newtonsoft.Json NuGet 包引用；文档更新持久化方案说明

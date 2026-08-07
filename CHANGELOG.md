@@ -1,5 +1,60 @@
 # CHANGELOG
 
+## [2026-08-07] 启动流程暂时去掉 mForm_Progress 启动进度页
+
+### 改动
+- [Program.cs](file:///e:/Project/BarometerWinform/BarometerWinform/Program.cs)：`Main()` 中注释掉 `ShowSplashScreen()` 调用，
+  程序启动直接进入主界面，加快启动速度（省去 2 秒模拟加载等待）。
+- **控件代码保留未删**：`Views/mForm_Progress.cs` / `mForm_Progress.Designer.cs` 及
+  `ShowSplashScreen()` 方法原样保留，后续需要恢复启动进度页时，取消 `Main()` 中对应注释即可。
+
+### 使用说明
+- 当前启动流程：直接显示主窗体，无启动进度页。
+- 需要恢复时：取消 `Program.cs` 中 `// ShowSplashScreen();` 的注释。
+
+## [2026-08-07] 接入真实扫码枪（ScannerService，参考 SerialScannerTest Demo）
+
+### 问题
+- 此前扫码功能只有"扫码模拟窗体"（ScanSimulationForm，手动输入条码），
+  真实扫码枪接入一直是预留项（Demo 已验证 Honeywell Xenon 1902 串口读码可行）。
+- 现场 ID 绑定流程需要"扫描产品 SN"，需要真实扫码枪把条码读进来并自动填入 SN。
+
+### 改动（新增扫码枪服务 + 业务接入 + 配置）
+- 新增 [ScannerService.cs](file:///e:/Project/BarometerWinform/BarometerWinform/Services/ScannerService.cs)
+  （真实扫码枪服务，参考 SerialScannerTest Demo）：
+  - WMI 查询 `Win32_PnPEntity` 按关键词（默认 `Xenon 1902`）自动识别串口；
+    配置了固定端口（`ScannerPort`）时优先用固定端口。
+  - 串口读码（115200/8/N/1，ASCII），按换行符把串口数据切分成一条条完整条码。
+  - 未插入/掉线时 UI 定时器每 3 秒自动重连，现场无需手动重开。
+  - 扫码/状态事件用 `SynchronizationContext` 封送到 UI 线程，订阅者可直接更新控件。
+- [DeviceConfig.cs](file:///e:/Project/BarometerWinform/BarometerWinform/Models/DeviceConfig.cs)
+  / [App.config](file:///e:/Project/BarometerWinform/BarometerWinform/App.config)
+  / [MainForm.cs](file:///e:/Project/BarometerWinform/BarometerWinform/Views/MainForm.cs) `LoadConfig`
+  新增扫码枪配置项：`ScannerEnabled`（默认 false=不连接）、`ScannerPort`（留空=自动识别）、
+  `ScannerDeviceKeyword`（默认 Xenon 1902）、`ScannerBaudRate`（115200）、
+  `ScannerDataBits`（8）、`ScannerStopBits`（1）、`ScannerParity`（None）。
+- [MainForm.cs](file:///e:/Project/BarometerWinform/BarometerWinform/Views/MainForm.cs)：
+  - 构造函数创建 `ScannerService`，`MainForm_Load` 启动，`MainForm_FormClosing` 释放。
+  - 订阅 `OnBarcodeScanned` / `OnStatusChanged` → 扫码结果与连接状态写 LOG 日志。
+  - "录入批号"按钮把扫码枪服务传入 `InputLotForm`。
+- [InputLotForm.cs](file:///e:/Project/BarometerWinform/BarometerWinform/Dialogs/InputLotForm.cs)
+  / [IdBindingForm.cs](file:///e:/Project/BarometerWinform/BarometerWinform/Dialogs/IdBindingForm.cs)：
+  - 扫码枪服务一路传入 ID 绑定窗体。
+  - 扫码结果自动填充 SN 输入框：工位编号已输入 → 自动加入产品列表（等效按回车）；
+    工位编号未输入 → 先填 SN、聚焦工位编号提示补录。
+  - 窗体关闭（`OnFormClosed`）时退订扫码事件，避免回调已销毁窗体。
+- 版本号 V1.15 → V1.16（主窗体标题、关于对话框、README）。
+
+### 使用说明
+- 现场有扫码枪：把 `App.config` 的 `ScannerEnabled` 置为 `true`，确认
+  `ScannerDeviceKeyword` 与设备管理器里的名称一致（默认 `Xenon 1902`），
+  程序启动后自动识别串口并连接，LOG 日志会显示"扫码枪已连接: COMx"。
+- WMI 识别不到时：可在 `ScannerPort` 里直接填端口（如 `COM10`）用固定端口。
+- 没有扫码枪：保持 `ScannerEnabled=false`（默认），扫码功能不影响整机启动，
+  仍可用 TEST 菜单的"扫码模拟"窗体手动模拟扫码调试。
+- 扫码流程：主窗体 LOG 记录每次读码；打开"录入批号 → ID绑定"后扫码，
+  SN 自动填充，工位编号已录入则自动加入产品列表。
+
 ## [2026-08-06] 移除"通信设置"按钮与 PLC 通讯设置窗体（项目无 PLC，改用 GX-CL140-S 耦合器通讯）
 
 ### 问题

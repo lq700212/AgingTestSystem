@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
+using BarometerWinform.Services;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
@@ -95,10 +96,21 @@ namespace BarometerWinform.Dialogs
         public event EventHandler<Tuple<string, List<ProductBinding>>> OnBindingCompleted;
 
         /// <summary>
+        /// 【V1.16 新增】扫码枪服务引用
+        /// 由录入批号窗体（InputLotForm）传入。
+        /// 当扫码枪扫到条码时，自动填充 SN 输入框：
+        /// - 工位编号已输入 → 自动加入产品列表（等效按回车）
+        /// - 工位编号未输入 → 先填入 SN，聚焦工位编号让用户补录
+        /// 可能为 null（未启用扫码枪），使用前需要判空。
+        /// </summary>
+        private readonly ScannerService _scanner;
+
+        /// <summary>
         /// 构造函数
         /// </summary>
         /// <param name="lotNumber">从录入批号窗口传入的批号</param>
-        public IdBindingForm(string lotNumber)
+        /// <param name="scanner">扫码枪服务（由录入批号窗体传入，可能为 null）</param>
+        public IdBindingForm(string lotNumber, ScannerService scanner = null)
         {
             InitializeComponent();
 
@@ -109,6 +121,14 @@ namespace BarometerWinform.Dialogs
             txtLot.Text = lotNumber;
             txtLot.ReadOnly = true;
             txtLot.BackColor = System.Drawing.Color.LightGray;
+
+            // 【V1.16】启用扫码枪时订阅扫码完成事件，实现 SN 自动填充
+            // 注意：扫码事件已在 UI 线程触发（ScannerService 内部已封送），可直接更新控件
+            _scanner = scanner;
+            if (_scanner != null)
+            {
+                _scanner.OnBarcodeScanned += Scanner_OnBarcodeScanned;
+            }
         }
 
         /// <summary>
@@ -202,6 +222,56 @@ namespace BarometerWinform.Dialogs
             // 写入调试日志
             System.Diagnostics.Debug.WriteLine(
                 $"[ID绑定] 已添加产品绑定: 工位={stationNo}, SN={sn}");
+        }
+
+        // ===================== 扫码枪 SN 自动填充（V1.16 新增） =====================
+
+        /// <summary>
+        /// 扫码完成事件处理（已由 ScannerService 封送到 UI 线程，可直接操作控件）
+        /// 把扫到的条码当作产品 SN 处理
+        /// </summary>
+        /// <param name="sender">扫码枪服务</param>
+        /// <param name="barcode">扫到的条码内容</param>
+        private void Scanner_OnBarcodeScanned(object sender, string barcode)
+        {
+            HandleScannedBarcode(barcode);
+        }
+
+        /// <summary>
+        /// 处理扫码结果（填充 SN 输入框 / 自动加入产品列表）
+        ///
+        /// 【处理规则】（与界面"先工位编号、后SN"的录入顺序一致）
+        /// 1. 工位编号已输入 → 条码填入 SN 框，并自动执行"加入产品列表"（等效按回车）
+        /// 2. 工位编号未输入 → 只把条码填入 SN 框，并聚焦工位编号，
+        ///    提示用户先录入工位编号后再扫码（避免把 SN 绑到错误的工位上）
+        ///
+        /// 【说明】
+        /// 真实扫码枪扫一个条码只产生一次事件，因此这里不处理"条码=工位编号"的情况，
+        /// 工位编号建议手动输入（人工确认），SN 用扫码枪扫（速度快、不易错）。
+        /// </summary>
+        /// <param name="barcode">扫到的条码内容</param>
+        private void HandleScannedBarcode(string barcode)
+        {
+            // 空条码直接忽略（理论上不会发生，防御性判断）
+            if (string.IsNullOrWhiteSpace(barcode)) return;
+
+            // 统一去掉首尾空白
+            string sn = barcode.Trim();
+
+            // 写入调试日志，方便现场排查
+            System.Diagnostics.Debug.WriteLine($"[ID绑定] 扫码枪读码: {sn}");
+
+            // 工位编号还没输入：先填入 SN 框，聚焦工位编号让用户补录
+            if (string.IsNullOrWhiteSpace(txtStationNo.Text))
+            {
+                txtSn.Text = sn;
+                txtStationNo.Focus();
+                return;
+            }
+
+            // 工位编号已输入：填入 SN 框并自动加入产品列表（等效用户按回车）
+            txtSn.Text = sn;
+            AddToProductList();
         }
 
         /// <summary>
@@ -559,6 +629,23 @@ namespace BarometerWinform.Dialogs
                 {
                     e.Cancel = true;
                 }
+            }
+        }
+
+        /// <summary>
+        /// 窗体已关闭事件（重写）
+        /// 【V1.16】窗体确定关闭时退订扫码事件，避免窗体销毁后扫码事件
+        /// 还回调到已释放的控件（使用 FormClosed 而非 FormClosing：
+        /// FormClosing 可能被用户"取消"而退订过早，导致窗体还在但收不到扫码）。
+        /// </summary>
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            base.OnFormClosed(e);
+
+            // 退订扫码事件，防止事件回调到已销毁的窗体
+            if (_scanner != null)
+            {
+                _scanner.OnBarcodeScanned -= Scanner_OnBarcodeScanned;
             }
         }
     }

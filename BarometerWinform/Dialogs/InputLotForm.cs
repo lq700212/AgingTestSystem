@@ -1,5 +1,6 @@
 using System;
 using System.Windows.Forms;
+using BarometerWinform.Services;
 
 namespace BarometerWinform.Dialogs
 {
@@ -47,12 +48,22 @@ namespace BarometerWinform.Dialogs
         public event EventHandler<string> OnLotInputCompleted;
 
         /// <summary>
+        /// 【V1.16 新增】扫码枪服务引用
+        /// 由主窗体传入，继续传递给 ID绑定窗体（IdBindingForm），
+        /// 使 ID 绑定界面打开时扫码结果能自动填充 SN 输入框。
+        /// 可能为 null（未启用扫码枪），使用前需要判空。
+        /// </summary>
+        private readonly ScannerService _scanner;
+
+        /// <summary>
         /// 构造函数
         /// 初始化窗体界面
         /// </summary>
-        public InputLotForm()
+        /// <param name="scanner">扫码枪服务（由主窗体传入，可能为 null）</param>
+        public InputLotForm(ScannerService scanner = null)
         {
             InitializeComponent();
+            _scanner = scanner;
         }
 
         /// <summary>
@@ -129,7 +140,8 @@ namespace BarometerWinform.Dialogs
             }
 
             // 批号验证通过，弹出ID绑定界面
-            using (var bindingForm = new IdBindingForm(lotNumber))
+            // 【V1.16】把扫码枪服务传进去：ID绑定窗体打开时，扫码结果自动填充 SN 输入框
+            using (var bindingForm = new IdBindingForm(lotNumber, _scanner))
             {
                 // 订阅ID绑定完成事件
                 bindingForm.OnBindingCompleted += (sender2, data) =>
