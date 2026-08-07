@@ -49,7 +49,9 @@
             this.tableLayoutPanelMain = new System.Windows.Forms.TableLayoutPanel();
             this.tableLayoutPanelTop = new System.Windows.Forms.TableLayoutPanel();
             this.lblTitle = new System.Windows.Forms.Label();
-            this.lblPermission = new System.Windows.Forms.Label();
+            this.panelPermission = new System.Windows.Forms.FlowLayoutPanel();
+            this.lblPermissionPrefix = new System.Windows.Forms.Label();
+            this.lblPermissionRole = new System.Windows.Forms.Label();
             this.lblCommStatusLabel = new System.Windows.Forms.Label();
             this.lblCommStatus = new System.Windows.Forms.Label();
             this.tableLayoutPanelMenu = new System.Windows.Forms.TableLayoutPanel();
@@ -144,7 +146,7 @@
             this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
             this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 15F));
             this.tableLayoutPanelTop.Controls.Add(this.lblTitle, 0, 0);
-            this.tableLayoutPanelTop.Controls.Add(this.lblPermission, 1, 0);
+            this.tableLayoutPanelTop.Controls.Add(this.panelPermission, 1, 0);
             this.tableLayoutPanelTop.Controls.Add(this.lblCommStatusLabel, 2, 0);
             this.tableLayoutPanelTop.Controls.Add(this.lblCommStatus, 3, 0);
             this.tableLayoutPanelTop.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -165,14 +167,43 @@
             this.lblTitle.TabIndex = 0;
             this.lblTitle.Text = "老化测试系统V1.16";
             // 
-            // lblPermission
+            // panelPermission - 当前操作权限显示容器（V1.19.7：拆为"前缀 + 角色名"两个标签）
+            // FlowLayoutPanel 水平排列：前缀标签固定黑色，角色名标签由
+            // MainForm.UpdatePermissionDisplay 按权限设置 ForeColor（管理员=红/技术员=天蓝/操作员=绿）。
+            // 背景色与顶栏一致，观感与普通标签相同。
             // 
-            this.lblPermission.AutoSize = true;
-            this.lblPermission.Location = new System.Drawing.Point(560, 0);
-            this.lblPermission.Name = "lblPermission";
-            this.lblPermission.Size = new System.Drawing.Size(125, 12);
-            this.lblPermission.TabIndex = 1;
-            this.lblPermission.Text = "当前操作权限: 操作员";
+            this.panelPermission.BackColor = System.Drawing.SystemColors.Control;
+            this.panelPermission.Controls.Add(this.lblPermissionPrefix);
+            this.panelPermission.Controls.Add(this.lblPermissionRole);
+            this.panelPermission.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.panelPermission.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
+            this.panelPermission.Location = new System.Drawing.Point(560, 0);
+            this.panelPermission.Margin = new System.Windows.Forms.Padding(0);
+            this.panelPermission.Name = "panelPermission";
+            this.panelPermission.Padding = new System.Windows.Forms.Padding(0);
+            this.panelPermission.Size = new System.Drawing.Size(348, 24);
+            this.panelPermission.TabIndex = 1;
+            this.panelPermission.WrapContents = false;
+            // 
+            // lblPermissionPrefix - 固定前缀"当前操作权限: "（始终默认黑字）
+            // 
+            this.lblPermissionPrefix.AutoSize = true;
+            this.lblPermissionPrefix.Location = new System.Drawing.Point(3, 3);
+            this.lblPermissionPrefix.Margin = new System.Windows.Forms.Padding(0);
+            this.lblPermissionPrefix.Name = "lblPermissionPrefix";
+            this.lblPermissionPrefix.Size = new System.Drawing.Size(110, 17);
+            this.lblPermissionPrefix.TabIndex = 0;
+            this.lblPermissionPrefix.Text = "当前操作权限: ";
+            // 
+            // lblPermissionRole - 角色名（V1.19.7：运行时按权限着色）
+            // 
+            this.lblPermissionRole.AutoSize = true;
+            this.lblPermissionRole.Location = new System.Drawing.Point(110, 3);
+            this.lblPermissionRole.Margin = new System.Windows.Forms.Padding(0);
+            this.lblPermissionRole.Name = "lblPermissionRole";
+            this.lblPermissionRole.Size = new System.Drawing.Size(40, 17);
+            this.lblPermissionRole.TabIndex = 1;
+            this.lblPermissionRole.Text = "操作员";
             // 
             // lblCommStatusLabel
             // 
@@ -633,8 +664,12 @@
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelTop;
         /// <summary>系统标题标签</summary>
         private System.Windows.Forms.Label lblTitle;
-        /// <summary>当前操作权限标签</summary>
-        private System.Windows.Forms.Label lblPermission;
+        /// <summary>当前操作权限显示容器（V1.19.7：拆为前缀+角色名两个标签）</summary>
+        private System.Windows.Forms.FlowLayoutPanel panelPermission;
+        /// <summary>固定前缀"当前操作权限: "（默认黑字）</summary>
+        private System.Windows.Forms.Label lblPermissionPrefix;
+        /// <summary>角色名标签（V1.19.7：ForeColor 按权限着色——管理员=红/技术员=天蓝/操作员=绿）</summary>
+        private System.Windows.Forms.Label lblPermissionRole;
         /// <summary>"通讯连接状态:"标签（V1.16 更名：现场无 PLC，改为通讯连接状态）</summary>
         private System.Windows.Forms.Label lblCommStatusLabel;
         /// <summary>通讯连接状态值标签（绿=已连接，红=未连接）</summary>
