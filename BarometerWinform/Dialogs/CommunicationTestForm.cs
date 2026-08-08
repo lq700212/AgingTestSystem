@@ -3,6 +3,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using BarometerWinform.Models;
 using NModbus;
@@ -23,8 +24,26 @@ namespace BarometerWinform.Dialogs
     ///   - 中部页签（UITabControl + UIPage）：
     ///     · Tab1"负压开关测试"：72 路真空电磁阀输出（Y000~Y107），寄存器 0x2000~0x2004
     ///     · Tab2"载台上电测试"：72 路载台上电（继电器）输出（Y110~Y217），寄存器 0x2004~0x2008
-    ///   - 底部按钮栏（pnlBottom）：UIButton 连接测试/全部关闭/读取状态/关闭窗口 + UITextBox 日志
+    ///   - 底部按钮栏（pnlBottom）：UIButton 连接测试/全部关闭/读取状态/一键遍历/关闭窗口 + UITextBox 日志
     ///   - 每个页签内的 9×8 = 72 个圆形灯按钮由 ChannelGrid 动态生成（自绘 CircleButton）
+    ///
+    /// 【一键遍历（V1.22 新增）】
+    ///   - 点击底部"一键遍历"按钮（紫），对当前页签的测试做"通断跑马灯"检测：
+    ///     每 500ms 只点亮一路通道、其余全部熄灭，72 路循环往复，用于快速检查每路
+    ///     DO 输出接线是否通断正常；再次点击（变红"停止遍历"）立即停止并全部关闭。
+    ///   - 负压开关测试 / 载台上电测试 两个页签都支持；运行中切换页签会自动停止遍历。
+    ///   - 性能：单拍在后台线程执行（写寄存器 + 读回真实状态），完成后切回 UI 线程
+    ///     刷新按钮，界面不卡顿；上一拍未完成时自动跳过下一拍，避免任务堆积。
+    ///   - 实时反馈：每拍写完后读回 10 个寄存器，用真实通断状态更新圆形灯按钮，
+    ///     一眼可看出哪路实际输出异常。
+    ///
+    /// 【自动连接 / 心跳 / 后台重连（V1.22 新增，与生产环境一致）】
+    ///   - 窗体打开（OnShown）即后台自动连接；失败不弹窗，只在日志提示，
+    ///     由重连定时器每 3s 后台静默重试，成功自动恢复。
+    ///   - 心跳定时器：已连接时每 1s 后台读一次 0x2000 探测存活，能及时发现中途断连；
+    ///     断连后弹窗提醒一次（防刷屏），并自动进入后台重连。
+    ///   - 所有 Modbus 读写（连接/心跳/遍历/手动操作）共用 _modbusLock 串行化，
+    ///     避免多线程同时操作非线程安全的 NModbus 客户端。
     ///
     /// 【逻辑】移植自测试工程 ModbusTcpIoControllerTest：
     ///   - 载台上电测试 ← PowerOnTestForm（按钮网格控制每一路 ON/OFF）
@@ -44,8 +63,14 @@ namespace BarometerWinform.Dialogs
     ///
     /// 【备用通道映射】复用生产工程配置（DeviceConfig.IoBackupChannelMappingEnabled /
     ///   IoBackupChannelMappings），逻辑与 ModbusTcpIoController 一致；默认关闭。
-    ///   V1.21 增强：点击被映射的通道时，先弹出提示（UIMessageBox）告知该通道已映射、
-    ///   实际输出通道是哪个寄存器第几路，避免现场误以为原通道还在工作。
+    ///   - 写入跟随映射：被映射的源通道位不写源寄存器，其信号汇总写到备用目标寄存器
+    ///     （默认 0x2009，RegAddresses[5]）；按钮仍显示旧通道名。
+    ///   - 读取跟随映射：读回状态时按映射后的目标寄存器/目标位解析，按钮反映真实物理输出。
+    ///   - 0x2009 写采用读-改-写（WriteBackupRegister + ComputeRemapTargetMask）：两个测试
+    ///     各自只动自己拥有的映射目标位，不互相覆盖（与主项目逐通道 RMW 一致）。
+    ///   - 点击被映射的通道（手动 toggle 或一键遍历点亮）都会弹出**非模态悬浮提示窗**
+    ///     （RemapNoticeForm，不阻塞流程、不抢焦点，可保持打开继续操作其他窗口）告知
+    ///     "该通道已做备用通道映射、实际输出通道是哪个寄存器第几路"并在日志追加映射记录。
     /// </summary>
     public partial class CommunicationTestForm : UIForm
     {
@@ -60,8 +85,11 @@ namespace BarometerWinform.Dialogs
         /// <summary>Modbus 主站（负责组包/解包、发起请求）</summary>
         private IModbusMaster _master;
 
-        /// <summary>是否已连接</summary>
-        private bool _connected;
+        /// <summary>是否已连接（volatile：后台心跳/遍历线程会读取，需保证跨线程可见性）</summary>
+        private volatile bool _connected;
+
+        /// <summary>Modbus 操作互斥锁（连接/读写/心跳/遍历共用；NModbus 的 TcpClient 非线程安全，必须串行化）</summary>
+        private readonly object _modbusLock = new object();
 
         /// <summary>目标设备地址（来自配置）</summary>
         private readonly string _host;
@@ -80,6 +108,46 @@ namespace BarometerWinform.Dialogs
         /// <summary>载台上电测试网格（72 路载台上电 Y110~Y217）</summary>
         private readonly ChannelGrid _carrierGrid;
 
+        // ===================== 一键遍历（通断跑马灯） =====================
+
+        /// <summary>一键遍历定时器：每 500ms 触发一次，把下一路通道点亮（跑马灯）</summary>
+        private readonly System.Windows.Forms.Timer _sweepTimer;
+
+        /// <summary>一键遍历是否正在运行（true=跑马灯进行中，按钮显示"停止遍历"；volatile 供后台遍历线程读取）</summary>
+        private volatile bool _sweepActive;
+
+        /// <summary>是否已在后台执行遍历单拍（防重入：上一个 500ms 还没做完就不叠加新的，避免任务堆积）</summary>
+        private volatile bool _sweepStepBusy;
+
+        /// <summary>当前遍历到的通道号（0~71；行 = /8，列 = %8，对应 9 排 × 8 列按钮）</summary>
+        private int _sweepChannelIndex;
+
+        /// <summary>当前遍历的目标测试网格（按下"一键遍历"时所在页签对应的网格）</summary>
+        private ChannelGrid _sweepGrid;
+
+        /// <summary>当前遍历的测试名称（负压开关测试 / 载台上电测试，仅用于日志显示）</summary>
+        private string _sweepGridName;
+
+        // ===================== 自动连接 / 心跳 / 后台重连 =====================
+
+        /// <summary>心跳定时器：已连接时每 1s 在后台读一次寄存器探测存活，及时发现中途断连</summary>
+        private readonly System.Windows.Forms.Timer _heartbeatTimer;
+
+        /// <summary>重连定时器：未连接时每 3s 在后台尝试自动重连（失败静默，不打扰）</summary>
+        private readonly System.Windows.Forms.Timer _reconnectTimer;
+
+        /// <summary>是否正在后台执行心跳探测（防重入）</summary>
+        private volatile bool _heartbeatBusy;
+
+        /// <summary>是否正在后台执行重连（防重入）</summary>
+        private volatile bool _reconnectBusy;
+
+        /// <summary>本次断连是否已弹窗提醒过（重连成功后复位；保证一次断连只弹一次窗，不刷屏）</summary>
+        private bool _disconnectNotified;
+
+        /// <summary>非模态映射提示窗（复用同一实例，多次触发只更新文本，不重复弹窗）</summary>
+        private RemapNoticeForm _remapNoticeForm;
+
         /// <summary>构造函数：读取配置的耦合器地址，创建两个测试网格</summary>
         /// <param name="config">设备配置（PlcAddress / PlcPort / IoUnitId / 备用映射等）</param>
         public CommunicationTestForm(DeviceConfig config)
@@ -93,6 +161,22 @@ namespace BarometerWinform.Dialogs
 
             // 初始状态：未连接（更新顶部 LED 与状态文字）
             SetConnected(false);
+
+            // 初始化一键遍历定时器（跑马灯）：间隔 500ms，仅负责在 UI 线程触发，
+            // 实际的寄存器写/读放在后台线程执行（见 SweepStepWorker），保证不卡界面
+            _sweepTimer = new System.Windows.Forms.Timer();
+            _sweepTimer.Interval = 500;
+            _sweepTimer.Tick += SweepTimer_Tick;
+
+            // 初始化心跳定时器（已连接时每 1s 探测一次存活）
+            _heartbeatTimer = new System.Windows.Forms.Timer();
+            _heartbeatTimer.Interval = 1000;
+            _heartbeatTimer.Tick += HeartbeatTimer_Tick;
+
+            // 初始化重连定时器（未连接时每 3s 后台尝试自动重连）
+            _reconnectTimer = new System.Windows.Forms.Timer();
+            _reconnectTimer.Interval = 3000;
+            _reconnectTimer.Tick += ReconnectTimer_Tick;
 
             // 创建两个测试网格（各自建自己的 9×8 圆形灯按钮）
             _vacuumGrid = new ChannelGrid(this, panelGridVacuum,
@@ -110,6 +194,33 @@ namespace BarometerWinform.Dialogs
                 RowBitValues: BuildBytePairRowBits(row0High: true),
                 RowIoNames: BuildCarrierIoNames(),
                 OwnedMask: new[] { 0xFF00, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0x0000 });
+        }
+
+        // ===================== 连接状态指示 =====================
+
+        /// <summary>
+        /// 窗体首次显示时：启动心跳/重连定时器并立即自动连接耦合器（与生产环境主窗体一致）。
+        /// 连接失败不弹窗，只在日志提示，随后由重连定时器每 3s 后台静默重试。
+        /// </summary>
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+
+            // 启动后台保活机制：心跳（1s）+ 自动重连（3s）
+            _heartbeatTimer.Start();
+            _reconnectTimer.Start();
+
+            // 打开即自动连接：后台线程执行，不阻塞界面
+            AutoConnect();
+        }
+
+        /// <summary>
+        /// 后台自动连接（静默）：失败只写日志，由重连定时器持续后台重试。
+        /// </summary>
+        private void AutoConnect()
+        {
+            AppendLog("[连接] 正在自动连接耦合器...");
+            Task.Run(() => TryConnectSilent());
         }
 
         // ===================== 连接状态指示 =====================
@@ -197,84 +308,249 @@ namespace BarometerWinform.Dialogs
         // ===================== 连接 / 断开 =====================
 
         /// <summary>
-        /// 与 IO 耦合器建立 Modbus TCP 连接（独立连接）。
-        /// 连接超时采用手动 BeginConnect + WaitOne，避免 IP 填错时界面长时间卡住。
-        /// 连接成功后更新顶部 LED 状态指示。
+        /// 静默连接（可在后台线程调用，不弹任何窗）：与 IO 耦合器建立 Modbus TCP 独立连接。
+        /// 连接超时采用手动 BeginConnect + WaitOne，避免 IP 填错时长时间卡住；
+        /// 成功/失败只更新状态指示与日志，供自动连接与后台重连复用。
         /// </summary>
-        private void Connect()
+        /// <returns>true=连接成功，false=连接失败/超时</returns>
+        private bool TryConnectSilent()
         {
-            try
+            lock (_modbusLock)
             {
-                if (_connected)
+                // 已连接则直接返回，避免重复建连
+                if (_connected) return true;
+
+                try
                 {
-                    Disconnect();
+                    // 清理上次残留的客户端
+                    if (_client != null)
+                    {
+                        try { _client.Close(); } catch { }
+                        _client = null;
+                    }
+
+                    var client = new TcpClient();
+                    int timeout = _config.TcpReceiveTimeoutMs > 0 ? _config.TcpReceiveTimeoutMs : 3000;
+                    client.SendTimeout = timeout;
+                    client.ReceiveTimeout = timeout;
+
+                    IAsyncResult connectResult = client.BeginConnect(_host, _port, null, null);
+                    if (!connectResult.AsyncWaitHandle.WaitOne(timeout))
+                    {
+                        // 连接超时：关闭临时客户端，仅日志提示（不弹窗）
+                        client.Close();
+                        client.Dispose();
+                        RunOnUi(() => AppendLog($"[错误] 连接 {_host}:{_port} 超时（{timeout}ms），后台将自动重试"));
+                        return false;
+                    }
+                    client.EndConnect(connectResult);
+
+                    var factory = new ModbusFactory();
+                    var master = factory.CreateMaster(client);
+                    master.Transport.ReadTimeout = timeout;
+                    master.Transport.WriteTimeout = timeout;
+
+                    _client = client;
+                    _master = master;
+                    _disconnectNotified = false;   // 复位断连弹窗标记，下次断连才能再弹
+
+                    RunOnUi(() => SetConnected(true));
+                    RunOnUi(() => AppendLog($"[连接] 已连接到 {_host}:{_port}（从站 {_unitId}）"));
+                    return true;
                 }
-
-                _client = new TcpClient();
-                int timeout = _config.TcpReceiveTimeoutMs > 0 ? _config.TcpReceiveTimeoutMs : 3000;
-                _client.SendTimeout = timeout;
-                _client.ReceiveTimeout = timeout;
-
-                IAsyncResult connectResult = _client.BeginConnect(_host, _port, null, null);
-                if (!connectResult.AsyncWaitHandle.WaitOne(timeout))
+                catch (Exception ex)
                 {
-                    _client.Close();
-                    _client.Dispose();
-                    _client = null;
-                    SetConnected(false);
-                    AppendLog($"[错误] 连接 {_host}:{_port} 超时（{timeout}ms），请检查 IP/网线");
-                    UIMessageBox.Show($"连接 {_host}:{_port} 超时（{timeout}ms）。", "错误",
-                        UIStyle.Red, UIMessageBoxButtons.OK, true, 0);
-                    return;
+                    RunOnUi(() => SetConnected(false));
+                    RunOnUi(() => AppendLog($"[错误] 连接 {_host}:{_port} 失败: {ex.Message}，后台将自动重试"));
+                    return false;
                 }
-                _client.EndConnect(connectResult);
-
-                var factory = new ModbusFactory();
-                _master = factory.CreateMaster(_client);
-                _master.Transport.ReadTimeout = timeout;
-                _master.Transport.WriteTimeout = timeout;
-
-                SetConnected(true);
-                AppendLog($"[连接] 已连接到 {_host}:{_port}（从站 {_unitId}）");
-                UIMessageBox.Show("连接成功！", "提示",
-                    UIStyle.Green, UIMessageBoxButtons.OK, true, 0);
             }
-            catch (Exception ex)
+        }
+
+        /// <summary>
+        /// 手动"连接测试"按钮：后台静默连接，完成后弹窗反馈结果（不阻塞 UI）。
+        /// </summary>
+        private void ConnectAsync()
+        {
+            AppendLog("[连接] 正在连接耦合器...");
+            Task.Run(() =>
             {
-                SetConnected(false);
-                string msg = $"连接失败: {ex.Message}";
-                if (ex.InnerException != null) msg += $"\n内部异常: {ex.InnerException.Message}";
-                AppendLog("[错误] " + msg);
-                UIMessageBox.Show(msg, "错误",
-                    UIStyle.Red, UIMessageBoxButtons.OK, true, 0);
+                bool ok = TryConnectSilent();
+                RunOnUi(() =>
+                {
+                    if (ok)
+                    {
+                        UIMessageBox.Show("连接成功！", "提示",
+                            UIStyle.Green, UIMessageBoxButtons.OK, true, 0);
+                    }
+                    else
+                    {
+                        UIMessageBox.Show($"连接 {_host}:{_port} 失败，程序已在后台自动重连。", "错误",
+                            UIStyle.Red, UIMessageBoxButtons.OK, true, 0);
+                    }
+                });
+            });
+        }
+
+        /// <summary>仅关闭 socket 并清空主站引用（加锁，可在任何线程调用；不含 UI 操作）</summary>
+        private void DisconnectCore()
+        {
+            lock (_modbusLock)
+            {
+                try
+                {
+                    if (_client != null) _client.Close();
+                }
+                catch
+                {
+                    // 断开时忽略清理异常
+                }
+                _client = null;
+                _master = null;
             }
         }
 
         /// <summary>断开 Modbus 连接并释放资源，同步更新顶部状态指示</summary>
         private void Disconnect()
         {
+            RunOnUi(() => SetConnected(false));
+            DisconnectCore();
+        }
+
+        /// <summary>
+        /// 处理检测到的断连（心跳失败 / 遍历读写失败等）：更新状态指示、停止遍历、
+        /// 弹窗提醒一次（防刷屏），断连恢复由后台重连定时器自动完成。
+        /// 仅应在 UI 线程调用。
+        /// </summary>
+        private void HandleDisconnect()
+        {
+            // 已断开则忽略重复触发
+            if (!_connected) return;
+            _connected = false;
+
             SetConnected(false);
-            try
+
+            // 一次断连只弹一次窗，重连成功后复位（_disconnectNotified=false）
+            if (!_disconnectNotified)
             {
-                if (_client != null)
+                _disconnectNotified = true;
+                AppendLog("[连接] 与耦合器连接已断开，正在后台自动重连...");
+                UIMessageBox.Show("与耦合器的连接已断开！\n程序正在后台自动重连，请检查网线/设备。",
+                    "连接断开", UIStyle.Red, UIMessageBoxButtons.OK, true, 0);
+            }
+
+            // 遍历跑马灯若在运行，立即停止（写寄存器必然失败）
+            if (_sweepActive) StopSweep();
+        }
+
+        // ===================== 心跳 / 后台自动重连 =====================
+
+        /// <summary>
+        /// 心跳定时器：已连接时每 1s 在后台读一次 0x2000 探测存活。
+        /// 读失败/超时即判定断连，弹窗提醒并由重连定时器自动恢复。
+        /// </summary>
+        private void HeartbeatTimer_Tick(object sender, EventArgs e)
+        {
+            // 未连接时不探测（交给重连定时器）；上一次探测未完成则跳过，避免任务堆积
+            if (!_connected || _master == null) return;
+            if (_heartbeatBusy) return;
+            _heartbeatBusy = true;
+
+            Task.Run(() =>
+            {
+                bool alive = false;
+                try
                 {
-                    _client.Close();
+                    lock (_modbusLock)
+                    {
+                        if (_connected && _master != null)
+                        {
+                            ushort[] regs = _master.ReadHoldingRegisters(_unitId, 0x2000, 1);
+                            alive = (regs != null && regs.Length > 0);
+                        }
+                    }
                 }
-            }
-            catch
+                catch
+                {
+                    alive = false;
+                }
+
+                // 探测失败 → 在 UI 线程统一处理断连（弹窗 + 停遍历 + 交后台重连）
+                if (!alive && _connected)
+                {
+                    RunOnUi(HandleDisconnect);
+                }
+            }).ContinueWith(t => _heartbeatBusy = false);
+        }
+
+        /// <summary>
+        /// 重连定时器：未连接时每 3s 在后台尝试一次静默重连（不弹窗，成功自动恢复）。
+        /// </summary>
+        private void ReconnectTimer_Tick(object sender, EventArgs e)
+        {
+            if (_connected) return;
+            if (_reconnectBusy) return;
+            _reconnectBusy = true;
+
+            Task.Run(() =>
             {
-                // 断开时忽略清理异常
-            }
-            finally
+                try
+                {
+                    TryConnectSilent();
+                }
+                finally
+                {
+                    _reconnectBusy = false;
+                }
+            });
+        }
+
+        /// <summary>
+        /// 跨线程安全地在 UI 线程执行委托（后台线程 → UI 线程用 BeginInvoke）。
+        /// 窗体已释放/正在释放时直接忽略，避免 ObjectDisposedException。
+        /// </summary>
+        private void RunOnUi(Action action)
+        {
+            if (action == null) return;
+            if (IsDisposed || Disposing) return;
+            if (InvokeRequired)
             {
-                _client = null;
-                _master = null;
+                try { BeginInvoke(new Action(action)); }
+                catch { }
+            }
+            else
+            {
+                action();
             }
         }
 
-        /// <summary>窗体关闭时断开连接，释放 socket</summary>
+        /// <summary>窗体关闭时停止所有定时器并断开连接，释放资源</summary>
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            // 停止遍历/心跳/重连定时器并释放，避免窗体销毁后定时器回调
+            _sweepActive = false;
+            if (_sweepTimer != null)
+            {
+                _sweepTimer.Stop();
+                _sweepTimer.Dispose();
+            }
+            if (_heartbeatTimer != null)
+            {
+                _heartbeatTimer.Stop();
+                _heartbeatTimer.Dispose();
+            }
+            if (_reconnectTimer != null)
+            {
+                _reconnectTimer.Stop();
+                _reconnectTimer.Dispose();
+            }
+            if (_remapNoticeForm != null)
+            {
+                _remapNoticeForm.Close();
+                _remapNoticeForm.Dispose();
+                _remapNoticeForm = null;
+            }
+
             Disconnect();
             base.OnFormClosed(e);
         }
@@ -283,6 +559,7 @@ namespace BarometerWinform.Dialogs
 
         /// <summary>
         /// 写入某个测试网格的指定寄存器（读-改-写，避免覆盖 0x2004 上对方测试拥有的字节）。
+        /// 加 _modbusLock 与后台心跳/遍历线程串行化，保证 NModbus 客户端不被并发使用。
         /// </summary>
         /// <param name="grid">目标测试网格</param>
         /// <param name="regIndex">寄存器索引（0~4 对应 RegAddresses；5=备用映射目标 0x2009）</param>
@@ -300,30 +577,37 @@ namespace BarometerWinform.Dialogs
 
             try
             {
-                // 读-改-写：只改写本网格在寄存器里拥有的位，保留其它位（如 0x2004 上对方的字节）
-                int ownedMask = grid.OwnedMask[regIndex];
-                ushort writeValue;
-                if (ownedMask == 0xFFFF)
+                lock (_modbusLock)
                 {
-                    // 整寄存器归本网格所有，直接写
-                    writeValue = (ushort)(val & 0xFFFF);
-                }
-                else
-                {
-                    ushort[] cur = _master.ReadHoldingRegisters(_unitId, (ushort)addr, 1);
-                    ushort current = (cur != null && cur.Length > 0) ? cur[0] : (ushort)0;
-                    writeValue = (ushort)((current & ~ownedMask) | (val & ownedMask));
-                }
+                    if (!_connected || _master == null)
+                    {
+                        AppendLog($"[警告] 未连接，无法写入。请先点击“连接测试”。(由第 {triggerRow + 1} 排触发，0x{addr:X4} = 0x{val:X4})");
+                        return;
+                    }
 
-                _master.WriteSingleRegister(_unitId, (ushort)addr, writeValue);
+                    // 读-改-写：只改写本网格在寄存器里拥有的位，保留其它位（如 0x2004 上对方的字节）
+                    int ownedMask = grid.OwnedMask[regIndex];
+                    ushort writeValue;
+                    if (ownedMask == 0xFFFF)
+                    {
+                        // 整寄存器归本网格所有，直接写
+                        writeValue = (ushort)(val & 0xFFFF);
+                    }
+                    else
+                    {
+                        ushort[] cur = _master.ReadHoldingRegisters(_unitId, (ushort)addr, 1);
+                        ushort current = (cur != null && cur.Length > 0) ? cur[0] : (ushort)0;
+                        writeValue = (ushort)((current & ~ownedMask) | (val & ownedMask));
+                    }
 
-                // 备用映射目标寄存器一并下发（开关关闭时自动跳过）
-                if (_config.IoBackupChannelMappingEnabled)
-                {
-                    _master.WriteSingleRegister(_unitId, (ushort)grid.RegAddresses[5], (ushort)grid.CurrentRegValues[5]);
+                    _master.WriteSingleRegister(_unitId, (ushort)addr, writeValue);
+
+                    // 备用映射目标寄存器（0x2009）一并下发：读-改-写，只动本网格拥有的映射目标位，
+                    // 保留另一测试在该寄存器里的映射位（与主项目 ModbusTcpIoController 逐通道 RMW 一致）
+                    WriteBackupRegister(grid, grid.CurrentRegValues[5]);
+
+                    AppendLog($"[写入] 由第 {triggerRow + 1} 排触发  0x{addr:X4} = 0x{writeValue:X4}");
                 }
-
-                AppendLog($"[写入] 由第 {triggerRow + 1} 排触发  0x{addr:X4} = 0x{writeValue:X4}");
             }
             catch (Exception ex)
             {
@@ -348,8 +632,12 @@ namespace BarometerWinform.Dialogs
 
             try
             {
-                // 读 10 个保持寄存器（0x2000~0x2009；第 10 个 0x2009 为备用映射目标）
-                ushort[] regs = _master.ReadHoldingRegisters(_unitId, 0x2000, 10);
+                ushort[] regs;
+                lock (_modbusLock)
+                {
+                    // 读 10 个保持寄存器（0x2000~0x2009；第 10 个 0x2009 为备用映射目标）
+                    regs = _master.ReadHoldingRegisters(_unitId, 0x2000, 10);
+                }
                 if (regs == null || regs.Length < 10)
                 {
                     AppendLog("[错误] 读取失败：返回寄存器数量不足");
@@ -391,15 +679,18 @@ namespace BarometerWinform.Dialogs
                 return;
             }
 
-            for (int i = 0; i < 10; i++)
+            lock (_modbusLock)
             {
-                try
+                for (int i = 0; i < 10; i++)
                 {
-                    _master.WriteSingleRegister(_unitId, (ushort)(0x2000 + i), 0x0000);
-                }
-                catch (Exception ex)
-                {
-                    AppendLog($"[错误] 写 0x{0x2000 + i:X4} 失败: {ex.Message}");
+                    try
+                    {
+                        _master.WriteSingleRegister(_unitId, (ushort)(0x2000 + i), 0x0000);
+                    }
+                    catch (Exception ex)
+                    {
+                        AppendLog($"[错误] 写 0x{0x2000 + i:X4} 失败: {ex.Message}");
+                    }
                 }
             }
             AppendLog("[关闭] 0x2000~0x2009 全部清零");
@@ -435,9 +726,10 @@ namespace BarometerWinform.Dialogs
         }
 
         /// <summary>
-        /// 弹窗说明某个通道已做备用通道映射，并告知实际输出通道（V1.21 新增）。
-        /// 在用户点击被映射的通道时调用（仅当映射启用且该通道命中映射表时）。
-        /// 使用 SunnyUI UIMessageBox 展示，并在日志中追加一条映射记录。
+        /// 告知某个通道已做备用通道映射及其实际输出通道（V1.21 新增，V1.22 改为非模态）。
+        /// 在用户点击被映射的通道（手动 toggle / 一键遍历点亮）时调用。
+        /// 使用非模态悬浮提示窗 RemapNoticeForm 展示：不阻塞代码流程、不强制占用焦点，
+        /// 用户可保持窗口打开并继续点击/操作其他窗体；同时日志追加一条映射记录。
         /// </summary>
         /// <param name="ioName">UI 上显示的 IO 编号（如 Y000）</param>
         /// <param name="srcReg">源寄存器地址</param>
@@ -448,11 +740,74 @@ namespace BarometerWinform.Dialogs
         {
             string msg = string.Format(
                 "通道 {0}（寄存器 0x{1:X4} 第 {2} 通道）已做备用通道映射。\n\n" +
-                "实际输出通道：寄存器 0x{3:X4} 第 {4} 通道（第 {5} 路）。",
+                "实际输出通道：寄存器 0x{3:X4} 第 {4} 通道（第 {5} 路）。\n\n" +
+                "提示窗不阻塞操作，可继续点击其他窗口；无需时点右上角“×”或“知道了”关闭。",
                 ioName, srcReg, srcCh + 1, dstReg, dstCh + 1, dstCh + 1);
-            UIMessageBox.Show(msg, "通道映射提示",
-                UIStyle.Blue, UIMessageBoxButtons.OK, true, 0);
+
+            // 复用同一个悬浮提示窗（非模态、不抢焦点），多次触发只更新文本，不重复弹窗
+            if (_remapNoticeForm == null || _remapNoticeForm.IsDisposed)
+            {
+                _remapNoticeForm = new RemapNoticeForm();
+                _remapNoticeForm.Show(this);
+            }
+            _remapNoticeForm.SetMessage(msg);
+
             AppendLog($"[映射] 通道 {ioName}（0x{srcReg:X4} 通道{srcCh + 1}）→ 实际输出 0x{dstReg:X4} 通道{dstCh + 1}");
+        }
+
+        /// <summary>
+        /// 非模态映射提示窗：WS_EX_NOACTIVATE + WS_EX_TOOLWINDOW，弹窗不激活、不抢焦点、
+        /// 不进任务栏/AltTab；置顶显示并停留在屏幕右上角，直到用户手动关闭。
+        /// </summary>
+        private sealed class RemapNoticeForm : UIForm
+        {
+            private readonly UILabel _label;
+
+            public RemapNoticeForm()
+            {
+                Text = "通道映射提示";
+                ShowTitle = true;
+                ShowInTaskbar = false;
+                TopMost = true;
+                Width = 500;
+                Height = 170;
+
+                var screen = Screen.PrimaryScreen.WorkingArea;
+                Location = new Point(screen.Right - Width - 16, screen.Top + 16);
+
+                var footer = new UIPanel { Dock = DockStyle.Bottom, Height = 48 };
+                var closeBtn = new UIButton { Text = "知道了", Size = new Size(96, 32) };
+                closeBtn.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+                closeBtn.Location = new Point(footer.Width - closeBtn.Width - 8, 8);
+                closeBtn.Click += (s, e) => Close();
+                footer.Controls.Add(closeBtn);
+
+                _label = new UILabel
+                {
+                    Dock = DockStyle.Fill,
+                    Padding = new Padding(12, 8, 12, 4),
+                    TextAlign = ContentAlignment.TopLeft,
+                    AutoSize = false,
+                    Font = new Font("Microsoft YaHei", 11F)
+                };
+
+                Controls.Add(_label);
+                Controls.Add(footer);
+            }
+
+            /// <summary>禁止激活：弹窗不抢占当前窗口焦点（鼠标点击仍有效）。</summary>
+            protected override CreateParams CreateParams
+            {
+                get
+                {
+                    CreateParams cp = base.CreateParams;
+                    cp.ExStyle |= 0x08000000; // WS_EX_NOACTIVATE
+                    cp.ExStyle |= 0x00000080; // WS_EX_TOOLWINDOW
+                    return cp;
+                }
+            }
+
+            public void SetMessage(string msg) => _label.Text = msg;
         }
 
         /// <summary>由位值反推通道号：0x0001→0，0x0002→1，0x0100→8，0x8000→15</summary>
@@ -468,7 +823,7 @@ namespace BarometerWinform.Dialogs
 
         private void btnConnect_Click(object sender, EventArgs e)
         {
-            Connect();
+            ConnectAsync();
         }
 
         private void btnAllOff_Click(object sender, EventArgs e)
@@ -479,6 +834,267 @@ namespace BarometerWinform.Dialogs
         private void btnReadStatus_Click(object sender, EventArgs e)
         {
             ReadAllStatus();
+        }
+
+        // ===================== 一键遍历（通断跑马灯） =====================
+
+        /// <summary>
+        /// "一键遍历"按钮点击：开始/停止对当前页签测试做"通断跑马灯"检测。
+        /// 未连接时先提示；运行中再次点击则停止并全部关闭。
+        /// </summary>
+        private void btnSweep_Click(object sender, EventArgs e)
+        {
+            // 遍历需要真实写寄存器，未连接时禁止启动
+            if (!_connected || _master == null)
+            {
+                UIMessageBox.Show("请先点击“连接测试”建立通讯！", "提示",
+                    UIStyle.Orange, UIMessageBoxButtons.OK, true, 0);
+                return;
+            }
+
+            // 正在运行 → 停止；未运行 → 开始
+            if (_sweepActive)
+            {
+                StopSweep();
+            }
+            else
+            {
+                StartSweep();
+            }
+        }
+
+        /// <summary>
+        /// 开始一键遍历：锁定当前页签对应的测试网格，启动 500ms 跑马灯定时器，
+        /// 并立即点亮第一路（不用等一个周期）。
+        /// </summary>
+        private void StartSweep()
+        {
+            // 按当前页签确定要遍历的测试网格（0=负压开关测试，1=载台上电测试）
+            if (tabControl.SelectedIndex == 0)
+            {
+                _sweepGrid = _vacuumGrid;
+                _sweepGridName = "负压开关测试";
+            }
+            else
+            {
+                _sweepGrid = _carrierGrid;
+                _sweepGridName = "载台上电测试";
+            }
+
+            _sweepActive = true;
+            _sweepChannelIndex = 0;
+            btnSweep.Text = "停止遍历";
+            btnSweep.Style = UIStyle.Red;
+            _sweepTimer.Start();
+            AppendLog($"[遍历] 开始 {_sweepGridName} 一键遍历：72 路通断跑马灯，每路点亮 500ms，循环检测");
+
+            // 立即执行第一拍（后台线程），无需等待第一个 500ms 周期
+            StartSweepStep();
+        }
+
+        /// <summary>
+        /// 停止一键遍历：停定时器、恢复按钮外观，并把当前网格全部通道熄灭写回设备，
+        /// 避免输出停留在半亮状态。
+        /// </summary>
+        private void StopSweep()
+        {
+            _sweepActive = false;
+            _sweepTimer.Stop();
+            btnSweep.Text = "一键遍历";
+            btnSweep.Style = UIStyle.Purple;
+
+            // 停止后把该网格全部通道关闭（仅已连接时才写设备，未连接只清本地灯）
+            if (_sweepGrid != null)
+            {
+                _sweepGrid.SweepAllOff();
+                AppendLog($"[遍历] 已停止，{_sweepGridName} 全部通道已关闭");
+            }
+            _sweepGrid = null;
+        }
+
+        /// <summary>
+        /// 启动一拍遍历：丢到后台线程执行，避免 Modbus 写/读阻塞 UI 线程（性能关键点）。
+        /// 若上一拍还没做完则跳过本拍（_sweepStepBusy 防重入），宁可放慢也不卡界面。
+        /// </summary>
+        private void StartSweepStep()
+        {
+            if (_sweepStepBusy) return;
+            _sweepStepBusy = true;
+            Task.Run((Action)SweepStepWorker);
+        }
+
+        /// <summary>
+        /// 遍历单拍（后台线程）：
+        ///  1) 纯计算"全灭 + 只亮当前通道"的寄存器值（不碰 UI 控件）；
+        ///  2) 加锁整体写回设备（读-改-写）；
+        ///  3) 读回真实通道状态，切回 UI 线程实时刷新按钮，让跑马灯与实际通断同步。
+        /// 连接中途断开时统一走 HandleDisconnect（弹窗 + 停遍历 + 后台重连）。
+        /// </summary>
+        private void SweepStepWorker()
+        {
+            try
+            {
+                if (!_sweepActive || _sweepGrid == null) return;
+
+                // 连接中断时停止遍历（不再写失败刷屏），交由 HandleDisconnect 处理
+                if (!_connected || _master == null)
+                {
+                    RunOnUi(() =>
+                    {
+                        AppendLog("[遍历] 连接已断开，自动停止遍历");
+                        StopSweep();
+                    });
+                    return;
+                }
+
+                int idx = _sweepChannelIndex;
+                int row = idx / 8;
+                int col = idx % 8;
+                ChannelGrid grid = _sweepGrid;
+
+                // 1) 纯计算：全灭后只点亮 (row, col) 的寄存器值（含备用映射 0x2009）
+                int[] regs = grid.ComputeSweepRegisters(row, col);
+
+                // 2) 加锁写回设备（每个寄存器一次，读-改-写保留共享字节）
+                WriteSweepRegisters(grid, regs);
+
+                // 3) 读回 10 个寄存器，用于按钮实时反映真实通断
+                ushort[] readBack = null;
+                lock (_modbusLock)
+                {
+                    if (_connected && _master != null)
+                    {
+                        readBack = _master.ReadHoldingRegisters(_unitId, 0x2000, 10);
+                    }
+                }
+
+                // 推进到下一路（单 worker 串行执行，无并发竞争）
+                _sweepChannelIndex = (idx + 1) % 72;
+
+                // 切回 UI 线程：用读回的真实值刷新按钮状态 + 完成一圈提示
+                int idxForLog = idx;
+                int litRow = row;
+                int litCol = col;
+                RunOnUi(() =>
+                {
+                    if (_sweepGrid == null) return;
+                    if (readBack != null && readBack.Length >= 10)
+                    {
+                        int[] vals = new int[10];
+                        for (int i = 0; i < 10; i++) vals[i] = readBack[i] & 0xFFFF;
+                        _sweepGrid.SetButtonsFromRegisters(vals);
+                    }
+                    if (idxForLog == 0)
+                    {
+                        AppendLog($"[遍历] {_sweepGridName} 完成一整圈（72 路通断检测），继续下一圈...");
+                    }
+
+                    // 当前点亮的通道若已映射到备用通道：按钮仍显示旧通道名（RowIoNames），
+                    // 但弹窗告知用户实际输出的通道是哪一个（现场一眼可辨，避免误以为原通道在工作）
+                    int litAbsReg = grid.RegAddresses[grid.RowToRegIndex[litRow]];
+                    int litCh = CommunicationTestForm.ChannelOf(grid.RowBitValues[litRow, litCol]);
+                    if (IsRemapSource(litAbsReg, litCh))
+                    {
+                        (int dstReg, int dstBit) = MapChannel(litAbsReg, litCh);
+                        ShowRemapNotice(grid.RowIoNames[litRow, litCol], litAbsReg, litCh, dstReg, dstBit);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                // 写/读失败：多数情况是断连，交由断开处理（弹窗 + 停遍历 + 后台重连）
+                RunOnUi(() =>
+                {
+                    AppendLog("[遍历] 寄存器读写异常: " + ex.Message);
+                    HandleDisconnect();
+                });
+            }
+            finally
+            {
+                _sweepStepBusy = false;
+            }
+        }
+
+        /// <summary>
+        /// 后台线程安全地写遍历寄存器（加锁串行化）：按本网格 OwnedMask 读-改-写，每寄存器一次，
+        /// 并下发备用映射目标 0x2009。不逐条写日志（避免 500ms 一拍刷屏）。
+        /// </summary>
+        private void WriteSweepRegisters(ChannelGrid grid, int[] regs)
+        {
+            lock (_modbusLock)
+            {
+                if (!_connected || _master == null) return;
+
+                for (int i = 0; i < 5; i++)
+                {
+                    // 本网格不拥有的寄存器跳过（如 0x2000 对载台电网格 OwnedMask=0）
+                    if (grid.OwnedMask[i] == 0) continue;
+
+                    int addr = grid.RegAddresses[i];
+                    int ownedMask = grid.OwnedMask[i];
+                    ushort writeValue;
+                    if (ownedMask == 0xFFFF)
+                    {
+                        // 整寄存器归本网格所有，直接写
+                        writeValue = (ushort)(regs[i] & 0xFFFF);
+                    }
+                    else
+                    {
+                        // 共享寄存器读-改-写：保留对方测试拥有的字节
+                        ushort[] cur = _master.ReadHoldingRegisters(_unitId, (ushort)addr, 1);
+                        ushort current = (cur != null && cur.Length > 0) ? cur[0] : (ushort)0;
+                        writeValue = (ushort)((current & ~ownedMask) | (regs[i] & ownedMask));
+                    }
+                    _master.WriteSingleRegister(_unitId, (ushort)addr, writeValue);
+                }
+
+                // 备用映射目标寄存器（0x2009）一并下发：读-改-写保留另一测试的映射位
+                WriteBackupRegister(grid, regs[5]);
+            }
+        }
+
+        /// <summary>
+        /// 读-改-写备用映射目标寄存器（RegAddresses[5]，默认 0x2009）：
+        /// 只改写"本网格拥有的映射目标位"（ComputeRemapTargetMask），保留其它测试的位。
+        /// 与主项目 ModbusTcpIoController 的逐通道读-改-写行为一致，避免两个测试互相覆盖。
+        /// 必须在 _modbusLock 内调用（读写共用一把锁）。
+        /// </summary>
+        /// <param name="grid">目标测试网格</param>
+        /// <param name="remapValue">本网格要写进 0x2009 的映射值（含备用映射目标位）</param>
+        private void WriteBackupRegister(ChannelGrid grid, int remapValue)
+        {
+            // 总开关关闭时不写 0x2009（配置默认关，多数工作台行为不变）
+            if (!_config.IoBackupChannelMappingEnabled) return;
+
+            int remapMask = grid.ComputeRemapTargetMask();
+            if (remapMask == 0) return;   // 本网格没有任何映射目标，不动 0x2009
+
+            ushort[] cur = _master.ReadHoldingRegisters(_unitId, (ushort)grid.RegAddresses[5], 1);
+            ushort current = (cur != null && cur.Length > 0) ? cur[0] : (ushort)0;
+            ushort writeValue = (ushort)((current & ~remapMask) | (remapValue & remapMask));
+            _master.WriteSingleRegister(_unitId, (ushort)grid.RegAddresses[5], writeValue);
+        }
+
+        /// <summary>
+        /// 定时器回调：每 500ms 启动一拍遍历（后台线程执行，UI 不卡顿）。
+        /// </summary>
+        private void SweepTimer_Tick(object sender, EventArgs e)
+        {
+            if (!_sweepActive) return;
+            StartSweepStep();
+        }
+
+        /// <summary>
+        /// 遍历运行中切换页签时自动停止：一键遍历只作用于按下时所在的测试，
+        /// 防止跑马灯误控制另一测试的输出通道。
+        /// </summary>
+        private void tabControl_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (_sweepActive)
+            {
+                StopSweep();
+                AppendLog("[遍历] 检测到切换页签，已停止遍历");
+            }
         }
 
         private void btnClose_Click(object sender, EventArgs e)
@@ -793,6 +1409,120 @@ namespace BarometerWinform.Dialogs
                 }
                 for (int i = 0; i < CurrentRegValues.Length; i++) CurrentRegValues[i] = 0;
                 RefreshRowLabels();
+            }
+
+            /// <summary>
+            /// 一键遍历用：纯计算（不触碰 UI 控件，可在后台线程安全调用）——模拟"全灭后只点亮
+            /// (row, col)"，重算 5 个业务寄存器值 + 备用映射目标 0x2009 的值。
+            /// 返回 regs[0~4]=业务寄存器、regs[5]=0x2009；由调用方加锁写回设备。
+            /// </summary>
+            /// <param name="row">要亮起的通道所在排（0~8）</param>
+            /// <param name="col">要亮起的通道所在列（0~7）</param>
+            public int[] ComputeSweepRegisters(int row, int col)
+            {
+                int[] regs = new int[6];
+
+                // 业务寄存器 0~4：只累加被点亮通道所属寄存器的那一位
+                for (int i = 0; i < 5; i++)
+                {
+                    int value = 0;
+                    for (int r = 0; r < 9; r++)
+                    {
+                        if (RowToRegIndex[r] != i) continue;
+                        int absReg = RegAddresses[i];
+                        for (int c = 0; c < 8; c++)
+                        {
+                            bool on = (r == row && c == col);   // 只有目标通道亮
+                            if (!on) continue;
+                            int ch = CommunicationTestForm.ChannelOf(RowBitValues[r, c]);
+                            if (_owner.IsRemapSource(absReg, ch)) continue;  // 被映射走的源位不写源寄存器
+                            value |= RowBitValues[r, c];
+                        }
+                    }
+                    regs[i] = value;
+                }
+
+                // 备用映射目标 0x2009：被映射的源通道 ON 位累积到目标通道
+                int remap = 0;
+                int absRegRow = RegAddresses[RowToRegIndex[row]];
+                int chRow = CommunicationTestForm.ChannelOf(RowBitValues[row, col]);
+                if (_owner.IsRemapSource(absRegRow, chRow))
+                {
+                    (_, int dstBit) = _owner.MapChannel(absRegRow, chRow);
+                    remap |= (1 << dstBit);
+                }
+                regs[5] = remap;
+
+                return regs;
+            }
+
+            /// <summary>
+            /// 本网格在备用映射目标寄存器（RegAddresses[5]，默认 0x2009）中"拥有"的位掩码：
+            /// 由所有"目标寄存器 = RegAddresses[5] 且 源通道属于本网格拥有的物理通道"的映射目标通道累加。
+            /// 写 0x2009 时用它做读-改-写，只动本网格的映射位、保留另一测试的位（与 0x2004 的处理一致）。
+            /// </summary>
+            public int ComputeRemapTargetMask()
+            {
+                int mask = 0;
+                if (!_owner._config.IoBackupChannelMappingEnabled || _owner._config.IoBackupChannelMappings == null)
+                    return 0;
+
+                foreach (var m in _owner._config.IoBackupChannelMappings)
+                {
+                    // 只关心目标落在本网格备用寄存器上的映射（如 0x2009）
+                    if (m.TargetRegister != RegAddresses[5]) continue;
+
+                    // 该映射的源通道是否属于本网格拥有的物理通道（按 OwnedMask 判断，
+                    // 例如负压阀网格拥有 0x2004 低字节、载台电网格拥有 0x2004 高字节）
+                    for (int i = 0; i < 5; i++)
+                    {
+                        if (m.SourceRegister == RegAddresses[i] &&
+                            (OwnedMask[i] & (1 << m.SourceChannel)) != 0)
+                        {
+                            mask |= (1 << m.TargetChannel);
+                            break;
+                        }
+                    }
+                }
+                return mask;
+            }
+
+            /// <summary>
+            /// 一键遍历停止时调用：本网格全部通道熄灭并把寄存器整体写 0，
+            /// 让设备输出回到全关状态。
+            /// </summary>
+            public void SweepAllOff()
+            {
+                for (int r = 0; r < 9; r++)
+                {
+                    for (int c = 0; c < 8; c++)
+                    {
+                        Buttons[r, c].IsOn = false;
+                    }
+                }
+                for (int i = 0; i < 5; i++) CurrentRegValues[i] = 0;
+                CurrentRegValues[5] = 0;
+                RefreshRowLabels();
+
+                WriteAllOwnedRegisters();
+            }
+
+            /// <summary>把本网格 6 个寄存器（0~4 业务 + [5] 备用映射目标）逐个写回设备，每个只写一次</summary>
+            private void WriteAllOwnedRegisters()
+            {
+                // 未连接时只更新本地按钮/寄存器状态，不尝试写设备（避免大量"未连接"警告刷屏）
+                if (!_owner._connected || _owner._master == null) return;
+
+                bool[] written = new bool[6];
+                for (int r = 0; r < 9; r++)
+                {
+                    int regIndex = RowToRegIndex[r];
+                    if (!written[regIndex])
+                    {
+                        written[regIndex] = true;
+                        _owner.WriteRegister(this, regIndex, r);
+                    }
+                }
             }
         }
 

@@ -15,8 +15,8 @@ namespace BarometerWinform.Dialogs
     /// │ │ 载台上电测试：panelGridPowerOn（9×8 圆形灯） │   │
     /// │ └────────────────────────────────────────────┘   │
     /// ├──────────────────────────────────────────────────┤
-    /// │ pnlBottom：[连接测试][全部关闭][读取状态][关闭窗口]│
-    /// │            txtLog（日志框，只读多行）             │
+    /// │ pnlBottom：[连接测试][全部关闭][读取状态][一键遍历][关闭窗口]│
+    /// │            txtLog（日志框，只读多行）                        │
     /// └──────────────────────────────────────────────────┘
     ///
     /// 说明：
@@ -65,6 +65,7 @@ namespace BarometerWinform.Dialogs
             this.btnConnect = new Sunny.UI.UIButton();
             this.btnAllOff = new Sunny.UI.UIButton();
             this.btnReadStatus = new Sunny.UI.UIButton();
+            this.btnSweep = new Sunny.UI.UIButton();
             this.btnClose = new Sunny.UI.UIButton();
             this.pnlHeader.SuspendLayout();
             this.pageVacuum.SuspendLayout();
@@ -131,6 +132,8 @@ namespace BarometerWinform.Dialogs
             this.tabControl.TabIndex = 1;
             this.tabControl.TabSelectedHighColor = System.Drawing.Color.Red;
             this.tabControl.TabSelectedHighColorSize = 3;
+            // 遍历跑马灯运行中切换页签时，自动停止遍历（见 tabControl_SelectedIndexChanged）
+            this.tabControl.SelectedIndexChanged += new System.EventHandler(this.tabControl_SelectedIndexChanged);
             // 
             // pageVacuum
             // 
@@ -186,6 +189,7 @@ namespace BarometerWinform.Dialogs
             // 
             this.pnlBottom.Controls.Add(this.txtLog);
             this.pnlBottom.Controls.Add(this.btnClose);
+            this.pnlBottom.Controls.Add(this.btnSweep);
             this.pnlBottom.Controls.Add(this.btnReadStatus);
             this.pnlBottom.Controls.Add(this.btnAllOff);
             this.pnlBottom.Controls.Add(this.btnConnect);
@@ -246,6 +250,17 @@ namespace BarometerWinform.Dialogs
             this.btnReadStatus.Text = "读取状态";
             this.btnReadStatus.Click += new System.EventHandler(this.btnReadStatus_Click);
             // 
+            // btnSweep
+            // 
+            this.btnSweep.Font = new System.Drawing.Font("微软雅黑", 10.5F, System.Drawing.FontStyle.Bold);
+            this.btnSweep.Location = new System.Drawing.Point(470, 12);
+            this.btnSweep.Name = "btnSweep";
+            this.btnSweep.Size = new System.Drawing.Size(140, 38);
+            this.btnSweep.Style = Sunny.UI.UIStyle.Purple;
+            this.btnSweep.TabIndex = 5;
+            this.btnSweep.Text = "一键遍历";
+            this.btnSweep.Click += new System.EventHandler(this.btnSweep_Click);
+            // 
             // btnClose
             // 
             this.btnClose.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
@@ -303,6 +318,7 @@ namespace BarometerWinform.Dialogs
         private Sunny.UI.UIButton btnConnect;
         private Sunny.UI.UIButton btnAllOff;
         private Sunny.UI.UIButton btnReadStatus;
+        private Sunny.UI.UIButton btnSweep;
         private Sunny.UI.UIButton btnClose;
         private Sunny.UI.UITextBox txtLog;
     }
