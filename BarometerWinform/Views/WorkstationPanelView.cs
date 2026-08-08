@@ -36,9 +36,9 @@ namespace BarometerWinform.Views
     ///
     /// 【状态灯颜色约定】
     /// - 上电状态灯（boxPower，V1.24 起带文字）：载台上电输出 ON=LimeGreen 绿底白字"上电"，
-    ///   OFF=红底白字"下电"（原为纯色无文字：绿/灰，V1.24 改红并加文字）
+    ///   OFF=浅灰(LightGray)底黑字"下电"（V1.28 由红改灰，与行全选按钮同色，降低视觉强度）
     /// - 真空开启显示（boxVacuumOpen，V1.19.10 起带文字+颜色）：真空电磁阀输出
-    ///   ON=绿底白字"真空开"，OFF=红底白字"真空关"
+    ///   ON=绿底白字"真空开"，OFF=浅灰(LightGray)底黑字"真空关"（V1.28 由红改灰）
     /// - 工作状态（boxWorkState，V1.18 文字用中文）：空闲/选中/繁忙/故障
     ///   空闲=绿底黑字（V1.24 由浅灰改为 LimeGreen，表示就绪）；已上电待测试=选中（橙底白字）；
     ///   测试中=繁忙（黄底白字，V1.24 由绿改为红绿灯"黄灯色" Gold）；
@@ -330,7 +330,7 @@ namespace BarometerWinform.Views
         /// - 压力值 / SN / 配方 / 延时（原样保留）
         /// - 上电状态灯（载台上电输出）
         /// - 选中指示（右上角，V1.19 原上电/下电按钮改为选中指示；V1.19.5 有选中才显示）
-        /// - 真空开启显示（文字+颜色，V1.19.10：真空开=绿底 / 真空关=红底）
+        /// - 真空开启显示（文字+颜色，V1.19.10：真空开=绿底 / 真空关=浅灰底；V1.28 由红改灰）
         /// - 工作状态（空闲/选中/繁忙/故障，V1.18 由英文改中文）
         /// - 面板背景色（空闲/测试中/故障；V1.19.2 起不再叠加选中高亮）
         /// </summary>
@@ -364,10 +364,10 @@ namespace BarometerWinform.Views
             bool vacuumOpen = data.OutputStatus != null && data.OutputStatus.Length >= 1 && data.OutputStatus[0];
             bool carrierPower = GetCarrierPower(data);
 
-            // ===== 真空开启显示（V1.19.10：文字+颜色，真空开=绿底 / 真空关=红底） =====
+            // ===== 真空开启显示（V1.19.10：文字+颜色，真空开=绿底 / 真空关=浅灰底，V1.28 由红改灰） =====
             UpdateVacuumOpenDisplay(vacuumOpen);
 
-            // ===== 上电状态灯（纯色：绿=已上电，灰=未上电） =====
+            // ===== 上电状态灯（V1.24 起带文字：绿=上电 / 浅灰=下电，V1.28 由红改灰） =====
             UpdateStatusLight(boxPower, carrierPower);
 
             // ===== 工作状态显示（空闲/选中/繁忙/故障） =====
@@ -381,14 +381,15 @@ namespace BarometerWinform.Views
         }
 
         /// <summary>
-        /// 更新上电状态灯（boxPower，V1.24 起带文字：红底"下电" / 绿底"上电"，白字）
+        /// 更新上电状态灯（boxPower，V1.24 起带文字：绿底"上电" / 灰底"下电"）
+        /// V1.28：下电由红改浅灰(LightGray)黑字，与行全选按钮同色，避免红色过度醒目。
         /// </summary>
         /// <param name="ctrl">上电状态灯控件（boxPower）</param>
-        /// <param name="isActive">true=上电（绿底 LimeGreen + 白字"上电"），false=下电（红底 + 白字"下电"）</param>
+        /// <param name="isActive">true=上电（绿底 LimeGreen + 白字"上电"），false=下电（浅灰底 + 黑字"下电"）</param>
         private void UpdateStatusLight(Control ctrl, bool isActive)
         {
-            ctrl.BackColor = isActive ? Color.LimeGreen : Color.Red;
-            ctrl.ForeColor = Color.White;
+            ctrl.BackColor = isActive ? Color.LimeGreen : Color.LightGray;
+            ctrl.ForeColor = isActive ? Color.White : Color.Black;
             ctrl.Text = isActive ? "上电" : "下电";
         }
 
@@ -399,11 +400,11 @@ namespace BarometerWinform.Views
         /// 原真空开启灯为"纯色无文字"（绿=开启，灰=关闭），操作员需对照颜色判断，
         /// 观感不够直观。V1.19.10 改为"文字 + 颜色"显示：
         /// - 真空开启（真空电磁阀输出 ON）：绿底白字"真空开"
-        /// - 真空关闭（真空电磁阀输出 OFF）：红底白字"真空关"
+        /// - 真空关闭（真空电磁阀输出 OFF）：浅灰(LightGray)底黑字"真空关"
         ///
-        /// 【为什么关闭用红色】
-        /// 真空未建立属于"异常/待机"状态，用红色（与工作状态"故障"红色呼应）更醒目，
-        /// 操作员一眼能看出当前该台真空没开。
+        /// 【颜色说明（V1.28）】
+        /// 真空关由红改浅灰（与行全选按钮同色）——真空未开是待机常态，红色过于醒目刺眼；
+        /// "故障"仍保留红色（见工作状态 boxWorkState），只有异常才用红色警示。
         /// </summary>
         /// <param name="vacuumOpen">true=真空开启，false=真空关闭</param>
         private void UpdateVacuumOpenDisplay(bool vacuumOpen)
@@ -417,8 +418,8 @@ namespace BarometerWinform.Views
             else
             {
                 boxVacuumOpen.Text = "真空关";
-                boxVacuumOpen.BackColor = Color.Red;
-                boxVacuumOpen.ForeColor = Color.White;
+                boxVacuumOpen.BackColor = Color.LightGray;
+                boxVacuumOpen.ForeColor = Color.Black;
             }
         }
 

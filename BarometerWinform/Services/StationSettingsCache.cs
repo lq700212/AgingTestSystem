@@ -24,12 +24,10 @@ namespace BarometerWinform.Services
         /// <summary>配方名称（可空）</summary>
         public string RecipeName { get; set; }
 
-        /// <summary>延时时间（时:分:秒，配方窗口"延时时间"，工位面板"延时开启"）序列化键保持 DelayStartTime 兼容旧缓存</summary>
-        [Newtonsoft.Json.JsonProperty("DelayStartTime")]
+        /// <summary>延时时间（时:分:秒，配方窗口"延时时间"，工位面板"延时开启"）</summary>
         public TimeSpan DelayTime { get; set; }
 
-        /// <summary>启动时间（时:分:秒，配方窗口"启动时间"，工位面板"延时到达"）序列化键保持 DelayArriveTime 兼容旧缓存</summary>
-        [Newtonsoft.Json.JsonProperty("DelayArriveTime")]
+        /// <summary>启动时间（时:分:秒，配方窗口"启动时间"，工位面板"延时到达"）</summary>
         public TimeSpan StartTime { get; set; }
 
         /// <summary>极限温度（单位：摄氏度）</summary>

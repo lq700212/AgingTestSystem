@@ -181,7 +181,8 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 | 版本 | 要点 |
 | :--- | :--- |
-| V1.28 | 时间输入样式统一：配方管理/批量设置/工位设置三窗口延时与启动时间均改三个 NumericUpDown + 冒号分隔（时:分:秒，时0-99/分0-59/秒0-59），命名统一 nudDelay*/nudStart*，字段映射对齐（延时→延时开启 DelayTime、启动→延时到达 StartTime；字段名由 DelayStartTime/DelayArriveTime 统一，[JsonProperty] 保旧 JSON 键名兼容）；批量设置配方窗口删除"延时时间2"，且原被丢弃的"启动时间"修复为写入配方；工位设置窗口 txtDelay/txtStart 改 NumericUpDown 并调整读取（GetTimeSpan）/回填（SetTimeInputs 钳制）/提示（GetTimeText）逻辑 |
+| V1.29 | 移除时间字段 [JsonProperty] 兼容（JSON 键名直接用 DelayTime/StartTime，旧 Recipes.json/StationSettings.json 需删除重建）+ 工位面板配色微调：boxPower 下电 / boxVacuumOpen 真空关由红底白字改浅灰(LightGray)底黑字（与行全选按钮同色），红仅保留给工作状态"故障" |
+| V1.28 | 时间输入样式统一：配方管理/批量设置/工位设置三窗口延时与启动时间均改三个 NumericUpDown + 冒号分隔（时:分:秒，时0-99/分0-59/秒0-59），命名统一 nudDelay*/nudStart*，字段映射对齐（延时→延时开启 DelayTime、启动→延时到达 StartTime；字段名由 DelayStartTime/DelayArriveTime 统一）；批量设置配方窗口删除"延时时间2"，且原被丢弃的"启动时间"修复为写入配方；工位设置窗口 txtDelay/txtStart 改 NumericUpDown 并调整读取（GetTimeSpan）/回填（SetTimeInputs 钳制）/提示（GetTimeText）逻辑 |
 | V1.27 | 配方管理移除"保存设置"按钮：添加/更新/删除操作即自动落盘 Recipes.json（原仅"保存设置"落盘，现三个操作按钮每次成功后自动持久化，改动重启不丢失） |
 | V1.26 | 批量设置配方"加入队列"=保存配方到本地+应用到选中工位（无选中先保存配方并提示选择工位）；工位设置"保存"=应用面板+缓存(StationSettings.json自动回填)+存配方、"加入对列"=应用面板+存配方、"下电"=关闭载台上电输出；RecipeStorage 新增 SaveWithDuplicateCheck 同名覆盖保存 |
 | V1.25 | 配方管理窗口编辑化（名称输入框、时/分/秒分拆、极限温度）+ 列表选中同步显示 + 添加防重名询问更新 + 删除二次确认 + Recipes.json 持久化启动加载 + 配方列表垂直滚动条；批量设置配方窗口左侧标签与右侧输入框垂直居中对齐 |
