@@ -21,12 +21,14 @@ namespace BarometerWinform.Views
     /// │ SN:    [SN值 Label]                 │  ← V1.19.3：内容改为 Label 显示
     /// │ 配方:  [配方值 Label]               │
     /// │ 延时开启 [__:__:__]      ┌────┐      │
-    /// │ 延时到达 [__:__:__]      │设置│      │  ← 点击弹出工位设置窗口（V1.18）
+    /// │ 延时到达 [__:__:__]      │设置│      │  ← 点击弹出设置窗口（V1.24：按选中数量分流）      │
     /// │                          └────┘      │
     /// └──────────────────────────────┘
     ///
     /// 【选中交互（V1.19.6）】
     /// - 在面板空白区域"长按约 0.8 秒"（按住不松手）即选中该工位（首次/新增选中通过长按）；
+    /// - 【V1.24】若长按时选中框已可见（已有任一工位被选中）：不再选中当前工位，
+    ///   而是**取消全部选中并隐藏所有选中框**（取消全选由主窗体 ClearAllSelectionRequested 事件统一执行）；
     /// - 选中框显示时（已有任一工位被选中）：单击面板空白区域或点击选中框 = **切换**该工位"选中/未选中"；
     /// - 例外：整表只有该工位处于选中状态时，把它切换为未选中 → 全表无选中，所有面板的选中框自动隐藏；
     /// - 选中框平时全部隐藏；只要有任一工位被选中，所有面板同时显示框——
@@ -37,7 +39,8 @@ namespace BarometerWinform.Views
     /// - 真空开启显示（boxVacuumOpen，V1.19.10 起带文字+颜色）：真空电磁阀输出
     ///   ON=绿底白字"真空开"，OFF=红底白字"真空关"
     /// - 工作状态（boxWorkState，V1.18 文字用中文）：空闲/选中/繁忙/故障
-    ///   空闲=浅灰底黑字；已上电待测试=选中（橙底白字）；测试中=繁忙（绿底白字）；
+    ///   空闲=绿底黑字（V1.24 由浅灰改为 LimeGreen，表示就绪）；已上电待测试=选中（橙底白字）；
+    ///   测试中=繁忙（黄底白字，V1.24 由绿改为红绿灯"黄灯色" Gold）；
     ///   故障=红底白字（V1.19.4 统一为"信号灯"色系，故障最醒目）
     ///   （V1.19.2：是否选中不再改变工作状态文字）
     /// - 选中指示（btnSelect，右上角，V1.19）：选中显示"✓"（绿底白字），未选中显示空心方框
@@ -146,10 +149,20 @@ namespace BarometerWinform.Views
         /// <summary>
         /// 工位设置按钮点击事件
         /// 当用户点击面板右下角的"设置"按钮时触发，参数为设备编号。
-        /// 主窗体收到事件后弹出工位设置窗口（StationSettingsForm），
-        /// 可查看/设置该工位的状态、SN、配方、延时时间、启动时间、极限温度。
+        /// 【V1.24】主窗体收到事件后按当前选中工位数分流：
+        /// 只选中 1 个 → 弹出该工位的工位设置窗口（StationSettingsForm）；
+        /// 选中 2 个及以上 → 弹出批量设置配方窗口（BatchRecipeForm）；
+        /// 若按钮所在工位未选中，主窗体先将其加入选中集合再分流。
         /// </summary>
         public event EventHandler<int> OnSetClicked;
+
+        /// <summary>
+        /// 取消全部选中请求事件（【V1.24 新增】）
+        /// 在面板空白区域"长按约 0.8 秒"时，若选中框已可见（已有任一工位被选中），
+        /// 触发本事件请求主窗体**取消全部选中并隐藏所有选中框**（而非选中当前工位）。
+        /// 主窗体订阅后在所有面板上执行 IsSelected=false，并刷新选中框隐藏。
+        /// </summary>
+        public event EventHandler ClearAllSelectionRequested;
 
         /// <summary>
         /// 无参数构造函数（仅供 Visual Studio 设计器使用）
@@ -287,13 +300,24 @@ namespace BarometerWinform.Views
         }
 
         /// <summary>
-        /// 长按计时到点：选中该工位（V1.19.5）
-        /// 标记本次按下已触发长按，松手时不再执行"单击取消"。
+        /// 长按计时到点（V1.24 更新）
+        /// - 选中框未显示（全表未选中）→ 选中该工位（首次/新增选中）；
+        /// - 选中框已显示（已有任一工位被选中）→ 不选中当前工位，
+        ///   触发 ClearAllSelectionRequested 请求主窗体取消全部选中并隐藏所有选中框。
+        /// 标记本次按下已触发长按，松手时不再执行"单击切换"。
         /// </summary>
         private void LongPressTimer_Tick(object sender, EventArgs e)
         {
             _longPressTimer.Stop();
             _longPressFired = true;
+
+            // 【V1.24】已有选中（选中框可见）时，长按空白处 = 取消全部选中并隐藏所有选中框
+            if (_selectionBoxVisible)
+            {
+                ClearAllSelectionRequested?.Invoke(this, EventArgs.Empty);
+                return;
+            }
+
             IsSelected = true;
         }
 
@@ -411,12 +435,12 @@ namespace BarometerWinform.Views
         ///
         /// 【状态规则】（V1.18 状态文字改为中文：空闲 / 选中 / 繁忙 / 故障）
         /// - 故障：故障（红底 + 白字，V1.19.4 由浅粉底+红字改为醒目红底，面板本身仍是浅粉打底）
-        /// - 测试中：繁忙（绿底 + 白字，与系统绿色一致）
+        /// - 测试中：繁忙（黄底 + 白字，V1.24 由绿改为红绿灯"黄灯色"）
         /// - 空闲但已上电：选中（橙底 + 白字）——按了上电按钮、准备测试
-        /// - 空闲且未上电：空闲（浅灰底 + 黑字，与 boxPower 关闭时的灰色一致）
+        /// - 空闲且未上电：空闲（绿底 + 黑字，V1.24 由浅灰改为 LimeGreen，表示就绪）
         ///
         /// 【配色搭配】（V1.19.4）统一为"信号灯"色系，一眼区分状态：
-        /// 红=故障（最醒目）/ 橙=已上电待测试（暖色提醒）/ 绿=测试中（与系统绿一致）/ 浅灰=空闲（中性）。
+        /// 红=故障（最醒目）/ 橙=已上电待测试（暖色提醒）/ 黄=测试中（V1.24 黄灯色）/ 绿=空闲就绪（V1.24）。
         ///
         /// 【V1.19.2】"是否被选中（IsSelected）"不再影响工作状态文字，
         /// 选中状态只通过右上角选中指示（btnSelect）体现。
@@ -435,7 +459,8 @@ namespace BarometerWinform.Views
 
                 case DeviceStatus.Testing:
                     boxWorkState.Text = "繁忙";
-                    boxWorkState.BackColor = Color.LimeGreen;
+                    // V1.24：红绿灯黄灯色（Gold = #FFD700）
+                    boxWorkState.BackColor = Color.Gold;
                     boxWorkState.ForeColor = Color.White;
                     break;
 
@@ -449,9 +474,9 @@ namespace BarometerWinform.Views
                     }
                     else
                     {
-                        // 完全空闲 → 空闲（灰底 + 黑字）
+                        // 完全空闲 → 空闲（绿底 + 黑字，V1.24 由浅灰改为 LimeGreen）
                         boxWorkState.Text = "空闲";
-                        boxWorkState.BackColor = Color.LightGray;
+                        boxWorkState.BackColor = Color.LimeGreen;
                         boxWorkState.ForeColor = Color.Black;
                     }
                     break;

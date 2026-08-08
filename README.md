@@ -65,8 +65,8 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Services/TestEventLogger.cs` | 测试事件 CSV 落盘（启动/停止/报警/复位/急停/真空建立） |
 | `Services/UserManager.cs` | 用户/登录/权限，Users.json 持久化 |
 | `Services/Mock*.cs` | Mock 实现（免接线演示） |
-| `Views/MainForm.cs` | 主窗体：面板区（9×8）、菜单下拉、状态栏、权限控制、扫码事件、操作区按钮 |
-| `Views/WorkstationPanelView.cs` | 单个工位面板：压力/SN/配方/延时/状态灯/选中指示（长按约 0.8s 选中） |
+| `Views/MainForm.cs` | 主窗体：面板区（9×8）、菜单下拉、状态栏（"在线"全部离线标红，V1.24）、权限控制、扫码事件、操作区按钮 |
+| `Views/WorkstationPanelView.cs` | 单个工位面板：压力/SN/配方/延时/状态灯/选中指示（长按约 0.8s 选中，已有选中时长按取消全部选中）；"设置"按钮按选中数量智能分流（V1.24） |
 | `Dialogs/CommunicationTestForm.cs` | 通讯测试窗体（IO 耦合器 DO 输出测试，负压阀/载台上电两页 9×8 灯按钮 + 一键遍历） |
 | `Dialogs/FanTestForm.cs` | 送风机测试窗体（定值启停 + 温湿度显示） |
 | `Dialogs/SettingsForm.cs` | 系统设置（管理员，按分类编辑 App.config 全部配置项，写回 exe.config 重启生效） |
@@ -106,7 +106,14 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 - **IP 自动识别**：连接顺序 = FanLastIp.cache（上次成功）→ FanIpAddress → FanIpCandidates；候选列表配几个识别几个，设备换 IP 自动找到并更新缓存。
 
 ### 4.4 主界面操作入口（右侧"操作"区）
-开启真空 / 启动运行 / 停止运行 / 报警复位 / 全部停止(急停) / 送风机定值启停 / 面板"设置"（工位设置窗口）/ 行"全选"。
+开启真空 / 启动运行 / 停止运行 / 报警复位 / 全部停止(急停) / 送风机定值启停 / 面板"设置" / 行"全选"。
+
+> **面板"设置"按钮（V1.24 智能分流）**：点击时若按钮所在工位未选中，先将其加入选中集合；
+> 然后只选中 **1 个工位** → 弹出该工位的工位设置窗口（`StationSettingsForm`）；
+> 选中 **2 个及以上** → 弹出批量设置配方窗口（`BatchRecipeForm`）。
+
+> **面板选中交互（V1.19.5~6 / V1.24）**：空白处"长按约 0.8s"选中该工位（选中框平时全隐藏，有选中才全部显示）；
+> 已有选中时长按空白处 = **取消全部选中并隐藏所有选中框**；选中框显示时单击空白处/选中框 = 切换该工位选中状态。
 
 ## 5. 配置项速查（App.config，可在"关于→设置"管理员界面编辑，写回 exe.config 重启生效）
 
@@ -170,6 +177,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 | 版本 | 要点 |
 | :--- | :--- |
+| V1.24 | 面板"设置"按钮智能分流：点击工位未选中先加入选中；仅选 1 台弹工位设置窗口，选≥2 台弹批量设置配方窗口（`ShowBatchRecipeForm` 抽取复用）；长按空白处取消全部选中并隐藏选中框；状态栏"在线"全部离线标红、默认"未连接"标红；工位面板配色优化（真空关默认红底、测试中=黄灯色、空闲=LimeGreen） |
 | V1.23 | 通讯测试/送风机测试窗体共享主程序连接（不自建 TCP）；DeviceManager/ModbusTcpIoController 新增共享原始寄存器 API |
 | V1.22 | 通讯测试窗体：一键遍历通断跑马灯、打开自动连接+心跳断连提醒+遍历后台执行、0x2009 映射读-改-写、非模态映射提示窗 |
 | V1.21 | 通讯测试窗体 SunnyUI 重构 + 备用通道映射点击提示 |

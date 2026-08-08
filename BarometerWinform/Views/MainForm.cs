@@ -889,6 +889,10 @@ namespace BarometerWinform.Views
                 // 订阅面板的"设置"按钮点击事件（V1.18：打开工位设置窗口）
                 panel.OnSetClicked += Panel_OnSetClicked;
 
+                // 【V1.24】订阅面板"取消全部选中"请求：
+                // 长按空白处且已有选中（选中框可见）时，取消全部选中并隐藏所有选中框。
+                panel.ClearAllSelectionRequested += Panel_ClearAllSelectionRequested;
+
                 // 【V1.19】订阅面板选中状态变化事件：
                 // 任一面板被单独选中/取消（V1.19.5：空白处长按约0.8秒选中 / 单击空白处或点击选中框取消）时，
                 // 立即刷新所在行的"全选/取消"按钮文字——只要该行有一台被取消，
@@ -1363,6 +1367,11 @@ namespace BarometerWinform.Views
             // 状态栏统计
             toolStripStatusLabelTesting.Text = $"测试中: {testingCount}";
             toolStripStatusLabelOnline.Text = $"在线: {onlineCount}/{_config.TotalBarometers}";
+
+            // 【V1.24】全部离线（在线 0/N）时"在线"文本标红，其余情况恢复默认颜色
+            toolStripStatusLabelOnline.ForeColor = onlineCount == 0
+                ? Color.Red
+                : SystemColors.ControlText;
         }
 
         /// <summary>
@@ -1453,14 +1462,60 @@ namespace BarometerWinform.Views
 
         /// <summary>
         /// 面板"设置"按钮点击事件处理（【V1.18】由单台手动控制改为工位设置窗口）
-        /// 弹出工位设置窗口：查看/设置该工位的状态、SN、配方、延时时间、启动时间、极限温度。
+        /// 【V1.24 优化】点击"设置"按钮时：
+        /// 1. 若被点击按钮所在的工位未被选中，先将其加入选中集合（确保点击的工位必被选中）；
+        /// 2. 再按当前选中数量决定弹出窗口：
+        ///    - 选中 2 个及以上工位：弹出批量设置配方窗口（BatchRecipeForm）；
+        ///    - 只选中 1 个工位：弹出该选中工位的工位设置窗口（StationSettingsForm）。
         /// </summary>
         private void Panel_OnSetClicked(object sender, int deviceId)
         {
-            using (var form = new StationSettingsForm(_deviceManager, _config, deviceId))
+            // 确保被点击"设置"按钮所在的工位被选中
+            if (_panelViews.TryGetValue(deviceId, out var clickedPanel) && !clickedPanel.IsSelected)
+            {
+                clickedPanel.IsSelected = true;
+            }
+
+            int selectedCount = 0;
+            int selectedDeviceId = 0;
+            foreach (var kvp in _panelViews)
+            {
+                if (kvp.Value.IsSelected)
+                {
+                    selectedCount++;
+                    selectedDeviceId = kvp.Key;
+                }
+            }
+
+            // 选中 2 个及以上工位 → 批量设置配方窗口
+            if (selectedCount >= 2)
+            {
+                ShowBatchRecipeForm();
+                return;
+            }
+
+            // 只选中 1 个工位（此时必为被点击的工位）→ 打开该工位的设置窗口
+            using (var form = new StationSettingsForm(_deviceManager, _config, selectedDeviceId))
             {
                 form.ShowDialog(this);
             }
+        }
+
+        /// <summary>
+        /// 面板"取消全部选中"请求处理（【V1.24 新增】）
+        /// 长按空白处且已有选中（选中框可见）时触发：将所有工位取消选中，
+        /// 并刷新选中框（全部未选中 → 自动隐藏所有面板的选中框）。
+        /// </summary>
+        private void Panel_ClearAllSelectionRequested(object sender, EventArgs e)
+        {
+            foreach (var panel in _panelViews.Values)
+            {
+                if (panel.IsSelected)
+                {
+                    panel.IsSelected = false;
+                }
+            }
+            UpdateSelectionBoxVisibility();
         }
 
         /// <summary>
@@ -2047,6 +2102,15 @@ namespace BarometerWinform.Views
         /// 弹出批量设置配方窗口，允许用户配置配方参数并加入队列
         /// </summary>
         private void btnBatchRecipe_Click(object sender, EventArgs e)
+        {
+            ShowBatchRecipeForm();
+        }
+
+        /// <summary>
+        /// 弹出批量设置配方窗口（【V1.24】抽取为公共方法，供"批量设置配方"按钮与
+        /// 面板"设置"按钮多选时共用）
+        /// </summary>
+        private void ShowBatchRecipeForm()
         {
             using (var form = new BatchRecipeForm())
             {

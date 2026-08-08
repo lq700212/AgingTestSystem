@@ -3,6 +3,16 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.24 — 面板"设置"智能分流 + 长按取消全选 + 离线/配色优化（2026-08-08）
+- 面板"设置"按钮点击逻辑优化（`Panel_OnSetClicked`）：点击时若按钮所在工位未被选中，先将其加入选中集合（选中框同步显示）；
+  再按选中数量分流——只选中 1 个工位 → 弹出该工位的 `StationSettingsForm`；选中 2 个及以上 → 弹出 `BatchRecipeForm`。
+- 批量设置配方窗口打开逻辑抽为公共方法 `ShowBatchRecipeForm()`，供"批量设置配方"菜单与面板多选场景复用（队列处理/日志一致）。
+- 长按空白处**取消全部选中**：全表未选中时长按仍为"选中该工位"；已有选中（选中框可见）时长按空白处 → 取消全部选中并隐藏所有选中框
+  （`ClearAllSelectionRequested` 事件 → 主窗体 `Panel_ClearAllSelectionRequested` 统一置 `IsSelected=false` + `UpdateSelectionBoxVisibility`）。
+- **离线/未加载状态标红**：状态栏"在线"统计全部离线（`在线: 0/N`）时 `toolStripStatusLabelOnline` 文字变红（默认即红，其余情况恢复默认色）；
+  默认显示"未连接"的 `lblFanState`/`lblCommStatus` 设计时默认字体改红色，数据未加载时直观告警。
+- **工位面板配色**：`boxVacuumOpen` 默认"真空关"改为红底白字（与加载后一致）；`boxWorkState` 测试中=繁忙改红绿灯**黄灯色**（Gold，原绿），空闲改 **LimeGreen**（原浅灰）。
+
 ## V1.23 — 通讯测试窗体共享主程序连接（2026-08-08）
 - 通讯测试/送风机测试窗体**不再自建 TCP 连接**，全部复用 `DeviceManager` 的共享连接，消除"连接数翻倍、IP 改了测试窗体能连主程序连不上"的割裂。
 - `ModbusTcpIoController` 新增线程安全 `ReadHoldingRegisters`/`WriteSingleRegister`（与采集线程共用同一条连接 + `_syncRoot` 串行化）。

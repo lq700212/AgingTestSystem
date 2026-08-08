@@ -164,7 +164,8 @@
             this.boxVacuumOpen.TabIndex = 5;
             this.boxVacuumOpen.Text = "真空关";
             this.boxVacuumOpen.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-            this.boxVacuumOpen.BackColor = System.Drawing.Color.LightGray;
+            // V1.24：默认"真空关"颜色与加载完数据后的真空关一致（红底白字）
+            this.boxVacuumOpen.BackColor = System.Drawing.Color.Red;
             this.boxVacuumOpen.ForeColor = System.Drawing.Color.White;
             //
             // boxWorkState - 工作状态显示（空闲/选中/繁忙/故障）
@@ -180,7 +181,9 @@
             this.boxWorkState.TabIndex = 6;
             this.boxWorkState.Text = "空闲";
             this.boxWorkState.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-            this.boxWorkState.BackColor = System.Drawing.Color.LightGray;
+            // V1.24：默认"空闲"颜色与加载完数据后的空闲一致（LimeGreen 底 + 黑字）
+            this.boxWorkState.BackColor = System.Drawing.Color.LimeGreen;
+            this.boxWorkState.ForeColor = System.Drawing.Color.Black;
             //
             // lblSN - "SN:"标签
             //
@@ -306,7 +309,7 @@
             // 为"纯色状态灯"加上鼠标悬停提示，方便操作员理解灯的含义
             this.toolTipPanel.SetToolTip(this.boxPower, "上电状态：绿=已上电，灰=未上电");
             this.toolTipPanel.SetToolTip(this.boxVacuumOpen, "真空开启状态（V1.19.10）：真空开=绿底，真空关=红底");
-            this.toolTipPanel.SetToolTip(this.boxWorkState, "工作状态（V1.19.4 配色）：空闲=浅灰 / 选中(已上电待测试)=橙 / 繁忙(测试中)=绿 / 故障=红");
+            this.toolTipPanel.SetToolTip(this.boxWorkState, "工作状态（V1.24 配色）：空闲=绿 / 选中(已上电待测试)=橙 / 繁忙(测试中)=黄 / 故障=红");
             this.toolTipPanel.SetToolTip(this.btnSelect, "选中指示（V1.19.6）：空白处长按约0.8秒=选中(绿✓)；有选中后单击空白处或本框=切换选中/取消；整表唯一选中项被取消时全部隐藏");
         }
 
