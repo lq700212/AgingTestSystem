@@ -97,7 +97,7 @@ namespace BarometerWinform.Dialogs
             { "BarometerPressureScale", "压力缩放系数（读数 × 该值）" },
 
             // ===== 报警参数 =====
-            { "AlarmPressureThresholdPa", "报警压力阈值（Pa，如 -95000）" },
+            { "AlarmPressureThresholdKPa", "报警压力阈值（kPa，如 -95）" },
             { "AlarmWhenPressureHigherThanThreshold", "报警方向（true=压力高于阈值时报警）" },
 
             // ===== 冷却送风机 =====
@@ -169,7 +169,7 @@ namespace BarometerWinform.Dialogs
             }),
             ("报警参数", new string[]
             {
-                "AlarmPressureThresholdPa", "AlarmWhenPressureHigherThanThreshold"
+                "AlarmPressureThresholdKPa", "AlarmWhenPressureHigherThanThreshold"
             }),
             ("冷却送风机", new string[]
             {
@@ -419,7 +419,7 @@ namespace BarometerWinform.Dialogs
 
                 // 小数（decimal / float）
                 case "BarometerPressureScale":
-                case "AlarmPressureThresholdPa":
+                case "AlarmPressureThresholdKPa":
                     if (!decimal.TryParse(value, out _)) { error = "应为数字"; return false; }
                     return true;
                 case "FanTempAlarmLimitC":

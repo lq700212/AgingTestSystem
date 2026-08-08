@@ -35,7 +35,7 @@ namespace BarometerWinform.Views
     /// ┌─────────────────────────────────────────────────────────┐
     /// │ 老化测试系统V1.00  │ 当前操作权限: 操作员 │ PLC连接状态: 已连接 │
     /// ├─────────────────────────────────────────────────────────┤
-        /// │ [用户权限] [参数设置] [LOG记录] [帮助] │
+        /// │ [用户权限] [参数设置] [日志记录] [关于] │
     /// ├──────────────────────────────┬──────────────────────────┤
     /// │                              │ 运行状态                 │
     /// │                              │ ┌────────────────────┐   │
@@ -153,8 +153,8 @@ namespace BarometerWinform.Views
         // ===== 布局相关常量（修复 L6：避免魔法数字散落代码各处） =====
         /// <summary>行全选按钮列的固定宽度（像素）</summary>
         private const int RowSelectButtonColumnWidth = 80;
-        /// <summary>工位面板的行高（像素），包含面板高度和上下边距（V1.16 加高容纳新布局）</summary>
-        private const int PanelRowHeight = 245;
+        /// <summary>工位面板的行高（像素），包含面板高度和上下边距（V1.16 加高容纳新布局；V1.19.12 随面板高度 225→205 同步减小）</summary>
+        private const int PanelRowHeight = 225;
         /// <summary>
         /// 工位面板的列宽（像素）= 面板设计宽度240 + 左右边距4 + 边框余量1
         /// 【说明】使用绝对列宽而非百分比，确保每个单元格足够宽容纳面板内容，
@@ -539,9 +539,9 @@ namespace BarometerWinform.Views
                 config.BarometerPressureScale = barometerPressureScale;
             }
 
-            if (decimal.TryParse(System.Configuration.ConfigurationManager.AppSettings["AlarmPressureThresholdPa"], out decimal alarmThresholdPa))
+            if (decimal.TryParse(System.Configuration.ConfigurationManager.AppSettings["AlarmPressureThresholdKPa"], out decimal alarmThresholdKPa))
             {
-                config.AlarmPressureThresholdPa = alarmThresholdPa;
+                config.AlarmPressureThresholdKPa = alarmThresholdKPa;
             }
 
             if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["AlarmWhenPressureHigherThanThreshold"], out bool alarmHigher))
@@ -1561,7 +1561,7 @@ namespace BarometerWinform.Views
         }
 
         /// <summary>
-        /// LOG记录按钮点击 → 显示LOG记录下拉菜单
+        /// 日志记录按钮点击 → 显示日志记录下拉菜单
         /// 菜单项：历史记录
         /// </summary>
         private void btnLog_Click(object sender, EventArgs e)
@@ -1573,12 +1573,12 @@ namespace BarometerWinform.Views
         }
 
         /// <summary>
-        /// 帮助按钮点击 → 显示帮助下拉菜单
+        /// 关于按钮点击 → 显示下拉菜单（V1.19.12 更名：btnHelp_Click → btnAbout_Click）
         /// 菜单项：
         /// - 设置：仅管理员可见（V1.17 权限控制，非管理员自动隐藏）
-        /// - 关于：所有权限可见
+        /// - 版本说明：所有权限可见（V1.19.12 更名：关于 → 版本说明）
         /// </summary>
-        private void btnHelp_Click(object sender, EventArgs e)
+        private void btnAbout_Click(object sender, EventArgs e)
         {
             var items = new List<(string Text, EventHandler ClickHandler)>();
 
@@ -1588,9 +1588,15 @@ namespace BarometerWinform.Views
                 items.Add(("设置", MenuHelpSettings_Click));
             }
 
-            items.Add(("关于", MenuHelpAbout_Click));
+            // 【通讯测试】仅技术员及以上权限可见（操作员不可见）
+            if (_userManager.HasPermission(UserRole.Technician))
+            {
+                items.Add(("通讯测试", MenuHelpCommunicationTest_Click));
+            }
 
-            ShowDropdownPopup(btnHelp, items.ToArray());
+            items.Add(("版本说明", MenuHelpVersionInfo_Click));
+
+            ShowDropdownPopup(btnAbout, items.ToArray());
         }
 
         #endregion
@@ -1809,7 +1815,7 @@ namespace BarometerWinform.Views
 
         #endregion
 
-        #region 帮助菜单项
+        #region 关于下拉菜单项（V1.19.12 更名：帮助 → 关于）
 
         /// <summary>
         /// 设置 → 弹出"系统设置"窗口，查看并编辑 App.config 中的全部配置项
@@ -1833,9 +1839,22 @@ namespace BarometerWinform.Views
         }
 
         /// <summary>
-        /// 关于 → 弹出版本信息对话框
+        /// 通讯测试 → 弹出通讯测试窗体（技术员及以上权限）
+        /// 用于手动测试负压开关与载台上电的 Modbus TCP 输出（直接操作 PLC DO 寄存器）
+        /// V1.21：改为非模态（Show 替代 ShowDialog），打开测试窗体的同时仍可点击操作主窗体
+        /// 及其它窗体（测试窗体关闭时自动 Dispose 释放资源）。
         /// </summary>
-        private void MenuHelpAbout_Click(object sender, EventArgs e)
+        private void MenuHelpCommunicationTest_Click(object sender, EventArgs e)
+        {
+            var form = new Dialogs.CommunicationTestForm(_config);
+            form.FormClosed += (s, args) => form.Dispose();
+            form.Show(this);
+        }
+
+        /// <summary>
+        /// 版本说明 → 弹出版本信息对话框（V1.19.12 更名：MenuHelpAbout_Click → MenuHelpVersionInfo_Click，菜单项"关于"改"版本说明"）
+        /// </summary>
+        private void MenuHelpVersionInfo_Click(object sender, EventArgs e)
         {
             MessageBox.Show(
                 "老化测试系统 V1.16\n\n" +
@@ -2003,7 +2022,8 @@ namespace BarometerWinform.Views
             }
 
             // 【V1.16】传入扫码枪服务：ID绑定窗体打开时，扫码结果自动填充 SN 输入框
-            using (var form = new InputLotForm(_scanner))
+            // 【V1.19.11】传入设备管理器：ID绑定保存时把"工位 → SN"写入工位静态信息，工位面板 SN 同步显示
+            using (var form = new InputLotForm(_scanner, _deviceManager))
             {
                 // 订阅批号录入完成事件：记录日志 + 通知设备管理器（用于事件落盘追溯）
                 form.OnLotInputCompleted += (sender2, lotNumber) =>

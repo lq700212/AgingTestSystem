@@ -57,14 +57,25 @@ namespace BarometerWinform.Dialogs
         private readonly ScannerService _scanner;
 
         /// <summary>
+        /// 【V1.19.11 新增】设备管理器引用
+        /// 由主窗体传入，继续传递给 ID绑定窗体（IdBindingForm）。
+        /// 【用途】ID 绑定保存时把"工位 → SN"写入设备管理器工位静态信息，
+        /// 使工位面板的 SN 显示与绑定关联一致（扫码枪扫码或手动输入均可）。
+        /// 可能为 null，使用前需要判空。
+        /// </summary>
+        private readonly DeviceManager _deviceManager;
+
+        /// <summary>
         /// 构造函数
         /// 初始化窗体界面
         /// </summary>
         /// <param name="scanner">扫码枪服务（由主窗体传入，可能为 null）</param>
-        public InputLotForm(ScannerService scanner = null)
+        /// <param name="deviceManager">设备管理器（V1.19.11 新增，可能为 null；用于绑定后把 SN 关联到工位）</param>
+        public InputLotForm(ScannerService scanner = null, DeviceManager deviceManager = null)
         {
             InitializeComponent();
             _scanner = scanner;
+            _deviceManager = deviceManager;
         }
 
         /// <summary>
@@ -142,7 +153,8 @@ namespace BarometerWinform.Dialogs
 
             // 批号验证通过，弹出ID绑定界面
             // 【V1.16】把扫码枪服务传进去：ID绑定窗体打开时，扫码结果自动识别工位号/SN 并填入输入框（V1.16 更新支持工位号扫码）
-            using (var bindingForm = new IdBindingForm(lotNumber, _scanner))
+            // 【V1.19.11】把设备管理器传进去：绑定保存时把"工位 → SN"写入工位静态信息，工位面板 SN 同步显示
+            using (var bindingForm = new IdBindingForm(lotNumber, _scanner, _deviceManager))
             {
                 // 订阅ID绑定完成事件
                 bindingForm.OnBindingCompleted += (sender2, data) =>

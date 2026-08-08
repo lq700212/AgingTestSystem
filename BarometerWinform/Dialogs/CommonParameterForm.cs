@@ -13,17 +13,19 @@ namespace BarometerWinform.Dialogs
     /// 【功能说明】
     /// 设置所有气压表的"负压阈值"（设备阈值），一次性批量写入全部气压表。
     /// 逻辑参考 ModbusRtuBarometerTest Demo 的 BatchSetThreshold 方法：
-    /// 把用户输入的负压值，逐台写入气压表 Holding Register 0x0010（功能码 0x06），
+    /// 把用户输入的负压值（单位 kPa），逐台写入气压表 Holding Register 0x0010（功能码 0x06），
     /// 该寄存器驱动气压表内部的硬件报警触点（压力到达阈值时触点动作）。
+    /// 【V1.19.9 新增】保存时同步更新软件报警阈值（DeviceConfig.AlarmPressureThresholdKPa），
+    /// 使 DeviceManager 的压力报警判定与界面输入的负压值（kPa）保持一致。
     ///
     /// 【界面布局】（所有控件居中显示）
     /// ┌───────────────────────────────┐
-    /// │     负压值设定：[_________]     │ ← Label + 输入框
+    /// │  负压值设定(kPa)：[_________]  │ ← Label + 输入框
     /// │         [  保存设置   ]         │ ← 保存按钮
     /// └───────────────────────────────┘
     ///
     /// 【工作流程】
-    /// 1. 用户在输入框填写负压值（默认 -95，单位与气压表读数一致）
+    /// 1. 用户在输入框填写负压值（默认 -95，单位 kPa，与气压表读数一致）
     /// 2. 点击"保存设置"按钮
     /// 3. 校验输入是否合法（非空、必须是数字）
     /// 4. 后台线程逐台写入全部气压表（避免 72 台连写阻塞 UI 线程）
@@ -127,6 +129,11 @@ namespace BarometerWinform.Dialogs
             // ===== 2) 保存期间锁定按钮，防止重复点击 =====
             btnSave.Enabled = false;
             btnSave.Text = "保存中...";
+
+            // ===== 2.5) 同步软件报警阈值（V1.19.9） =====
+            // 生产环境报警判定以本窗口输入的负压值（kPa）为准，
+            // 写设备阈值的同时更新软件报警阈值，两者保持一致。
+            _deviceManager.UpdateAlarmPressureThresholdKPa(thresholdValue);
 
             // ===== 3) 后台线程批量写入 =====
             // SetAllBarometerThresholds 逐台写 0x0010，内部有互斥锁（线程安全）；

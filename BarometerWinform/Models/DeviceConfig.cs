@@ -232,19 +232,20 @@ namespace BarometerWinform.Models
         public decimal BarometerPressureScale { get; set; } = 1m;
 
         /// <summary>
-        /// 报警压力阈值（单位：Pa）
+        /// 报警压力阈值（单位：kPa）
         /// 
         /// 约定：
-        /// - 默认 -95000 Pa（界面里也默认填这个）
+        /// - 默认 -95 kPa（界面里也默认填这个）
         /// - 真空压力通常为负数，数值越接近 0 代表真空越差
+        /// - 生产环境由"公共参数窗口"保存的负压值实时同步（V1.19.9）
         /// </summary>
-        public decimal AlarmPressureThresholdPa { get; set; } = -95000m;
+        public decimal AlarmPressureThresholdKPa { get; set; } = -95m;
 
         /// <summary>
         /// 报警比较方向
         ///
-        /// true：当 pressurePa > AlarmPressureThresholdPa 触发报警（真空变差：负数变“大”）
-        /// false：当 pressurePa < AlarmPressureThresholdPa 触发报警（少见，保留扩展）
+        /// true：当 pressureKPa > AlarmPressureThresholdKPa 触发报警（真空变差：负数变“大”）
+        /// false：当 pressureKPa < AlarmPressureThresholdKPa 触发报警（少见，保留扩展）
         /// </summary>
         public bool AlarmWhenPressureHigherThanThreshold { get; set; } = true;
 

@@ -5,7 +5,7 @@ namespace BarometerWinform.Dialogs
     ///
     /// 【界面布局】（所有控件居中显示）
     /// ┌───────────────────────────────┐
-    /// │     负压值设定：[_________]     │ ← Label + 输入框（水平居中成一组）
+    /// │  负压值设定(kPa)：[_________]  │ ← Label + 输入框（水平居中成一组）
     /// │         [  保存设置   ]         │ ← 保存按钮（水平居中）
     /// └───────────────────────────────┘
     /// 说明：控件在 InitializeComponent 里按固定位置摆放，
@@ -37,17 +37,17 @@ namespace BarometerWinform.Dialogs
             // lblThreshold
             // 
             this.lblThreshold.AutoSize = true;
-            this.lblThreshold.Location = new System.Drawing.Point(40, 30);
+            this.lblThreshold.Location = new System.Drawing.Point(54, 30);
             this.lblThreshold.Name = "lblThreshold";
-            this.lblThreshold.Size = new System.Drawing.Size(77, 12);
+            this.lblThreshold.Size = new System.Drawing.Size(107, 12);
             this.lblThreshold.TabIndex = 4;
-            this.lblThreshold.Text = "负压值设定：";
+            this.lblThreshold.Text = "负压值设定(kPa)：";
             // 
             // txtThreshold
             // 
-            this.txtThreshold.Location = new System.Drawing.Point(127, 27);
+            this.txtThreshold.Location = new System.Drawing.Point(167, 27);
             this.txtThreshold.Name = "txtThreshold";
-            this.txtThreshold.Size = new System.Drawing.Size(130, 21);
+            this.txtThreshold.Size = new System.Drawing.Size(91, 21);
             this.txtThreshold.TabIndex = 3;
             this.txtThreshold.Text = "-95";
             // 

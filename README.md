@@ -97,7 +97,7 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │ 标题栏: 老化测试系统V1.16 | 权限: 操作员 | 通讯连接: 未连接          │
 ├─────────────────────────────────────────────────────────────────┤
-│ 菜单按钮: 用户权限 | 参数设置 | LOG记录 | 帮助              │
+│ 菜单按钮: 用户权限 | 参数设置 | 日志记录 | 关于              │
 ├──────────────────────────────────────┬──────────────────────────┤
 │                                      │ 运行状态                  │
 │         气压表显示区域                  │ 送风机监视                  │
@@ -146,7 +146,7 @@
 ┌──────────────────────────────┐
 │ NO.1                  [□✓]   │  ← 设备编号 + 选中指示（V1.19.4 起"有选中才显示"）
 │ 上电   [状态灯]                │  ← 标题与下方各标题左对齐；状态灯与内容列左对齐（V1.19.3）
-│ 真空压力 [值] [真空开启灯] [工作状态]   │  ← 压力值只读；真空灯=纯色；工作状态文字带色（V1.19.4）
+│ 真空压力 [值] [真空开] [工作状态]   │  ← 压力值只读（V1.19.10 加宽）；真空开/关=文字+颜色；工作状态文字带色（V1.19.4）
 │ SN:    [SN值 Label]                 │  ← V1.19.3：内容改为 Label 显示
 │ 配方:  [配方值 Label]               │
 │ 延时开启 [__:__:__]      ┌────┐      │
@@ -156,7 +156,8 @@
 ```
 
 **状态约定（V1.18.1 文字改中文：空闲/选中/繁忙/故障）**:
-- 上电状态灯 / 真空开启灯：纯色无文字（绿=ON，灰=OFF），鼠标悬停有 ToolTip 说明。
+- 上电状态灯：纯色无文字（绿=ON，灰=OFF），鼠标悬停有 ToolTip 说明。
+- 真空开启显示（V1.19.10 起带文字+颜色）：真空开=绿底白字；真空关=红底白字（原纯色绿/灰，V1.19.10 改为文字+颜色，关闭用红色更醒目），鼠标悬停有 ToolTip 说明。
 - 选中指示（右上角，V1.19）：**V1.19.5 起**选中=绿底（ForestGreen）+ 白色"✓"；未选中=空心方框（黑框白底，无文字）。（V1.19.2：**选中状态仅靠此指示体现**，面板背景色/工作状态文字不再随选中变化）
 - 选中框显示规则（V1.19.5）：**平时全部隐藏，只要有任一工位被选中→所有面板同时显示框**（选中项=绿底白✓，其它项=空心白框）；全部取消选中→全部隐藏。
 - 选中交互（V1.19.5 替换 V1.18 的点击切换选中；V1.19.6 单击改"切换"）：在面板**空白区域长按约 0.8 秒**（按住不松手）即选中该工位；选中框显示时（已有任一工位被选中），**单击**空白区域或点击选中框即**切换**该工位"选中/未选中"。例外：整表**唯一**选中的工位被切换为未选中时 → 全表无选中，所有面板选中框自动隐藏。
@@ -168,7 +169,8 @@
 | 方法 | 功能 |
 | :--- | :--- |
 | `UpdateData(data)` | 更新面板显示数据（压力/SN/配方/延时 + 状态灯 + 工作状态 + 选中指示；V1.19.3：SN/配方为 Label 显示，上电灯前有"上电"标题） |
-| `UpdateStatusLight(ctrl, isActive)` | 更新纯色状态灯颜色（绿=开，灰=关） |
+| `UpdateStatusLight(ctrl, isActive)` | 更新纯色状态灯颜色（绿=开，灰=关；目前仅上电灯 boxPower 使用） |
+| `UpdateVacuumOpenDisplay(vacuumOpen)` | 【V1.19.10】更新真空开启显示（文字+颜色：真空开=绿底白字，真空关=红底白字） |
 | `UpdateWorkState(status, carrierPower)` | 更新工作状态文字与颜色（空闲/选中/繁忙/故障，V1.19.4 配色：浅灰/橙/绿/红底） |
 | `UpdateStatusColor(status)` | 根据状态更新背景色（空闲=白/测试中=浅黄/故障=浅粉） |
 | `UpdateSelectionStyle()` | 刷新选中框样式（V1.19.5：按自身选中状态填充绿底白✓/空心白框，并按主窗体协调结果显示/隐藏） |
@@ -218,16 +220,16 @@
 | :--- | :--- | :--- | :--- |
 | 用户权限 | 操作员 / 技术员 / 管理员 / 用户管理* | 弹出 LoginForm 输入用户名密码后切换权限；*用户管理仅管理员可见 | 任意权限 |
 | 参数设置 | 公共参数 / 配方管理 | 分别弹出 CommonParameterForm / RecipeManagerForm | 技术员或管理员 |
-| LOG记录 | 历史记录 | 弹出 HistoryRecordForm | 任意权限 |
-| 帮助 | 设置* / 关于 | "设置"→弹出 SettingsForm（单页按分类标题条查看/编辑 App.config 全部配置项，写回 exe.config 重启生效）；"关于"→弹出版本信息 MessageBox | *设置仅管理员可见（非管理员隐藏）；关于任意权限 |
+| 日志记录 | 历史记录 | 弹出 HistoryRecordForm | 任意权限 |
+| 关于 | 设置* / 通讯测试** / 版本说明 | "设置"→弹出 SettingsForm（单页按分类标题条查看/编辑 App.config 全部配置项，写回 exe.config 重启生效）；"通讯测试"→弹出 CommunicationTestForm（IO 耦合器 DO 输出通道手动测试，V1.20 新增、V1.21 SunnyUI 重构，详见 3.1.4）；"版本说明"→弹出版本信息 MessageBox（V1.19.12：菜单项"关于"改"版本说明"） | *设置仅管理员可见（非管理员隐藏）；**通讯测试仅技术员及以上权限可见（操作员不可见）；版本说明任意权限 |
 
 **关键方法**（MainForm.cs）:
 
 | 方法 | 功能 |
 | :--- | :--- |
 | `ShowDropdownPopup(hostButton, items)` | 在主按钮下方显示无边框下拉菜单（Form + TableLayoutPanel + Button 列表，尺寸和主按钮一致） |
-| `MenuHelpSettings_Click()` | 【V1.17】"帮助→设置"：弹出 SettingsForm（表格查看/编辑 App.config 全部配置项） |
-| `MenuHelpAbout_Click()` | 【V1.17】"帮助→关于"：弹出版本信息对话框 |
+| `MenuHelpSettings_Click()` | 【V1.17】"关于→设置"：弹出 SettingsForm（表格查看/编辑 App.config 全部配置项） |
+| `MenuHelpVersionInfo_Click()` | 【V1.19.12 更名】"关于→版本说明"：弹出版本信息对话框（原 MenuHelpAbout_Click） |
 | `TryLoginAndSwitchPermission(role)` | 【新增】弹出 LoginForm 登录窗体，校验通过后切换权限 |
 | `UpdateButtonPermissionStates()` | 【新增】根据当前权限启用/禁用按钮 |
 | `WriteLog(message)` | 写入日志到右侧 LOG 文本框 |
@@ -245,9 +247,10 @@
 | `UserManagementForm` | 用户账号管理（仅管理员） | 修改操作员/技术员的用户名和密码，用户数据持久化到 Users.json 文件 | 新增/删除账号 |
 | `BatchRecipeForm` | 批量设置配方 | 配方名称、延时时间1/2（时:分:秒）、启动时间（时:分:秒）、极限温度输入，加入队列功能，配方队列管理 | 配方批量应用到选中面板待实现 |
 | `InputLotForm` | 录入批号 | 批号输入框、红色背景注释提示、确定/取消按钮、Enter键支持、输入校验，确定后弹出ID绑定界面 | 批号持久化、关联生产记录待实现 |
-| `IdBindingForm` | ID绑定 | 批号显示（只读）、工位编号输入框、SN输入框、红色背景注释说明、产品列表显示（带滚动条）、保存按钮、重复工位覆盖确认、Enter键支持、Excel文档生成（命名规则：批号_日期_时间.xlsx）；【V1.16】扫码枪自动识别工位号（恰好2位数字）/产品SN 填入对应输入框，两条都齐后自动加入产品列表（乱序扫码也能正确配对） | ID绑定数据持久化待实现 |
-| `StationSettingsForm` | 【V1.18】工位设置窗口 | 点击工位面板"设置"按钮弹出；标题"工位设置窗口 NO XX"；左侧一列 6 个设置项（设置项名+输入框，均左对齐、整列居中）：状态、SN、配方、延时时间、启动时间、极限温度（V1.18.1：状态标题只要"状态"两字，状态值显示中文 空闲/选中/繁忙/故障）；右侧一列按钮：破空 / 下电 / 保存 / 加入对列 / 关闭窗口；打开时从采集缓存回显当前工位数据（状态/SN/配方/延时时间，启动时间与极限温度属配方配置数据中无对应字段留空） | 右侧按钮（破空/下电/保存/加入对列）具体业务功能待确认（代码留 TODO 标记） |
+| `IdBindingForm` | ID绑定 | 批号显示（只读）、工位编号输入框、SN输入框、红色背景注释说明、产品列表显示（带滚动条）、保存按钮、重复工位覆盖确认、Enter键支持、Excel文档生成（命名规则：批号_日期_时间.xlsx）；【V1.16】扫码枪自动识别工位号（恰好2位数字）/产品SN 填入对应输入框，两条都齐后自动加入产品列表（乱序扫码也能正确配对）；【V1.19.11】保存时把"工位 → SN"写入 DeviceManager 工位静态信息，工位面板 SN 与绑定结果同步（未启用扫码枪时手动输入工位号+SN 同样关联） | ID绑定数据持久化待实现 |
+| `StationSettingsForm` | 【V1.18】工位设置窗口 | 点击工位面板"设置"按钮弹出；标题"工位设置窗口 NO XX"；左侧一列 6 个设置项（设置项名+输入框，均左对齐、整列居中）：状态、SN、配方、延时时间、启动时间、极限温度（V1.18.1：状态标题只要"状态"两字，状态值显示中文 空闲/选中/繁忙/故障）；右侧一列按钮：破空 / 下电 / 保存 / 加入对列 / 关闭窗口；打开时从采集缓存回显当前工位数据（状态/SN/配方/延时时间/启动时间，启动时间即延时到达，极限温度属配方配置数据中无对应字段留空）；【V1.19.11】"保存"按钮已实现：把 SN/配方/延时开启/延时到达 写入 DeviceManager 工位静态信息并同步到工位面板，延时格式 时:分:秒 校验（非法提示不保存，空白清空），回显补充启动时间（延时到达）字段 | 右侧按钮（破空/下电/加入对列）具体业务功能待确认（代码留 TODO 标记）；极限温度待配方表接入 |
 | `SettingsForm` | 【V1.17】系统设置（仅管理员） | 单页纵向展示 App.config 全部配置项（不用选项卡），按业务分类用标题分隔条隔开（基础配置 / 气压表串口通讯 / IO耦合器（Modbus TCP）/ 气压表寄存器 / 报警参数 / 冷却送风机 / 老化测试业务 / 扫码枪），每类一个表格三列：设置名称（key，只读）/ 说明（中文，只读）/ 设置值（可编辑输入）；页面可滚动，界面用 SunnyUI 控件（UILine 标题 / UIDataGridView 表格 / UIButton 按钮）；"保存设置"前按类型校验（整数/小数/布尔/十六进制寄存器地址，如 0x1000），不合法项整批拦截并列出；保存用 ConfigurationManager.OpenExeConfiguration 写回 exe.config 并刷新 appSettings 缓存，提示重启程序后生效 | 配置修改后需重启生效（设备参数启动时一次性加载） |
+| `CommunicationTestForm` | 【V1.20】通讯测试（技术员及以上） | IO 耦合器（GX-CL140，Modbus TCP）DO 输出通道手动测试窗体：两个页签分别测 72 路负压阀输出（Y000~Y107，寄存器 0x2000~0x2004）与 72 路载台上电输出（Y110~Y217，寄存器 0x2004~0x2008），每页 9×8 圆形灯按钮点击 toggle ON/OFF（读-改-写不覆盖共享的 0x2004 字节），底部 连接测试/全部关闭/读取状态/关闭窗口 四个按钮 + 日志框；复用生产工程 NModbus 独立连接，不影响采集线程；复用 App.config 备用通道映射（IoBackupChannelMappingEnabled / IoBackupChannelMappings，V1.20）。【V1.21】整体改用 SunnyUI 控件重构（UIForm 标题栏 + UITabControl/UIPage 页签 + UIPanel 面板 + UIButton 按钮 + UITextBox 日志 + UILedBulb 连接状态灯，顶部状态条实时显示已连接/未连接）；点击被映射到备用通道的通道时，先弹窗（UIMessageBox）告知"该通道已做备用通道映射、实际输出通道是哪个寄存器第几路"并在日志追加映射记录 | — |
 
 **BatchRecipeForm 事件**:
 - `OnRecipeAdded` 事件：配方加入队列时触发，主窗体订阅此事件记录日志。
@@ -295,7 +298,7 @@
 | `GetFanData()` | 获取送风机最新状态（缓存） |
 | `SetOutput(outputId, state)` | 写单个 IO 输出（供单台手动控制等） |
 | `GetOutput(outputId)` / `GetInput(inputId)` | 读单个 IO 输出/输入状态 |
-| `SetBarometerThreshold(deviceId, v)` | 【V1.15 新增】写单台**设备阈值**（透传 IBarometerReader.SetThreshold，设备单位，非 Pa） |
+| `SetBarometerThreshold(deviceId, v)` | 【V1.15 新增】写单台**设备阈值**（透传 IBarometerReader.SetThreshold，设备单位，非 kPa 软件阈值） |
 | `SetAllBarometerThresholds(v)` | 【V1.15 新增】批量写全部**设备阈值**，返回失败名单（透传 SetAllThresholds，应在后台线程调用） |
 | `GetTestingCount()` / `GetOnlineCount()` | 统计测试中/在线台数（状态栏显示） |
 
@@ -412,7 +415,7 @@ public interface IBarometerReader
 - 【V1.16.1 修复】小数位**固定用配置 `BarometerDefaultDecimalPlaces`（=1）**，不再读设备 0x0002 ——
   现场实测 72 台中 47 台的 0x0002 返回 0（不可靠），旧逻辑按 0 位小数换算会把 -95 写成寄存器 -95，
   仪表（实际 1 位小数）显示 -9.5。压力读取 `ReadData` 同样固定 1 位小数，两处与仪表显示完全一致。
-- **单位注意**：`thresholdValue` 是"设备单位"（与压力读数同单位同小数位），**不是**软件报警阈值 `AlarmPressureThresholdPa`（Pa）。单位未按说明书确认前不要写。
+- **单位注意**：`thresholdValue` 是"设备单位"（与压力读数同单位同小数位），**不是**软件报警阈值 `AlarmPressureThresholdKPa`（kPa）。单位未按说明书确认前不要写。
 - `SetAllThresholds` 逐台失败不中断、返回失败名单；72 台连写 + 坏设备会阻塞较久，应在后台线程调用。
 - 实测经验：批量写某台超时通常表示该台设备掉线/损坏（Demo 已提供「批量读取压力」按钮用于定位离线设备）。
 
@@ -505,7 +508,7 @@ public interface IFanController : IDisposable
 | 属性 | 类型 | 说明 |
 | :--- | :--- | :--- |
 | `DeviceId` | int | 气压表编号（1-72） |
-| `VacuumPressure` | decimal | 真空压力值（Pa） |
+| `VacuumPressure` | decimal | 真空压力值（kPa） |
 | `SerialNumber` | string | 设备序列号 |
 | `RecipeName` | string | 当前配方名称 |
 | `Status` | DeviceStatus | 设备状态（空闲/测试中/故障） |
@@ -562,7 +565,7 @@ public interface IFanController : IDisposable
 | `BarometerPressureRegisterAddress` | ushort | 0x0001 | 压力寄存器（0x0002 为小数位，实测不可靠，转换不再使用） |
 | `BarometerDefaultDecimalPlaces` | int | 1 | 小数位默认值（压力读取与阈值写入统一使用，不再读设备 0x0002；换气压表时按新表实际小数位改这里即可） |
 | `BarometerPressureScale` | decimal | 1 | 压力缩放系数 |
-| `AlarmPressureThresholdPa` | decimal | -95000 | 报警压力阈值（Pa） |
+| `AlarmPressureThresholdKPa` | decimal | -95 | 报警压力阈值（kPa，V1.19.9 由 Pa 改为 kPa；公共参数窗口保存负压值时实时同步） |
 | `AlarmWhenPressureHigherThanThreshold` | bool | true | 压力高于阈值报警 |
 | `PlcAddress` | string | 192.168.1.20 | GX-CL140 IP |
 | `PlcPort` | int | 502 | GX-CL140 端口（Modbus TCP） |
@@ -588,7 +591,7 @@ public interface IFanController : IDisposable
 | :--- | :--- | :--- |
 | `Id` | int | 配方编号 |
 | `Name` | string | 配方名称 |
-| `NegativePressure` | decimal | 负压值设定 |
+| `NegativePressure` | decimal | 负压值设定（kPa） |
 | `DelayStartTime` | TimeSpan | 延时开启时间 |
 | `DelayArriveTime` | TimeSpan | 延时到达时间 |
 | `LimitTemperature` | decimal | 极限温度 |
@@ -794,7 +797,7 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 | `BarometerPressureRegisterAddress` | 压力寄存器（0x0001，0x0002 为小数位，实测不可靠，转换不再使用） | 0x0001 |
 | `BarometerDefaultDecimalPlaces` | 小数位默认值（压力读取与阈值写入统一使用，不读 0x0002；换气压表时按新表改这里） | 1 |
 | `BarometerPressureScale` | 压力缩放系数 | 1 |
-| `AlarmPressureThresholdPa` | 报警压力阈值（Pa） | -95000 |
+| `AlarmPressureThresholdKPa` | 报警压力阈值（kPa，如 -95） | -95 |
 | `AlarmWhenPressureHigherThanThreshold` | 压力高于阈值报警 | true |
 | `PlcAddress` | GX-CL140 IP | 192.168.1.20 |
 | `PlcPort` | GX-CL140 端口 | 502 |
@@ -852,9 +855,9 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 | 用户权限管理 | 已实现 | MainForm.cs / UserManager.cs / LoginForm.cs / UserManagementForm.cs | 下拉菜单（操作员/技术员/管理员）+ 登录窗体 + 用户管理（管理员修改他人账号）；用户数据持久化到 Users.json（V1.13） |
 | 参数设置-公共参数 | 已实现（V1.16） | MainForm.cs / CommonParameterForm | 公共参数窗口：输入负压值 → 后台线程批量写入所有气压表阈值寄存器（0x0010，写入期间暂停采集防串口争抢，阈值换算固定 1 位小数）→ 汇总成功/失败台数；串口未连接时提示"未连接任何气压表" |
 | 参数设置-配方管理 | 部分实现 | MainForm.cs / RecipeManagerForm | 配方列表显示已实现，新增/编辑/删除逻辑待实现 |
-| LOG记录-历史记录 | 已实现（V1.15） | MainForm.cs / HistoryRecordForm | 读取 Logs\TestLog_*.csv 真实事件日志，按日期查询 |
-| 帮助-设置 | 已实现（V1.17，仅管理员） | MainForm.cs / SettingsForm | 管理员登录后"帮助"下拉菜单才显示"设置"；弹出系统设置窗口，单页纵向按业务分类标题条隔开展示 App.config 全部配置项（设置名称/说明/设置值），可直接编辑并写回 exe.config（重启生效），保存前按类型校验 |
-| 帮助-关于 | 已实现 | MainForm.cs | 版本信息弹窗已实现 |
+| 日志记录-历史记录 | 已实现（V1.15） | MainForm.cs / HistoryRecordForm | 读取 Logs\TestLog_*.csv 真实事件日志，按日期查询 |
+| 关于-设置 | 已实现（V1.17，仅管理员） | MainForm.cs / SettingsForm | 管理员登录后"关于"下拉菜单才显示"设置"（V1.19.12 按钮名由"帮助"改"关于"）；弹出系统设置窗口，单页纵向按业务分类标题条隔开展示 App.config 全部配置项（设置名称/说明/设置值），可直接编辑并写回 exe.config（重启生效），保存前按类型校验 |
+| 关于-版本说明 | 已实现 | MainForm.cs | 版本信息弹窗已实现（V1.19.12：菜单项"关于"改"版本说明"，处理函数更名 MenuHelpVersionInfo_Click） |
 | 行全选按钮 | 已实现（V1.18 更名） | MainForm.cs | 每行最右侧"全选"按钮（原名 Set(SEL_N)，V1.19.2 起灰色背景，V1.19.4 改浅灰 LightGray、与上电状态灯同色），点击选中该行所有面板（V1.19.5 起选中行面板显示绿底白✓框，其它行面板显示空心白框；V1.19.2 起面板背景色/工作状态不再变化）；V1.19.1 起按钮文字实时反映该行选中状态：整行全部选中→"取消"（点击整行取消），任一台被单独取消（长按选中/单击空白处或点击选中框取消）→按钮立即变回"全选" |
 | 面板批量操作 | 已实现（V1.15） | MainForm.cs / WorkstationPanelView | 选中面板后执行：开启真空 / 启动运行 / 停止运行 / 报警复位 |
 | 送风机定值启动 | 已实现（V1.15） | MainForm.cs / FanControllerClient.cs | 送风机 Modbus TCP 接入，定值启动/停止 + 温度湿度监视 |
@@ -864,15 +867,15 @@ MainForm (WindowState=Maximized, MinimumSize=800×600)
 | 停止运行（选中台） | 已实现（V1.15） | MainForm.cs / DeviceManager.cs | 关阀+断电+退出测试（末台时送风机自动停止） |
 | 报警复位（选中台） | 已实现（V1.15） | MainForm.cs / DeviceManager.cs | 人工解除故障状态，可重新测试 |
 | 全部停止（急停） | 已实现（V1.15） | MainForm.cs / DeviceManager.cs | 一键全关阀+全断电+停送风机，带防误触确认 |
-| 工位设置窗口 | 已实现（V1.18） | MainForm.cs / Dialogs/StationSettingsForm.cs | 面板"设置"按钮打开，左侧 6 个设置项（状态/SN/配方/延时时间/启动时间/极限温度），右侧按钮列（破空/下电/保存/加入对列/关闭窗口）；右侧按钮业务功能待确认（代码留 TODO） |
+| 工位设置窗口 | 已实现（V1.18） | MainForm.cs / Dialogs/StationSettingsForm.cs | 面板"设置"按钮打开，左侧 6 个设置项（状态/SN/配方/延时时间/启动时间/极限温度），右侧按钮列（破空/下电/保存/加入对列/关闭窗口）；【V1.19.11】"保存"已实现：SN/配方/延时开启/延时到达 写入 DeviceManager 工位静态信息并同步面板（破空/下电/加入对列 仍待确认） |
 | 单台手动控制 | 已实现（V1.15） | Dialogs/DeviceManualForm.cs | 面板"设置"按钮打开（V1.18 起由工位设置窗口替代），点动阀/载台电 + 实时 DI 状态 |
 | 批量设置配方 | 已实现 | MainForm.cs / BatchRecipeForm.cs | 批量设置配方窗口已实现，支持配方名称、延时时间1/2、启动时间、极限温度输入，以及配方队列管理；配方批量应用到选中面板待实现 |
 | 录入批号 | 已实现 | MainForm.cs / InputLotForm.cs | 录入批号窗口已实现，支持手动输入批号、输入校验、Enter键确认；确定后弹出ID绑定界面；批号写入 DeviceManager 供日志追溯 |
-| ID绑定 | 已实现 | InputLotForm.cs / IdBindingForm.cs | ID绑定窗口已实现，支持工位编号和SN输入、产品列表显示、重复工位覆盖确认、保存功能；【V1.16】扫码枪自动识别工位号（恰好2位数字）/产品SN 填入对应输入框，两条都齐后自动加入产品列表（乱序扫码正确配对）；保存时自动生成Excel文档（命名规则：批号_日期_时间.xlsx），包含批号、工位号、SN、配方名称、延时时间、启动时间列；ID绑定数据持久化待实现 |
+| ID绑定 | 已实现 | InputLotForm.cs / IdBindingForm.cs | ID绑定窗口已实现，支持工位编号和SN输入、产品列表显示、重复工位覆盖确认、保存功能；【V1.16】扫码枪自动识别工位号（恰好2位数字）/产品SN 填入对应输入框，两条都齐后自动加入产品列表（乱序扫码正确配对）；【V1.19.11】保存时把"工位 → SN"写入 DeviceManager，工位面板 SN 与绑定同步（手动输入同样关联）；保存时自动生成Excel文档（命名规则：批号_日期_时间.xlsx），包含批号、工位号、SN、配方名称、延时时间、启动时间列；ID绑定数据持久化待实现 |
 | 老化计时自动停止 | 已实现（V1.15） | DeviceManager.cs | 真空确认后开始计时，到达 MaxTestDurationSeconds 自动停止并记日志 |
 | 报警事件落盘 | 已实现（V1.15） | TestEventLogger.cs | 启动/停止/报警/复位/急停/真空建立 写入 Logs\TestLog_yyyyMMdd.csv |
 | 日志持久化 | 部分实现（V1.15） | TestEventLogger.cs | 事件日志已落盘 CSV；界面 LOG 文本框仍未写文件 |
-| 配置持久化 | 部分实现（V1.17） | Dialogs/SettingsForm.cs | "帮助→设置"可查看/编辑 App.config 全部配置项并写回 exe.config（重启生效）；其余设置窗体（配方管理等）的配置仍仅内存生效 |
+| 配置持久化 | 部分实现（V1.17） | Dialogs/SettingsForm.cs | "关于→设置"可查看/编辑 App.config 全部配置项并写回 exe.config（重启生效）；其余设置窗体（配方管理等）的配置仍仅内存生效 |
 
 ### 5.3 硬件接入待确认项
 
@@ -947,7 +950,7 @@ BarometerWinform/
 │       ├── IdBindingForm.Designer.cs
 │       ├── DeviceManualForm.cs                     # 【V1.15新增】单台手动控制（面板"设置"按钮打开，V1.18 起由工位设置窗口替代）
 │       ├── DeviceManualForm.Designer.cs
-│       ├── SettingsForm.cs                         # 【V1.17新增】系统设置（帮助→设置，编辑 App.config 全部配置项）
+│       ├── SettingsForm.cs                         # 【V1.17新增】系统设置（关于→设置，编辑 App.config 全部配置项）
 │       ├── SettingsForm.Designer.cs
 │       ├── StationSettingsForm.cs                  # 【V1.18新增】工位设置窗口（面板"设置"按钮打开）
 │       └── StationSettingsForm.Designer.cs
@@ -1094,7 +1097,9 @@ Get-ChildItem -Path $projectRoot -Recurse -Filter "*.cs" -File |
   - V1.19.8 (2026-08-08): 用户管理窗体优化。删除底部灰色操作提示 lblTip，窗体高度 365→330；"当前用户名"行改为"当前角色"行，值显示角色中文名并按角色着色：**技术员=蓝色、操作员=绿色**（管理员=红色为防御分支），不再显示用户名（新增 `UpdateRoleDisplay`）。详见 CHANGELOG.md
   - V1.19.7 (2026-08-08): 权限显示角色名按角色着色。右上角"当前操作权限"由单个标签拆为"前缀 + 角色名"两个标签（panelPermission 内 FlowLayoutPanel 水平排列，观感不变），角色名 `lblPermissionRole` 运行时按权限设 ForeColor：**管理员=红色、技术员=天蓝色、操作员=绿色**，前缀"当前操作权限: "保持默认色（新增 `UpdatePermissionDisplay`，替换原 `lblPermission.Text` 赋值）。详见 CHANGELOG.md
   - V1.19.6 (2026-08-08): 选中框显示时单击改"切换"选中状态。选中框显示期间（已有任一工位被选中），单击面板空白区域或点击选中框 = **切换**该工位"选中/未选中"（此前为"单击取消"）；例外：整表**唯一**选中的工位被切换为未选中时 → 全表无选中，所有面板选中框自动隐藏（主窗体 `UpdateSelectionBoxVisibility` 已覆盖该规则）。首次/新增选中仍需在空白区域长按约 0.8 秒。详见 CHANGELOG.md
-  - V1.19.5 (2026-08-08): 选中交互改为"长按选中 + 有选中才显示绿✓框"。移除右上角选中框常驻显示与"点击切换选中"：改为在面板空白区域**长按约0.8秒**选中该工位、**单击**空白区域或点击选中框取消选中（长按期间移动超阈值视为拖动取消计时）；选中框平时全部隐藏，只要有任一工位被选中→所有面板同时显示框（选中项=绿底ForestGreen+白色✓，其它项=空心白框），全部取消→全部隐藏（主窗体 `UpdateSelectionBoxVisibility` 统一协调）；选中框样式由浅蓝底绿勾改为绿底白勾。详见 CHANGELOG.md
+   - V1.19.5 (2026-08-08): 选中交互改为"长按选中 + 有选中才显示绿✓框"。移除右上角选中框常驻显示与"点击切换选中"：改为在面板空白区域**长按约0.8秒**选中该工位、**单击**空白区域或点击选中框取消选中（长按期间移动超阈值视为拖动取消计时）；选中框平时全部隐藏，只要有任一工位被选中→所有面板同时显示框（选中项=绿底ForestGreen+白色✓，其它项=空心白框），全部取消→全部隐藏（主窗体 `UpdateSelectionBoxVisibility` 统一协调）；选中框样式由浅蓝底绿勾改为绿底白勾。详见 CHANGELOG.md
+   - V1.19.12 (2026-08-08): 工位面板高度减小 + 主菜单"帮助"更名"关于"。工位面板 Size 240×225→240×205（内容最低点 y≈189~195，底部空白约30px→约10px），网格行高 PanelRowHeight 245→225；主菜单第4个按钮 `btnHelp`（"帮助"）→ `btnAbout`（"关于"），点击下拉菜单项"关于"→"版本说明"，处理函数更名 `btnHelp_Click`→`btnAbout_Click`、`MenuHelpAbout_Click`→`MenuHelpVersionInfo_Click`。详见 CHANGELOG.md
+   - V1.19.11 (2026-08-08): 工位 SN/配方/延时关联打通。真实气压表只上报压力，新增 `StationInfo`（Models/StationInfo.cs）模型与 DeviceManager 每工位静态信息存储（`_stationInfo` 字典），采集时在 `CollectData` 叠加到该工位数据上（`ApplyStationInfo`，仅覆盖已配置字段），工位面板 SN/配方/延时显示与设置/绑定一致；工位设置窗口"保存"按钮实现（SN/配方/延时开启/延时到达 写入 DeviceManager，延时格式 时:分:秒 校验、空白清空，回显补充启动时间即延时到达，极限温度待配方表接入）；ID绑定保存时把"工位 → SN"写入 DeviceManager（`SetStationSerialNumbers`），手动输入工位号+SN 与扫码枪扫码等效关联；MainForm 把 `_deviceManager` 逐级传入 InputLotForm/IdBindingForm；主菜单"LOG记录"按钮更名"日志记录"。详见 CHANGELOG.md
   - V1.19.4 (2026-08-08): 行全选按钮改浅灰 + 工作状态配色统一为"信号灯"色系。行"全选/取消"按钮背景色由深灰（Gray）改为浅灰（LightGray，与上电状态灯 boxPower 同色）、文字改黑色；工作状态（boxWorkState）配色：空闲=浅灰底黑字 / 选中(已上电待测试)=橙底白字 / 繁忙(测试中)=绿底白字 / 故障=红底白字（原浅粉底红字改醒目红底），并加 ToolTip 说明配色。详见 CHANGELOG.md
   - V1.19.3 (2026-08-08): 面板布局微调。上电状态灯（boxPower）前加"上电"标题（标题与下方各标题左对齐、灯与内容列左对齐，x=57）；SN/配方内容显示由只读 TextBox 改为 Label（lblSNValue/lblRecipeValue，白底 + 边框，观感与只读框一致）。详见 CHANGELOG.md
   - V1.19.2 (2026-08-08): 选中状态仅由右上角选中指示体现 + 行全选按钮改灰色。移除面板整体选中高亮（`UpdateStatusColor` 不再叠加浅蓝背景、`UpdateWorkState` 去掉"已选中→选中"规则、`UpdateSelectionStyle` 只刷新选中指示）；行全选按钮背景色由道奇蓝改为灰色。详见 CHANGELOG.md
@@ -1451,7 +1456,7 @@ Sheet1 布局为5列：A列=输入设备名、B列=输入地址、C列=分隔、
 
 | 预留项 | V1.09 当时状态 | 后续实现 |
 | :--- | :--- | :--- |
-| 真空负压表信号处理 | 仅显示状态 | V1.12 读取压力值并按 AlarmPressureThresholdPa 判定；V1.15 真空建立超时报警 |
+| 真空负压表信号处理 | 仅显示状态 | V1.12 读取压力值并按 AlarmPressureThresholdKPa 判定；V1.15 真空建立超时报警 |
 | 真空电磁阀控制 | 仅显示状态 | V1.12/V1.15 开启真空/启动运行开阀，停止/报警/急停关阀 |
 | 载台上电控制 | 仅显示状态 | V1.12/V1.15 启动运行上电，停止/报警/急停断电 |
 | 真空启动流程 | 预留 | V1.15 "开启真空（选中台）" → DeviceManager 真空确认 |

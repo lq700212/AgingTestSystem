@@ -15,7 +15,7 @@ namespace BarometerWinform.Models
         public int DeviceId { get; set; }
 
         /// <summary>
-        /// 真空压力值（单位：Pa）
+        /// 真空压力值（单位：kPa，与气压表读数一致，V1.19.9 由 Pa 改为 kPa）
         /// </summary>
         public decimal VacuumPressure { get; set; }
 

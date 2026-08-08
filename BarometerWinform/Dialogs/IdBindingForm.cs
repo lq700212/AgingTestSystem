@@ -113,11 +113,21 @@ namespace BarometerWinform.Dialogs
         private readonly ScannerService _scanner;
 
         /// <summary>
+        /// 【V1.19.11 新增】设备管理器引用
+        /// 由录入批号窗体（InputLotForm）传入（可能为 null）。
+        /// 【用途】绑定保存时，把每个"工位 → SN"的对应关系写入设备管理器
+        /// 的工位静态信息，使工位面板的 SN 显示与绑定结果关联一致。
+        /// 即使不启用扫码枪、纯手动输入工位号+SN，保存后同样生效。
+        /// </summary>
+        private readonly DeviceManager _deviceManager;
+
+        /// <summary>
         /// 构造函数
         /// </summary>
         /// <param name="lotNumber">从录入批号窗口传入的批号</param>
         /// <param name="scanner">扫码枪服务（由录入批号窗体传入，可能为 null）</param>
-        public IdBindingForm(string lotNumber, ScannerService scanner = null)
+        /// <param name="deviceManager">设备管理器（V1.19.11 新增，可能为 null；用于绑定后把 SN 关联到工位）</param>
+        public IdBindingForm(string lotNumber, ScannerService scanner = null, DeviceManager deviceManager = null)
         {
             InitializeComponent();
 
@@ -136,6 +146,9 @@ namespace BarometerWinform.Dialogs
             {
                 _scanner.OnBarcodeScanned += Scanner_OnBarcodeScanned;
             }
+
+            // 【V1.19.11】保存设备管理器引用（绑定完成后把 SN 关联到对应工位）
+            _deviceManager = deviceManager;
         }
 
         /// <summary>
@@ -337,6 +350,8 @@ namespace BarometerWinform.Dialogs
         /// <summary>
         /// 保存按钮点击事件
         /// 验证绑定数据、生成Excel文档、触发完成事件
+        /// 【V1.19.11】保存时把"工位 → SN"写入设备管理器工位静态信息，
+        /// 使工位面板的 SN 显示与绑定关联一致（扫码枪扫码或手动输入均可）。
         /// </summary>
         private void btnSave_Click(object sender, EventArgs e)
         {
@@ -347,6 +362,11 @@ namespace BarometerWinform.Dialogs
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
+
+            // 【V1.19.11】把绑定的 SN 关联到对应工位
+            // 纯手动输入（未启用扫码枪）同样生效：工位编号 + SN 已录入列表即可。
+            // 未传设备管理器（null）时跳过，不影响 Excel 导出。
+            ApplyBindingsToStations();
 
             // 生成Excel文档
             string excelFilePath = GenerateExcelFile();
@@ -372,6 +392,33 @@ namespace BarometerWinform.Dialogs
             // 设置对话框结果并关闭窗口
             this.DialogResult = DialogResult.OK;
             this.Close();
+        }
+
+        /// <summary>
+        /// 把已绑定的"工位 → SN"写入设备管理器工位静态信息（【V1.19.11 新增】）
+        ///
+        /// 【说明】
+        /// - 遍历产品绑定列表，把每个工位编号对应的 SN 通过 DeviceManager 保存，
+        ///   采集线程下次叠加后，工位面板的 SN 标签即显示绑定后的 SN。
+        /// - 工位编号按 int 解析（"01" → 1）；解析失败或不在 1~72 范围自动忽略。
+        /// - 未传入设备管理器（_deviceManager == null）时不操作。
+        /// </summary>
+        private void ApplyBindingsToStations()
+        {
+            if (_deviceManager == null) return;
+
+            var serialNumbers = new Dictionary<int, string>();
+            foreach (var binding in _productBindings)
+            {
+                if (int.TryParse(binding.StationNo?.Trim(), out int stationNo))
+                {
+                    serialNumbers[stationNo] = binding.Sn;
+                }
+            }
+            _deviceManager.SetStationSerialNumbers(serialNumbers);
+
+            System.Diagnostics.Debug.WriteLine(
+                $"[ID绑定] 已把 {serialNumbers.Count} 个工位的 SN 关联到设备管理器");
         }
 
         /// <summary>

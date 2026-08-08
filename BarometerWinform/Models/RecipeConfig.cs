@@ -21,7 +21,7 @@ namespace BarometerWinform.Models
         public string Name { get; set; }
 
         /// <summary>
-        /// 负压值设定（单位：Pa）
+        /// 负压值设定（单位：kPa，与气压表读数一致）
         /// </summary>
         public decimal NegativePressure { get; set; }
 
