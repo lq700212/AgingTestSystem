@@ -494,6 +494,74 @@ namespace BarometerWinform.Services
             }
         }
 
+        /// <summary>
+        /// 读取连续多个保持寄存器（功能码 0x03）—— 共享连接上的"原始寄存器读"
+        ///
+        /// 【用途】供通讯测试窗体（CommunicationTestForm）复用主程序**同一条** Modbus TCP 连接
+        /// 读写 DO 原始寄存器（0x2000~0x2009），不再自建第二条连接。
+        /// 本方法内部用 <see cref="_syncRoot"/> 串行化，与采集线程（ReadAllInputs/ReadAllOutputs）、
+        /// 心跳、自动重连共用一把锁，多线程并发安全。
+        /// </summary>
+        /// <param name="startAddress">起始寄存器地址</param>
+        /// <param name="count">寄存器数量（1~125）</param>
+        /// <returns>寄存器值数组；未连接/异常返回 null</returns>
+        public ushort[] ReadHoldingRegisters(ushort startAddress, ushort count)
+        {
+            if (!_isConnected || _config == null || _master == null)
+            {
+                OnError?.Invoke(this, "设备未连接");
+                return null;
+            }
+
+            try
+            {
+                lock (_syncRoot)
+                {
+                    return _master.ReadHoldingRegisters(_config.IoUnitId, startAddress, count);
+                }
+            }
+            catch (Exception ex)
+            {
+                MarkDisconnectedOnFailure(ex);
+                OnError?.Invoke(this, ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 写单个保持寄存器（功能码 0x06）—— 共享连接上的"原始寄存器写"
+        ///
+        /// 【用途】同 <see cref="ReadHoldingRegisters"/>，供通讯测试窗体复用主程序同一条连接
+        /// 写 DO 原始寄存器（含读-改-写的最终结果），不再自建第二条连接。
+        /// 内部用 <see cref="_syncRoot"/> 串行化，多线程并发安全。
+        /// </summary>
+        /// <param name="address">寄存器地址</param>
+        /// <param name="value">要写入的值</param>
+        /// <returns>true=写成功；false=未连接/异常</returns>
+        public bool WriteSingleRegister(ushort address, ushort value)
+        {
+            if (!_isConnected || _config == null || _master == null)
+            {
+                OnError?.Invoke(this, "设备未连接");
+                return false;
+            }
+
+            try
+            {
+                lock (_syncRoot)
+                {
+                    _master.WriteSingleRegister(_config.IoUnitId, address, value);
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                MarkDisconnectedOnFailure(ex);
+                OnError?.Invoke(this, ex.Message);
+                return false;
+            }
+        }
+
         public void Dispose()
         {
             Disconnect();

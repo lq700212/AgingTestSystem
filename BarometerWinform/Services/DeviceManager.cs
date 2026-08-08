@@ -309,6 +309,13 @@ namespace BarometerWinform.Services
         public bool IsFanEnabled => _config.FanEnabled;
 
         /// <summary>
+        /// 设备配置（只读引用）。
+        /// 【用途】各窗体（通讯测试 / 送风机测试 / 系统设置）读取连接参数与备用映射配置时，
+        /// 统一通过本属性拿配置，与主窗体共用同一实例，保证"一台设备一条连接"口径一致。
+        /// </summary>
+        public DeviceConfig Config => _config;
+
+        /// <summary>
         /// IO 耦合器当前是否已连接（【V1.16.1 新增】）
         /// 顶部"通讯连接状态"标签的数据源：只反映耦合器（阀 / 载台电控制）是否连通。
         /// 后台读/写失败时会自动置 false，TryReconnectIo 自动重连成功后置 true。
@@ -941,6 +948,37 @@ namespace BarometerWinform.Services
         public bool[] GetAllOutputs()
         {
             return _ioController.ReadAllOutputs();
+        }
+
+        /// <summary>
+        /// 读取连续多个保持寄存器 —— 复用主程序**同一条** IO 耦合器连接（线程安全）
+        ///
+        /// 【用途】通讯测试窗体（CommunicationTestForm）的原始寄存器读写（0x2000~0x2009）走这里，
+        /// 与采集线程共用 <see cref="ModbusTcpIoController"/> 及它内部的锁，不再自建第二条 TCP 连接。
+        /// Mock 模式（<see cref="MockIoController"/>）不支持原始寄存器访问，返回 null。
+        /// </summary>
+        /// <param name="startAddress">起始寄存器地址</param>
+        /// <param name="count">寄存器数量</param>
+        /// <returns>寄存器值数组；未连接/Mock 模式/异常返回 null</returns>
+        public ushort[] ReadHoldingRegisters(ushort startAddress, ushort count)
+        {
+            var real = _ioController as ModbusTcpIoController;
+            return real?.ReadHoldingRegisters(startAddress, count);
+        }
+
+        /// <summary>
+        /// 写单个保持寄存器 —— 复用主程序**同一条** IO 耦合器连接（线程安全）
+        ///
+        /// 【用途】同 <see cref="ReadHoldingRegisters"/>，供通讯测试窗体写入 DO 原始寄存器。
+        /// Mock 模式（<see cref="MockIoController"/>）不支持原始寄存器访问，返回 false。
+        /// </summary>
+        /// <param name="address">寄存器地址</param>
+        /// <param name="value">要写入的值</param>
+        /// <returns>true=写成功；false=未连接/Mock 模式/异常</returns>
+        public bool WriteSingleRegister(ushort address, ushort value)
+        {
+            var real = _ioController as ModbusTcpIoController;
+            return real != null && real.WriteSingleRegister(address, value);
         }
 
         // =====================================================================

@@ -715,38 +715,104 @@ namespace BarometerWinform.Views
 
         /// <summary>
         /// 窗体加载完成事件
-        /// 在窗体显示之前完成动态控件的创建和设备启动
+        /// 在窗体显示之前完成动态控件的创建；设备连接改到后台线程，避免首屏卡顿
         /// </summary>
         private void MainForm_Load(object sender, EventArgs e)
         {
             // 动态创建工位显示面板（根据配置的设备数量）
             CreateWorkstationPanels();
 
-            // 启动设备管理器（开始数据采集）
-            // 【V1.16】Start 只要求"气压表串口"连通；耦合器/送风机断开不影响压力采集，
-            // 具体哪一步连不上会通过 OnDiagnostic 事件写进 LOG。
-            bool started = _deviceManager.Start();
-            if (!started)
-            {
-                // 启动失败（气压表串口没连上）：把原因写到 LOG，方便现场排查
-                WriteLog($"设备启动失败：{_deviceManager.LastStartupError}");
-            }
-
-            // 【V1.16.1】顶部"通讯连接状态"只反映 IO 耦合器（阀/载台电控制）是否连接，
-            // 不再用"气压表串口是否连上"冒充。Start() 内部已同步触发
-            // OnConnectionStatusChanged 事件（数据源 = 耦合器），这里再按实际状态兜底刷新一次。
-            _commConnected = _deviceManager.IsIoConnected;
-            UpdateConnectionStatus();
-
-            // 【V1.16 新增】启动扫码枪服务（自动识别串口并连接；未启用/未插入时定时重连）
-            // 扫码枪是可选设备，内部已做"ScannerEnabled=false 直接跳过"处理，不影响整机启动
-            _scanner?.Start();
-
-            // 【V1.16.2】刷新状态栏"扫码枪"连接状态（已连接/未连接/未启用）
-            RefreshScannerStatus();
+            // 【启动优化】原逻辑在 UI 线程同步执行 _deviceManager.Start()（连接气压表串口、
+            // IO 耦合器、送风机 + 首次同步轮询全部 72 台气压表，串口/网线异常时可能耗时数秒）
+            // 和 _scanner.Start()，导致窗体显示前明显卡顿。现改为后台线程执行：
+            // - 界面立即显示，采集/扫码枪在后台陆续就绪；
+            // - DeviceManager 内部定时器为 System.Timers.Timer（线程池触发），
+            //   所有事件已自行 BeginInvoke 封送，后台调用 Start() 线程安全。
+            StartDevicesInBackground();
 
             // 启动定时器更新状态栏时间显示
             timerTime.Start();
+        }
+
+        /// <summary>
+        /// 后台启动设备管理器与扫码枪（【启动优化】）
+        /// - _deviceManager.Start()：连接气压表/IO耦合器/送风机 + 首次采集，耗时步骤放后台；
+        /// - _scanner.Start()：扫码枪自动识别串口并连接（可选设备，内部已做未启用跳过）。
+        /// 完成后切回 UI 线程刷新顶部"通讯连接状态"与状态栏"扫码枪"状态。
+        /// </summary>
+        private void StartDevicesInBackground()
+        {
+            Task.Run(() =>
+            {
+                // 启动设备管理器（开始数据采集）
+                // 【V1.16】Start 只要求"气压表串口"连通；耦合器/送风机断开不影响压力采集，
+                // 具体哪一步连不上会通过 OnDiagnostic 事件写进 LOG。
+                bool started = false;
+                try
+                {
+                    started = _deviceManager.Start();
+                }
+                catch (Exception ex)
+                {
+                    WriteLogOnUi($"设备启动异常：{ex.Message}");
+                }
+
+                if (!started)
+                {
+                    // 启动失败（气压表串口没连上）：把原因写到 LOG，方便现场排查
+                    WriteLogOnUi($"设备启动失败：{_deviceManager.LastStartupError}");
+                }
+
+                // 【V1.16 新增】启动扫码枪服务（自动识别串口并连接；未启用/未插入时定时重连）
+                // 扫码枪是可选设备，内部已做"ScannerEnabled=false 直接跳过"处理，不影响整机启动。
+                // 注意：ScannerService 的 Start() 必须在 UI 线程执行——它内部会创建
+                // System.Windows.Forms.Timer（重连/心跳）和 DeviceChangeWindow（NativeWindow，
+                // 用于接收 WM_DEVICECHANGE 热插拔消息），两者都依赖 UI 消息泵；
+                // 在 Task.Run 后台线程执行会导致定时器与热插拔监听失效，扫码枪无法自动重连。
+                RunOnUi(() =>
+                {
+                    if (IsDisposed || Disposing) return;
+                    try
+                    {
+                        _scanner?.Start();
+                    }
+                    catch (Exception ex)
+                    {
+                        WriteLog($"扫码枪启动异常：{ex.Message}");
+                    }
+                });
+
+                // 【V1.16.1】顶部"通讯连接状态"只反映 IO 耦合器（阀/载台电控制）是否连接，
+                // 不再用"气压表串口是否连上"冒充。Start() 内部已同步触发
+                // OnConnectionStatusChanged 事件（数据源 = 耦合器），这里再按实际状态兜底刷新一次。
+                // 同时刷新状态栏"扫码枪"连接状态（已连接/未连接/未启用）。
+                RunOnUi(() =>
+                {
+                    if (IsDisposed || Disposing) return;
+                    _commConnected = _deviceManager.IsIoConnected;
+                    UpdateConnectionStatus();
+                    RefreshScannerStatus();
+                });
+            });
+        }
+
+        /// <summary>切换到 UI 线程写日志（后台线程调用时使用，避免跨线程访问控件）</summary>
+        private void WriteLogOnUi(string message)
+        {
+            RunOnUi(() => WriteLog(message));
+        }
+
+        /// <summary>切换到 UI 线程执行（窗体已释放时安全跳过）</summary>
+        private void RunOnUi(Action action)
+        {
+            if (IsDisposed || Disposing) return;
+            try
+            {
+                if (InvokeRequired) BeginInvoke(action);
+                else action();
+            }
+            catch (ObjectDisposedException) { }
+            catch (InvalidOperationException) { }
         }
 
         /// <summary>
@@ -1594,6 +1660,12 @@ namespace BarometerWinform.Views
                 items.Add(("通讯测试", MenuHelpCommunicationTest_Click));
             }
 
+            // 【送风机测试】仅技术员及以上权限可见（操作员不可见）
+            if (_userManager.HasPermission(UserRole.Technician))
+            {
+                items.Add(("送风机测试", MenuHelpFanTest_Click));
+            }
+
             items.Add(("版本说明", MenuHelpVersionInfo_Click));
 
             ShowDropdownPopup(btnAbout, items.ToArray());
@@ -1846,7 +1918,19 @@ namespace BarometerWinform.Views
         /// </summary>
         private void MenuHelpCommunicationTest_Click(object sender, EventArgs e)
         {
-            var form = new Dialogs.CommunicationTestForm(_config);
+            var form = new Dialogs.CommunicationTestForm(_deviceManager);
+            form.FormClosed += (s, args) => form.Dispose();
+            form.Show(this);
+        }
+
+        /// <summary>
+        /// 送风机测试 → 弹出冷却送风机通讯测试窗体（技术员及以上权限）
+        /// 用于手动测试送风机控制屏的 Modbus TCP 通讯与定值启动/停止（直接读写设备寄存器）
+        /// 非模态（Show 替代 ShowDialog），打开测试窗体的同时仍可点击操作主窗体。
+        /// </summary>
+        private void MenuHelpFanTest_Click(object sender, EventArgs e)
+        {
+            var form = new Dialogs.FanTestForm(_deviceManager);
             form.FormClosed += (s, args) => form.Dispose();
             form.Show(this);
         }

@@ -212,6 +212,12 @@
     <Compile Include="Dialogs\CommunicationTestForm.Designer.cs">
       <DependentUpon>CommunicationTestForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="Dialogs\FanTestForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Dialogs\FanTestForm.Designer.cs">
+      <DependentUpon>FanTestForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="Program.cs" />
   </ItemGroup>
   <ItemGroup>
