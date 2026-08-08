@@ -64,13 +64,17 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Services/ScannerService.cs` | 扫码枪：WMI 识别串口、串口读码、断线心跳重连 |
 | `Services/TestEventLogger.cs` | 测试事件 CSV 落盘（启动/停止/报警/复位/急停/真空建立） |
 | `Services/UserManager.cs` | 用户/登录/权限，Users.json 持久化 |
+| `Services/RecipeStorage.cs` | 配方列表持久化（Recipes.json，启动加载/操作即写盘；SaveWithDuplicateCheck 同名覆盖保存，V1.25/1.26） |
+| `Services/StationSettingsCache.cs` | 工位配置缓存（StationSettings.json，按工位缓存 SN/配方/延时/极限温度，设置窗口下次打开自动回填，V1.26） |
 | `Services/Mock*.cs` | Mock 实现（免接线演示） |
 | `Views/MainForm.cs` | 主窗体：面板区（9×8）、菜单下拉、状态栏（"在线"全部离线标红，V1.24）、权限控制、扫码事件、操作区按钮 |
 | `Views/WorkstationPanelView.cs` | 单个工位面板：压力/SN/配方/延时/状态灯/选中指示（长按约 0.8s 选中，已有选中时长按取消全部选中）；"设置"按钮按选中数量智能分流（V1.24） |
 | `Dialogs/CommunicationTestForm.cs` | 通讯测试窗体（IO 耦合器 DO 输出测试，负压阀/载台上电两页 9×8 灯按钮 + 一键遍历） |
 | `Dialogs/FanTestForm.cs` | 送风机测试窗体（定值启停 + 温湿度显示） |
 | `Dialogs/SettingsForm.cs` | 系统设置（管理员，按分类编辑 App.config 全部配置项，写回 exe.config 重启生效） |
-| `Dialogs/StationSettingsForm.cs` | 工位设置（SN/配方/延时/启动时间 写入 StationInfo） |
+| `Dialogs/StationSettingsForm.cs` | 工位设置（SN/配方/延时/启动时间 写入 StationInfo；延时/启动时间三 NumericUpDown 冒号分隔，V1.28；保存=应用+缓存+存配方、加入对列=应用+存配方、下电=关闭载台上电） |
+| `Dialogs/RecipeManagerForm.cs` | 配方管理窗口（左侧列表可滚动 + 右侧可编辑输入，延时/启动时间冒号分隔三 NumericUpDown，V1.28；添加/更新/删除操作即自动落盘 Recipes.json，V1.27 起无"保存设置"按钮） |
+| `Dialogs/BatchRecipeForm.cs` | 批量设置配方窗口（配方名称/延时时间/启动时间/极限温度；延时/启动时间均三 NumericUpDown 冒号分隔，V1.28 删"延时时间2"，两个时间都写入配方：延时→延时开启、启动→延时到达；加入队列=保存配方+应用到选中工位，无选中先保存配方并提示选择） |
 | `Dialogs/IdBindingForm.cs` / `InputLotForm.cs` | 录入批号 + 工位↔SN 绑定（扫码枪自动识别填充，生成 Excel） |
 | `Models/` | BarometerData / FanData(+FanRunState) / IoStatus / DeviceConfig / RecipeConfig / StationInfo / 用户模型 |
 
@@ -177,7 +181,11 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 | 版本 | 要点 |
 | :--- | :--- |
-| V1.24 | 面板"设置"按钮智能分流：点击工位未选中先加入选中；仅选 1 台弹工位设置窗口，选≥2 台弹批量设置配方窗口（`ShowBatchRecipeForm` 抽取复用）；长按空白处取消全部选中并隐藏选中框；状态栏"在线"全部离线标红、默认"未连接"标红；工位面板配色优化（真空关默认红底、测试中=黄灯色、空闲=LimeGreen） |
+| V1.28 | 时间输入样式统一：配方管理/批量设置/工位设置三窗口延时与启动时间均改三个 NumericUpDown + 冒号分隔（时:分:秒，时0-99/分0-59/秒0-59），命名统一 nudDelay*/nudStart*，字段映射对齐（延时→延时开启 DelayTime、启动→延时到达 StartTime；字段名由 DelayStartTime/DelayArriveTime 统一，[JsonProperty] 保旧 JSON 键名兼容）；批量设置配方窗口删除"延时时间2"，且原被丢弃的"启动时间"修复为写入配方；工位设置窗口 txtDelay/txtStart 改 NumericUpDown 并调整读取（GetTimeSpan）/回填（SetTimeInputs 钳制）/提示（GetTimeText）逻辑 |
+| V1.27 | 配方管理移除"保存设置"按钮：添加/更新/删除操作即自动落盘 Recipes.json（原仅"保存设置"落盘，现三个操作按钮每次成功后自动持久化，改动重启不丢失） |
+| V1.26 | 批量设置配方"加入队列"=保存配方到本地+应用到选中工位（无选中先保存配方并提示选择工位）；工位设置"保存"=应用面板+缓存(StationSettings.json自动回填)+存配方、"加入对列"=应用面板+存配方、"下电"=关闭载台上电输出；RecipeStorage 新增 SaveWithDuplicateCheck 同名覆盖保存 |
+| V1.25 | 配方管理窗口编辑化（名称输入框、时/分/秒分拆、极限温度）+ 列表选中同步显示 + 添加防重名询问更新 + 删除二次确认 + Recipes.json 持久化启动加载 + 配方列表垂直滚动条；批量设置配方窗口左侧标签与右侧输入框垂直居中对齐 |
+| V1.24 | 面板"设置"按钮智能分流：点击工位未选中先加入选中；仅选 1 台弹工位设置窗口，选≥2 台弹批量设置配方窗口（`ShowBatchRecipeForm` 抽取复用）；长按空白处取消全部选中并隐藏选中框；状态栏"在线"全部离线标红、默认"未连接"标红；工位面板配色优化（真空关默认红底、测试中=黄灯色、空闲=LimeGreen、上电灯未上电=红） |
 | V1.23 | 通讯测试/送风机测试窗体共享主程序连接（不自建 TCP）；DeviceManager/ModbusTcpIoController 新增共享原始寄存器 API |
 | V1.22 | 通讯测试窗体：一键遍历通断跑马灯、打开自动连接+心跳断连提醒+遍历后台执行、0x2009 映射读-改-写、非模态映射提示窗 |
 | V1.21 | 通讯测试窗体 SunnyUI 重构 + 备用通道映射点击提示 |
@@ -210,8 +218,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 ## 10. 待完善项
 
-- 配方管理：新增/编辑/删除/持久化未实现（部分内存）
 - ID 绑定数据持久化、批号关联生产记录
 - 用户密码明文（应哈希）
-- 工位设置窗口"破空/下电/加入对列"按钮业务待确认
+- 工位设置窗口"破空"按钮业务待确认（下电/保存/加入对列已实现，V1.26）
 - 界面 LOG 文本框仍未写文件

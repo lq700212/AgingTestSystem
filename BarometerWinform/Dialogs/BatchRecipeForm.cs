@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Windows.Forms;
 using BarometerWinform.Models;
+using BarometerWinform.Services;
 
 namespace BarometerWinform.Dialogs
 {
@@ -9,92 +10,84 @@ namespace BarometerWinform.Dialogs
     /// 批量设置配方窗口（业务逻辑部分）
     ///
     /// 【功能说明】
-    /// 本窗口用于批量设置配方参数，支持用户输入配方名称、延时时间、启动时间、极限温度等参数，
-    /// 点击"加入队列"按钮将当前配置加入配方队列，后续可批量应用到多个选中的气压表面板。
+    /// 本窗口用于批量设置配方参数（配方名称、延时时间、启动时间、极限温度），
+    /// 点击"加入队列"按钮：
+    /// 1. 先把当前配置的配方保存到本地配方存储（Recipes.json，有同名则询问是否覆盖更新）；
+    /// 2. 判断当前是否至少选中了一个工位面板（WorkstationPanelView）：
+    ///    - 没有任何选中 → 提示"请先选择工位"，配方已保存，可在「参数设置 → 配方管理」中选用，
+    ///      或关闭窗口、选中工位后再打开本窗口重新点击"加入队列"应用到选中工位；
+    ///    - 有选中 → 把该配方的名称 / 延时开启（延时时间）/ 延时到达（启动时间）应用到所有选中的工位面板。
+    /// "关闭窗口"按钮直接关闭本窗体。
+    ///
+    /// 【数据流转】
+    /// 1. 主窗体在弹出本窗口时传入：设备管理器（应用配方到工位）、共享配方列表（_recipes）、
+    ///    当前选中的工位编号数组（可能为空）。
+    /// 2. 用户在窗口中填写各项配方参数。
+    /// 3. 点击"加入队列" → 保存配方到共享列表并落盘 → 应用到选中工位。
     ///
     /// 【界面布局】
     /// ┌─────────────────────────────────────────────┐
     /// │ 批量设置设置配方窗口                         │  ← 标题栏
     /// ├─────────────────────────────────────────────┤
     /// │ 配方名称：[____________]                    │  ← 配方名称输入框
-    /// │ 延时时间1：[__]:[__]:[__]                   │  ← 延时时间1（时:分:秒）
-    /// │ 延时时间2：[__]:[__]:[__]                   │  ← 延时时间2（时:分:秒）
-    /// │ 启动时间：[__]:[__]:[__]                    │  ← 启动时间（时:分:秒）
+    /// │ 延时时间：[__]:[__]:[__]                    │  ← 延时时间（NumericUpDown，对应延时开启）
+    /// │ 启动时间：[__]:[__]:[__]                    │  ← 启动时间（NumericUpDown，对应延时到达）
     /// │ 极限温度：[____] °C                         │  ← 极限温度输入框
     /// ├─────────────────────────────────────────────┤
-    /// │         [加入队列]                          │  ← 加入队列按钮
-    /// │         [关闭窗口]                          │  ← 关闭窗口按钮
+    /// │         [加入队列]                          │  ← 保存配方 + 应用到选中工位
+    /// │         [关闭窗口]                          │  ← 直接关闭
     /// └─────────────────────────────────────────────┘
     ///
-    /// 【数据流转】
-    /// 1. 用户在窗口中填写各项配方参数
-    /// 2. 点击"加入队列"按钮，参数验证通过后创建 RecipeConfig 对象
-    /// 3. RecipeConfig 对象加入配方队列列表（_recipeQueue）
-    /// 4. 触发 OnRecipeAdded 事件，通知主窗体有新配方加入队列
-    /// 5. 用户可继续添加更多配方到队列，或点击"关闭窗口"退出
-    ///
-    /// 【参数说明】
-    /// - 配方名称：测试配方的名称标识，用于区分不同配方（如 ABCDEFGH）
-    /// - 延时时间1：第一个延时阶段的时长（格式：时:分:秒，对应 RecipeConfig.DelayStartTime）
-    /// - 延时时间2：第二个延时阶段的时长（格式：时:分:秒，对应 RecipeConfig.DelayArriveTime）
-    /// - 启动时间：测试启动前的等待时长（格式：时:分:秒，暂存于额外字段）
-    /// - 极限温度：测试过程中的温度上限值（单位：摄氏度，对应 RecipeConfig.LimitTemperature）
+    /// 【字段映射（V1.28 与配方管理窗口对齐）】
+    /// - 延时时间 → RecipeConfig.DelayTime（工位面板"延时开启"）
+    /// - 启动时间 → RecipeConfig.StartTime（工位面板"延时到达"）
+    /// - 极限温度 → RecipeConfig.LimitTemperature
     ///
     /// 【注意事项】
-    /// 1. 所有时间输入框限制为2位数字，温度输入框限制为3位数字
-    /// 2. 输入验证：小时0-23，分钟0-59，秒0-59，温度0-999
-    /// 3. 配方名称不能为空
+    /// 1. 延时时间 / 启动时间均使用三个 NumericUpDown（时:分:秒，V1.28 由 TextBox 改）：
+    ///    时 0-99、分 0-59、秒 0-59，控件自带范围限制，无需再校验；
+    /// 2. 温度输入框限制为3位数字，范围 0-999°C；
+    /// 3. 配方名称不能为空。
     /// </summary>
     public partial class BatchRecipeForm : Form
     {
         /// <summary>
-        /// 配方队列列表
-        /// 存储用户通过本窗口添加的所有配方配置
-        /// 实际项目中可扩展为持久化存储（如数据库、JSON文件）
+        /// 设备管理器（用于把配方应用（写入工位静态信息）到选中的工位面板）
+        /// 可为 null，null 时不执行"应用到工位"，仅保存配方。
         /// </summary>
-        private readonly List<RecipeConfig> _recipeQueue;
+        private readonly DeviceManager _deviceManager;
 
         /// <summary>
-        /// 配方加入队列事件
-        /// 当用户点击"加入队列"按钮并成功添加配方时触发
-        /// 参数为新添加的 RecipeConfig 对象，便于主窗体获取配方信息
+        /// 主窗体共享的配方列表（保存配方时直接修改，与「参数设置 → 配方管理」共用同一列表）
         /// </summary>
-        public event EventHandler<RecipeConfig> OnRecipeAdded;
+        private readonly List<RecipeConfig> _recipes;
+
+        /// <summary>
+        /// 当前选中的工位编号数组（主窗体传入，可能为空表示一个工位都没选中）
+        /// </summary>
+        private readonly IReadOnlyList<int> _selectedDeviceIds;
 
         /// <summary>
         /// 构造函数
-        /// 初始化窗口控件和配方队列
         /// </summary>
-        public BatchRecipeForm()
+        /// <param name="deviceManager">设备管理器（可 null，仅影响"应用到工位"）</param>
+        /// <param name="recipes">主窗体共享的配方列表（保存配方时修改并落盘）</param>
+        /// <param name="selectedDeviceIds">当前选中的工位编号（允许为空数组）</param>
+        public BatchRecipeForm(DeviceManager deviceManager, List<RecipeConfig> recipes,
+            IReadOnlyList<int> selectedDeviceIds)
         {
             InitializeComponent();
-            _recipeQueue = new List<RecipeConfig>();
-        }
 
-        /// <summary>
-        /// 获取当前配方队列
-        /// 用于主窗体获取用户添加的所有配方
-        /// </summary>
-        /// <returns>配方队列列表的副本（避免外部直接修改内部状态）</returns>
-        public List<RecipeConfig> GetRecipeQueue()
-        {
-            return new List<RecipeConfig>(_recipeQueue);
-        }
-
-        /// <summary>
-        /// 清空配方队列
-        /// 用于主窗体在批量应用配方后清空队列
-        /// </summary>
-        public void ClearRecipeQueue()
-        {
-            _recipeQueue.Clear();
+            _deviceManager = deviceManager;
+            _recipes = recipes;
+            _selectedDeviceIds = selectedDeviceIds ?? new List<int>();
         }
 
         /// <summary>
         /// 获取当前窗口输入的配方配置
-        /// 从各个输入控件中读取值，创建并返回 RecipeConfig 对象
+        /// 从各个输入控件中读取值，校验通过后创建并返回 RecipeConfig 对象。
         /// </summary>
-        /// <returns>配方配置对象，如果验证失败返回 null</returns>
+        /// <returns>配方配置对象；验证失败返回 null（已弹窗提示）</returns>
         private RecipeConfig GetCurrentRecipeConfig()
         {
             // 验证配方名称
@@ -107,32 +100,16 @@ namespace BarometerWinform.Dialogs
                 return null;
             }
 
-            // 解析延时时间1（时:分:秒）
-            TimeSpan delayTime1;
-            if (!TryParseTimeSpan(txtDelay1Hour.Text, txtDelay1Minute.Text, txtDelay1Second.Text, out delayTime1))
-            {
-                MessageBox.Show("延时时间1输入无效，请输入有效的时:分:秒", "输入验证",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return null;
-            }
+            // 读取延时时间（时:分:秒，NumericUpDown 控件已限制范围，无需额外校验）→ 延时开启
+            TimeSpan delayTime = new TimeSpan(
+                (int)nudDelayHours.Value, (int)nudDelayMinutes.Value, (int)nudDelaySeconds.Value);
 
-            // 解析延时时间2（时:分:秒）
-            TimeSpan delayTime2;
-            if (!TryParseTimeSpan(txtDelay2Hour.Text, txtDelay2Minute.Text, txtDelay2Second.Text, out delayTime2))
-            {
-                MessageBox.Show("延时时间2输入无效，请输入有效的时:分:秒", "输入验证",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return null;
-            }
+            // 读取启动时间（时:分:秒，NumericUpDown 控件已限制范围，无需额外校验）→ 延时到达
+            TimeSpan startTime = new TimeSpan(
+                (int)nudStartHours.Value, (int)nudStartMinutes.Value, (int)nudStartSeconds.Value);
 
-            // 解析启动时间（时:分:秒）
-            TimeSpan startTime;
-            if (!TryParseTimeSpan(txtStartHour.Text, txtStartMinute.Text, txtStartSecond.Text, out startTime))
-            {
-                MessageBox.Show("启动时间输入无效，请输入有效的时:分:秒", "输入验证",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return null;
-            }
+            // 延时到达：由"启动时间"输入框填写（V1.28 与配方管理窗口对齐，两个时间都保存）
+            TimeSpan delayArriveTime = startTime;
 
             // 解析极限温度
             decimal limitTemp;
@@ -154,14 +131,14 @@ namespace BarometerWinform.Dialogs
             }
 
             // 创建配方配置对象
-            // 注意：根据需求，启动时间暂未映射到 RecipeConfig 的现有字段
-            // 实际项目中可根据业务需求扩展 RecipeConfig 模型添加启动时间字段
+            // Id 由 RecipeStorage.SaveWithDuplicateCheck 在保存时统一分配，这里留 0。
+            // 延时时间 → DelayTime（延时开启），启动时间 → StartTime（延时到达），
+            // 与配方管理窗口 / 工位设置窗口的字段映射完全一致（V1.28 对齐）。
             return new RecipeConfig
             {
-                Id = _recipeQueue.Count + 1,
                 Name = recipeName,
-                DelayStartTime = delayTime1,
-                DelayArriveTime = delayTime2,
+                DelayTime = delayTime,
+                StartTime = delayArriveTime,
                 LimitTemperature = limitTemp,
                 CreateTime = DateTime.Now,
                 IsEnabled = true
@@ -169,68 +146,65 @@ namespace BarometerWinform.Dialogs
         }
 
         /// <summary>
-        /// 尝试解析时间输入为 TimeSpan
-        /// 验证小时、分钟、秒的有效性
-        /// </summary>
-        /// <param name="hourText">小时输入文本</param>
-        /// <param name="minuteText">分钟输入文本</param>
-        /// <param name="secondText">秒输入文本</param>
-        /// <param name="timeSpan">解析成功后的 TimeSpan 对象</param>
-        /// <returns>解析是否成功</returns>
-        private bool TryParseTimeSpan(string hourText, string minuteText, string secondText, out TimeSpan timeSpan)
-        {
-            timeSpan = TimeSpan.Zero;
-
-            // 解析小时（0-23）
-            if (!int.TryParse(hourText.Trim(), out int hour) || hour < 0 || hour > 23)
-            {
-                return false;
-            }
-
-            // 解析分钟（0-59）
-            if (!int.TryParse(minuteText.Trim(), out int minute) || minute < 0 || minute > 59)
-            {
-                return false;
-            }
-
-            // 解析秒（0-59）
-            if (!int.TryParse(secondText.Trim(), out int second) || second < 0 || second > 59)
-            {
-                return false;
-            }
-
-            // 创建 TimeSpan 对象
-            timeSpan = new TimeSpan(hour, minute, second);
-            return true;
-        }
-
-        /// <summary>
         /// 加入队列按钮点击事件
-        /// 获取当前输入的配方配置，验证通过后加入队列
+        ///
+        /// 【流程】
+        /// 1. 校验并构建当前配方（GetCurrentRecipeConfig）；
+        /// 2. 保存配方到本地配方列表（SaveWithDuplicateCheck，有同名询问是否覆盖更新）；
+        ///    用户取消覆盖 / 保存失败 → 直接返回，不做任何事；
+        /// 3. 判断是否选中了工位：
+        ///    - 一个工位都没选中 → 提示"请先选择工位"，配方已保存；
+        ///    - 有选中 → 把配方的名称 / 延时开启（延时时间）/ 延时到达（启动时间）应用到所有选中工位。
         /// </summary>
         private void btnAddToQueue_Click(object sender, EventArgs e)
         {
-            // 获取当前配方配置
+            // ---- 1) 校验并构建当前配方 ----
             RecipeConfig recipe = GetCurrentRecipeConfig();
             if (recipe == null)
             {
                 return;
             }
 
-            // 加入配方队列
-            _recipeQueue.Add(recipe);
+            // ---- 2) 保存配方到本地配方存储（有同名则询问是否覆盖更新） ----
+            bool saved = RecipeStorage.SaveWithDuplicateCheck(_recipes, recipe);
+            if (!saved)
+            {
+                // 用户取消覆盖 或 保存失败：放弃本次加入队列
+                return;
+            }
 
-            // 写入日志（输出到控制台，实际项目中可写入日志文件）
-            System.Diagnostics.Debug.WriteLine(
-                $"[批量设置配方] 配方已加入队列: {recipe.Name}（延时1: {recipe.DelayStartTime}, 延时2: {recipe.DelayArriveTime}, 极限温度: {recipe.LimitTemperature}°C）");
+            // ---- 3) 判断是否有选中的工位面板 ----
+            if (_selectedDeviceIds == null || _selectedDeviceIds.Count == 0)
+            {
+                // 一个工位都没选中：配方已保存，提醒用户先选择工位
+                MessageBox.Show(
+                    "当前没有任何选中的工位面板！\r\n\r\n" +
+                    $"配方 \"{recipe.Name}\" 已保存到本地配方列表。\r\n\r\n" +
+                    "请关闭本窗口后，在主界面选中至少一个工位，\r\n" +
+                    "再打开本窗口点击\"加入队列\"即可应用到选中的工位；\r\n" +
+                    "也可以直接在「参数设置 → 配方管理」中选用该配方。",
+                    "请先选择工位",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return;
+            }
 
-            // 触发配方加入事件，通知主窗体
-            OnRecipeAdded?.Invoke(this, recipe);
+            // ---- 4) 应用到所有选中的工位面板 ----
+            int appliedCount = 0;
+            foreach (int deviceId in _selectedDeviceIds)
+            {
+                if (_deviceManager == null) break;
 
-            // 弹出成功提示
+                // 写入工位静态信息（采集线程叠加后，工位面板同步显示配方名称 / 延时开启 / 延时到达）
+                _deviceManager.SetStationRecipeName(deviceId, recipe.Name);
+                _deviceManager.SetStationDelayTimes(deviceId, recipe.DelayTime, recipe.StartTime);
+                appliedCount++;
+            }
+
+            // ---- 5) 成功提示 ----
             MessageBox.Show(
-                $"配方 \"{recipe.Name}\" 已成功加入队列！\n\n" +
-                $"队列当前配方数量: {_recipeQueue.Count}",
+                $"配方 \"{recipe.Name}\" 已保存到本地配方列表，\r\n" +
+                $"并已应用到 {appliedCount} 个选中的工位面板！",
                 "加入队列成功",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
@@ -238,11 +212,10 @@ namespace BarometerWinform.Dialogs
 
         /// <summary>
         /// 关闭窗口按钮点击事件
-        /// 关闭窗口并返回 DialogResult.OK
+        /// 直接关闭当前窗体（不保存、不应用任何内容）。
         /// </summary>
         private void btnClose_Click(object sender, EventArgs e)
         {
-            this.DialogResult = DialogResult.OK;
             this.Close();
         }
     }

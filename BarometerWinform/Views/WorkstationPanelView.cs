@@ -16,13 +16,13 @@ namespace BarometerWinform.Views
     /// 【界面布局】（控件创建见 <see cref="WorkstationPanelView.Designer.cs"/>）
     /// ┌──────────────────────────────┐
     /// │ NO.1                  [□✓]   │  ← 设备编号 + 选中指示（V1.19.5 起"有选中才显示"）
-    /// │ 上电   [状态灯]                │  ← 标题与下方各标题左对齐；状态灯与内容列左对齐（V1.19.3）
-    /// │ 真空压力 [值] [真空开] [工作状态]   │  ← 压力值只读（V1.19.10 加宽）；真空开/关=文字+颜色；工作状态文字带色（V1.19.4）
-    /// │ SN:    [SN值 Label]                 │  ← V1.19.3：内容改为 Label 显示
-    /// │ 配方:  [配方值 Label]               │
-    /// │ 延时开启 [__:__:__]      ┌────┐      │
-    /// │ 延时到达 [__:__:__]      │设置│      │  ← 点击弹出设置窗口（V1.24：按选中数量分流）      │
-    /// │                          └────┘      │
+    /// │ [上电/下电] [工作状态]         │  ← 上电状态灯/工作状态（文字+颜色，V1.24）
+    /// │ 真空压力 [值] [真空开]         │  ← 压力值只读（V1.19.10 加宽）；真空开/关=文字+颜色
+    /// │ SN:    [SN值 Label]           │
+    /// │ 配方:  [配方值 Label]         │
+    /// │ 延时开启 [__:__:__]   ┌────┐  │
+    /// │ 延时到达 [__:__:__]   │设置│  │  ← 点击弹出设置窗口（V1.24：按选中数量分流）
+    /// │                       └────┘  │
     /// └──────────────────────────────┘
     ///
     /// 【选中交互（V1.19.6）】
@@ -35,7 +35,8 @@ namespace BarometerWinform.Views
     ///   选中项 = 绿底 + 白色"✓"，未选中项 = 空心白框（显示/隐藏由主窗体统一协调）。
     ///
     /// 【状态灯颜色约定】
-    /// - 上电状态灯（boxPower）：载台上电输出 ON=绿色，OFF=灰色（纯色无文字）
+    /// - 上电状态灯（boxPower，V1.24 起带文字）：载台上电输出 ON=LimeGreen 绿底白字"上电"，
+    ///   OFF=红底白字"下电"（原为纯色无文字：绿/灰，V1.24 改红并加文字）
     /// - 真空开启显示（boxVacuumOpen，V1.19.10 起带文字+颜色）：真空电磁阀输出
     ///   ON=绿底白字"真空开"，OFF=红底白字"真空关"
     /// - 工作状态（boxWorkState，V1.18 文字用中文）：空闲/选中/繁忙/故障
@@ -354,8 +355,8 @@ namespace BarometerWinform.Views
             lblRecipeValue.Text = data.RecipeName;
 
             // 更新延时时间显示（格式：时:分:秒）
-            txtDelayStart.Text = data.DelayStartTime.ToString(@"hh\:mm\:ss");
-            txtDelayArrive.Text = data.DelayArriveTime.ToString(@"hh\:mm\:ss");
+            txtDelayStart.Text = data.DelayTime.ToString(@"hh\:mm\:ss");
+            txtDelayArrive.Text = data.StartTime.ToString(@"hh\:mm\:ss");
 
             // ===== 解析 IO 输出状态（依据显耀IO表） =====
             // OutputStatus[0] = 真空电磁阀输出（控制真空开/关）
@@ -380,13 +381,15 @@ namespace BarometerWinform.Views
         }
 
         /// <summary>
-        /// 更新状态灯颜色（纯色灯通用方法）
+        /// 更新上电状态灯（boxPower，V1.24 起带文字：红底"下电" / 绿底"上电"，白字）
         /// </summary>
-        /// <param name="ctrl">状态灯控件（目前仅 boxPower 使用，boxVacuumOpen 已改用文字+颜色）</param>
-        /// <param name="isActive">true=绿色（开），false=灰色（关）</param>
+        /// <param name="ctrl">上电状态灯控件（boxPower）</param>
+        /// <param name="isActive">true=上电（绿底 LimeGreen + 白字"上电"），false=下电（红底 + 白字"下电"）</param>
         private void UpdateStatusLight(Control ctrl, bool isActive)
         {
-            ctrl.BackColor = isActive ? Color.LimeGreen : Color.LightGray;
+            ctrl.BackColor = isActive ? Color.LimeGreen : Color.Red;
+            ctrl.ForeColor = Color.White;
+            ctrl.Text = isActive ? "上电" : "下电";
         }
 
         /// <summary>
@@ -477,7 +480,7 @@ namespace BarometerWinform.Views
                         // 完全空闲 → 空闲（绿底 + 黑字，V1.24 由浅灰改为 LimeGreen）
                         boxWorkState.Text = "空闲";
                         boxWorkState.BackColor = Color.LimeGreen;
-                        boxWorkState.ForeColor = Color.Black;
+                        boxWorkState.ForeColor = Color.White;
                     }
                     break;
             }

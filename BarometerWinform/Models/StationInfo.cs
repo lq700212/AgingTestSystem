@@ -42,13 +42,13 @@ namespace BarometerWinform.Models
         /// 延时开启时间（时:分:秒，工位设置窗口录入）
         /// 为空表示尚未配置
         /// </summary>
-        public TimeSpan? DelayStartTime { get; set; }
+        public TimeSpan? DelayTime { get; set; }
 
         /// <summary>
         /// 延时到达时间（时:分:秒，工位设置窗口录入）
         /// 为空表示尚未配置
         /// </summary>
-        public TimeSpan? DelayArriveTime { get; set; }
+        public TimeSpan? StartTime { get; set; }
 
         /// <summary>
         /// 深拷贝（避免外部修改污染 DeviceManager 内部存储）
@@ -61,8 +61,8 @@ namespace BarometerWinform.Models
                 DeviceId = this.DeviceId,
                 SerialNumber = this.SerialNumber,
                 RecipeName = this.RecipeName,
-                DelayStartTime = this.DelayStartTime,
-                DelayArriveTime = this.DelayArriveTime
+                DelayTime = this.DelayTime,
+                StartTime = this.StartTime
             };
         }
     }

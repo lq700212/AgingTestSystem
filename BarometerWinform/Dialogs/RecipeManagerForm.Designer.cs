@@ -2,35 +2,16 @@ namespace BarometerWinform.Dialogs
 {
     /// <summary>
     /// 配方管理窗体 —— 设计器自动生成部分
-    /// 
+    ///
     /// 【界面布局说明】
-    /// 根据用户提供的图片样式，采用左右分栏布局：
-    /// 
-    /// ┌─────────────────────────────────────────────────────────────┐
-    /// │ 配方管理窗口                                               │ ← 标题栏
-    /// ├─────────────────────────────────────────────────────────────┤
-    /// │ TableLayoutPanel (2列)                                      │
-    /// │ ┌─────────────────────────┐  ┌─────────────────────────┐   │
-    /// │ │ PanelLeft (左侧列表区)  │  │ PanelRight (右侧设置区) │   │
-    /// │ │ ┌─────────────────────┐ │  │ ┌─────────────────────┐ │   │
-    /// │ │ │ 序号  │ 配方名称     │ │  │ │ 配方设置            │ │   │
-    /// │ │ │───────┼─────────────│ │  │ │ 配方名称：ABCDEFGH   │ │   │
-    /// │ │ │ 1     │ ABCDEFGH    │ │  │ │ 延时时间：1:20:30    │ │   │
-    /// │ │ │ 2     │ BBVJKNVK    │ │  │ │ 启动时间：2:10:5     │ │   │
-    /// │ │ │ 3     │ RFTYHYJWF   │ │  │ │ 极限温度：50℃        │ │   │
-    /// │ │ │ 4     │ WFRWGYJUK   │ │  │ ├─────────────────────┤ │   │
-    /// │ │ │ 5     │ FGYJKIewF   │ │  │ │ [添加] [更新] [删除] │ │   │
-    /// │ │ │(带滚动条)           │ │  │ └─────────────────────┘ │   │
-    /// │ │ └─────────────────────┘ │  └─────────────────────────┘   │
-    /// │ └─────────────────────────┘                                │
-    /// ├─────────────────────────────────────────────────────────────┤
-    /// │ [保存设置] (横跨整个底部)                                    │
-    /// └─────────────────────────────────────────────────────────────┘
-    /// 
-    /// 【控件说明】
+    /// 左右分栏布局：
     /// - 左侧：DataGridView 只显示序号和配方名称两列
-    /// - 右侧：Label 控件显示选中配方的详细信息（配方名称、延时时间、启动时间、极限温度）
-    /// - 底部按钮区域：添加、更新、删除按钮在右侧设置区底部；保存设置按钮横跨底部
+    /// - 右侧：可编辑输入区
+    ///   - 配方名称：TextBox
+    ///   - 延时时间 / 启动时间：三个 NumericUpDown 以冒号分隔显示（时:分:秒，V1.28）
+    ///   - 极限温度：NumericUpDown + ℃ 单位
+    /// - 底部按钮区域：添加、更新、删除按钮在右侧设置区底部（V1.27 起无底部"保存设置"按钮，
+    ///   添加/更新/删除操作即自动落盘）
     /// </summary>
     partial class RecipeManagerForm
     {
@@ -58,26 +39,38 @@ namespace BarometerWinform.Dialogs
             this.btnDelete = new System.Windows.Forms.Button();
             this.btnUpdate = new System.Windows.Forms.Button();
             this.btnAdd = new System.Windows.Forms.Button();
+            this.lblLimitTempUnit = new System.Windows.Forms.Label();
+            this.nudLimitTemp = new System.Windows.Forms.NumericUpDown();
             this.lblLimitTemp = new System.Windows.Forms.Label();
-            this.lblLimitTempValue = new System.Windows.Forms.Label();
+            this.nudStartSeconds = new System.Windows.Forms.NumericUpDown();
+            this.lblStartMinutesUnit = new System.Windows.Forms.Label();
+            this.nudStartMinutes = new System.Windows.Forms.NumericUpDown();
+            this.lblStartHoursUnit = new System.Windows.Forms.Label();
+            this.nudStartHours = new System.Windows.Forms.NumericUpDown();
             this.lblStartTime = new System.Windows.Forms.Label();
-            this.lblStartTimeValue = new System.Windows.Forms.Label();
+            this.nudDelaySeconds = new System.Windows.Forms.NumericUpDown();
+            this.lblDelayMinutesUnit = new System.Windows.Forms.Label();
+            this.nudDelayMinutes = new System.Windows.Forms.NumericUpDown();
+            this.lblDelayHoursUnit = new System.Windows.Forms.Label();
+            this.nudDelayHours = new System.Windows.Forms.NumericUpDown();
             this.lblDelayTime = new System.Windows.Forms.Label();
-            this.lblDelayTimeValue = new System.Windows.Forms.Label();
+            this.txtRecipeName = new System.Windows.Forms.TextBox();
             this.lblRecipeName = new System.Windows.Forms.Label();
-            this.lblRecipeNameValue = new System.Windows.Forms.Label();
-            this.lblRecipeNameLabel = new System.Windows.Forms.Label();
             this.lblRecipeSettings = new System.Windows.Forms.Label();
-            this.panelBottom = new System.Windows.Forms.Panel();
-            this.btnSaveSettings = new System.Windows.Forms.Button();
             this.tableLayoutPanelMain.SuspendLayout();
             this.panelLeft.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.dgvRecipes)).BeginInit();
             this.panelRight.SuspendLayout();
-            this.panelBottom.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.nudLimitTemp)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudStartSeconds)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudStartMinutes)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudStartHours)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudDelaySeconds)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudDelayMinutes)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudDelayHours)).BeginInit();
             this.SuspendLayout();
             //
-            // tableLayoutPanelMain - 主布局容器（2列：左侧列表区/右侧设置区）
+            // tableLayoutPanelMain
             //
             this.tableLayoutPanelMain.ColumnCount = 2;
             this.tableLayoutPanelMain.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 45F));
@@ -89,119 +82,145 @@ namespace BarometerWinform.Dialogs
             this.tableLayoutPanelMain.Name = "tableLayoutPanelMain";
             this.tableLayoutPanelMain.RowCount = 1;
             this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelMain.Size = new System.Drawing.Size(700, 400);
+            this.tableLayoutPanelMain.Size = new System.Drawing.Size(700, 353);
             this.tableLayoutPanelMain.TabIndex = 0;
             //
-            // panelLeft - 左侧配方列表区域面板
+            // panelLeft
             //
             this.panelLeft.Controls.Add(this.dgvRecipes);
             this.panelLeft.Dock = System.Windows.Forms.DockStyle.Fill;
             this.panelLeft.Location = new System.Drawing.Point(3, 3);
             this.panelLeft.Margin = new System.Windows.Forms.Padding(3, 3, 0, 3);
             this.panelLeft.Name = "panelLeft";
-            this.panelLeft.Size = new System.Drawing.Size(309, 347);
+            this.panelLeft.Size = new System.Drawing.Size(312, 347);
             this.panelLeft.TabIndex = 0;
             //
-            // dgvRecipes - 配方列表表格（只显示序号和配方名称）
+            // dgvRecipes
             //
             this.dgvRecipes.AllowUserToAddRows = false;
             this.dgvRecipes.AllowUserToDeleteRows = false;
             this.dgvRecipes.AllowUserToResizeRows = false;
             this.dgvRecipes.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.Fill;
+            this.dgvRecipes.AutoSizeRowsMode = System.Windows.Forms.DataGridViewAutoSizeRowsMode.None;
             this.dgvRecipes.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             this.dgvRecipes.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
-                this.colSeq,
-                this.colName});
+            this.colSeq,
+            this.colName});
             this.dgvRecipes.Dock = System.Windows.Forms.DockStyle.Fill;
             this.dgvRecipes.Location = new System.Drawing.Point(0, 0);
             this.dgvRecipes.MultiSelect = false;
             this.dgvRecipes.Name = "dgvRecipes";
             this.dgvRecipes.ReadOnly = true;
             this.dgvRecipes.RowHeadersVisible = false;
+            this.dgvRecipes.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
             this.dgvRecipes.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
-            this.dgvRecipes.Size = new System.Drawing.Size(309, 347);
+            this.dgvRecipes.Size = new System.Drawing.Size(312, 347);
             this.dgvRecipes.TabIndex = 0;
             this.dgvRecipes.CellClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.dgvRecipes_CellClick);
             //
-            // colSeq - 序号列
+            // colSeq
             //
             this.colSeq.HeaderText = "序号";
             this.colSeq.Name = "colSeq";
-            this.colSeq.Width = 60;
+            this.colSeq.ReadOnly = true;
             //
-            // colName - 配方名称列
+            // colName
             //
             this.colName.HeaderText = "配方名称";
             this.colName.Name = "colName";
+            this.colName.ReadOnly = true;
             //
-            // panelRight - 右侧配方设置区域面板
+            // panelRight
             //
             this.panelRight.Controls.Add(this.btnDelete);
             this.panelRight.Controls.Add(this.btnUpdate);
             this.panelRight.Controls.Add(this.btnAdd);
+            this.panelRight.Controls.Add(this.lblLimitTempUnit);
+            this.panelRight.Controls.Add(this.nudLimitTemp);
             this.panelRight.Controls.Add(this.lblLimitTemp);
-            this.panelRight.Controls.Add(this.lblLimitTempValue);
+            this.panelRight.Controls.Add(this.nudStartSeconds);
+            this.panelRight.Controls.Add(this.lblStartMinutesUnit);
+            this.panelRight.Controls.Add(this.nudStartMinutes);
+            this.panelRight.Controls.Add(this.lblStartHoursUnit);
+            this.panelRight.Controls.Add(this.nudStartHours);
             this.panelRight.Controls.Add(this.lblStartTime);
-            this.panelRight.Controls.Add(this.lblStartTimeValue);
+            this.panelRight.Controls.Add(this.nudDelaySeconds);
+            this.panelRight.Controls.Add(this.lblDelayMinutesUnit);
+            this.panelRight.Controls.Add(this.nudDelayMinutes);
+            this.panelRight.Controls.Add(this.lblDelayHoursUnit);
+            this.panelRight.Controls.Add(this.nudDelayHours);
             this.panelRight.Controls.Add(this.lblDelayTime);
-            this.panelRight.Controls.Add(this.lblDelayTimeValue);
+            this.panelRight.Controls.Add(this.txtRecipeName);
             this.panelRight.Controls.Add(this.lblRecipeName);
-            this.panelRight.Controls.Add(this.lblRecipeNameValue);
-            this.panelRight.Controls.Add(this.lblRecipeNameLabel);
             this.panelRight.Controls.Add(this.lblRecipeSettings);
             this.panelRight.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.panelRight.Location = new System.Drawing.Point(318, 3);
+            this.panelRight.Location = new System.Drawing.Point(321, 3);
             this.panelRight.Margin = new System.Windows.Forms.Padding(6, 3, 3, 3);
             this.panelRight.Name = "panelRight";
-            this.panelRight.Size = new System.Drawing.Size(379, 347);
+            this.panelRight.Size = new System.Drawing.Size(376, 347);
             this.panelRight.TabIndex = 1;
             //
-            // btnDelete - 删除按钮
+            // btnDelete
             //
             this.btnDelete.Location = new System.Drawing.Point(260, 280);
             this.btnDelete.Name = "btnDelete";
             this.btnDelete.Size = new System.Drawing.Size(75, 23);
-            this.btnDelete.TabIndex = 12;
+            this.btnDelete.TabIndex = 15;
             this.btnDelete.Text = "删除";
             this.btnDelete.Click += new System.EventHandler(this.btnDelete_Click);
             //
-            // btnUpdate - 更新按钮
+            // btnUpdate
             //
             this.btnUpdate.Location = new System.Drawing.Point(165, 280);
             this.btnUpdate.Name = "btnUpdate";
             this.btnUpdate.Size = new System.Drawing.Size(75, 23);
-            this.btnUpdate.TabIndex = 11;
+            this.btnUpdate.TabIndex = 14;
             this.btnUpdate.Text = "更新";
             this.btnUpdate.Click += new System.EventHandler(this.btnUpdate_Click);
             //
-            // btnAdd - 添加按钮
+            // btnAdd
             //
             this.btnAdd.Location = new System.Drawing.Point(70, 280);
             this.btnAdd.Name = "btnAdd";
             this.btnAdd.Size = new System.Drawing.Size(75, 23);
-            this.btnAdd.TabIndex = 10;
+            this.btnAdd.TabIndex = 13;
             this.btnAdd.Text = "添加";
             this.btnAdd.Click += new System.EventHandler(this.btnAdd_Click);
             //
-            // lblLimitTemp - 极限温度标签
+            // lblLimitTemp
             //
             this.lblLimitTemp.AutoSize = true;
             this.lblLimitTemp.Location = new System.Drawing.Point(30, 180);
             this.lblLimitTemp.Name = "lblLimitTemp";
             this.lblLimitTemp.Size = new System.Drawing.Size(65, 12);
-            this.lblLimitTemp.TabIndex = 9;
+            this.lblLimitTemp.TabIndex = 11;
             this.lblLimitTemp.Text = "极限温度：";
             //
-            // lblLimitTempValue - 极限温度值显示
+            // nudLimitTemp
             //
-            this.lblLimitTempValue.AutoSize = true;
-            this.lblLimitTempValue.Location = new System.Drawing.Point(95, 180);
-            this.lblLimitTempValue.Name = "lblLimitTempValue";
-            this.lblLimitTempValue.Size = new System.Drawing.Size(41, 12);
-            this.lblLimitTempValue.TabIndex = 8;
-            this.lblLimitTempValue.Text = "50℃";
+            this.nudLimitTemp.DecimalPlaces = 1;
+            this.nudLimitTemp.Increment = 0.5M;
+            this.nudLimitTemp.Location = new System.Drawing.Point(95, 176);
+            this.nudLimitTemp.Maximum = new decimal(new int[] {
+            300,
+            0,
+            0,
+            0});
+            this.nudLimitTemp.Name = "nudLimitTemp";
+            this.nudLimitTemp.Size = new System.Drawing.Size(70, 21);
+            this.nudLimitTemp.TabIndex = 12;
+            this.nudLimitTemp.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             //
-            // lblStartTime - 启动时间标签
+            // lblLimitTempUnit
+            //
+            this.lblLimitTempUnit.AutoSize = true;
+            this.lblLimitTempUnit.Location = new System.Drawing.Point(167, 182);
+            this.lblLimitTempUnit.Name = "lblLimitTempUnit";
+            this.lblLimitTempUnit.Size = new System.Drawing.Size(12, 12);
+            this.lblLimitTempUnit.TabIndex = 0;
+            this.lblLimitTempUnit.Text = "℃";
+            //
+            // lblStartTime
             //
             this.lblStartTime.AutoSize = true;
             this.lblStartTime.Location = new System.Drawing.Point(30, 145);
@@ -210,95 +229,161 @@ namespace BarometerWinform.Dialogs
             this.lblStartTime.TabIndex = 7;
             this.lblStartTime.Text = "启动时间：";
             //
-            // lblStartTimeValue - 启动时间值显示
+            // nudStartHours
             //
-            this.lblStartTimeValue.AutoSize = true;
-            this.lblStartTimeValue.Location = new System.Drawing.Point(95, 145);
-            this.lblStartTimeValue.Name = "lblStartTimeValue";
-            this.lblStartTimeValue.Size = new System.Drawing.Size(53, 12);
-            this.lblStartTimeValue.TabIndex = 6;
-            this.lblStartTimeValue.Text = "2:10:5";
+            this.nudStartHours.Location = new System.Drawing.Point(95, 141);
+            this.nudStartHours.Maximum = new decimal(new int[] {
+            99,
+            0,
+            0,
+            0});
+            this.nudStartHours.Name = "nudStartHours";
+            this.nudStartHours.Size = new System.Drawing.Size(48, 21);
+            this.nudStartHours.TabIndex = 8;
+            this.nudStartHours.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             //
-            // lblDelayTime - 延时时间标签
+            // lblStartHoursUnit - 启动时间：时与分之间的冒号分隔符（V1.28 由"时"单位改为":"）
+            //
+            this.lblStartHoursUnit.AutoSize = true;
+            this.lblStartHoursUnit.Location = new System.Drawing.Point(145, 145);
+            this.lblStartHoursUnit.Name = "lblStartHoursUnit";
+            this.lblStartHoursUnit.Size = new System.Drawing.Size(6, 12);
+            this.lblStartHoursUnit.TabIndex = 0;
+            this.lblStartHoursUnit.Text = ":";
+            //
+            // nudStartMinutes
+            //
+            this.nudStartMinutes.Location = new System.Drawing.Point(159, 141);
+            this.nudStartMinutes.Maximum = new decimal(new int[] {
+            59,
+            0,
+            0,
+            0});
+            this.nudStartMinutes.Name = "nudStartMinutes";
+            this.nudStartMinutes.Size = new System.Drawing.Size(48, 21);
+            this.nudStartMinutes.TabIndex = 9;
+            this.nudStartMinutes.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            //
+            // lblStartMinutesUnit - 启动时间：分与秒之间的冒号分隔符（V1.28 由"分"单位改为":"）
+            //
+            this.lblStartMinutesUnit.AutoSize = true;
+            this.lblStartMinutesUnit.Location = new System.Drawing.Point(209, 145);
+            this.lblStartMinutesUnit.Name = "lblStartMinutesUnit";
+            this.lblStartMinutesUnit.Size = new System.Drawing.Size(6, 12);
+            this.lblStartMinutesUnit.TabIndex = 0;
+            this.lblStartMinutesUnit.Text = ":";
+            //
+            // nudStartSeconds
+            //
+            this.nudStartSeconds.Location = new System.Drawing.Point(223, 141);
+            this.nudStartSeconds.Maximum = new decimal(new int[] {
+            59,
+            0,
+            0,
+            0});
+            this.nudStartSeconds.Name = "nudStartSeconds";
+            this.nudStartSeconds.Size = new System.Drawing.Size(48, 21);
+            this.nudStartSeconds.TabIndex = 10;
+            this.nudStartSeconds.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            //
+            // lblDelayTime
             //
             this.lblDelayTime.AutoSize = true;
             this.lblDelayTime.Location = new System.Drawing.Point(30, 110);
             this.lblDelayTime.Name = "lblDelayTime";
             this.lblDelayTime.Size = new System.Drawing.Size(65, 12);
-            this.lblDelayTime.TabIndex = 5;
+            this.lblDelayTime.TabIndex = 3;
             this.lblDelayTime.Text = "延时时间：";
             //
-            // lblDelayTimeValue - 延时时间值显示
+            // nudDelayHours
             //
-            this.lblDelayTimeValue.AutoSize = true;
-            this.lblDelayTimeValue.Location = new System.Drawing.Point(95, 110);
-            this.lblDelayTimeValue.Name = "lblDelayTimeValue";
-            this.lblDelayTimeValue.Size = new System.Drawing.Size(65, 12);
-            this.lblDelayTimeValue.TabIndex = 4;
-            this.lblDelayTimeValue.Text = "1:20:30";
+            this.nudDelayHours.Location = new System.Drawing.Point(95, 106);
+            this.nudDelayHours.Maximum = new decimal(new int[] {
+            99,
+            0,
+            0,
+            0});
+            this.nudDelayHours.Name = "nudDelayHours";
+            this.nudDelayHours.Size = new System.Drawing.Size(48, 21);
+            this.nudDelayHours.TabIndex = 4;
+            this.nudDelayHours.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             //
-            // lblRecipeName - 配方名称标签
+            // lblDelayHoursUnit - 延时时间：时与分之间的冒号分隔符（V1.28 由"时"单位改为":"）
+            //
+            this.lblDelayHoursUnit.AutoSize = true;
+            this.lblDelayHoursUnit.Location = new System.Drawing.Point(145, 110);
+            this.lblDelayHoursUnit.Name = "lblDelayHoursUnit";
+            this.lblDelayHoursUnit.Size = new System.Drawing.Size(6, 12);
+            this.lblDelayHoursUnit.TabIndex = 0;
+            this.lblDelayHoursUnit.Text = ":";
+            //
+            // nudDelayMinutes
+            //
+            this.nudDelayMinutes.Location = new System.Drawing.Point(159, 106);
+            this.nudDelayMinutes.Maximum = new decimal(new int[] {
+            59,
+            0,
+            0,
+            0});
+            this.nudDelayMinutes.Name = "nudDelayMinutes";
+            this.nudDelayMinutes.Size = new System.Drawing.Size(48, 21);
+            this.nudDelayMinutes.TabIndex = 5;
+            this.nudDelayMinutes.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            //
+            // lblDelayMinutesUnit - 延时时间：分与秒之间的冒号分隔符（V1.28 由"分"单位改为":"）
+            //
+            this.lblDelayMinutesUnit.AutoSize = true;
+            this.lblDelayMinutesUnit.Location = new System.Drawing.Point(209, 110);
+            this.lblDelayMinutesUnit.Name = "lblDelayMinutesUnit";
+            this.lblDelayMinutesUnit.Size = new System.Drawing.Size(6, 12);
+            this.lblDelayMinutesUnit.TabIndex = 0;
+            this.lblDelayMinutesUnit.Text = ":";
+            //
+            // nudDelaySeconds
+            //
+            this.nudDelaySeconds.Location = new System.Drawing.Point(223, 106);
+            this.nudDelaySeconds.Maximum = new decimal(new int[] {
+            59,
+            0,
+            0,
+            0});
+            this.nudDelaySeconds.Name = "nudDelaySeconds";
+            this.nudDelaySeconds.Size = new System.Drawing.Size(48, 21);
+            this.nudDelaySeconds.TabIndex = 6;
+            this.nudDelaySeconds.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            //
+            // lblRecipeName
             //
             this.lblRecipeName.AutoSize = true;
             this.lblRecipeName.Location = new System.Drawing.Point(30, 75);
             this.lblRecipeName.Name = "lblRecipeName";
             this.lblRecipeName.Size = new System.Drawing.Size(65, 12);
-            this.lblRecipeName.TabIndex = 3;
+            this.lblRecipeName.TabIndex = 1;
             this.lblRecipeName.Text = "配方名称：";
             //
-            // lblRecipeNameValue - 配方名称值显示
+            // txtRecipeName
             //
-            this.lblRecipeNameValue.AutoSize = true;
-            this.lblRecipeNameValue.Location = new System.Drawing.Point(95, 75);
-            this.lblRecipeNameValue.Name = "lblRecipeNameValue";
-            this.lblRecipeNameValue.Size = new System.Drawing.Size(77, 12);
-            this.lblRecipeNameValue.TabIndex = 2;
-            this.lblRecipeNameValue.Text = "ABCDEFGH";
+            this.txtRecipeName.Location = new System.Drawing.Point(95, 72);
+            this.txtRecipeName.Name = "txtRecipeName";
+            this.txtRecipeName.Size = new System.Drawing.Size(180, 21);
+            this.txtRecipeName.TabIndex = 2;
             //
-            // lblRecipeNameLabel - 配方名称标签（显示重复的配方名称）
-            //
-            this.lblRecipeNameLabel.AutoSize = true;
-            this.lblRecipeNameLabel.Location = new System.Drawing.Point(95, 50);
-            this.lblRecipeNameLabel.Name = "lblRecipeNameLabel";
-            this.lblRecipeNameLabel.Size = new System.Drawing.Size(77, 12);
-            this.lblRecipeNameLabel.TabIndex = 1;
-            this.lblRecipeNameLabel.Text = "ABCDEFGH";
-            //
-            // lblRecipeSettings - 配方设置标题标签
+            // lblRecipeSettings
             //
             this.lblRecipeSettings.AutoSize = true;
             this.lblRecipeSettings.Font = new System.Drawing.Font("微软雅黑", 10F, System.Drawing.FontStyle.Bold);
             this.lblRecipeSettings.Location = new System.Drawing.Point(140, 20);
             this.lblRecipeSettings.Name = "lblRecipeSettings";
-            this.lblRecipeSettings.Size = new System.Drawing.Size(72, 19);
+            this.lblRecipeSettings.Size = new System.Drawing.Size(65, 19);
             this.lblRecipeSettings.TabIndex = 0;
             this.lblRecipeSettings.Text = "配方设置";
             //
-            // panelBottom - 底部按钮面板（保存设置按钮）
-            //
-            this.panelBottom.Controls.Add(this.btnSaveSettings);
-            this.panelBottom.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.panelBottom.Location = new System.Drawing.Point(0, 353);
-            this.panelBottom.Name = "panelBottom";
-            this.panelBottom.Size = new System.Drawing.Size(700, 47);
-            this.panelBottom.TabIndex = 1;
-            //
-            // btnSaveSettings - 保存设置按钮（横跨整个底部）
-            //
-            this.btnSaveSettings.Location = new System.Drawing.Point(270, 10);
-            this.btnSaveSettings.Name = "btnSaveSettings";
-            this.btnSaveSettings.Size = new System.Drawing.Size(160, 27);
-            this.btnSaveSettings.TabIndex = 0;
-            this.btnSaveSettings.Text = "保存设置";
-            this.btnSaveSettings.Click += new System.EventHandler(this.btnSaveSettings_Click);
-            //
-            // RecipeManagerForm - 窗体自身属性设置
+            // RecipeManagerForm
             //
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(700, 400);
+            this.ClientSize = new System.Drawing.Size(700, 355);
             this.Controls.Add(this.tableLayoutPanelMain);
-            this.Controls.Add(this.panelBottom);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
@@ -310,8 +395,15 @@ namespace BarometerWinform.Dialogs
             ((System.ComponentModel.ISupportInitialize)(this.dgvRecipes)).EndInit();
             this.panelRight.ResumeLayout(false);
             this.panelRight.PerformLayout();
-            this.panelBottom.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.nudLimitTemp)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudStartSeconds)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudStartMinutes)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudStartHours)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudDelaySeconds)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudDelayMinutes)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudDelayHours)).EndInit();
             this.ResumeLayout(false);
+
         }
 
         #endregion
@@ -328,9 +420,6 @@ namespace BarometerWinform.Dialogs
         /// <summary>右侧配方设置区域面板</summary>
         private System.Windows.Forms.Panel panelRight;
 
-        /// <summary>底部按钮面板</summary>
-        private System.Windows.Forms.Panel panelBottom;
-
         /// <summary>配方列表表格</summary>
         private System.Windows.Forms.DataGridView dgvRecipes;
 
@@ -343,32 +432,56 @@ namespace BarometerWinform.Dialogs
         /// <summary>配方设置标题标签</summary>
         private System.Windows.Forms.Label lblRecipeSettings;
 
-        /// <summary>配方名称标签（上方显示）</summary>
-        private System.Windows.Forms.Label lblRecipeNameLabel;
-
         /// <summary>配方名称标签</summary>
         private System.Windows.Forms.Label lblRecipeName;
 
-        /// <summary>配方名称值显示</summary>
-        private System.Windows.Forms.Label lblRecipeNameValue;
+        /// <summary>配方名称输入框</summary>
+        private System.Windows.Forms.TextBox txtRecipeName;
 
         /// <summary>延时时间标签</summary>
         private System.Windows.Forms.Label lblDelayTime;
 
-        /// <summary>延时时间值显示</summary>
-        private System.Windows.Forms.Label lblDelayTimeValue;
+        /// <summary>延时时间：时输入</summary>
+        private System.Windows.Forms.NumericUpDown nudDelayHours;
+
+        /// <summary>延时时间：时单位</summary>
+        private System.Windows.Forms.Label lblDelayHoursUnit;
+
+        /// <summary>延时时间：分输入</summary>
+        private System.Windows.Forms.NumericUpDown nudDelayMinutes;
+
+        /// <summary>延时时间：分单位</summary>
+        private System.Windows.Forms.Label lblDelayMinutesUnit;
+
+        /// <summary>延时时间：秒输入</summary>
+        private System.Windows.Forms.NumericUpDown nudDelaySeconds;
 
         /// <summary>启动时间标签</summary>
         private System.Windows.Forms.Label lblStartTime;
 
-        /// <summary>启动时间值显示</summary>
-        private System.Windows.Forms.Label lblStartTimeValue;
+        /// <summary>启动时间：时输入</summary>
+        private System.Windows.Forms.NumericUpDown nudStartHours;
+
+        /// <summary>启动时间：时单位</summary>
+        private System.Windows.Forms.Label lblStartHoursUnit;
+
+        /// <summary>启动时间：分输入</summary>
+        private System.Windows.Forms.NumericUpDown nudStartMinutes;
+
+        /// <summary>启动时间：分单位</summary>
+        private System.Windows.Forms.Label lblStartMinutesUnit;
+
+        /// <summary>启动时间：秒输入</summary>
+        private System.Windows.Forms.NumericUpDown nudStartSeconds;
 
         /// <summary>极限温度标签</summary>
         private System.Windows.Forms.Label lblLimitTemp;
 
-        /// <summary>极限温度值显示</summary>
-        private System.Windows.Forms.Label lblLimitTempValue;
+        /// <summary>极限温度输入</summary>
+        private System.Windows.Forms.NumericUpDown nudLimitTemp;
+
+        /// <summary>极限温度单位</summary>
+        private System.Windows.Forms.Label lblLimitTempUnit;
 
         /// <summary>添加按钮</summary>
         private System.Windows.Forms.Button btnAdd;
@@ -378,8 +491,5 @@ namespace BarometerWinform.Dialogs
 
         /// <summary>删除按钮</summary>
         private System.Windows.Forms.Button btnDelete;
-
-        /// <summary>保存设置按钮</summary>
-        private System.Windows.Forms.Button btnSaveSettings;
     }
 }

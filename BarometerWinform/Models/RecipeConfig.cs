@@ -26,14 +26,18 @@ namespace BarometerWinform.Models
         public decimal NegativePressure { get; set; }
 
         /// <summary>
-        /// 延时开启时间（时:分:秒）
+        /// 延时时间（时:分:秒，配方窗口"延时时间"，工位面板"延时开启"）
+        /// 序列化键保持 DelayStartTime，兼容旧版 Recipes.json（V1.28 字段名统一）
         /// </summary>
-        public TimeSpan DelayStartTime { get; set; }
+        [Newtonsoft.Json.JsonProperty("DelayStartTime")]
+        public TimeSpan DelayTime { get; set; }
 
         /// <summary>
-        /// 延时到达时间（时:分:秒）
+        /// 启动时间（时:分:秒，配方窗口"启动时间"，工位面板"延时到达"）
+        /// 序列化键保持 DelayArriveTime，兼容旧版 Recipes.json（V1.28 字段名统一）
         /// </summary>
-        public TimeSpan DelayArriveTime { get; set; }
+        [Newtonsoft.Json.JsonProperty("DelayArriveTime")]
+        public TimeSpan StartTime { get; set; }
 
         /// <summary>
         /// 极限温度（单位：摄氏度）

@@ -140,9 +140,8 @@ namespace BarometerWinform.Views
         private string _runStatus = "空闲";
 
         /// <summary>
-        /// 配方列表（内存中维护）
-        /// 实际项目中应替换为持久化存储（数据库/文件）
-        /// 当前为空列表，通过"配方管理"窗体维护
+        /// 配方列表（内存中维护，启动时从 Recipes.json 加载，保存设置时写回）
+        /// 通过"配方管理"窗体维护
         /// </summary>
         private readonly List<RecipeConfig> _recipes = new List<RecipeConfig>();
 
@@ -182,6 +181,9 @@ namespace BarometerWinform.Views
 
             // 2. 加载配置（从 App.config 读取设备数量、采集间隔等）
             _config = LoadConfig();
+
+            // 2.5 【配方持久化】启动时从本地 Recipes.json 加载配方列表
+            LoadRecipes();
 
             // 3. 初始化设备管理器（连接硬件、启动数据采集）
             _deviceManager = new DeviceManager(_config);
@@ -1495,7 +1497,8 @@ namespace BarometerWinform.Views
             }
 
             // 只选中 1 个工位（此时必为被点击的工位）→ 打开该工位的设置窗口
-            using (var form = new StationSettingsForm(_deviceManager, _config, selectedDeviceId))
+            // 传入共享配方列表 _recipes，供"保存/加入对列"把当前配方写入本地配方存储
+            using (var form = new StationSettingsForm(_deviceManager, _config, _recipes, selectedDeviceId))
             {
                 form.ShowDialog(this);
             }
@@ -1925,6 +1928,20 @@ namespace BarometerWinform.Views
             }
         }
 
+        /// <summary>
+        /// 加载本地持久化的配方列表（Recipes.json）
+        /// 由"配方管理"窗体的"保存设置"写入；文件不存在或加载失败时保持空列表
+        /// </summary>
+        private void LoadRecipes()
+        {
+            var loaded = RecipeStorage.Load();
+            if (loaded != null && loaded.Count > 0)
+            {
+                _recipes.Clear();
+                _recipes.AddRange(loaded);
+            }
+        }
+
         #endregion
 
         #region LOG记录菜单项
@@ -2108,44 +2125,30 @@ namespace BarometerWinform.Views
 
         /// <summary>
         /// 弹出批量设置配方窗口（【V1.24】抽取为公共方法，供"批量设置配方"按钮与
-        /// 面板"设置"按钮多选时共用）
+        /// 面板"设置"按钮多选时共用；【V1.26】加入队列=保存配方+应用到选中工位）
+        ///
+        /// 【V1.26 说明】
+        /// - 传入当前选中的工位编号（允许为 0 个）：若一个工位都没选中，
+        ///   "加入队列"时批量窗口先把配方保存到本地配方列表，再提示用户先选择工位；
+        /// - 传入共享配方列表 _recipes 与设备管理器，供批量窗口保存配方 / 应用到选中工位。
         /// </summary>
         private void ShowBatchRecipeForm()
         {
-            using (var form = new BatchRecipeForm())
+            // 收集当前选中的工位编号（允许为 0 个：是否满足"至少选中一个"由批量窗口判断并提示，
+            // 因此这里不弹提示、也不返回 null）
+            var selectedIds = new List<int>();
+            foreach (var kvp in _panelViews)
             {
-                // 订阅配方加入事件，记录日志
-                form.OnRecipeAdded += (sender2, recipe) =>
+                if (kvp.Value.IsSelected)
                 {
-                    WriteLog($"[批量设置配方] 配方 \"{recipe.Name}\" 已加入队列");
-                };
-
-                // 显示窗口（模态对话框，阻塞主窗口直到关闭）
-                DialogResult result = form.ShowDialog(this);
-
-                // 用户关闭窗口后，获取配方队列
-                if (result == DialogResult.OK)
-                {
-                    var recipeQueue = form.GetRecipeQueue();
-                    if (recipeQueue.Count > 0)
-                    {
-                        // 【预留】实际项目中应将配方队列应用到选中的工位面板
-                        // 当前简化为提示信息，显示队列中的配方数量
-                        WriteLog($"[批量设置配方] 窗口关闭，队列中共有 {recipeQueue.Count} 个配方");
-                        MessageBox.Show(
-                            $"批量设置配方窗口已关闭！\n\n" +
-                            $"配方队列中共有 {recipeQueue.Count} 个配方待处理。\n\n" +
-                            $"【预留功能】\n" +
-                            $"后续实现：将队列中的配方批量应用到所有选中的工位面板",
-                            "批量设置配方",
-                            MessageBoxButtons.OK,
-                            MessageBoxIcon.Information);
-                    }
-                    else
-                    {
-                        WriteLog("[批量设置配方] 窗口关闭，配方队列为空");
-                    }
+                    selectedIds.Add(kvp.Key);
                 }
+            }
+
+            using (var form = new BatchRecipeForm(_deviceManager, _recipes, selectedIds))
+            {
+                // 显示窗口（模态对话框，阻塞主窗口直到关闭）
+                form.ShowDialog(this);
             }
         }
 
