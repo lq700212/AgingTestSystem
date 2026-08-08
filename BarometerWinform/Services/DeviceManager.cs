@@ -259,11 +259,43 @@ namespace BarometerWinform.Services
         /// </summary>
         private volatile bool _disposed = false;
 
+        // =====================================================================
+        // IO 触发后快速跟踪刷新（【V1.30 新增】）
+        // 触发 IO（开/关真空阀、上/断电、启动/停止测试）后，对目标工位启动
+        // 独立高频补读定时器（250ms/次），压力变化 ≤0.5 秒可见，
+        // 不拖慢 72 台全量轮询链路；跟踪窗口到期自动退出恢复正常轮询。
+        // =====================================================================
+
+        /// <summary>快速跟踪补读间隔（毫秒）</summary>
+        private const int QuickTrackIntervalMs = 250;
+
+        /// <summary>单次快速跟踪最长窗口（毫秒，覆盖真空建立 15s 内从常压抽到目标负压）</summary>
+        private const int QuickTrackWindowMs = 12000;
+
+        /// <summary>正在快速跟踪的工位集合（受 <see cref="_quickTrackLock"/> 保护）</summary>
+        private readonly HashSet<int> _quickTrackSet = new HashSet<int>();
+
+        /// <summary>保护快速跟踪集合的锁</summary>
+        private readonly object _quickTrackLock = new object();
+
+        /// <summary>快速跟踪高频补读定时器（AutoReset=true，仅在集合非空时运行）</summary>
+        private readonly System.Timers.Timer _quickTrackTimer;
+
+        /// <summary>本批快速跟踪开始时间（用于窗口到期自动退出）</summary>
+        private DateTime _quickTrackStart;
+
         /// <summary>
         /// 批量数据更新事件（一次采集周期触发一次，参数为本次采集的所有数据）
         /// 【注意】在后台线程触发，UI 层需用 BeginInvoke 切到 UI 线程
         /// </summary>
         public event EventHandler<BarometerData[]> OnBatchDataUpdated;
+
+        /// <summary>
+        /// 单台快速跟踪增量更新事件（【V1.30 新增】）
+        /// IO 触发后高频补读指定工位，每读到一次触发一次（参数为该工位最新数据）。
+        /// 【注意】在后台线程触发，UI 层需用 BeginInvoke 切到 UI 线程更新对应面板。
+        /// </summary>
+        public event EventHandler<BarometerData> OnQuickTrackDataUpdated;
 
         /// <summary>
         /// 连接状态变更事件（【V1.16.1】语义 = IO 耦合器是否连接）
@@ -366,6 +398,12 @@ namespace BarometerWinform.Services
             _collectTimer = new System.Timers.Timer(_config.CollectInterval);
             _collectTimer.Elapsed += CollectTimer_Elapsed;
             _collectTimer.AutoReset = true;
+
+            // IO 触发后快速跟踪定时器（【V1.30 新增】）
+            // 初始不启动，仅在 StartQuickTracking 加入工位后运行；集合空时自动停止。
+            _quickTrackTimer = new System.Timers.Timer(QuickTrackIntervalMs);
+            _quickTrackTimer.Elapsed += QuickTrackTimer_Elapsed;
+            _quickTrackTimer.AutoReset = true;
 
             // 送风机独立轮询定时器（只有启用时才创建）
             if (_config.FanEnabled)
@@ -915,6 +953,178 @@ namespace BarometerWinform.Services
         public void SetOutput(int outputId, bool state)
         {
             _ioController.WriteOutput(outputId, state);
+
+            // 【V1.30】IO 触发后快速跟踪：写输出成功即对目标工位高频补读，
+            // 压力变化 ≤0.5 秒内反映到面板（非阀/载台电输出点自动忽略）。
+            if (TryGetDeviceIdFromOutput(outputId, out int deviceId))
+            {
+                StartQuickTracking(new[] { deviceId });
+            }
+        }
+
+        // =====================================================================
+        // IO 触发后快速跟踪（【V1.30 新增】）
+        // 触发 IO 后，目标工位进入快速跟踪集合，由独立高频定时器（250ms）
+        // 只补读这几台压力 + IO 状态，并广播 OnQuickTrackDataUpdated 刷新对应面板。
+        // 窗口到期（QuickTrackWindowMs）自动清空集合、停止定时器，恢复正常轮询。
+        // =====================================================================
+
+        /// <summary>
+        /// 启动 IO 触发后的快速跟踪
+        /// 把指定工位加入快速跟踪集合并启动高频补读定时器；集合已有该工位则幂等。
+        /// 有新工位加入时重置窗口计时，保证最近一次触发也能看满窗口。
+        /// </summary>
+        /// <param name="deviceIds">要快速跟踪的工位编号数组</param>
+        public void StartQuickTracking(int[] deviceIds)
+        {
+            if (deviceIds == null || deviceIds.Length == 0) return;
+            if (_disposed) return;
+
+            lock (_quickTrackLock)
+            {
+                foreach (int deviceId in deviceIds)
+                {
+                    if (deviceId < 1 || deviceId > _config.TotalBarometers) continue;
+                    _quickTrackSet.Add(deviceId);
+                }
+
+                if (_quickTrackSet.Count == 0) return;
+
+                // 刷新窗口起点：有新工位加入就重新计时，保证最近一次触发也能看满窗口
+                _quickTrackStart = DateTime.Now;
+                if (!_quickTrackTimer.Enabled)
+                {
+                    _quickTrackTimer.Start();
+                }
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[快速跟踪] 开始跟踪 {_quickTrackSet.Count} 台");
+        }
+
+        /// <summary>
+        /// 快速跟踪定时器触发
+        /// 对集合内每台：读单台压力 + 补齐 IO 输出状态 → 广播增量事件刷新对应面板。
+        /// 窗口到期后清空集合并停止定时器，恢复正常全量轮询。
+        /// 【防重入】用 Monitor.TryEnter 防止上一次补读未完成时重复进入（参照 _collectLock 模式）。
+        /// </summary>
+        private void QuickTrackTimer_Elapsed(object sender, ElapsedEventArgs e)
+        {
+            if (_disposed) return;
+
+            if (!Monitor.TryEnter(_quickTrackLock))
+            {
+                return; // 上一次补读未完成，跳过本次
+            }
+
+            try
+            {
+                if (_quickTrackSet.Count == 0)
+                {
+                    _quickTrackTimer.Stop();
+                    return;
+                }
+
+                // 窗口到期：结束本次快速跟踪，恢复正常轮询
+                if ((DateTime.Now - _quickTrackStart).TotalMilliseconds > QuickTrackWindowMs)
+                {
+                    _quickTrackSet.Clear();
+                    _quickTrackTimer.Stop();
+                    System.Diagnostics.Debug.WriteLine("[快速跟踪] 窗口到期，恢复正常轮询");
+                    return;
+                }
+
+                // 读全量 DO 一次，用于补齐真实模式下读取器不返回的输出状态
+                bool[] allOutputs = _ioController.ReadAllOutputs();
+
+                // 全程持有 _quickTrackLock，集合不会被 StartQuickTracking 并发修改，直接遍历安全
+                foreach (int deviceId in _quickTrackSet)
+                {
+                    BarometerData data = _barometerReader.ReadData(deviceId);
+                    if (data == null) continue; // 单台读失败跳过，不中断其它台
+
+                    // 补齐 IO 输出状态（真空阀 + 载台上电）；Mock 读取器自带则跳过
+                    if (data.OutputStatus == null || data.OutputStatus.Length < 2)
+                    {
+                        ApplyQuickTrackOutputStatus(data, deviceId, allOutputs);
+                    }
+
+                    // 测试中的台状态修正为 Testing（与 CollectData 判定一致）
+                    lock (_stateLock)
+                    {
+                        if (_testingStates[deviceId - 1])
+                        {
+                            data.Status = DeviceStatus.Testing;
+                        }
+                    }
+
+                    OnQuickTrackDataUpdated?.Invoke(this, data);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"快速跟踪补读失败: {ex.Message}");
+            }
+            finally
+            {
+                Monitor.Exit(_quickTrackLock);
+            }
+        }
+
+        /// <summary>
+        /// 为快速跟踪读到的数据补齐 IO 输出状态（真空阀 + 载台上电 2 位）
+        /// 映射逻辑与 CollectData 一致（内部编号：阀 = TotalInputs + deviceId，
+        /// 载台电 = TotalInputs + TotalBarometers + deviceId）。
+        /// </summary>
+        private void ApplyQuickTrackOutputStatus(BarometerData data, int deviceId, bool[] allOutputs)
+        {
+            if (allOutputs == null || allOutputs.Length < _config.TotalOutputs) return;
+            if (data.OutputStatus == null || data.OutputStatus.Length < 2)
+            {
+                data.OutputStatus = new bool[2];
+            }
+
+            int outputStart = _config.TotalInputs + 1;
+            int valveOutputId = _config.TotalInputs + deviceId;
+            int carrierOutputId = _config.TotalInputs + _config.TotalBarometers + deviceId;
+
+            int valveIndex = valveOutputId - outputStart;
+            int carrierIndex = carrierOutputId - outputStart;
+
+            if (valveIndex >= 0 && valveIndex < allOutputs.Length)
+            {
+                data.OutputStatus[0] = allOutputs[valveIndex];
+            }
+            if (carrierIndex >= 0 && carrierIndex < allOutputs.Length)
+            {
+                data.OutputStatus[1] = allOutputs[carrierIndex];
+            }
+        }
+
+        /// <summary>
+        /// 从输出点内部编号反推工位编号
+        /// 阀：TotalInputs + deviceId；载台电：TotalInputs + TotalBarometers + deviceId。
+        /// 非阀/载台电输出（如预留通道）返回 false。
+        /// </summary>
+        private bool TryGetDeviceIdFromOutput(int outputId, out int deviceId)
+        {
+            deviceId = 0;
+            if (outputId <= _config.TotalInputs) return false;
+
+            int valveOffset = outputId - _config.TotalInputs;
+            if (valveOffset >= 1 && valveOffset <= _config.TotalBarometers)
+            {
+                deviceId = valveOffset;
+                return true;
+            }
+
+            int carrierOffset = outputId - _config.TotalInputs - _config.TotalBarometers;
+            if (carrierOffset >= 1 && carrierOffset <= _config.TotalBarometers)
+            {
+                deviceId = carrierOffset;
+                return true;
+            }
+
+            return false;
         }
 
         /// <summary>
@@ -1202,6 +1412,9 @@ namespace BarometerWinform.Services
             // 批量写输出
             _ioController.WriteOutputs(outputIds.ToArray(), states.ToArray());
 
+            // 【V1.30】启动测试后对目标工位快速跟踪，实时反映真空建立过程
+            StartQuickTracking(deviceIds);
+
             // 送风机生命周期联动（首台启动时启动送风机）
             UpdateFanLifecycle();
         }
@@ -1240,6 +1453,9 @@ namespace BarometerWinform.Services
             }
 
             _ioController.WriteOutputs(outputIds.ToArray(), states.ToArray());
+
+            // 【V1.30】停止测试后快速跟踪压力回落
+            StartQuickTracking(deviceIds);
 
             // 送风机生命周期联动（如果是最后一台，这里会停止送风机）
             UpdateFanLifecycle();
@@ -1881,6 +2097,8 @@ namespace BarometerWinform.Services
                     _collectTimer?.Dispose();
                     _fanTimer?.Stop();
                     _fanTimer?.Dispose();
+                    _quickTrackTimer?.Stop();
+                    _quickTrackTimer?.Dispose();
                 }
             }
         }
