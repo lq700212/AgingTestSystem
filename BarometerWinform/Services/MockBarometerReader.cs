@@ -122,8 +122,8 @@ namespace BarometerWinform.Services
                 // V1.10：状态统一由 DeviceManager 根据测试状态/报警判定来写，
                 // Mock 读取器只负责提供压力数据，避免随机状态误导 Demo
                 Status = DeviceStatus.Idle,
-                DelayStartTime = new TimeSpan(0, delayStartMin, delayStartSec),
-                DelayArriveTime = new TimeSpan(0, delayArriveMin, delayArriveSec),
+                DelayTime = new TimeSpan(0, delayStartMin, delayStartSec),
+                StartTime = new TimeSpan(0, delayArriveMin, delayArriveSec),
                 CollectTime = DateTime.Now,
                 // 1个输入: 真空负压表信号
                 InputStatus = new[] { vacuumPressureInput },

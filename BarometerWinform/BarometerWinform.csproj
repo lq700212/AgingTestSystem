@@ -103,6 +103,8 @@
     <Compile Include="Services\TestEventLogger.cs" />
     <Compile Include="Services\DeviceManager.cs" />
     <Compile Include="Services\UserManager.cs" />
+    <Compile Include="Services\RecipeStorage.cs" />
+    <Compile Include="Services\StationSettingsCache.cs" />
     <Compile Include="Views\WorkstationPanelView.cs">
       <SubType>UserControl</SubType>
     </Compile>
@@ -129,6 +131,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Dialogs\InputLotForm.resx">
       <DependentUpon>InputLotForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Dialogs\RecipeManagerForm.resx">
+      <DependentUpon>RecipeManagerForm.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
@@ -219,6 +224,9 @@
       <DependentUpon>FanTestForm.cs</DependentUpon>
     </Compile>
     <Compile Include="Program.cs" />
+    <EmbeddedResource Include="Views\WorkstationPanelView.resx">
+      <DependentUpon>WorkstationPanelView.cs</DependentUpon>
+    </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />

@@ -37,12 +37,12 @@ namespace BarometerWinform.Models
         /// <summary>
         /// 延时开启时间（时:分:秒）
         /// </summary>
-        public TimeSpan DelayStartTime { get; set; }
+        public TimeSpan DelayTime { get; set; }
 
         /// <summary>
         /// 延时到达时间（时:分:秒）
         /// </summary>
-        public TimeSpan DelayArriveTime { get; set; }
+        public TimeSpan StartTime { get; set; }
 
         /// <summary>
         /// 采集时间戳
@@ -79,8 +79,8 @@ namespace BarometerWinform.Models
                 SerialNumber = this.SerialNumber,
                 RecipeName = this.RecipeName,
                 Status = this.Status,
-                DelayStartTime = this.DelayStartTime,
-                DelayArriveTime = this.DelayArriveTime,
+                DelayTime = this.DelayTime,
+                StartTime = this.StartTime,
                 CollectTime = this.CollectTime,
                 // 数组深拷贝，避免外部修改影响原对象
                 InputStatus = (bool[])this.InputStatus?.Clone(),

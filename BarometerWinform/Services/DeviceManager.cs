@@ -763,9 +763,9 @@ namespace BarometerWinform.Services
         /// 由工位设置窗口保存按钮调用。写入后采集叠加显示在工位面板延时标签上。
         /// </summary>
         /// <param name="deviceId">工位编号（1 ~ TotalBarometers）</param>
-        /// <param name="delayStartTime">延时开启时间（可空 = 不修改）</param>
-        /// <param name="delayArriveTime">延时到达时间（可空 = 不修改）</param>
-        public void SetStationDelayTimes(int deviceId, TimeSpan? delayStartTime, TimeSpan? delayArriveTime)
+        /// <param name="delayTime">延时时间（配方窗口"延时时间"，工位面板"延时开启"；可空 = 不修改）</param>
+        /// <param name="startTime">启动时间（配方窗口"启动时间"，工位面板"延时到达"；可空 = 不修改）</param>
+        public void SetStationDelayTimes(int deviceId, TimeSpan? delayTime, TimeSpan? startTime)
         {
             if (deviceId < 1 || deviceId > _config.TotalBarometers) return;
             lock (_stationInfoLock)
@@ -775,8 +775,8 @@ namespace BarometerWinform.Services
                     info = new StationInfo { DeviceId = deviceId };
                     _stationInfo[deviceId] = info;
                 }
-                if (delayStartTime.HasValue) info.DelayStartTime = delayStartTime;
-                if (delayArriveTime.HasValue) info.DelayArriveTime = delayArriveTime;
+                if (delayTime.HasValue) info.DelayTime = delayTime;
+                if (startTime.HasValue) info.StartTime = startTime;
             }
         }
 
@@ -809,7 +809,7 @@ namespace BarometerWinform.Services
         ///
         /// 【为什么需要叠加】
         /// 真实气压表只上报压力，BarometerData 的 SerialNumber / RecipeName /
-        /// DelayStartTime / DelayArriveTime 在采集层是空的。
+        /// DelayTime / StartTime 在采集层是空的。
         /// 工位面板（WorkstationPanelView）显示的 SN / 配方 / 延时正是读取这些字段，
         /// 所以必须在数据流出前把 _stationInfo 里维护的配置覆盖上去，
         /// 保证"有显示 SN/配方/延时 的地方都与绑定/设置关联一致"。
@@ -839,13 +839,13 @@ namespace BarometerWinform.Services
             {
                 data.RecipeName = info.RecipeName;
             }
-            if (info.DelayStartTime.HasValue)
+            if (info.DelayTime.HasValue)
             {
-                data.DelayStartTime = info.DelayStartTime.Value;
+                data.DelayTime = info.DelayTime.Value;
             }
-            if (info.DelayArriveTime.HasValue)
+            if (info.StartTime.HasValue)
             {
-                data.DelayArriveTime = info.DelayArriveTime.Value;
+                data.StartTime = info.StartTime.Value;
             }
         }
 

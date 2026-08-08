@@ -46,9 +46,17 @@
             this.lblRecipe = new System.Windows.Forms.Label();
             this.txtRecipe = new System.Windows.Forms.TextBox();
             this.lblDelay = new System.Windows.Forms.Label();
-            this.txtDelay = new System.Windows.Forms.TextBox();
+            this.nudDelayHours = new System.Windows.Forms.NumericUpDown();
+            this.lblDelayColon1 = new System.Windows.Forms.Label();
+            this.nudDelayMinutes = new System.Windows.Forms.NumericUpDown();
+            this.lblDelayColon2 = new System.Windows.Forms.Label();
+            this.nudDelaySeconds = new System.Windows.Forms.NumericUpDown();
             this.lblStart = new System.Windows.Forms.Label();
-            this.txtStart = new System.Windows.Forms.TextBox();
+            this.nudStartHours = new System.Windows.Forms.NumericUpDown();
+            this.lblStartColon1 = new System.Windows.Forms.Label();
+            this.nudStartMinutes = new System.Windows.Forms.NumericUpDown();
+            this.lblStartColon2 = new System.Windows.Forms.Label();
+            this.nudStartSeconds = new System.Windows.Forms.NumericUpDown();
             this.lblTemp = new System.Windows.Forms.Label();
             this.txtTemp = new System.Windows.Forms.TextBox();
             this.btnBreakVacuum = new System.Windows.Forms.Button();
@@ -56,6 +64,12 @@
             this.btnSave = new System.Windows.Forms.Button();
             this.btnAddToQueue = new System.Windows.Forms.Button();
             this.btnClose = new System.Windows.Forms.Button();
+            ((System.ComponentModel.ISupportInitialize)(this.nudDelayHours)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudDelayMinutes)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudDelaySeconds)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudStartHours)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudStartMinutes)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudStartSeconds)).BeginInit();
             this.SuspendLayout();
             //
             // lblState - "状态"设置项名称（左对齐，V1.18 只显示"状态"两字）
@@ -117,12 +131,62 @@
             this.lblDelay.TabIndex = 6;
             this.lblDelay.Text = "延时时间:";
             //
-            // txtDelay - 延时时间输入框
+            // nudDelayHours - 延时时间-时（NumericUpDown，V1.28 由 TextBox 改）
             //
-            this.txtDelay.Location = new System.Drawing.Point(150, 139);
-            this.txtDelay.Name = "txtDelay";
-            this.txtDelay.Size = new System.Drawing.Size(180, 21);
-            this.txtDelay.TabIndex = 7;
+            this.nudDelayHours.Location = new System.Drawing.Point(150, 136);
+            this.nudDelayHours.Maximum = new decimal(new int[] {
+            99,
+            0,
+            0,
+            0});
+            this.nudDelayHours.Name = "nudDelayHours";
+            this.nudDelayHours.Size = new System.Drawing.Size(48, 21);
+            this.nudDelayHours.TabIndex = 7;
+            this.nudDelayHours.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            //
+            // lblDelayColon1 - 延时时间：时与分之间的冒号分隔符
+            //
+            this.lblDelayColon1.AutoSize = true;
+            this.lblDelayColon1.Location = new System.Drawing.Point(200, 140);
+            this.lblDelayColon1.Name = "lblDelayColon1";
+            this.lblDelayColon1.Size = new System.Drawing.Size(6, 12);
+            this.lblDelayColon1.TabIndex = 0;
+            this.lblDelayColon1.Text = ":";
+            //
+            // nudDelayMinutes - 延时时间-分（NumericUpDown）
+            //
+            this.nudDelayMinutes.Location = new System.Drawing.Point(212, 136);
+            this.nudDelayMinutes.Maximum = new decimal(new int[] {
+            59,
+            0,
+            0,
+            0});
+            this.nudDelayMinutes.Name = "nudDelayMinutes";
+            this.nudDelayMinutes.Size = new System.Drawing.Size(48, 21);
+            this.nudDelayMinutes.TabIndex = 8;
+            this.nudDelayMinutes.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            //
+            // lblDelayColon2 - 延时时间：分与秒之间的冒号分隔符
+            //
+            this.lblDelayColon2.AutoSize = true;
+            this.lblDelayColon2.Location = new System.Drawing.Point(262, 140);
+            this.lblDelayColon2.Name = "lblDelayColon2";
+            this.lblDelayColon2.Size = new System.Drawing.Size(6, 12);
+            this.lblDelayColon2.TabIndex = 0;
+            this.lblDelayColon2.Text = ":";
+            //
+            // nudDelaySeconds - 延时时间-秒（NumericUpDown）
+            //
+            this.nudDelaySeconds.Location = new System.Drawing.Point(274, 136);
+            this.nudDelaySeconds.Maximum = new decimal(new int[] {
+            59,
+            0,
+            0,
+            0});
+            this.nudDelaySeconds.Name = "nudDelaySeconds";
+            this.nudDelaySeconds.Size = new System.Drawing.Size(48, 21);
+            this.nudDelaySeconds.TabIndex = 9;
+            this.nudDelaySeconds.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             //
             // lblStart - "启动时间"设置项名称（左对齐）
             //
@@ -133,12 +197,62 @@
             this.lblStart.TabIndex = 8;
             this.lblStart.Text = "启动时间:";
             //
-            // txtStart - 启动时间输入框
+            // nudStartHours - 启动时间-时（NumericUpDown，V1.28 由 TextBox 改）
             //
-            this.txtStart.Location = new System.Drawing.Point(150, 177);
-            this.txtStart.Name = "txtStart";
-            this.txtStart.Size = new System.Drawing.Size(180, 21);
-            this.txtStart.TabIndex = 9;
+            this.nudStartHours.Location = new System.Drawing.Point(150, 174);
+            this.nudStartHours.Maximum = new decimal(new int[] {
+            99,
+            0,
+            0,
+            0});
+            this.nudStartHours.Name = "nudStartHours";
+            this.nudStartHours.Size = new System.Drawing.Size(48, 21);
+            this.nudStartHours.TabIndex = 10;
+            this.nudStartHours.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            //
+            // lblStartColon1 - 启动时间：时与分之间的冒号分隔符
+            //
+            this.lblStartColon1.AutoSize = true;
+            this.lblStartColon1.Location = new System.Drawing.Point(200, 178);
+            this.lblStartColon1.Name = "lblStartColon1";
+            this.lblStartColon1.Size = new System.Drawing.Size(6, 12);
+            this.lblStartColon1.TabIndex = 0;
+            this.lblStartColon1.Text = ":";
+            //
+            // nudStartMinutes - 启动时间-分（NumericUpDown）
+            //
+            this.nudStartMinutes.Location = new System.Drawing.Point(212, 174);
+            this.nudStartMinutes.Maximum = new decimal(new int[] {
+            59,
+            0,
+            0,
+            0});
+            this.nudStartMinutes.Name = "nudStartMinutes";
+            this.nudStartMinutes.Size = new System.Drawing.Size(48, 21);
+            this.nudStartMinutes.TabIndex = 11;
+            this.nudStartMinutes.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            //
+            // lblStartColon2 - 启动时间：分与秒之间的冒号分隔符
+            //
+            this.lblStartColon2.AutoSize = true;
+            this.lblStartColon2.Location = new System.Drawing.Point(262, 178);
+            this.lblStartColon2.Name = "lblStartColon2";
+            this.lblStartColon2.Size = new System.Drawing.Size(6, 12);
+            this.lblStartColon2.TabIndex = 0;
+            this.lblStartColon2.Text = ":";
+            //
+            // nudStartSeconds - 启动时间-秒（NumericUpDown）
+            //
+            this.nudStartSeconds.Location = new System.Drawing.Point(274, 174);
+            this.nudStartSeconds.Maximum = new decimal(new int[] {
+            59,
+            0,
+            0,
+            0});
+            this.nudStartSeconds.Name = "nudStartSeconds";
+            this.nudStartSeconds.Size = new System.Drawing.Size(48, 21);
+            this.nudStartSeconds.TabIndex = 12;
+            this.nudStartSeconds.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             //
             // lblTemp - "极限温度"设置项名称（左对齐）
             //
@@ -228,9 +342,17 @@
             this.Controls.Add(this.btnBreakVacuum);
             this.Controls.Add(this.txtTemp);
             this.Controls.Add(this.lblTemp);
-            this.Controls.Add(this.txtStart);
+            this.Controls.Add(this.nudStartSeconds);
+            this.Controls.Add(this.lblStartColon2);
+            this.Controls.Add(this.nudStartMinutes);
+            this.Controls.Add(this.lblStartColon1);
+            this.Controls.Add(this.nudStartHours);
             this.Controls.Add(this.lblStart);
-            this.Controls.Add(this.txtDelay);
+            this.Controls.Add(this.nudDelaySeconds);
+            this.Controls.Add(this.lblDelayColon2);
+            this.Controls.Add(this.nudDelayMinutes);
+            this.Controls.Add(this.lblDelayColon1);
+            this.Controls.Add(this.nudDelayHours);
             this.Controls.Add(this.lblDelay);
             this.Controls.Add(this.txtRecipe);
             this.Controls.Add(this.lblRecipe);
@@ -245,6 +367,12 @@
             this.ShowInTaskbar = false;
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "工位设置窗口";
+            ((System.ComponentModel.ISupportInitialize)(this.nudDelayHours)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudDelayMinutes)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudDelaySeconds)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudStartHours)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudStartMinutes)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudStartSeconds)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
         }
@@ -266,12 +394,28 @@
         private System.Windows.Forms.TextBox txtRecipe;
         /// <summary>"延时时间"设置项名称标签</summary>
         private System.Windows.Forms.Label lblDelay;
-        /// <summary>延时时间输入框</summary>
-        private System.Windows.Forms.TextBox txtDelay;
+        /// <summary>延时时间-时输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
+        private System.Windows.Forms.NumericUpDown nudDelayHours;
+        /// <summary>延时时间-时/分冒号分隔符</summary>
+        private System.Windows.Forms.Label lblDelayColon1;
+        /// <summary>延时时间-分输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
+        private System.Windows.Forms.NumericUpDown nudDelayMinutes;
+        /// <summary>延时时间-分/秒冒号分隔符</summary>
+        private System.Windows.Forms.Label lblDelayColon2;
+        /// <summary>延时时间-秒输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
+        private System.Windows.Forms.NumericUpDown nudDelaySeconds;
         /// <summary>"启动时间"设置项名称标签</summary>
         private System.Windows.Forms.Label lblStart;
-        /// <summary>启动时间输入框</summary>
-        private System.Windows.Forms.TextBox txtStart;
+        /// <summary>启动时间-时输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
+        private System.Windows.Forms.NumericUpDown nudStartHours;
+        /// <summary>启动时间-时/分冒号分隔符</summary>
+        private System.Windows.Forms.Label lblStartColon1;
+        /// <summary>启动时间-分输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
+        private System.Windows.Forms.NumericUpDown nudStartMinutes;
+        /// <summary>启动时间-分/秒冒号分隔符</summary>
+        private System.Windows.Forms.Label lblStartColon2;
+        /// <summary>启动时间-秒输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
+        private System.Windows.Forms.NumericUpDown nudStartSeconds;
         /// <summary>"极限温度"设置项名称标签</summary>
         private System.Windows.Forms.Label lblTemp;
         /// <summary>极限温度输入框</summary>
