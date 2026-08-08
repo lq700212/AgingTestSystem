@@ -217,6 +217,7 @@
             // lblCommStatus
             // 
             this.lblCommStatus.AutoSize = true;
+            this.lblCommStatus.ForeColor = System.Drawing.Color.Red;
             this.lblCommStatus.Location = new System.Drawing.Point(1186, 0);
             this.lblCommStatus.Name = "lblCommStatus";
             this.lblCommStatus.Size = new System.Drawing.Size(41, 12);
@@ -408,6 +409,7 @@
             // 
             this.lblFanState.AutoSize = true;
             this.lblFanState.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Bold);
+            this.lblFanState.ForeColor = System.Drawing.Color.Red;
             this.lblFanState.Location = new System.Drawing.Point(100, 21);
             this.lblFanState.Name = "lblFanState";
             this.lblFanState.Size = new System.Drawing.Size(44, 17);
@@ -595,7 +597,8 @@
             this.toolStripStatusLabelTesting.Text = "测试中: 0";
             // 
             // toolStripStatusLabelOnline
-            // 
+            //
+            this.toolStripStatusLabelOnline.ForeColor = System.Drawing.Color.Red;
             this.toolStripStatusLabelOnline.Name = "toolStripStatusLabelOnline";
             this.toolStripStatusLabelOnline.Size = new System.Drawing.Size(65, 17);
             this.toolStripStatusLabelOnline.Text = "在线: 0/72";
