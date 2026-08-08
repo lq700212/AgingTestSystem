@@ -191,6 +191,8 @@ namespace BarometerWinform.Views
             // 4. 订阅设备管理器事件（批量数据更新、连接状态变更、送风机数据更新）
             // 【修复 M2】改为订阅批量数据更新事件，一次更新所有面板
             _deviceManager.OnBatchDataUpdated += DeviceManager_OnBatchDataUpdated;
+            // 【V1.30】订阅 IO 触发后快速跟踪增量更新事件（只刷新触发的那台面板）
+            _deviceManager.OnQuickTrackDataUpdated += DeviceManager_OnQuickTrackDataUpdated;
             _deviceManager.OnConnectionStatusChanged += DeviceManager_OnConnectionStatusChanged;
             // 【V1.10 新增】订阅送风机数据更新事件（独立定时器触发）
             _deviceManager.OnFanDataUpdated += DeviceManager_OnFanDataUpdated;
@@ -1148,6 +1150,60 @@ namespace BarometerWinform.Views
             catch (InvalidOperationException)
             {
                 // 窗体在 BeginInvoke 前刚好释放，忽略此异常
+            }
+        }
+
+        /// <summary>
+        /// 单台快速跟踪增量更新事件处理（【V1.30 新增】）
+        /// IO 触发后高频补读指定工位，每读到一次触发一次。
+        /// 【注意】此方法由快速跟踪定时器的后台线程调用，必须用 BeginInvoke
+        /// 切到 UI 线程更新对应面板；仅刷新该台，不影响其它面板。
+        /// </summary>
+        private void DeviceManager_OnQuickTrackDataUpdated(object sender, BarometerData data)
+        {
+            // 窗体已释放或正在释放时直接返回，避免 Invoke 抛 ObjectDisposedException
+            if (this.IsDisposed || this.Disposing) return;
+
+            // 防御性检查：数据为空时直接返回
+            if (data == null) return;
+
+            try
+            {
+                if (this.InvokeRequired)
+                {
+                    // 显式包成 object[]，避免 H9 参数展开陷阱
+                    this.BeginInvoke(
+                        new Action<BarometerData>(UpdateSinglePanel),
+                        new object[] { data });
+                }
+                else
+                {
+                    UpdateSinglePanel(data);
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                // 窗体已释放，忽略此异常
+            }
+            catch (InvalidOperationException)
+            {
+                // 窗体在 BeginInvoke 前刚好释放，忽略此异常
+            }
+        }
+
+        /// <summary>
+        /// 更新单个面板显示（【V1.30 新增】，快速跟踪专用）
+        /// 按设备编号找到对应面板并调用其 UpdateData 方法，只刷新触发 IO 的那台。
+        /// </summary>
+        /// <param name="data">该工位最新数据</param>
+        private void UpdateSinglePanel(BarometerData data)
+        {
+            // 窗体已释放则不更新
+            if (this.IsDisposed || data == null) return;
+
+            if (_panelViews.TryGetValue(data.DeviceId, out WorkstationPanelView panel))
+            {
+                panel.UpdateData(data);
             }
         }
 
@@ -2474,6 +2530,8 @@ namespace BarometerWinform.Views
             if (_deviceManager != null)
             {
                 _deviceManager.OnBatchDataUpdated -= DeviceManager_OnBatchDataUpdated;
+                // 【V1.30】退订快速跟踪增量更新事件
+                _deviceManager.OnQuickTrackDataUpdated -= DeviceManager_OnQuickTrackDataUpdated;
                 _deviceManager.OnConnectionStatusChanged -= DeviceManager_OnConnectionStatusChanged;
                 // 【V1.10】退订送风机数据更新事件
                 _deviceManager.OnFanDataUpdated -= DeviceManager_OnFanDataUpdated;
