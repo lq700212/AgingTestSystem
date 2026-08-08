@@ -129,6 +129,12 @@
     <EmbeddedResource Include="Dialogs\CommonParameterForm.resx">
       <DependentUpon>CommonParameterForm.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="Dialogs\CommunicationTestForm.resx">
+      <DependentUpon>CommunicationTestForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Dialogs\FanTestForm.resx">
+      <DependentUpon>FanTestForm.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Dialogs\InputLotForm.resx">
       <DependentUpon>InputLotForm.cs</DependentUpon>
     </EmbeddedResource>

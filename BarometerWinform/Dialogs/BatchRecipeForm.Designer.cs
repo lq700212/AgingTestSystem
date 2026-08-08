@@ -88,9 +88,9 @@ namespace BarometerWinform.Dialogs
             this.tableLayoutPanelTemp.SuspendLayout();
             this.panelButtons.SuspendLayout();
             this.SuspendLayout();
-            //
+            // 
             // tableLayoutPanelMain
-            //
+            // 
             this.tableLayoutPanelMain.ColumnCount = 1;
             this.tableLayoutPanelMain.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanelMain.Controls.Add(this.tableLayoutPanelInput, 0, 0);
@@ -103,9 +103,9 @@ namespace BarometerWinform.Dialogs
             this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 80F));
             this.tableLayoutPanelMain.Size = new System.Drawing.Size(480, 320);
             this.tableLayoutPanelMain.TabIndex = 0;
-            //
+            // 
             // tableLayoutPanelInput
-            //
+            // 
             this.tableLayoutPanelInput.ColumnCount = 2;
             this.tableLayoutPanelInput.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 100F));
             this.tableLayoutPanelInput.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
@@ -126,11 +126,11 @@ namespace BarometerWinform.Dialogs
             this.tableLayoutPanelInput.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 40F));
             this.tableLayoutPanelInput.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 40F));
             this.tableLayoutPanelInput.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelInput.Size = new System.Drawing.Size(474, 200);
+            this.tableLayoutPanelInput.Size = new System.Drawing.Size(474, 237);
             this.tableLayoutPanelInput.TabIndex = 0;
-            //
+            // 
             // lblRecipeNameLabel
-            //
+            // 
             this.lblRecipeNameLabel.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblRecipeNameLabel.Location = new System.Drawing.Point(3, 0);
             this.lblRecipeNameLabel.Name = "lblRecipeNameLabel";
@@ -138,17 +138,17 @@ namespace BarometerWinform.Dialogs
             this.lblRecipeNameLabel.TabIndex = 0;
             this.lblRecipeNameLabel.Text = "配方名称：";
             this.lblRecipeNameLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            //
+            // 
             // txtRecipeName
-            //
+            // 
             this.txtRecipeName.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
             this.txtRecipeName.Location = new System.Drawing.Point(103, 9);
             this.txtRecipeName.Name = "txtRecipeName";
             this.txtRecipeName.Size = new System.Drawing.Size(368, 21);
             this.txtRecipeName.TabIndex = 1;
-            //
+            // 
             // lblDelayTime1Label
-            //
+            // 
             this.lblDelayTime1Label.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblDelayTime1Label.Location = new System.Drawing.Point(3, 40);
             this.lblDelayTime1Label.Name = "lblDelayTime1Label";
@@ -156,9 +156,9 @@ namespace BarometerWinform.Dialogs
             this.lblDelayTime1Label.TabIndex = 2;
             this.lblDelayTime1Label.Text = "延时时间：";
             this.lblDelayTime1Label.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            //
+            // 
             // tableLayoutPanelDelay1
-            //
+            // 
             this.tableLayoutPanelDelay1.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
             this.tableLayoutPanelDelay1.ColumnCount = 5;
             this.tableLayoutPanelDelay1.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
@@ -177,9 +177,9 @@ namespace BarometerWinform.Dialogs
             this.tableLayoutPanelDelay1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanelDelay1.Size = new System.Drawing.Size(368, 26);
             this.tableLayoutPanelDelay1.TabIndex = 3;
-            //
+            // 
             // nudDelayHours
-            //
+            // 
             this.nudDelayHours.Dock = System.Windows.Forms.DockStyle.Fill;
             this.nudDelayHours.Location = new System.Drawing.Point(3, 3);
             this.nudDelayHours.Maximum = new decimal(new int[] {
@@ -191,9 +191,9 @@ namespace BarometerWinform.Dialogs
             this.nudDelayHours.Size = new System.Drawing.Size(103, 21);
             this.nudDelayHours.TabIndex = 0;
             this.nudDelayHours.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
-            //
+            // 
             // lblDelay1Colon1
-            //
+            // 
             this.lblDelay1Colon1.Anchor = System.Windows.Forms.AnchorStyles.None;
             this.lblDelay1Colon1.AutoSize = true;
             this.lblDelay1Colon1.Location = new System.Drawing.Point(113, 7);
@@ -201,9 +201,9 @@ namespace BarometerWinform.Dialogs
             this.lblDelay1Colon1.Size = new System.Drawing.Size(11, 12);
             this.lblDelay1Colon1.TabIndex = 1;
             this.lblDelay1Colon1.Text = ":";
-            //
+            // 
             // nudDelayMinutes
-            //
+            // 
             this.nudDelayMinutes.Dock = System.Windows.Forms.DockStyle.Fill;
             this.nudDelayMinutes.Location = new System.Drawing.Point(132, 3);
             this.nudDelayMinutes.Maximum = new decimal(new int[] {
@@ -215,9 +215,9 @@ namespace BarometerWinform.Dialogs
             this.nudDelayMinutes.Size = new System.Drawing.Size(103, 21);
             this.nudDelayMinutes.TabIndex = 2;
             this.nudDelayMinutes.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
-            //
+            // 
             // lblDelay1Colon2
-            //
+            // 
             this.lblDelay1Colon2.Anchor = System.Windows.Forms.AnchorStyles.None;
             this.lblDelay1Colon2.AutoSize = true;
             this.lblDelay1Colon2.Location = new System.Drawing.Point(242, 7);
@@ -225,9 +225,9 @@ namespace BarometerWinform.Dialogs
             this.lblDelay1Colon2.Size = new System.Drawing.Size(11, 12);
             this.lblDelay1Colon2.TabIndex = 3;
             this.lblDelay1Colon2.Text = ":";
-            //
+            // 
             // nudDelaySeconds
-            //
+            // 
             this.nudDelaySeconds.Dock = System.Windows.Forms.DockStyle.Fill;
             this.nudDelaySeconds.Location = new System.Drawing.Point(261, 3);
             this.nudDelaySeconds.Maximum = new decimal(new int[] {
@@ -239,9 +239,9 @@ namespace BarometerWinform.Dialogs
             this.nudDelaySeconds.Size = new System.Drawing.Size(104, 21);
             this.nudDelaySeconds.TabIndex = 4;
             this.nudDelaySeconds.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
-            //
+            // 
             // lblStartTimeLabel
-            //
+            // 
             this.lblStartTimeLabel.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblStartTimeLabel.Location = new System.Drawing.Point(3, 80);
             this.lblStartTimeLabel.Name = "lblStartTimeLabel";
@@ -249,9 +249,9 @@ namespace BarometerWinform.Dialogs
             this.lblStartTimeLabel.TabIndex = 6;
             this.lblStartTimeLabel.Text = "启动时间：";
             this.lblStartTimeLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            //
+            // 
             // tableLayoutPanelStart
-            //
+            // 
             this.tableLayoutPanelStart.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
             this.tableLayoutPanelStart.ColumnCount = 5;
             this.tableLayoutPanelStart.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
@@ -270,9 +270,9 @@ namespace BarometerWinform.Dialogs
             this.tableLayoutPanelStart.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanelStart.Size = new System.Drawing.Size(368, 26);
             this.tableLayoutPanelStart.TabIndex = 7;
-            //
+            // 
             // nudStartHours
-            //
+            // 
             this.nudStartHours.Dock = System.Windows.Forms.DockStyle.Fill;
             this.nudStartHours.Location = new System.Drawing.Point(3, 3);
             this.nudStartHours.Maximum = new decimal(new int[] {
@@ -284,9 +284,9 @@ namespace BarometerWinform.Dialogs
             this.nudStartHours.Size = new System.Drawing.Size(103, 21);
             this.nudStartHours.TabIndex = 0;
             this.nudStartHours.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
-            //
+            // 
             // lblStartColon1
-            //
+            // 
             this.lblStartColon1.Anchor = System.Windows.Forms.AnchorStyles.None;
             this.lblStartColon1.AutoSize = true;
             this.lblStartColon1.Location = new System.Drawing.Point(113, 7);
@@ -294,9 +294,9 @@ namespace BarometerWinform.Dialogs
             this.lblStartColon1.Size = new System.Drawing.Size(11, 12);
             this.lblStartColon1.TabIndex = 1;
             this.lblStartColon1.Text = ":";
-            //
+            // 
             // nudStartMinutes
-            //
+            // 
             this.nudStartMinutes.Dock = System.Windows.Forms.DockStyle.Fill;
             this.nudStartMinutes.Location = new System.Drawing.Point(132, 3);
             this.nudStartMinutes.Maximum = new decimal(new int[] {
@@ -308,9 +308,9 @@ namespace BarometerWinform.Dialogs
             this.nudStartMinutes.Size = new System.Drawing.Size(103, 21);
             this.nudStartMinutes.TabIndex = 2;
             this.nudStartMinutes.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
-            //
+            // 
             // lblStartColon2
-            //
+            // 
             this.lblStartColon2.Anchor = System.Windows.Forms.AnchorStyles.None;
             this.lblStartColon2.AutoSize = true;
             this.lblStartColon2.Location = new System.Drawing.Point(242, 7);
@@ -318,9 +318,9 @@ namespace BarometerWinform.Dialogs
             this.lblStartColon2.Size = new System.Drawing.Size(11, 12);
             this.lblStartColon2.TabIndex = 3;
             this.lblStartColon2.Text = ":";
-            //
+            // 
             // nudStartSeconds
-            //
+            // 
             this.nudStartSeconds.Dock = System.Windows.Forms.DockStyle.Fill;
             this.nudStartSeconds.Location = new System.Drawing.Point(261, 3);
             this.nudStartSeconds.Maximum = new decimal(new int[] {
@@ -332,34 +332,34 @@ namespace BarometerWinform.Dialogs
             this.nudStartSeconds.Size = new System.Drawing.Size(104, 21);
             this.nudStartSeconds.TabIndex = 4;
             this.nudStartSeconds.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
-            //
+            // 
             // lblLimitTempLabel
-            //
+            // 
             this.lblLimitTempLabel.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblLimitTempLabel.Location = new System.Drawing.Point(3, 120);
             this.lblLimitTempLabel.Name = "lblLimitTempLabel";
-            this.lblLimitTempLabel.Size = new System.Drawing.Size(94, 40);
+            this.lblLimitTempLabel.Size = new System.Drawing.Size(94, 117);
             this.lblLimitTempLabel.TabIndex = 8;
             this.lblLimitTempLabel.Text = "极限温度：";
             this.lblLimitTempLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            //
+            // 
             // tableLayoutPanelTemp
-            //
+            // 
             this.tableLayoutPanelTemp.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
             this.tableLayoutPanelTemp.ColumnCount = 2;
             this.tableLayoutPanelTemp.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 60F));
             this.tableLayoutPanelTemp.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 40F));
             this.tableLayoutPanelTemp.Controls.Add(this.txtLimitTemp, 0, 0);
             this.tableLayoutPanelTemp.Controls.Add(this.lblTempUnit, 1, 0);
-            this.tableLayoutPanelTemp.Location = new System.Drawing.Point(103, 127);
+            this.tableLayoutPanelTemp.Location = new System.Drawing.Point(103, 165);
             this.tableLayoutPanelTemp.Name = "tableLayoutPanelTemp";
             this.tableLayoutPanelTemp.RowCount = 1;
             this.tableLayoutPanelTemp.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanelTemp.Size = new System.Drawing.Size(368, 26);
             this.tableLayoutPanelTemp.TabIndex = 9;
-            //
+            // 
             // txtLimitTemp
-            //
+            // 
             this.txtLimitTemp.Dock = System.Windows.Forms.DockStyle.Fill;
             this.txtLimitTemp.Location = new System.Drawing.Point(3, 3);
             this.txtLimitTemp.MaxLength = 3;
@@ -367,9 +367,9 @@ namespace BarometerWinform.Dialogs
             this.txtLimitTemp.Size = new System.Drawing.Size(214, 21);
             this.txtLimitTemp.TabIndex = 0;
             this.txtLimitTemp.Text = "50";
-            //
+            // 
             // lblTempUnit
-            //
+            // 
             this.lblTempUnit.Anchor = System.Windows.Forms.AnchorStyles.Left;
             this.lblTempUnit.AutoSize = true;
             this.lblTempUnit.Location = new System.Drawing.Point(223, 7);
@@ -377,9 +377,9 @@ namespace BarometerWinform.Dialogs
             this.lblTempUnit.Size = new System.Drawing.Size(23, 12);
             this.lblTempUnit.TabIndex = 1;
             this.lblTempUnit.Text = "°C";
-            //
+            // 
             // panelButtons
-            //
+            // 
             this.panelButtons.Controls.Add(this.btnAddToQueue);
             this.panelButtons.Controls.Add(this.btnClose);
             this.panelButtons.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -388,27 +388,27 @@ namespace BarometerWinform.Dialogs
             this.panelButtons.Name = "panelButtons";
             this.panelButtons.Size = new System.Drawing.Size(474, 77);
             this.panelButtons.TabIndex = 1;
-            //
+            // 
             // btnAddToQueue
-            //
+            // 
             this.btnAddToQueue.Location = new System.Drawing.Point(150, 10);
             this.btnAddToQueue.Name = "btnAddToQueue";
             this.btnAddToQueue.Size = new System.Drawing.Size(170, 30);
             this.btnAddToQueue.TabIndex = 0;
             this.btnAddToQueue.Text = "加入队列";
             this.btnAddToQueue.Click += new System.EventHandler(this.btnAddToQueue_Click);
-            //
+            // 
             // btnClose
-            //
+            // 
             this.btnClose.Location = new System.Drawing.Point(150, 46);
             this.btnClose.Name = "btnClose";
             this.btnClose.Size = new System.Drawing.Size(170, 30);
             this.btnClose.TabIndex = 1;
             this.btnClose.Text = "关闭窗口";
             this.btnClose.Click += new System.EventHandler(this.btnClose_Click);
-            //
+            // 
             // BatchRecipeForm
-            //
+            // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(480, 320);
@@ -424,11 +424,11 @@ namespace BarometerWinform.Dialogs
             ((System.ComponentModel.ISupportInitialize)(this.nudDelayHours)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudDelayMinutes)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudDelaySeconds)).EndInit();
+            this.tableLayoutPanelStart.ResumeLayout(false);
+            this.tableLayoutPanelStart.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nudStartHours)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudStartMinutes)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudStartSeconds)).EndInit();
-            this.tableLayoutPanelStart.ResumeLayout(false);
-            this.tableLayoutPanelStart.PerformLayout();
             this.tableLayoutPanelTemp.ResumeLayout(false);
             this.tableLayoutPanelTemp.PerformLayout();
             this.panelButtons.ResumeLayout(false);
