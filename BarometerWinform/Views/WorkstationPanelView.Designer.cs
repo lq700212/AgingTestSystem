@@ -86,16 +86,16 @@
             // 
             // boxPower
             // 
-            this.boxPower.BackColor = System.Drawing.Color.Red;
+            this.boxPower.BackColor = System.Drawing.Color.LightGray;
             this.boxPower.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.boxPower.ForeColor = System.Drawing.Color.White;
+            this.boxPower.ForeColor = System.Drawing.Color.Black;
             this.boxPower.Location = new System.Drawing.Point(57, 29);
             this.boxPower.Name = "boxPower";
             this.boxPower.Size = new System.Drawing.Size(52, 23);
             this.boxPower.TabIndex = 1;
             this.boxPower.Text = "下电";
             this.boxPower.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-            this.toolTipPanel.SetToolTip(this.boxPower, "上电状态（V1.24）：绿(LimeGreen)=上电，红=下电");
+            this.toolTipPanel.SetToolTip(this.boxPower, "上电状态（V1.28）：绿(LimeGreen)=上电，浅灰(LightGray)=下电");
             // 
             // btnSelect
             // 
@@ -130,16 +130,16 @@
             // 
             // boxVacuumOpen
             // 
-            this.boxVacuumOpen.BackColor = System.Drawing.Color.Red;
+            this.boxVacuumOpen.BackColor = System.Drawing.Color.LightGray;
             this.boxVacuumOpen.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.boxVacuumOpen.ForeColor = System.Drawing.Color.White;
+            this.boxVacuumOpen.ForeColor = System.Drawing.Color.Black;
             this.boxVacuumOpen.Location = new System.Drawing.Point(138, 67);
             this.boxVacuumOpen.Name = "boxVacuumOpen";
             this.boxVacuumOpen.Size = new System.Drawing.Size(48, 21);
             this.boxVacuumOpen.TabIndex = 5;
             this.boxVacuumOpen.Text = "真空关";
             this.boxVacuumOpen.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-            this.toolTipPanel.SetToolTip(this.boxVacuumOpen, "真空开启状态（V1.19.10）：真空开=绿底，真空关=红底");
+            this.toolTipPanel.SetToolTip(this.boxVacuumOpen, "真空开启状态（V1.28）：真空开=绿底，真空关=浅灰(LightGray)底");
             // 
             // boxWorkState
             // 
@@ -275,7 +275,7 @@
 
         /// <summary>设备编号标签（左上角）</summary>
         private System.Windows.Forms.Label lblDeviceId;
-        /// <summary>上电状态灯（文字+颜色：绿=LimeGreen"上电"白字，红="下电"白字，V1.24）</summary>
+        /// <summary>上电状态灯（文字+颜色：绿=LimeGreen"上电"白字，浅灰="下电"黑字，V1.24/V1.28）</summary>
         private System.Windows.Forms.Label boxPower;
         /// <summary>选中指示/切换按钮（右上角，原 btnPower 改为选中指示，V1.19）</summary>
         private System.Windows.Forms.Button btnSelect;
@@ -283,7 +283,7 @@
         private System.Windows.Forms.Label lblVacuum;
         /// <summary>真空压力值显示框（只读）</summary>
         private System.Windows.Forms.TextBox txtPressure;
-        /// <summary>真空开启状态显示（V1.19.10 起带文字+颜色：真空开=绿底白字，真空关=红底白字）</summary>
+        /// <summary>真空开启状态显示（V1.19.10 起带文字+颜色：真空开=绿底白字，真空关=浅灰底黑字，V1.28 由红改灰）</summary>
         private System.Windows.Forms.Label boxVacuumOpen;
         /// <summary>工作状态显示（空闲/选中/繁忙/故障，V1.19.4 起带"信号灯"配色）</summary>
         private System.Windows.Forms.Label boxWorkState;

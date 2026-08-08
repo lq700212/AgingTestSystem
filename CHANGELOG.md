@@ -3,11 +3,15 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.29 — 移除 JSON 兼容 + 工位面板待机配色调整（2026-08-08）
+- **移除 `[JsonProperty]` 兼容**：`RecipeConfig` / `StationCacheEntry` 的时间字段不再用 `[JsonProperty]` 保留旧 JSON 键名（`DelayStartTime`/`DelayArriveTime`），JSON 键名直接用新属性名（`DelayTime`/`StartTime`）；旧 Recipes.json / StationSettings.json 数据已不兼容，需删除重建（用户已清空旧配方，不保留兼容代码）。
+- **工位面板配色微调**：`boxPower` 下电（原红底白字）与 `boxVacuumOpen` 真空关（原红底白字）改为浅灰(LightGray)底黑字，与每行最右侧全选按钮同色，降低待机状态的视觉刺激；红色仅保留给工作状态"故障"（`boxWorkState`）。
+
 ## V1.28 — 时间输入样式统一：冒号分隔 + NumericUpDown（2026-08-08）
 - **配方管理窗口**：延时时间 / 启动时间由"时/分/秒"三个带单位标签的数字框，改为 `时:分:秒` **冒号分隔**显示（单位标签改为 ":"，移除"秒"单位标签）。
 - **批量设置配方窗口**：删除"延时时间2"，仅保留"延时时间"与"启动时间"；两者均由三个 TextBox 改为三个 `NumericUpDown`（时0-99/分0-59/秒0-59，冒号分隔），控件命名同步改为 `nudDelayHours/Minutes/Seconds`、`nudStartHours/Minutes/Seconds`。
 - **工位设置窗口**：`txtDelay` / `txtStart` 改为与配方管理窗口一致的三框 `NumericUpDown` 冒号分隔样式（`nudDelayHours/Minutes/Seconds`、`nudStartHours/Minutes/Seconds`），相关逻辑同步调整——读取用 `GetTimeSpan` 组合三框，回填用 `SetTimeInputs`（越界钳制到控件范围），成功提示时间文本用 `GetTimeText`。
-- 说明：三个窗口的时间输入样式 / 命名自此统一，字段映射对齐——**延时时间 → `DelayTime`（工位面板"延时开启"），启动时间 → `StartTime`（工位面板"延时到达"）**；字段名同步统一（原 `DelayStartTime`/`DelayArriveTime` 改名为 `DelayTime`/`StartTime`，JSON 序列化键用 `[JsonProperty]` 保持旧键名，旧 Recipes.json / StationSettings.json 数据不丢失）；批量设置窗口原"启动时间"输入被丢弃（校验后不保存）的缺陷一并修复，现在两个时间都写入配方。
+- 说明：三个窗口的时间输入样式 / 命名自此统一，字段映射对齐——**延时时间 → `DelayTime`（工位面板"延时开启"），启动时间 → `StartTime`（工位面板"延时到达"）**；字段名同步统一（原 `DelayStartTime`/`DelayArriveTime` 改名为 `DelayTime`/`StartTime`）；批量设置窗口原"启动时间"输入被丢弃（校验后不保存）的缺陷一并修复，现在两个时间都写入配方。（注：V1.28 提交时曾用 `[JsonProperty]` 兼容旧 JSON 键名，V1.29 已移除，见下条。）
 
 ## V1.27 — 配方管理移除"保存设置"按钮：操作即自动落盘（2026-08-08）
 - **配方管理窗口**：移除底部"保存设置"按钮（按钮、底部面板及窗口高度一并调整）。
