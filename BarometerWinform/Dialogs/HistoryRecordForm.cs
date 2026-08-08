@@ -15,7 +15,7 @@ namespace BarometerWinform.Dialogs
     /// 【数据来源（V1.10 改为读取真实日志文件）】
     /// - 日志文件：程序运行目录\Logs\TestLog_yyyyMMdd.csv（每天一个文件）
     /// - 写入方：<see cref="BarometerWinform.Services.TestEventLogger"/>
-    /// - 列格式：时间,批号,设备编号,事件,详情,压力(Pa),温度(°C)
+    /// - 列格式：时间,批号,设备编号,事件,详情,压力(kPa),温度(°C)
     /// - 历史记录窗体按选择的日期范围读取对应日期的 CSV 文件并展示
     ///
     /// 【导出（预留）】
@@ -138,7 +138,7 @@ namespace BarometerWinform.Dialogs
                     {
                         if (firstLine)
                         {
-                            // 跳过表头：时间,批号,设备编号,事件,详情,压力(Pa),温度(°C)
+                            // 跳过表头：时间,批号,设备编号,事件,详情,压力(kPa),温度(°C)
                             firstLine = false;
                             continue;
                         }

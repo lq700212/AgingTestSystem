@@ -29,12 +29,15 @@ namespace BarometerWinform.Dialogs
     /// 状态项显示中文状态：空闲 / 选中 / 繁忙 / 故障（V1.18 由 IDLE/SELECT/BUSY 改中文）。
     ///
     /// 【说明】
-    /// 右侧按钮（破空 / 下电 / 保存 / 加入对列）的具体业务功能待确认，
+    /// 【V1.19.11】"保存"已实现：把 SN / 配方 / 延时开启 / 延时到达 写入
+    /// DeviceManager 工位静态信息，工位面板同步更新。
+    /// 右侧按钮（破空 / 下电 / 加入对列）的具体业务功能待确认，
     /// 代码中先留下 TODO 标记，后续确认后再实现；"关闭窗口"为直接关闭。
     ///
     /// 【数据来源】
     /// 构造时传入设备管理器，从采集缓存读取当前工位数据用于回显；
-    /// 数据中不存在"启动时间 / 极限温度"字段（属配方配置），回显留空待设置。
+    /// SN / 配方 / 延时来自工位静态信息叠加后的缓存（与工位面板一致）。
+    /// 数据中不存在"极限温度"字段（属配方配置），留空待后续接入配方表。
     /// </summary>
     public partial class StationSettingsForm : Form
     {
@@ -72,6 +75,8 @@ namespace BarometerWinform.Dialogs
         /// 回显当前工位数据
         /// 读取设备管理器缓存中的该工位最新数据，填充状态 / SN / 配方 / 延时时间。
         /// 缓存中没有数据时（采集未开始 / 离线）保持输入框为空。
+        /// 【V1.19.11】SN / 配方 / 延时来自工位静态信息叠加后的缓存数据，
+        /// 与工位面板（WorkstationPanelView）显示一致。
         /// </summary>
         private void LoadStationData()
         {
@@ -80,12 +85,14 @@ namespace BarometerWinform.Dialogs
 
             // 状态：IDLE / SELECT / BUSY / FAULT（由设备状态 + 载台上电状态推导）
             txtState.Text = GetStateText(data);
-            // SN（采集缓存一般无值，留待现场录入/绑定）
+            // SN（来自工位静态信息叠加，可改）
             txtSN.Text = data.SerialNumber;
             // 配方名称
             txtRecipe.Text = data.RecipeName;
-            // 延时时间（时:分:秒，取延时开启时间）
+            // 延时开启时间（时:分:秒）
             txtDelay.Text = data.DelayStartTime.ToString(@"hh\:mm\:ss");
+            // 启动时间（延时到达，时:分:秒）
+            txtStart.Text = data.DelayArriveTime.ToString(@"hh\:mm\:ss");
         }
 
         /// <summary>
@@ -129,12 +136,76 @@ namespace BarometerWinform.Dialogs
         }
 
         /// <summary>
-        /// 保存按钮点击事件
-        /// 具体业务功能待确认后实现。
+        /// 保存按钮点击事件（【V1.19.11 实现】）
+        ///
+        /// 【功能】
+        /// 把本窗口录入的 SN / 配方 / 延时开启 / 延时到达 写入设备管理器工位静态信息，
+        /// 采集线程下次叠加后，工位面板（SN / 配方 / 延时显示）即同步更新。
+        ///
+        /// 【说明】
+        /// - SN / 配方：可空，空串视为清空。
+        /// - 延时开启 / 延时到达：格式 时:分:秒（如 01:10:20），为空视为清空。
+        /// - 启动时间输入框在本窗体对应"延时到达"（与 RecipeManagerForm 语义一致）。
+        /// - 极限温度（txtTemp）暂不处理：BarometerData / 工位面板没有对应字段，
+        ///   属配方配置范畴，留待后续接入配方表时再关联。
         /// </summary>
         private void btnSave_Click(object sender, EventArgs e)
         {
-            // TODO: 保存功能待确认后实现（例如：将输入框的 SN / 配方 / 延时等写入工位配置）
+            if (_deviceManager == null)
+            {
+                MessageBox.Show("设备管理器未就绪，无法保存", "提示",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // ---- 1) 解析延时时间（时:分:秒）----
+            TimeSpan? delayStart = ParseTimeInput(txtDelay.Text, "延时开启");
+            if (delayStart == null) return;
+            TimeSpan? delayArrive = ParseTimeInput(txtStart.Text, "延时到达");
+            if (delayArrive == null) return;
+
+            // ---- 2) 写入设备管理器工位静态信息 ----
+            _deviceManager.SetStationSerialNumber(_deviceId, txtSN.Text);
+            _deviceManager.SetStationRecipeName(_deviceId, txtRecipe.Text);
+            _deviceManager.SetStationDelayTimes(_deviceId, delayStart, delayArrive);
+
+            // ---- 3) 提示 + 关闭 ----
+            MessageBox.Show(
+                $"工位 {_deviceId} 保存成功！\r\n" +
+                $"SN: {(string.IsNullOrWhiteSpace(txtSN.Text) ? "（空）" : txtSN.Text.Trim())}\r\n" +
+                $"配方: {(string.IsNullOrWhiteSpace(txtRecipe.Text) ? "（空）" : txtRecipe.Text.Trim())}\r\n" +
+                $"延时开启: {txtDelay.Text.Trim()}\r\n" +
+                $"延时到达: {txtStart.Text.Trim()}",
+                "保存成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+            this.DialogResult = DialogResult.OK;
+            this.Close();
+        }
+
+        /// <summary>
+        /// 解析 时:分:秒 格式的时间输入（供延时开启 / 延时到达使用）
+        /// 非法格式时弹窗提示并聚焦输入框，返回 null 表示放弃本次保存。
+        /// </summary>
+        /// <param name="text">输入文本（可能为空白）</param>
+        /// <param name="fieldName">字段中文名（用于提示，如"延时开启"）</param>
+        /// <returns>解析出的 TimeSpan；空白返回 TimeSpan.Zero；格式错误返回 null</returns>
+        private TimeSpan? ParseTimeInput(string text, string fieldName)
+        {
+            string trimmed = text?.Trim() ?? "";
+            if (string.IsNullOrEmpty(trimmed))
+            {
+                // 空白视为清空（写入 TimeSpan.Zero）
+                return TimeSpan.Zero;
+            }
+
+            if (TimeSpan.TryParse(trimmed, out TimeSpan ts))
+            {
+                return ts;
+            }
+
+            MessageBox.Show($"{fieldName} 格式不正确，请使用 时:分:秒（如 01:10:20）", "提示",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return null;
         }
 
         /// <summary>

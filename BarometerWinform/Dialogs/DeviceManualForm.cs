@@ -73,7 +73,7 @@ namespace BarometerWinform.Dialogs
             BarometerData data = _deviceManager.GetBarometerData(_deviceId);
             if (data != null)
             {
-                txtPressure.Text = $"{data.VacuumPressure} Pa";
+                txtPressure.Text = $"{data.VacuumPressure} kPa";
             }
             else
             {

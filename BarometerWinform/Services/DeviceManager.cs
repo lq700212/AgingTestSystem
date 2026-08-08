@@ -158,6 +158,23 @@ namespace BarometerWinform.Services
         private readonly Dictionary<int, BarometerData> _barometerDataCache = new Dictionary<int, BarometerData>();
 
         /// <summary>
+        /// 工位静态信息存储（【V1.19.11 新增】）
+        /// Key: 工位编号，Value: 该工位的 SN / 配方 / 延时配置。
+        ///
+        /// 【用途】真实气压表只上报压力，SN / 配方 / 延时无法从设备读取，
+        /// 需由上位机维护（ID 绑定扫码/手动录入 SN、工位设置窗口录入配方/延时），
+        /// 再在每次采集时叠加到 BarometerData 上，让工位面板同步展示。
+        /// 【线程安全】使用 _stationInfoLock 保护
+        /// </summary>
+        private readonly Dictionary<int, StationInfo> _stationInfo = new Dictionary<int, StationInfo>();
+
+        /// <summary>
+        /// 工位静态信息锁（保护 _stationInfo）
+        /// 与 _cacheLock 分开：采集线程（读叠加）与 UI 线程（写绑定/设置）并发访问
+        /// </summary>
+        private readonly object _stationInfoLock = new object();
+
+        /// <summary>
         /// 送风机最新数据
         /// 【线程安全】使用 _cacheLock 保护
         /// </summary>
@@ -674,10 +691,162 @@ namespace BarometerWinform.Services
         }
 
         /// <summary>
+        /// 获取指定工位的静态信息（SN / 配方 / 延时，【V1.19.11 新增】）
+        /// 用于工位设置窗口回显。返回副本，避免外部修改污染内部存储。
+        /// </summary>
+        /// <param name="deviceId">工位编号（1 ~ TotalBarometers）</param>
+        /// <returns>工位静态信息；未配置过时返回 null</returns>
+        public StationInfo GetStationInfo(int deviceId)
+        {
+            lock (_stationInfoLock)
+            {
+                _stationInfo.TryGetValue(deviceId, out StationInfo info);
+                return info?.Clone();
+            }
+        }
+
+        /// <summary>
+        /// 设置指定工位的 SN（【V1.19.11 新增】）
+        ///
+        /// 【调用方】ID 绑定（IdBindingForm 保存时，扫码枪扫码或手动输入的 SN）、
+        /// 工位设置窗口（StationSettingsForm 保存按钮）。
+        /// 写入后，采集线程在下次采集时把 SN 叠加到该工位的数据上，
+        /// 工位面板的 SN 标签即可同步显示。
+        /// </summary>
+        /// <param name="deviceId">工位编号（1 ~ TotalBarometers）</param>
+        /// <param name="serialNumber">产品序列号（空字符串/空白视为清空）</param>
+        public void SetStationSerialNumber(int deviceId, string serialNumber)
+        {
+            if (deviceId < 1 || deviceId > _config.TotalBarometers) return;
+            string sn = serialNumber?.Trim() ?? "";
+            lock (_stationInfoLock)
+            {
+                if (!_stationInfo.TryGetValue(deviceId, out StationInfo info))
+                {
+                    info = new StationInfo { DeviceId = deviceId };
+                    _stationInfo[deviceId] = info;
+                }
+                info.SerialNumber = sn;
+            }
+        }
+
+        /// <summary>
+        /// 设置指定工位的配方名称（【V1.19.11 新增】）
+        /// 由工位设置窗口保存按钮调用。写入后采集叠加显示在工位面板配方标签上。
+        /// </summary>
+        /// <param name="deviceId">工位编号（1 ~ TotalBarometers）</param>
+        /// <param name="recipeName">配方名称（空白视为清空）</param>
+        public void SetStationRecipeName(int deviceId, string recipeName)
+        {
+            if (deviceId < 1 || deviceId > _config.TotalBarometers) return;
+            string name = recipeName?.Trim() ?? "";
+            lock (_stationInfoLock)
+            {
+                if (!_stationInfo.TryGetValue(deviceId, out StationInfo info))
+                {
+                    info = new StationInfo { DeviceId = deviceId };
+                    _stationInfo[deviceId] = info;
+                }
+                info.RecipeName = name;
+            }
+        }
+
+        /// <summary>
+        /// 设置指定工位的延时时间（【V1.19.11 新增】）
+        /// 由工位设置窗口保存按钮调用。写入后采集叠加显示在工位面板延时标签上。
+        /// </summary>
+        /// <param name="deviceId">工位编号（1 ~ TotalBarometers）</param>
+        /// <param name="delayStartTime">延时开启时间（可空 = 不修改）</param>
+        /// <param name="delayArriveTime">延时到达时间（可空 = 不修改）</param>
+        public void SetStationDelayTimes(int deviceId, TimeSpan? delayStartTime, TimeSpan? delayArriveTime)
+        {
+            if (deviceId < 1 || deviceId > _config.TotalBarometers) return;
+            lock (_stationInfoLock)
+            {
+                if (!_stationInfo.TryGetValue(deviceId, out StationInfo info))
+                {
+                    info = new StationInfo { DeviceId = deviceId };
+                    _stationInfo[deviceId] = info;
+                }
+                if (delayStartTime.HasValue) info.DelayStartTime = delayStartTime;
+                if (delayArriveTime.HasValue) info.DelayArriveTime = delayArriveTime;
+            }
+        }
+
+        /// <summary>
+        /// 批量设置指定工位的 SN（【V1.19.11 新增，供 ID 绑定保存时调用）
+        /// 一次写入多个工位的 SN，避免逐台循环加锁。
+        /// </summary>
+        /// <param name="serialNumbers">工位编号 → SN 的映射（无效编号自动忽略）</param>
+        public void SetStationSerialNumbers(IReadOnlyDictionary<int, string> serialNumbers)
+        {
+            if (serialNumbers == null || serialNumbers.Count == 0) return;
+            lock (_stationInfoLock)
+            {
+                foreach (var kv in serialNumbers)
+                {
+                    int deviceId = kv.Key;
+                    if (deviceId < 1 || deviceId > _config.TotalBarometers) continue;
+                    if (!_stationInfo.TryGetValue(deviceId, out StationInfo info))
+                    {
+                        info = new StationInfo { DeviceId = deviceId };
+                        _stationInfo[deviceId] = info;
+                    }
+                    info.SerialNumber = kv.Value?.Trim() ?? "";
+                }
+            }
+        }
+
+        /// <summary>
+        /// 把工位静态信息（SN / 配方 / 延时）叠加到采集数据上（【V1.19.11 新增】）
+        ///
+        /// 【为什么需要叠加】
+        /// 真实气压表只上报压力，BarometerData 的 SerialNumber / RecipeName /
+        /// DelayStartTime / DelayArriveTime 在采集层是空的。
+        /// 工位面板（WorkstationPanelView）显示的 SN / 配方 / 延时正是读取这些字段，
+        /// 所以必须在数据流出前把 _stationInfo 里维护的配置覆盖上去，
+        /// 保证"有显示 SN/配方/延时 的地方都与绑定/设置关联一致"。
+        ///
+        /// 【与 Mock 的关系】
+        /// Mock 读取器生成的 SN / 配方 / 延时是模拟值；本方法只在工位静态信息
+        /// 已配置（非空）时覆盖，未配置的工位保留原值（Mock 模拟值 / 空）。
+        /// </summary>
+        /// <param name="data">采集到的工位数据（会被就地修改）</param>
+        private void ApplyStationInfo(BarometerData data)
+        {
+            if (data == null) return;
+
+            StationInfo info;
+            lock (_stationInfoLock)
+            {
+                if (!_stationInfo.TryGetValue(data.DeviceId, out info)) return;
+                info = info.Clone();
+            }
+
+            // 仅覆盖"已配置"的字段：配置过 SN 才写 SN，配方/延时同理
+            if (!string.IsNullOrEmpty(info.SerialNumber))
+            {
+                data.SerialNumber = info.SerialNumber;
+            }
+            if (!string.IsNullOrEmpty(info.RecipeName))
+            {
+                data.RecipeName = info.RecipeName;
+            }
+            if (info.DelayStartTime.HasValue)
+            {
+                data.DelayStartTime = info.DelayStartTime.Value;
+            }
+            if (info.DelayArriveTime.HasValue)
+            {
+                data.DelayArriveTime = info.DelayArriveTime.Value;
+            }
+        }
+
+        /// <summary>
         /// 写入单台气压表的设备阈值（透传 IBarometerReader.SetThreshold）
         ///
         /// 【单位提醒】thresholdValue 是"设备单位"（与压力读数同单位同小数位），
-        /// 不是软件报警阈值 AlarmPressureThresholdPa（Pa）。写前务必确认设备单位。
+        /// 不是软件报警阈值 AlarmPressureThresholdKPa（kPa）。写前务必确认设备单位。
         /// </summary>
         /// <param name="deviceId">气压表编号（1~TotalBarometers）</param>
         /// <param name="thresholdValue">设备单位阈值（如 -95.0）</param>
@@ -685,6 +854,21 @@ namespace BarometerWinform.Services
         public bool SetBarometerThreshold(int deviceId, decimal thresholdValue)
         {
             return _barometerReader.SetThreshold(deviceId, thresholdValue);
+        }
+
+        /// <summary>
+        /// 更新软件报警压力阈值（【V1.19.9 新增】）
+        ///
+        /// 公共参数窗口保存负压值（单位 kPa）时同步调用，把界面输入的负压值写入
+        /// <see cref="DeviceConfig.AlarmPressureThresholdKPa"/>，让 DeviceManager 的压力
+        /// 报警判定（IsAlarm / PressureOutOfRange）与气压表设备阈值保持一致。
+        ///
+        /// 【单位】thresholdKPa 单位是 kPa（与气压表读数同单位，如 -95）。
+        /// </summary>
+        /// <param name="thresholdKPa">报警压力阈值（kPa，如 -95）</param>
+        public void UpdateAlarmPressureThresholdKPa(decimal thresholdKPa)
+        {
+            _config.AlarmPressureThresholdKPa = thresholdKPa;
         }
 
         /// <summary>
@@ -1310,6 +1494,13 @@ namespace BarometerWinform.Services
                         }
                     }
 
+                    // ===== 3.5) 叠加工位静态信息（【V1.19.11 新增】） =====
+                    // 真实气压表只上报压力，SN / 配方 / 延时需由上位机维护
+                    // （ID 绑定扫码/手动录入 SN、工位设置窗口录入配方/延时）。
+                    // 这里把 _stationInfo 里存的静态信息覆盖到采集数据上，
+                    // 使工位面板的 SN / 配方 / 延时显示与绑定/设置保持关联一致。
+                    ApplyStationInfo(data);
+
                     // ===== 4) 报警判定（增强版） =====
                     bool isTesting;
                     lock (_stateLock)
@@ -1318,7 +1509,7 @@ namespace BarometerWinform.Services
                     }
 
                     // 【业务修正】只有"正在测试"的台才做压力报警判定。
-                    // 原因：未测试的台（阀关着）压力是常压（接近 0Pa），
+                    // 原因：未测试的台（阀关着）压力是常压（接近 0kPa），
                     // 按"压力 > 阈值"判定必然越限，但这是正常状态，不是报警。
                     // 报警联动（关阀+断电）只对测试中的台有意义。
                     bool isAlarm = false;
@@ -1346,6 +1537,12 @@ namespace BarometerWinform.Services
                     else if (isTesting)
                     {
                         data.Status = DeviceStatus.Testing;
+                    }
+                    else
+                    {
+                        // 非测试的台：覆盖读取器对常压（接近 0kPa）的"压力越限"误判，
+                        // 恢复为空闲（读取器仅做基础报警提示，真正判定以本处业务逻辑为准）
+                        data.Status = DeviceStatus.Idle;
                     }
 
                     // ===== 5) 真空建立确认 + 老化计时 =====
@@ -1422,7 +1619,7 @@ namespace BarometerWinform.Services
                         _testStartTimes[deviceId - 1] = DateTime.Now;
 
                         TestEventLogger.Write(_currentLotNumber, deviceId, "真空建立",
-                            $"真空已建立: {data.VacuumPressure} Pa");
+                            $"真空已建立: {data.VacuumPressure} kPa");
                     }
                     return; // 还在确认窗口内，不检查计时
                 }
@@ -1499,7 +1696,7 @@ namespace BarometerWinform.Services
 
             // 记录报警事件（供追溯）
             TestEventLogger.Write(_currentLotNumber, deviceId, "报警", reason,
-                pressurePa: GetDeviceLastPressure(deviceId));
+                pressureKPa: GetDeviceLastPressure(deviceId));
         }
 
         /// <summary>
@@ -1520,18 +1717,18 @@ namespace BarometerWinform.Services
         /// <summary>
         /// 压力是否越限（失压 / 超抽）
         ///
-        /// 【判定规则】
+        /// 【判定规则】（单位 kPa，与气压表读数一致，V1.19.9 由 Pa 改为 kPa）
         /// - AlarmWhenPressureHigherThanThreshold=true（默认）：压力 > 阈值 → 报警
         ///   真空压力为负，数值越大（越接近 0）真空越差，触发失压报警
         /// - false：压力 &lt; 阈值 → 报警（扩展用）
         /// </summary>
-        private bool PressureOutOfRange(decimal pressurePa)
+        private bool PressureOutOfRange(decimal pressureKPa)
         {
             if (_config.AlarmWhenPressureHigherThanThreshold)
             {
-                return pressurePa > _config.AlarmPressureThresholdPa;
+                return pressureKPa > _config.AlarmPressureThresholdKPa;
             }
-            return pressurePa < _config.AlarmPressureThresholdPa;
+            return pressureKPa < _config.AlarmPressureThresholdKPa;
         }
 
         /// <summary>
@@ -1607,7 +1804,7 @@ namespace BarometerWinform.Services
         private string GetAlarmReason(BarometerData data)
         {
             if (data == null) return "通讯故障";
-            return $"真空压力越限: {data.VacuumPressure} Pa（阈值 {_config.AlarmPressureThresholdPa} Pa）";
+            return $"真空压力越限: {data.VacuumPressure} kPa（阈值 {_config.AlarmPressureThresholdKPa} kPa）";
         }
 
         /// <summary>

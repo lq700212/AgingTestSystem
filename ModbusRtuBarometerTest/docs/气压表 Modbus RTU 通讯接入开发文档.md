@@ -114,7 +114,7 @@ float pressure = rawValue / (float)Math.Pow(10, decimalPos);
 
 **换算公式**：`压力 = (short)原始值 / 10^小数位`
 - 例：`0x0001 = 0xFFCE` → `(short)0xFFCE = -50`，`0x0002 = 1` → `-50 / 10 = -5.0`
-- **单位**代码里没定义（Pa？kPa？），需按设备说明书确认。
+- **单位**：按现场实测与软件约定为 **kPa**（与生产软件报警阈值 `AlarmPressureThresholdKPa` 同单位），需按设备说明书最终确认。
 
 ### 4.2 阈值：浮点数 → 寄存器值
 [Form1.cs:200-207](../Form1.cs#L200-L207) 的逻辑：
@@ -220,12 +220,12 @@ port.Close();
 <add key="Parity" value="None" />
 <add key="BarometerPressureRegisterAddress" value="0x0001" />  <!-- ✅ 与 Demo 一致（Input Register 0x0001；V1.15 起生产默认已是 0x0001） -->
 <add key="BarometerPressureScale" value="1" />                <!-- 缩放系数，默认 1；V1.15 起已补读小数位 0x0002 并除以 10^n -->
-<add key="AlarmPressureThresholdPa" value="-95000" />         <!-- 软件报警阈值（见坑点 4），不写设备 -->
+<add key="AlarmPressureThresholdKPa" value="-95" />          <!-- 软件报警阈值（kPa，见坑点 4），不写设备 -->
 <add key="AlarmWhenPressureHigherThanThreshold" value="true" />
 <add key="UseMockCommunication" value="false" />              <!-- false=真实通讯 -->
 ```
 
-> 📌 写设备阈值（0x0010）的值不是上面这个 Pa 值，而是"设备单位"值，需现场确认（见坑点 4）。
+> 📌 写设备阈值（0x0010）的值不是上面这个 kPa 值，而是"设备单位"值，需现场确认（见坑点 4）。
 
 ### 7.3 新增接入步骤（供后续开发参考）
 1. 复用 `ModbusRtuBarometerReader`（V1.15 起已与 Demo 一致），按 [第 4 节](#4-数据转换核心) 换算读压力。
@@ -253,9 +253,9 @@ port.Close();
 3. **小数位处理（现状：已一致）**：V1.15 起生产实现读 0x0002 取小数位（0~4，非法默认 1），压力 = `(short)raw / 10^小数位`；`BarometerPressureScale` 保留作额外缩放。
 
 4. **两种"阈值"别混淆**：
-   - **软件阈值**（生产，`AlarmPressureThresholdPa=-95000`）：上位机自己用压力值比较判报警，触发关阀/断电。**不写设备。**
+   - **软件阈值**（生产，`AlarmPressureThresholdKPa=-95`，单位 kPa）：上位机自己用压力值比较判报警，触发关阀/断电。**不写设备。** V1.19.9 起由"公共参数窗口"保存的负压值实时同步。
    - **设备阈值**（demo / 生产 `SetThreshold`，写 `0x0010`）：写进气压表内部的报警点，让气压表的**硬件报警触点（→GX-CL140 的 DI）**在该压力下闭合。
-   - 两个阈值互不相干，是否都要设、设成什么值，属工艺决策。设备阈值的单位需与压力读数一致（**不是 Pa 软件阈值**），按说明书确认后再写。
+   - 两个阈值互不相干，是否都要设、设成什么值，属工艺决策。设备阈值的单位需与压力读数一致（**不是 kPa 软件阈值**），按说明书确认后再写。
 
 5. **有符号强转**：`(short)data[0]` 必须显式强转，否则 `0xFFFE` 会被当 65534 而不是 -2，负压就反了。
 
@@ -287,7 +287,7 @@ port.Close();
 | 只有部分从站能读 | 该台从站地址与物理地址不符，或该台损坏 |
 | 批量写某台/某几台一直超时 | **先点「批量读取压力」扫一遍**——离线名单里的就是故障设备（断电/掉线/地址错/损坏），修硬件后重跑批量写；每次扫描/写入的逐台结果+耗时已落盘 `Logs\BarometerScan_yyyyMMdd.csv`，多扫几遍汇总 Excel 可区分"永久离线"还是"间歇掉线" |
 | 数据偶尔 CRC/超时错 | 串口并发读写（需加锁）/ 干扰大（降波特率或加终端电阻）；偶发一次失败后可自行恢复属正常总线抖动 |
-| 数值单位对不上 | 确认压力单位（Pa/kPa）与小数位，配 `BarometerPressureScale` |
+| 数值单位对不上 | 确认压力单位（kPa）与小数位，配 `BarometerPressureScale` |
 
 ---
 

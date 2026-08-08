@@ -14,7 +14,7 @@ namespace BarometerWinform.Services
     /// 【文件格式】
     /// 目录：程序运行目录\Logs\
     /// 文件名：TestLog_yyyyMMdd.csv（每天一个文件）
-    /// 表头：时间,批号,设备编号,事件,详情,压力(Pa),温度(°C)
+    /// 表头：时间,批号,设备编号,事件,详情,压力(kPa),温度(°C)
     ///
     /// 【给新手的说明】
     /// - 静态类不需要实例化，直接 TestEventLogger.Write(...) 调用即可
@@ -48,10 +48,10 @@ namespace BarometerWinform.Services
         /// <param name="deviceId">设备编号（0 表示整机事件，如急停）</param>
         /// <param name="eventType">事件类型（如 启动 / 停止 / 报警 / 复位 / 急停 / 真空建立）</param>
         /// <param name="detail">事件详情描述</param>
-        /// <param name="pressurePa">关联的压力值（可选，用于报警/停止时记录）</param>
+        /// <param name="pressureKPa">关联的压力值（kPa，可选，用于报警/停止时记录）</param>
         /// <param name="temperature">关联的温度值（可选，用于送风机温度告警时记录）</param>
         public static void Write(string lotNumber, int deviceId, string eventType,
-            string detail, decimal? pressurePa = null, float? temperature = null)
+            string detail, decimal? pressureKPa = null, float? temperature = null)
         {
             try
             {
@@ -68,14 +68,14 @@ namespace BarometerWinform.Services
                     sb.Append(deviceId).Append(',');
                     sb.Append(CsvEscape(eventType)).Append(',');
                     sb.Append(CsvEscape(detail)).Append(',');
-                    sb.Append(pressurePa.HasValue ? pressurePa.Value.ToString() : "").Append(',');
+                    sb.Append(pressureKPa.HasValue ? pressureKPa.Value.ToString() : "").Append(',');
                     sb.Append(temperature.HasValue ? temperature.Value.ToString("0.0") : "");
 
                     using (var writer = new StreamWriter(file, true, Encoding.UTF8))
                     {
                         if (needHeader)
                         {
-                            writer.WriteLine("时间,批号,设备编号,事件,详情,压力(Pa),温度(°C)");
+                            writer.WriteLine("时间,批号,设备编号,事件,详情,压力(kPa),温度(°C)");
                         }
                         writer.WriteLine(sb.ToString());
                     }

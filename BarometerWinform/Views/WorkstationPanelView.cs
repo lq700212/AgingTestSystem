@@ -17,7 +17,7 @@ namespace BarometerWinform.Views
     /// ┌──────────────────────────────┐
     /// │ NO.1                  [□✓]   │  ← 设备编号 + 选中指示（V1.19.5 起"有选中才显示"）
     /// │ 上电   [状态灯]                │  ← 标题与下方各标题左对齐；状态灯与内容列左对齐（V1.19.3）
-    /// │ 真空压力 [值] [真空开启灯] [工作状态]   │  ← 压力值只读；真空灯=纯色；工作状态文字带色（V1.19.4）
+    /// │ 真空压力 [值] [真空开] [工作状态]   │  ← 压力值只读（V1.19.10 加宽）；真空开/关=文字+颜色；工作状态文字带色（V1.19.4）
     /// │ SN:    [SN值 Label]                 │  ← V1.19.3：内容改为 Label 显示
     /// │ 配方:  [配方值 Label]               │
     /// │ 延时开启 [__:__:__]      ┌────┐      │
@@ -34,7 +34,8 @@ namespace BarometerWinform.Views
     ///
     /// 【状态灯颜色约定】
     /// - 上电状态灯（boxPower）：载台上电输出 ON=绿色，OFF=灰色（纯色无文字）
-    /// - 真空开启灯（boxVacuumOpen）：真空电磁阀输出 ON=绿色，OFF=灰色（纯色无文字）
+    /// - 真空开启显示（boxVacuumOpen，V1.19.10 起带文字+颜色）：真空电磁阀输出
+    ///   ON=绿底白字"真空开"，OFF=红底白字"真空关"
     /// - 工作状态（boxWorkState，V1.18 文字用中文）：空闲/选中/繁忙/故障
     ///   空闲=浅灰底黑字；已上电待测试=选中（橙底白字）；测试中=繁忙（绿底白字）；
     ///   故障=红底白字（V1.19.4 统一为"信号灯"色系，故障最醒目）
@@ -304,7 +305,7 @@ namespace BarometerWinform.Views
         /// - 压力值 / SN / 配方 / 延时（原样保留）
         /// - 上电状态灯（载台上电输出）
         /// - 选中指示（右上角，V1.19 原上电/下电按钮改为选中指示；V1.19.5 有选中才显示）
-        /// - 真空开启灯（真空电磁阀输出）
+        /// - 真空开启显示（文字+颜色，V1.19.10：真空开=绿底 / 真空关=红底）
         /// - 工作状态（空闲/选中/繁忙/故障，V1.18 由英文改中文）
         /// - 面板背景色（空闲/测试中/故障；V1.19.2 起不再叠加选中高亮）
         /// </summary>
@@ -319,8 +320,8 @@ namespace BarometerWinform.Views
             // 更新设备编号显示
             lblDeviceId.Text = $"NO.{data.DeviceId}";
 
-            // 更新真空压力值（单位：Pa，与全系统一致）
-            txtPressure.Text = $"{data.VacuumPressure} Pa";
+            // 更新真空压力值（单位：kPa，与气压表读数一致，V1.19.9 由 Pa 改为 kPa）
+            txtPressure.Text = $"{data.VacuumPressure} kPa";
 
             // 更新序列号（V1.19.3：lblSNValue 为 Label 显示）
             lblSNValue.Text = data.SerialNumber;
@@ -338,8 +339,8 @@ namespace BarometerWinform.Views
             bool vacuumOpen = data.OutputStatus != null && data.OutputStatus.Length >= 1 && data.OutputStatus[0];
             bool carrierPower = GetCarrierPower(data);
 
-            // ===== 真空开启灯（纯色：绿=开启，灰=关闭） =====
-            UpdateStatusLight(boxVacuumOpen, vacuumOpen);
+            // ===== 真空开启显示（V1.19.10：文字+颜色，真空开=绿底 / 真空关=红底） =====
+            UpdateVacuumOpenDisplay(vacuumOpen);
 
             // ===== 上电状态灯（纯色：绿=已上电，灰=未上电） =====
             UpdateStatusLight(boxPower, carrierPower);
@@ -357,11 +358,41 @@ namespace BarometerWinform.Views
         /// <summary>
         /// 更新状态灯颜色（纯色灯通用方法）
         /// </summary>
-        /// <param name="ctrl">状态灯控件（boxPower / boxVacuumOpen）</param>
+        /// <param name="ctrl">状态灯控件（目前仅 boxPower 使用，boxVacuumOpen 已改用文字+颜色）</param>
         /// <param name="isActive">true=绿色（开），false=灰色（关）</param>
         private void UpdateStatusLight(Control ctrl, bool isActive)
         {
             ctrl.BackColor = isActive ? Color.LimeGreen : Color.LightGray;
+        }
+
+        /// <summary>
+        /// 更新真空开启显示（V1.19.10 起带文字 + 颜色）
+        ///
+        /// 【需求背景】
+        /// 原真空开启灯为"纯色无文字"（绿=开启，灰=关闭），操作员需对照颜色判断，
+        /// 观感不够直观。V1.19.10 改为"文字 + 颜色"显示：
+        /// - 真空开启（真空电磁阀输出 ON）：绿底白字"真空开"
+        /// - 真空关闭（真空电磁阀输出 OFF）：红底白字"真空关"
+        ///
+        /// 【为什么关闭用红色】
+        /// 真空未建立属于"异常/待机"状态，用红色（与工作状态"故障"红色呼应）更醒目，
+        /// 操作员一眼能看出当前该台真空没开。
+        /// </summary>
+        /// <param name="vacuumOpen">true=真空开启，false=真空关闭</param>
+        private void UpdateVacuumOpenDisplay(bool vacuumOpen)
+        {
+            if (vacuumOpen)
+            {
+                boxVacuumOpen.Text = "真空开";
+                boxVacuumOpen.BackColor = Color.LimeGreen;
+                boxVacuumOpen.ForeColor = Color.White;
+            }
+            else
+            {
+                boxVacuumOpen.Text = "真空关";
+                boxVacuumOpen.BackColor = Color.Red;
+                boxVacuumOpen.ForeColor = Color.White;
+            }
         }
 
         /// <summary>
@@ -510,7 +541,7 @@ namespace BarometerWinform.Views
             {
                 btnSelect.Text = "✓";
                 btnSelect.ForeColor = Color.White;
-                btnSelect.BackColor = Color.ForestGreen;
+                btnSelect.BackColor = Color.LimeGreen;
             }
             else
             {

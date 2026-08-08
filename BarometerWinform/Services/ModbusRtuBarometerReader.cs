@@ -374,19 +374,19 @@ namespace BarometerWinform.Services
                 //    - 实际压力 = 有符号原始值 / 10^小数位，再乘以可选缩放系数 BarometerPressureScale
                 short rawSigned = (short)registers[0];
                 int decimalPos = _config.BarometerDefaultDecimalPlaces;
-                decimal pressurePa = rawSigned / (decimal)Math.Pow(10, decimalPos);
-                pressurePa *= _config.BarometerPressureScale;
+                decimal pressureKPa = rawSigned / (decimal)Math.Pow(10, decimalPos);
+                pressureKPa *= _config.BarometerPressureScale;
 
                 var data = new BarometerData
                 {
                     DeviceId = deviceId,
-                    VacuumPressure = pressurePa,
+                    VacuumPressure = pressureKPa,
                     CollectTime = DateTime.Now
                 };
 
                 // 5) 在“采集层”做一次最基础的报警判断，用于 UI 先显示 Fault（红色）。
                 //    真正的联动输出（关阀/断电）由 DeviceManager 统一处理，避免通讯类里写业务逻辑。
-                bool alarm = IsAlarm(pressurePa);
+                bool alarm = IsAlarm(pressureKPa);
                 data.Status = alarm ? DeviceStatus.Fault : DeviceStatus.Idle;
                 return data;
             }
@@ -493,7 +493,7 @@ namespace BarometerWinform.Services
         /// 所以 Demo 写阈值一直硬编码 1 位小数 —— 这里改为与 Demo 一致。
         ///
         /// 【单位提醒】thresholdValue 是"设备单位"（与压力读数同单位同小数位），
-        /// 不是软件报警阈值 AlarmPressureThresholdPa。写前务必确认设备单位。
+        /// 不是软件报警阈值 AlarmPressureThresholdKPa（kPa）。写前务必确认设备单位。
         /// </summary>
         /// <param name="deviceId">气压表编号（1~TotalBarometers）</param>
         /// <param name="thresholdValue">设备单位阈值（如 -95.0）</param>
@@ -597,14 +597,14 @@ namespace BarometerWinform.Services
             return result;
         }
 
-        private bool IsAlarm(decimal pressurePa)
+        private bool IsAlarm(decimal pressureKPa)
         {
             if (_config.AlarmWhenPressureHigherThanThreshold)
             {
-                return pressurePa > _config.AlarmPressureThresholdPa;
+                return pressureKPa > _config.AlarmPressureThresholdKPa;
             }
 
-            return pressurePa < _config.AlarmPressureThresholdPa;
+            return pressureKPa < _config.AlarmPressureThresholdKPa;
         }
 
         private Parity ParseParity(string parity)

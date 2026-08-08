@@ -1,5 +1,159 @@
 # CHANGELOG
 
+## [2026-08-08] 通讯测试窗体 SunnyUI 重构 + 备用通道映射点击提示（V1.21）
+
+### 问题
+- 通讯测试窗体（CommunicationTestForm）整体还是原生 WinForms 控件（默认灰色按钮、
+  默认页签、默认标题栏、默认文本框），观感与其他 SunnyUI 风格窗体（系统设置等）不一致，较丑。
+- 现场工位如果对某个 DQ 通道做了备用通道映射（烧毁后用备用通道），测试时点击该通道
+  没有任何提示，容易误以为原通道仍在工作，看不出实际输出到了哪个备用通道。
+
+### 改动
+**1) 通讯测试窗体整体改用 SunnyUI 控件重构（CommunicationTestForm.cs / Designer.cs）**
+- 窗体基类 `System.Windows.Forms.Form` → `Sunny.UI.UIForm`（蓝色标题栏，ShowTitle）。
+- 新增顶部状态条（pnlHeader）：`UILedBulb` 连接指示灯 + `UILabel` 连接状态，
+  连接成功→绿灯"已连接"，断开/失败→红灯"未连接"（`SetConnected` 统一更新）。
+- 中部页签：`Sunny.UI.UITabControl` + 两个 `UIPage`（负压开关测试 / 载台上电测试），
+  页内网格容器用 `Sunny.UI.UIPanel`（白色背景，替换原生 Panel）。
+- 底部按钮：`Sunny.UI.UIButton`（连接测试=绿 / 全部关闭=橙 / 读取状态=蓝 / 关闭窗口=灰）；
+  日志框用 `Sunny.UI.UITextBox`（只读多行，ScrollToCaret 自动滚动 + 最多保留 200 行）。
+- 弹窗统一改用 `Sunny.UI.UIMessageBox`（错误=红 / 警告=橙 / 提示=绿 / 通道映射=蓝）。
+- 逻辑（9×8 圆形灯网格、寄存器读写、读-改-写、备用映射、日志）全部保留不变。
+
+**2) 备用通道映射点击提示（V1.21，承接 V1.20 的备用映射接入）**
+- `ChannelGrid.OnCircleClick`：点击按钮时先用 `IsRemapSource` 判断该通道是否命中映射表，
+  命中则先弹窗再 toggle。
+- 新增 `ShowRemapNotice`：弹窗说明"通道 X（寄存器 0xXXXX 第 N 通道）已做备用通道映射，
+  实际输出通道：寄存器 0xXXXX 第 N 通道（第 N 路）"，并在日志追加 `[映射]` 记录。
+- 仅当 `IoBackupChannelMappingEnabled=true` 且该通道在映射表中时触发，未启用映射的工位行为完全不变。
+
+### 说明
+- 圆形灯按钮（CircleButton）仍为自绘控件（ON=亮绿+金边，OFF=深灰），不依赖 SunnyUI 样式，
+  保持"指示灯"观感与点击交互不变。
+- 通讯测试入口不变：主菜单"关于"下拉 →"通讯测试"（技术员及以上权限）。
+- 窗体打开方式改为**非模态**（MainForm 用 `Show` 替代 `ShowDialog`）：打开测试窗体的同时
+  仍可点击操作主窗体及其它窗体，测试窗体关闭时自动 Dispose 释放资源。
+- 窗体高度加大（ClientSize 780×1000 + MinimumSize 780×1000）：9 排×8 列通道按钮一屏显示完整，
+  页面不再出现滚动条。
+
+## [2026-08-08] 工位面板高度减小 + 主菜单"帮助"更名"关于"（V1.19.12）
+
+### 问题
+- 工位面板（WorkstationPanelView）高度 225px，内容最低点（"延时到达"输入框、设置按钮）在
+  y≈189~195，底部约 30px 空白过大。
+- 主菜单第 4 个按钮叫"帮助"，但其下拉里只有"设置 / 关于"，且已有"关于"字样在菜单项里，
+  按钮语义与用户习惯不符：按钮应叫"关于"，菜单项才是"版本说明"。
+
+### 改动
+**1) 工位面板高度减小（WorkstationPanelView.Designer.cs / MainForm.cs）**
+- 面板 Size 由 240×225 改为 240×205（底部空白由约 30px 减为约 10px）。
+- 网格行高 PanelRowHeight 由 245 同步改为 225（保持"面板高 + 上下边距 20px"关系）。
+
+**2) 主菜单"帮助"按钮更名"关于"（MainForm.Designer.cs / MainForm.cs）**
+- 控件 `btnHelp` → `btnAbout`（字段声明 / 创建 / Controls.Add / 事件全部更名），
+  按钮文字 "帮助" → "关于"。
+- 点击弹出下拉菜单项更名：**"关于" → "版本说明"**（V1.19.12）。
+- 处理函数更名：`btnHelp_Click` → `btnAbout_Click`、`MenuHelpAbout_Click` → `MenuHelpVersionInfo_Click`。
+- 下拉菜单项为运行时动态创建的 Button（无持久控件名），只需更名事件处理函数。
+
+### 说明
+- 下拉菜单结构不变：设置（仅管理员可见）/ 版本说明（所有权限可见）。
+
+## [2026-08-08] 工位 SN/配方/延时关联 + 日志记录按钮更名（V1.19.11）
+
+### 问题
+- 真实气压表（ModbusRtuBarometerReader）只上报压力，BarometerData 的
+  SN / 配方 / 延时开启 / 延时到达 字段在采集层恒为空，工位面板上永远显示不了
+  现场绑定的 SN，也无法关联配方与延时。
+- ID 绑定（扫码枪扫码或手动输入）此前只导出 Excel，绑定结果没有回写到
+  工位数据，面板 SN 与绑定脱节。
+- 主菜单"LOG记录"按钮文案与界面中文风格不一致。
+
+### 改动
+**1) 新增工位静态信息存储并叠加到采集数据（DeviceManager.cs / StationInfo.cs）**
+- 新增模型 `StationInfo`（Models/StationInfo.cs）：DeviceId / SerialNumber /
+  RecipeName / DelayStartTime / DelayArriveTime。
+- DeviceManager 新增 `_stationInfo` 字典（按工位编号存储）+ `_stationInfoLock`。
+- 新增方法：`GetStationInfo` / `SetStationSerialNumber` / `SetStationRecipeName` /
+  `SetStationDelayTimes` / `SetStationSerialNumbers`（批量）/ `ApplyStationInfo`（叠加）。
+- `CollectData` 在 IO 回填后、报警判定前调用 `ApplyStationInfo`，把工位静态信息
+  覆盖到采集数据上（仅覆盖已配置字段），使面板 SN / 配方 / 延时显示与绑定/设置一致。
+
+**2) 工位设置窗口"保存"实现（StationSettingsForm.cs）**
+- 保存按钮原来只是 TODO 空实现；现在把 SN / 配方 / 延时开启 / 延时到达 写入
+  DeviceManager 工位静态信息，保存后工位面板同步更新。
+- 延时格式 时:分:秒 校验（非法格式提示，不保存）；空白视为清空。
+- 回显补充"启动时间"（延时到达）字段。
+- 极限温度（txtTemp）暂不处理：BarometerData / 工位面板无对应字段，留待配方表接入。
+
+**3) ID 绑定把 SN 关联到工位（IdBindingForm.cs / InputLotForm.cs / MainForm.cs）**
+- IdBindingForm 构造函数新增可选 `DeviceManager` 参数；保存时遍历绑定列表，
+  调用 `SetStationSerialNumbers` 把"工位 → SN"写入设备管理器。
+- 纯手动输入（未启用扫码枪）同样生效：工位编号 + SN 录入列表即可关联。
+- InputLotForm / MainForm 逐级传递 `_deviceManager`。
+
+**4) 主菜单按钮更名（MainForm.Designer.cs）**
+- btnLog 文本 "LOG记录" → "日志记录"。
+
+### 说明
+- SN / 配方 / 延时为"工位配置"类静态信息，不随设备采集变化；写入后由采集线程
+  每次叠加到该工位数据上，因此所有显示 SN/配方/延时 的地方（工位面板、工位设置窗口）
+  都会与绑定/设置结果保持一致。
+- Mock 读取器生成的模拟值仅在工位静态信息未配置时保留原值，已配置的工位以
+  静态信息为准。
+
+## [2026-08-08] 工位面板真空开启显示文字化 + 压力框加宽（V1.19.10）
+
+### 问题
+- 真空开启灯原来是"纯色无文字"（绿=开启，灰=关闭），操作员需对照颜色判断，观感不直观。
+- 真空压力值框偏窄（58px），负压值位数较多（如 -100.0 kPa）时可能显示不全。
+
+### 改动
+**1) 真空开启显示改为"文字 + 颜色"（WorkstationPanelView.cs / WorkstationPanelView.Designer.cs）**
+- 真空开启（真空电磁阀输出 ON）：绿底白字"真空开"。
+- 真空关闭（真空电磁阀输出 OFF）：红底白字"真空关"（关闭用红色，与工作状态"故障"红色呼应，更醒目）。
+- 新增 `UpdateVacuumOpenDisplay(vacuumOpen)` 方法；`UpdateStatusLight` 现在只用于上电灯 boxPower。
+- ToolTip 说明同步更新。
+
+**2) 真空压力框加宽、状态框微缩（WorkstationPanelView.Designer.cs）**
+- txtPressure 宽度 58 → 78（保证 -100.0 kPa 等数值完整显示，比右侧两个状态框都宽）。
+- boxVacuumOpen 宽度 55 → 48（配合"真空开/关"两字文本）。
+- boxWorkState 宽度 60 → 46（配合"空闲/选中/繁忙/故障"两字文本）。
+
+### 说明
+- 布局仍在同一行（y=67，高 21），三个框位置依次右移，不改变面板整体尺寸（240×225）。
+- README 同步更新 ASCII 布局图、状态约定与关键方法表。
+
+## [2026-08-08] 报警阈值与界面单位统一为 kPa，故障显示逻辑修复（V1.19.9）
+
+### 问题
+- 真空压力/报警阈值单位不一致：真实读取器按 kPa 返回压力（寄存器 -950 / 小数位 1 → -95.0，
+  与界面输入的 -95 同单位），但软件报警阈值配置却是 Pa（-95000），
+  导致压力判定 `-95.0 > -95000` 恒成立，生产环境所有台都误报"故障"。
+- 非测试中的台（阀关着，压力为常压 ~0kPa）：读取器按"压力越限"误标 Fault，
+  DeviceManager 未覆盖，面板错误显示"故障"。
+
+### 改动
+**1) 软件报警阈值改为 kPa 并跟随"公共参数窗口"输入（DeviceManager.cs / CommonParameterForm.cs）**
+- `DeviceConfig.AlarmPressureThresholdPa`（默认 -95000）→ `AlarmPressureThresholdKPa`（默认 -95，单位 kPa）。
+- App.config 配置项同步更名 `AlarmPressureThresholdKPa`，MainForm / SettingsForm 同步更新。
+- 新增 `DeviceManager.UpdateAlarmPressureThresholdKPa(...)`：公共参数窗口保存负压值时
+  同步更新软件报警阈值，使软件报警判定与界面输入（kPa）一致。
+
+**2) 非测试台故障误判修复（DeviceManager.cs）**
+- `CollectData` 状态赋值补 `else` 分支：非测试且未报警的台强制置为 Idle，
+  覆盖读取器对常压（~0kPa）的"压力越限"误判。
+
+**3) 界面单位统一为 kPa（相关界面补充单位）**
+- WorkstationPanelView：真空压力显示 `Pa` → `kPa`。
+- DeviceManualForm：当前压力显示 `Pa` → `kPa`。
+- CommonParameterForm：标签"负压值设定：" → "负压值设定(kPa)："。
+- SettingsForm：报警压力阈值说明改为"kPa，如 -95"。
+- MockBarometerReader：模拟压力值由 Pa 改为 kPa（良好 -96~-100 / 较差 -1~-90），与真实读取器一致。
+- 日志（真空已建立 / 真空压力越限）与各处注释单位同步为 kPa。
+
+### 说明
+- 读取器采集层的基础报警判断仍保留（用于 UI 先提示），最终状态以 DeviceManager 业务逻辑为准。
 ## [2026-08-08] 用户管理窗体：删除操作提示 + 当前角色中文显示（V1.19.8）
 
 ### 改动
@@ -939,7 +1093,7 @@
 - README / 通讯接入说明 同步补充设备阈值写入能力与排查提示。
 
 ### 待现场确认项
-- 设备阈值（0x0010）的**单位/数值**需按气压表说明书确认后再写（不是 -95000Pa 那个软件报警阈值）。
+- 设备阈值（0x0010）的**单位/数值**需按气压表说明书确认后再写（不是 -95kPa 那个软件报警阈值）。
 - 排查地址 32 那台气压表的供电 / RS485 接线 / 从站地址拨码，修好后重跑批量写即可全成功。
 
 ## [2026-08-06] V1.15 业务串联 + 冷却送风机接入（老化测试业务流程闭环）

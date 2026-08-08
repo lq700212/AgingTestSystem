@@ -12,7 +12,7 @@
     /// ┌──────────────────────────────┐
     /// │ NO.1                  [□✓]   │  ← 设备编号 + 选中指示（右上角，V1.19）
     /// │ 上电   [状态灯]                 │  ← 标题与下方各标题左对齐；状态灯与内容列左对齐（V1.19.3）
-    /// │ 真空压力 [值] [真空开启灯] [工作状态]   │  ← 压力值只读；真空灯=纯色；工作状态文字
+    /// │ 真空压力 [值] [真空开] [工作状态]   │  ← 压力值只读（V1.19.10 加宽）；真空开/关=文字+颜色；工作状态文字
     /// │ SN:    [SN值 Label]                 │  ← V1.19.3：内容改为 Label 显示
     /// │ 配方:  [配方值 Label]               │
     /// │ 延时开启 [__:__:__]      ┌────┐      │
@@ -141,35 +141,41 @@
             this.lblVacuum.Text = "真空压力";
             //
             // txtPressure - 真空压力值显示框（只读）
+            // 【V1.19.10 加宽】负压值可能位数较多（如 -100.0 kPa），原宽度 58 偏窄易显示不全，
+            // 调整为 78（比右侧两个状态框都宽，优先保证压力值完整显示）。
             //
             this.txtPressure.Location = new System.Drawing.Point(57, 67);
             this.txtPressure.Name = "txtPressure";
             this.txtPressure.ReadOnly = true;
-            this.txtPressure.Size = new System.Drawing.Size(58, 21);
+            this.txtPressure.Size = new System.Drawing.Size(78, 21);
             this.txtPressure.TabIndex = 4;
             this.txtPressure.Text = "---";
             //
-            // boxVacuumOpen - 真空开启状态灯（纯色，无文字）
-            // 真空电磁阀输出：ON=绿色，OFF=灰色。颜色在业务代码里更新。
+            // boxVacuumOpen - 真空开启状态显示（V1.19.10 起带文字 + 颜色）
+            // 真空电磁阀输出：ON=绿底白字"真空开"，OFF=红底白字"真空关"。
+            // （原为纯色无文字：绿=开启、灰=关闭；V1.19.10 改为文字 + 颜色，观感更直观）
+            // 【V1.19.10 微缩】配合压力框加宽，本框宽度由 55 缩为 48。
             //
             this.boxVacuumOpen.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.boxVacuumOpen.Location = new System.Drawing.Point(118, 67);
+            this.boxVacuumOpen.Location = new System.Drawing.Point(138, 67);
             this.boxVacuumOpen.Name = "boxVacuumOpen";
-            this.boxVacuumOpen.Size = new System.Drawing.Size(55, 21);
+            this.boxVacuumOpen.Size = new System.Drawing.Size(48, 21);
             this.boxVacuumOpen.AutoSize = false;
             this.boxVacuumOpen.TabIndex = 5;
-            this.boxVacuumOpen.Text = "";
+            this.boxVacuumOpen.Text = "真空关";
             this.boxVacuumOpen.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             this.boxVacuumOpen.BackColor = System.Drawing.Color.LightGray;
+            this.boxVacuumOpen.ForeColor = System.Drawing.Color.White;
             //
             // boxWorkState - 工作状态显示（空闲/选中/繁忙/故障）
             // 空闲且未上电=空闲；空闲但已上电=选中；测试中=繁忙；故障=故障。
             // （V1.19.2：是否选中不再影响工作状态文字，选中仅由右上角选中指示体现）
+            // 【V1.19.10 微缩】配合压力框加宽，本框宽度由 60 缩为 46。
             //
             this.boxWorkState.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
-            this.boxWorkState.Location = new System.Drawing.Point(176, 67);
+            this.boxWorkState.Location = new System.Drawing.Point(189, 67);
             this.boxWorkState.Name = "boxWorkState";
-            this.boxWorkState.Size = new System.Drawing.Size(60, 21);
+            this.boxWorkState.Size = new System.Drawing.Size(46, 21);
             this.boxWorkState.AutoSize = false;
             this.boxWorkState.TabIndex = 6;
             this.boxWorkState.Text = "空闲";
@@ -291,13 +297,15 @@
             this.Controls.Add(this.lblPower);
             this.Controls.Add(this.lblDeviceId);
             this.Name = "WorkstationPanelView";
-            this.Size = new System.Drawing.Size(240, 225);
+            // 【V1.19.12】面板高度由 225 减为 205：原底部空白（约30px）过大，
+            // 内容最低点为"延时到达"输入框与"设置"按钮（y≈189~195），205 保留约 10px 下边距。
+            this.Size = new System.Drawing.Size(240, 205);
             this.ResumeLayout(false);
             this.PerformLayout();
 
             // 为"纯色状态灯"加上鼠标悬停提示，方便操作员理解灯的含义
             this.toolTipPanel.SetToolTip(this.boxPower, "上电状态：绿=已上电，灰=未上电");
-            this.toolTipPanel.SetToolTip(this.boxVacuumOpen, "真空开启状态：绿=开启，灰=关闭");
+            this.toolTipPanel.SetToolTip(this.boxVacuumOpen, "真空开启状态（V1.19.10）：真空开=绿底，真空关=红底");
             this.toolTipPanel.SetToolTip(this.boxWorkState, "工作状态（V1.19.4 配色）：空闲=浅灰 / 选中(已上电待测试)=橙 / 繁忙(测试中)=绿 / 故障=红");
             this.toolTipPanel.SetToolTip(this.btnSelect, "选中指示（V1.19.6）：空白处长按约0.8秒=选中(绿✓)；有选中后单击空白处或本框=切换选中/取消；整表唯一选中项被取消时全部隐藏");
         }
@@ -319,7 +327,7 @@
         private System.Windows.Forms.Label lblVacuum;
         /// <summary>真空压力值显示框（只读）</summary>
         private System.Windows.Forms.TextBox txtPressure;
-        /// <summary>真空开启状态灯（纯色：绿=开启，灰=关闭）</summary>
+        /// <summary>真空开启状态显示（V1.19.10 起带文字+颜色：真空开=绿底白字，真空关=红底白字）</summary>
         private System.Windows.Forms.Label boxVacuumOpen;
         /// <summary>工作状态显示（空闲/选中/繁忙/故障，V1.19.4 起带"信号灯"配色）</summary>
         private System.Windows.Forms.Label boxWorkState;

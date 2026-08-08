@@ -65,7 +65,7 @@ namespace BarometerWinform.Interfaces
         /// 【单位说明（重要）】
         /// 参数 thresholdValue 是"设备单位"，即与压力读数同单位、同小数位的值
         /// （寄存器值 = round(thresholdValue × 10^小数位)，与 Demo 一致）。
-        /// 它 ≠ 软件报警阈值 AlarmPressureThresholdPa（Pa），两者是不同概念：
+        /// 它 ≠ 软件报警阈值 AlarmPressureThresholdKPa（kPa），两者是不同概念：
         /// - 软件阈值：上位机内存里比较压力用的，不写设备；
         /// - 设备阈值：写进气压表内部，驱动硬件报警触点（→ GX-CL140 的 DI）。
         /// 是否设、设成什么值属工艺决策，单位需按设备说明书确认后再调用本方法。
