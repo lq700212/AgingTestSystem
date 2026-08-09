@@ -622,6 +622,8 @@ namespace BarometerWinform.Services
                     return StopBits.One;
                 case 2:
                     return StopBits.Two;
+                case 15:   // 与 ScannerService 约定一致：15 表示 1.5 停止位
+                    return StopBits.OnePointFive;
                 default:
                     return StopBits.One;
             }

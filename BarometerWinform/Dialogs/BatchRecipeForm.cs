@@ -29,7 +29,7 @@ namespace BarometerWinform.Dialogs
     /// ┌─────────────────────────────────────────────┐
     /// │ 批量设置设置配方窗口                         │  ← 标题栏
     /// ├─────────────────────────────────────────────┤
-    /// │ 配方名称：[____________]                    │  ← 配方名称输入框
+    /// │ 配方名称：[____________]                    │  ← 配方名称输入框（支持自动检索）
     /// │ 延时时间：[__]:[__]:[__]                    │  ← 延时时间（NumericUpDown，对应延时开启）
     /// │ 启动时间：[__]:[__]:[__]                    │  ← 启动时间（NumericUpDown，对应延时到达）
     /// │ 极限温度：[____] °C                         │  ← 极限温度输入框
@@ -48,6 +48,8 @@ namespace BarometerWinform.Dialogs
     ///    时 0-99、分 0-59、秒 0-59，控件自带范围限制，无需再校验；
     /// 2. 温度输入框限制为3位数字，范围 0-999°C；
     /// 3. 配方名称不能为空。
+    /// 4. 配方名称输入框支持自动检索：输入时弹出模糊匹配的已存在配方列表供选择，
+    ///    选中后自动填写配方名称、延时时间、启动时间、极限温度（V1.29 新增）。
     /// </summary>
     public partial class BatchRecipeForm : Form
     {
@@ -68,6 +70,11 @@ namespace BarometerWinform.Dialogs
         private readonly IReadOnlyList<int> _selectedDeviceIds;
 
         /// <summary>
+        /// 配方名称自动检索提供者（V1.29 新增，使用后需释放）
+        /// </summary>
+        private RecipeAutoCompleteProvider _recipeAutoComplete;
+
+        /// <summary>
         /// 构造函数
         /// </summary>
         /// <param name="deviceManager">设备管理器（可 null，仅影响"应用到工位"）</param>
@@ -81,6 +88,43 @@ namespace BarometerWinform.Dialogs
             _deviceManager = deviceManager;
             _recipes = recipes;
             _selectedDeviceIds = selectedDeviceIds ?? new List<int>();
+
+            // 初始化配方名称自动检索（V1.29 新增）
+            _recipeAutoComplete = new RecipeAutoCompleteProvider(
+                txtRecipeName,
+                _recipes,
+                OnRecipeSelected);
+        }
+
+        /// <summary>
+        /// 配方自动检索选中回调（V1.29 新增）
+        /// 用户从自动检索列表中选择一个配方后，自动填写配方名称、延时时间、启动时间、极限温度。
+        /// </summary>
+        /// <param name="recipe">选中的配方</param>
+        private void OnRecipeSelected(RecipeConfig recipe)
+        {
+            if (recipe == null) return;
+
+            txtRecipeName.Text = recipe.Name;
+
+            // 回填延时时间（时:分:秒）
+            nudDelayHours.Value = Math.Max(nudDelayHours.Minimum,
+                Math.Min(nudDelayHours.Maximum, (decimal)(int)recipe.DelayTime.TotalHours));
+            nudDelayMinutes.Value = Math.Max(nudDelayMinutes.Minimum,
+                Math.Min(nudDelayMinutes.Maximum, (decimal)recipe.DelayTime.Minutes));
+            nudDelaySeconds.Value = Math.Max(nudDelaySeconds.Minimum,
+                Math.Min(nudDelaySeconds.Maximum, (decimal)recipe.DelayTime.Seconds));
+
+            // 回填启动时间（时:分:秒）
+            nudStartHours.Value = Math.Max(nudStartHours.Minimum,
+                Math.Min(nudStartHours.Maximum, (decimal)(int)recipe.StartTime.TotalHours));
+            nudStartMinutes.Value = Math.Max(nudStartMinutes.Minimum,
+                Math.Min(nudStartMinutes.Maximum, (decimal)recipe.StartTime.Minutes));
+            nudStartSeconds.Value = Math.Max(nudStartSeconds.Minimum,
+                Math.Min(nudStartSeconds.Maximum, (decimal)recipe.StartTime.Seconds));
+
+            // 回填极限温度
+            txtLimitTemp.Text = recipe.LimitTemperature.ToString("0.#");
         }
 
         /// <summary>

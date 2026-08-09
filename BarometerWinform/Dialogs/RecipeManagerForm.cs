@@ -237,7 +237,7 @@ namespace BarometerWinform.Dialogs
             if (existingIndex >= 0)
             {
                 var result = MessageBox.Show(
-                    $"已存在配方 \"{_recipes[existingIndex].Name}\"，是否更新该配方？",
+                    $"已存在配方 \"{_recipes[existingIndex].Name}\"，是否更新覆盖该配方？",
                     "配方已存在",
                     MessageBoxButtons.OKCancel,
                     MessageBoxIcon.Question);
@@ -274,7 +274,7 @@ namespace BarometerWinform.Dialogs
             string name = txtRecipeName.Text.Trim();
             if (string.IsNullOrEmpty(name))
             {
-                MessageBox.Show("请输入或选择要更新的配方名称", "提示",
+                MessageBox.Show("请输入配方名称", "提示",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 txtRecipeName.Focus();
                 return;
@@ -283,8 +283,19 @@ namespace BarometerWinform.Dialogs
             int index = FindRecipeIndex(name);
             if (index < 0)
             {
-                MessageBox.Show($"列表中不存在配方 \"{name}\"，请点击\"添加\"新增配方", "提示",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                // 列表中没有同名配方 → 直接添加（相当于"添加"功能）
+                var newRecipe = new RecipeConfig { CreateTime = DateTime.Now };
+                if (!TryApplyInputToRecipe(newRecipe))
+                {
+                    return;
+                }
+
+                _recipes.Add(newRecipe);
+                PersistRecipes();
+                LoadRecipesToGrid();
+                SelectRecipeRow(_recipes.Count - 1);
+                MessageBox.Show($"配方 \"{newRecipe.Name}\" 已添加", "提示",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
