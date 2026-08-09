@@ -64,6 +64,9 @@ namespace BarometerWinform.Dialogs
         /// <summary>当前操作的工位编号（1 ~ TotalBarometers）</summary>
         private readonly int _deviceId;
 
+        /// <summary>配方名称自动检索提供者（V1.29 新增，使用后需释放）</summary>
+        private RecipeAutoCompleteProvider _recipeAutoComplete;
+
         /// <summary>
         /// 构造函数
         /// 初始化界面，设置标题为"工位设置窗口 NO X"，并从缓存 / 采集缓存回显当前工位数据。
@@ -86,6 +89,43 @@ namespace BarometerWinform.Dialogs
 
             // 从缓存 / 采集缓存读取当前工位数据并回显到输入框
             LoadStationData();
+
+            // 初始化配方名称自动检索（V1.29 新增）
+            _recipeAutoComplete = new RecipeAutoCompleteProvider(
+                txtRecipe,
+                _recipes,
+                OnRecipeSelected);
+        }
+
+        /// <summary>
+        /// 配方自动检索选中回调（V1.29 新增）
+        /// 用户从自动检索列表中选择一个配方后，自动填写配方名称、延时时间、启动时间、极限温度。
+        /// </summary>
+        /// <param name="recipe">选中的配方</param>
+        private void OnRecipeSelected(RecipeConfig recipe)
+        {
+            if (recipe == null) return;
+
+            txtRecipe.Text = recipe.Name;
+
+            // 回填延时时间（时:分:秒）
+            nudDelayHours.Value = Math.Max(nudDelayHours.Minimum,
+                Math.Min(nudDelayHours.Maximum, (decimal)(int)recipe.DelayTime.TotalHours));
+            nudDelayMinutes.Value = Math.Max(nudDelayMinutes.Minimum,
+                Math.Min(nudDelayMinutes.Maximum, (decimal)recipe.DelayTime.Minutes));
+            nudDelaySeconds.Value = Math.Max(nudDelaySeconds.Minimum,
+                Math.Min(nudDelaySeconds.Maximum, (decimal)recipe.DelayTime.Seconds));
+
+            // 回填启动时间（时:分:秒）
+            nudStartHours.Value = Math.Max(nudStartHours.Minimum,
+                Math.Min(nudStartHours.Maximum, (decimal)(int)recipe.StartTime.TotalHours));
+            nudStartMinutes.Value = Math.Max(nudStartMinutes.Minimum,
+                Math.Min(nudStartMinutes.Maximum, (decimal)recipe.StartTime.Minutes));
+            nudStartSeconds.Value = Math.Max(nudStartSeconds.Minimum,
+                Math.Min(nudStartSeconds.Maximum, (decimal)recipe.StartTime.Seconds));
+
+            // 回填极限温度
+            txtTemp.Text = recipe.LimitTemperature.ToString("0.#");
         }
 
         /// <summary>

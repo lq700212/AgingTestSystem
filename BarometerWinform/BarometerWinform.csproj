@@ -104,6 +104,8 @@
     <Compile Include="Services\DeviceManager.cs" />
     <Compile Include="Services\UserManager.cs" />
     <Compile Include="Services\RecipeStorage.cs" />
+    <Compile Include="Controls\DataGridViewNumericUpDownCell.cs" />
+    <Compile Include="Services\RecipeAutoCompleteProvider.cs" />
     <Compile Include="Services\StationSettingsCache.cs" />
     <Compile Include="Views\WorkstationPanelView.cs">
       <SubType>UserControl</SubType>

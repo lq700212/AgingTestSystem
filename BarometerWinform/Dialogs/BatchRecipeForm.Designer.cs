@@ -1,3 +1,5 @@
+using System;
+
 namespace BarometerWinform.Dialogs
 {
     /// <summary>
@@ -35,9 +37,19 @@ namespace BarometerWinform.Dialogs
         /// <param name="disposing">如果应释放托管资源，为 true；否则为 false</param>
         protected override void Dispose(bool disposing)
         {
-            if (disposing && (components != null))
+            if (disposing)
             {
-                components.Dispose();
+                if (components != null)
+                {
+                    components.Dispose();
+                }
+                // 释放配方自动检索资源（V1.29 新增）
+                var provider = this.GetType().GetField("_recipeAutoComplete",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (provider?.GetValue(this) is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
             }
             base.Dispose(disposing);
         }

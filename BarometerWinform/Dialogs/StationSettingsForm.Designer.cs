@@ -1,4 +1,6 @@
-﻿namespace BarometerWinform.Dialogs
+﻿using System;
+
+namespace BarometerWinform.Dialogs
 {
     /// <summary>
     /// 工位设置窗口 —— 设计器自动生成部分（V1.18 新增）
@@ -26,9 +28,19 @@
         /// <summary>清理所有正在使用的资源</summary>
         protected override void Dispose(bool disposing)
         {
-            if (disposing && (components != null))
+            if (disposing)
             {
-                components.Dispose();
+                if (components != null)
+                {
+                    components.Dispose();
+                }
+                // 释放配方自动检索资源（V1.29 新增）
+                var provider = this.GetType().GetField("_recipeAutoComplete",
+                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (provider?.GetValue(this) is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
             }
             base.Dispose(disposing);
         }
