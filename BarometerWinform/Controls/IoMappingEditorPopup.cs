@@ -7,15 +7,14 @@ namespace BarometerWinform.Controls
 {
     /// <summary>
     /// IO 备用通道映射编辑弹出框（供系统设置窗口 IoBackupChannelMappings 配置项使用）：
-    /// 以"一行一条映射"的表格展示，每行三列：原 IO 通道 → 新 IO 通道，
-    /// 左右两侧为十六进制通道号（0x00~0xFF，可用微调框调整），中间箭头标识对应关系。
-    /// 支持直接修改、输入新增、选中删除。
+    /// 以"一行一条映射"的表格展示，每行四列输入 + 中间箭头：
+    ///   原寄存器 0x2000 | 原通道 00 → 新寄存器 0x2009 | 新通道 01
+    /// 寄存器地址（0x0000~0xFFFF）与通道号（00~1F）均为十六进制，可微调。
+    /// 支持直接修改、添加新行、选中删除。
     ///
-    /// 【通道号 ↔ 原配置格式】UI 显示的是"通道号"（十六进制，0x00~0xFF），
-    /// 配置文件里存的却是"寄存器@位"（如 0x2000@0-&gt;0x2009@10）。
-    /// 映射关系：寄存器 = 起始寄存器地址 + (通道号&gt;&gt;4)，位 = 通道号 &amp; 0x0F；
-    /// 反推：通道号 = (寄存器 - 起始地址)&lt;&lt;4 | 位。
-    /// 点【确定】时逐行换算回"寄存器@位-&gt;寄存器@位"格式，保证与代码其它部分解析一致。
+    /// 【与配置格式的对应】配置里存的即是"寄存器@位"（如 0x2000@0-&gt;0x2009@10），
+    /// 与界面四列一一对应，无需额外换算，只是把配置里的十进制位号显示成十六进制：
+    ///   位号 0~31 → 显示 00~1F；保存时再转回十进制位号，保证与其它代码解析一致。
     /// </summary>
     public class IoMappingEditorPopup : Form
     {
@@ -24,7 +23,6 @@ namespace BarometerWinform.Controls
         private readonly Sunny.UI.UIButton _btnDelete;
         private readonly Sunny.UI.UIButton _btnOk;
         private readonly Sunny.UI.UIButton _btnCancel;
-        private readonly int _baseRegister;
         private bool _closing;
 
         /// <summary>
@@ -36,22 +34,20 @@ namespace BarometerWinform.Controls
         /// 构造弹出框
         /// </summary>
         /// <param name="currentValue">当前配置值（如 "0x2000@0->0x2009@10;0x2008@0->0x2009@11"）</param>
-        /// <param name="baseRegister">IO 输出寄存器起始地址（IoOutputRegisterStartAddress），用于通道号 ↔ 寄存器换算</param>
-        public IoMappingEditorPopup(string currentValue, int baseRegister)
+        public IoMappingEditorPopup(string currentValue)
         {
-            _baseRegister = baseRegister;
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
             ShowInTaskbar = false;
             BackColor = Color.White;
-            ClientSize = new Size(440, 268);
+            ClientSize = new Size(560, 268);
 
-            // 映射表格：蓝主题，三列（原通道 / 箭头 / 新通道）
+            // 映射表格：蓝主题，五列（原寄存器/原通道/箭头/新寄存器/新通道）
             _dgv = new Sunny.UI.UIDataGridView
             {
                 Style = Sunny.UI.UIStyle.Blue,
                 Location = new Point(12, 12),
-                Size = new Size(416, 158),
+                Size = new Size(536, 158),
                 BorderStyle = BorderStyle.None,
                 AllowUserToAddRows = false,
                 AllowUserToDeleteRows = false,
@@ -64,9 +60,11 @@ namespace BarometerWinform.Controls
                 BackgroundColor = Color.White,
                 ScrollBars = ScrollBars.Vertical
             };
-            _dgv.Columns.Add("colSrc", "原 IO 通道");
+            _dgv.Columns.Add("colSrcReg", "原寄存器");
+            _dgv.Columns.Add("colSrcCh", "原通道");
             _dgv.Columns.Add("colArrow", "→");
-            _dgv.Columns.Add("colDst", "新 IO 通道");
+            _dgv.Columns.Add("colDstReg", "新寄存器");
+            _dgv.Columns.Add("colDstCh", "新通道");
             _dgv.DefaultCellStyle.BackColor = Color.White;
             _dgv.DefaultCellStyle.ForeColor = Color.FromArgb(48, 48, 48);
             _dgv.DefaultCellStyle.SelectionBackColor = Color.FromArgb(48, 119, 238);
@@ -80,18 +78,38 @@ namespace BarometerWinform.Controls
             _dgv.ColumnHeadersDefaultCellStyle.Font = new Font("微软雅黑", 9F, FontStyle.Bold);
             _dgv.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
 
-            // 原/新通道：十六进制数字微调单元格（0x00~0xFF）
-            _dgv.Columns["colSrc"].CellTemplate = new DataGridViewHexNumericUpDownCell { Maximum = 0xFF };
-            _dgv.Columns["colDst"].CellTemplate = new DataGridViewHexNumericUpDownCell { Maximum = 0xFF };
-            _dgv.Columns["colSrc"].Width = 170;
-            _dgv.Columns["colSrc"].AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
-            _dgv.Columns["colSrc"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
-            _dgv.Columns["colDst"].Width = 170;
-            _dgv.Columns["colDst"].AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
-            _dgv.Columns["colDst"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            // 原/新寄存器：十六进制微调框（0x0000~0xFFFF，4 位 + 0x 前缀）
+            _dgv.Columns["colSrcReg"].CellTemplate = new DataGridViewHexNumericUpDownCell
+            {
+                Maximum = 0xFFFF,
+                HexDigits = 4,
+                ShowPrefix = true
+            };
+            _dgv.Columns["colDstReg"].CellTemplate = new DataGridViewHexNumericUpDownCell
+            {
+                Maximum = 0xFFFF,
+                HexDigits = 4,
+                ShowPrefix = true
+            };
+            // 原/新通道：十六进制微调框（00~1F，兼容 32 点/模块）
+            _dgv.Columns["colSrcCh"].CellTemplate = new DataGridViewHexNumericUpDownCell { Maximum = 0x1F };
+            _dgv.Columns["colDstCh"].CellTemplate = new DataGridViewHexNumericUpDownCell { Maximum = 0x1F };
+
+            _dgv.Columns["colSrcReg"].Width = 148;
+            _dgv.Columns["colSrcReg"].AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+            _dgv.Columns["colSrcReg"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            _dgv.Columns["colSrcCh"].Width = 78;
+            _dgv.Columns["colSrcCh"].AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+            _dgv.Columns["colSrcCh"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            _dgv.Columns["colDstReg"].Width = 148;
+            _dgv.Columns["colDstReg"].AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+            _dgv.Columns["colDstReg"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            _dgv.Columns["colDstCh"].Width = 78;
+            _dgv.Columns["colDstCh"].AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+            _dgv.Columns["colDstCh"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
 
             // 中间箭头列：不可编辑，始终显示 "→"
-            _dgv.Columns["colArrow"].Width = 64;
+            _dgv.Columns["colArrow"].Width = 56;
             _dgv.Columns["colArrow"].ReadOnly = true;
             _dgv.Columns["colArrow"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
             _dgv.Columns["colArrow"].DefaultCellStyle.Font = new Font("微软雅黑", 12F);
@@ -104,9 +122,9 @@ namespace BarometerWinform.Controls
             // 操作提示
             var lblHint = new Label
             {
-                Text = "通道号为十六进制（0x00~0xFF）：高四位=寄存器偏移，低四位=位号；保存时自动换算回 寄存器@位",
+                Text = "寄存器（0x0000~0xFFFF）与通道（00~1F）均为十六进制；保存时自动换算回配置格式",
                 Location = new Point(12, 176),
-                Size = new Size(416, 18),
+                Size = new Size(536, 18),
                 TextAlign = ContentAlignment.MiddleLeft,
                 Font = new Font("微软雅黑", 8.5F),
                 ForeColor = Color.FromArgb(130, 138, 150)
@@ -123,11 +141,11 @@ namespace BarometerWinform.Controls
             Controls.Add(_btnDelete);
 
             // 取消 / 确定
-            _btnCancel = CreateButton("取消", new Point(282, 198), new Size(62, 30), Sunny.UI.UIStyle.Gray);
+            _btnCancel = CreateButton("取消", new Point(398, 198), new Size(62, 30), Sunny.UI.UIStyle.Gray);
             _btnCancel.Click += (s, e) => CloseAsCancel();
             Controls.Add(_btnCancel);
 
-            _btnOk = CreateButton("确定", new Point(344, 198), new Size(84, 30), Sunny.UI.UIStyle.Blue);
+            _btnOk = CreateButton("确定", new Point(466, 198), new Size(82, 30), Sunny.UI.UIStyle.Blue);
             _btnOk.Click += (s, e) => Confirm();
             Controls.Add(_btnOk);
 
@@ -148,7 +166,7 @@ namespace BarometerWinform.Controls
             return btn;
         }
 
-        /// <summary>把当前配置值解析成一行一条映射填入表格（通道号 = (寄存器-起始地址)<<4 | 位）</summary>
+        /// <summary>把当前配置值解析成一行一条映射填入表格（寄存器保持十六进制显示，位号显示为十六进制）</summary>
         private void LoadValue(string currentValue)
         {
             _dgv.Rows.Clear();
@@ -157,18 +175,19 @@ namespace BarometerWinform.Controls
             var mappings = BarometerWinform.Models.IoOutputChannelRemap.ParseAll(currentValue, out _);
             foreach (var m in mappings)
             {
-                int srcChannel = (m.SourceRegister - _baseRegister) << 4 | m.SourceChannel;
-                int dstChannel = (m.TargetRegister - _baseRegister) << 4 | m.TargetChannel;
-                _dgv.Rows.Add((decimal)srcChannel, "→", (decimal)dstChannel);
+                _dgv.Rows.Add(
+                    (decimal)m.SourceRegister, (decimal)m.SourceChannel,
+                    "→",
+                    (decimal)m.TargetRegister, (decimal)m.TargetChannel);
             }
         }
 
-        /// <summary>添加一行空白映射（左右通道留给用户输入）</summary>
+        /// <summary>添加一行空白映射（四格留给用户输入）</summary>
         private void AddMapping()
         {
-            int rowIdx = _dgv.Rows.Add(null, "→", null);
-            _dgv.Rows[rowIdx].Cells["colSrc"].Selected = true;
-            _dgv.CurrentCell = _dgv.Rows[rowIdx].Cells["colSrc"];
+            int rowIdx = _dgv.Rows.Add(null, null, "→", null, null);
+            _dgv.Rows[rowIdx].Cells["colSrcReg"].Selected = true;
+            _dgv.CurrentCell = _dgv.Rows[rowIdx].Cells["colSrcReg"];
         }
 
         /// <summary>表格内按 Delete 键删除选中的行</summary>
@@ -211,31 +230,29 @@ namespace BarometerWinform.Controls
             {
                 if (row.IsNewRow) continue;
 
-                string srcText = row.Cells["colSrc"].Value?.ToString()?.Trim();
-                string dstText = row.Cells["colDst"].Value?.ToString()?.Trim();
-                if (string.IsNullOrEmpty(srcText) || string.IsNullOrEmpty(dstText)) continue;
-
-                if (!TryParseChannel(srcText, out int srcChannel) || !TryParseChannel(dstText, out int dstChannel))
+                if (!TryGetDecimal(row, "colSrcReg", out decimal srcRegDec) ||
+                    !TryGetDecimal(row, "colSrcCh", out decimal srcChDec) ||
+                    !TryGetDecimal(row, "colDstReg", out decimal dstRegDec) ||
+                    !TryGetDecimal(row, "colDstCh", out decimal dstChDec))
                 {
-                    MessageBox.Show(this, "通道号应为 0x00~0xFF 的十六进制数字。", "提示",
-                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
+                    continue;
                 }
 
-                int srcReg = _baseRegister + (srcChannel >> 4);
-                int srcBit = srcChannel & 0x0F;
-                int dstReg = _baseRegister + (dstChannel >> 4);
-                int dstBit = dstChannel & 0x0F;
+                int srcReg = (int)srcRegDec;
+                int srcCh = (int)srcChDec;
+                int dstReg = (int)dstRegDec;
+                int dstCh = (int)dstChDec;
 
                 // 源与目标相同没有意义（没换位置）
-                if (srcReg == dstReg && srcBit == dstBit)
+                if (srcReg == dstReg && srcCh == dstCh)
                 {
-                    MessageBox.Show(this, $"第 {row.Index + 1} 行：源通道 0x{srcChannel:X2} 与目标通道相同，请修改。", "提示",
+                    MessageBox.Show(this, $"第 {row.Index + 1} 行：源（0x{srcReg:X4}@{srcCh:X2}）与目标相同，请修改。", "提示",
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
 
-                parts.Add($"0x{srcReg:X4}@{srcBit}->0x{dstReg:X4}@{dstBit}");
+                // 通道号转回十进制位号（0~31），寄存器保持 0x 十六进制，与 IoOutputChannelRemap 解析格式一致
+                parts.Add($"0x{srcReg:X4}@{srcCh}->0x{dstReg:X4}@{dstCh}");
             }
 
             ResultValue = string.Join(";", parts);
@@ -243,20 +260,16 @@ namespace BarometerWinform.Controls
             Close();
         }
 
-        /// <summary>解析通道号（兼容带 0x 前缀与不带，十六进制）</summary>
-        private static bool TryParseChannel(string text, out int channel)
+        /// <summary>取某行某列的值；空值返回 false（跳过未填写的行）</summary>
+        private static bool TryGetDecimal(DataGridViewRow row, string column, out decimal value)
         {
-            string t = text.Trim();
-            if (t.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ||
-                t.StartsWith("0X", StringComparison.OrdinalIgnoreCase))
+            object raw = row.Cells[column].Value;
+            if (raw is decimal d)
             {
-                t = t.Substring(2);
+                value = d;
+                return true;
             }
-            if (int.TryParse(t, System.Globalization.NumberStyles.HexNumber, null, out channel))
-            {
-                return channel >= 0 && channel <= 0xFF;
-            }
-            channel = 0;
+            value = 0;
             return false;
         }
 

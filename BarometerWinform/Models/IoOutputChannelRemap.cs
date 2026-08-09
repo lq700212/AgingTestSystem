@@ -18,7 +18,7 @@ namespace BarometerWinform.Models
     /// 【配置格式】（App.config → IoBackupChannelMappings）
     ///   源寄存器@源通道->目标寄存器@目标通道，多组用分号(;)分隔
     ///   - 寄存器：十六进制（可带 0x 前缀），如 0x2000
-    ///   - 通道：0~15 的十进制（0 = 第 1 路，bit0；15 = 第 16 路，bit15）
+    ///   - 通道：0~31 的十进制（0 = 第 1 路，bit0；31 = 第 32 路，bit31）
     ///   示例（0x2000 的 00 通道烧毁 → 备用到 0x2009 的 10 通道）：
     ///     0x2000@0->0x2009@10;0x2008@0->0x2009@11
     /// </summary>
@@ -27,13 +27,13 @@ namespace BarometerWinform.Models
         /// <summary>源寄存器地址（绝对地址，如 0x2000）</summary>
         public ushort SourceRegister { get; set; }
 
-        /// <summary>源通道号（0~15，0 = 第 1 路）</summary>
+        /// <summary>源通道号（0~31，0 = 第 1 路）</summary>
         public int SourceChannel { get; set; }
 
         /// <summary>目标寄存器地址（绝对地址，如 0x2009）</summary>
         public ushort TargetRegister { get; set; }
 
-        /// <summary>目标通道号（0~15，0 = 第 1 路）</summary>
+        /// <summary>目标通道号（0~31，0 = 第 1 路）</summary>
         public int TargetChannel { get; set; }
 
         /// <summary>
@@ -105,7 +105,7 @@ namespace BarometerWinform.Models
         /// </summary>
         /// <param name="s">原始字符串</param>
         /// <param name="reg">解析出的寄存器地址</param>
-        /// <param name="channel">解析出的通道号（0~15）</param>
+        /// <param name="channel">解析出的通道号（0~31）</param>
         /// <param name="error">解析失败时的原因说明</param>
         /// <returns>成功返回 true</returns>
         private static bool TryParseEndpoint(string s, out ushort reg, out int channel, out string error)
@@ -135,9 +135,9 @@ namespace BarometerWinform.Models
                 return false;
             }
 
-            if (!int.TryParse(parts[1].Trim(), out channel) || channel < 0 || channel > 15)
+            if (!int.TryParse(parts[1].Trim(), out channel) || channel < 0 || channel > 31)
             {
-                error = $"通道 '{parts[1]}' 应为 0~15 的数字（0 = 第 1 路）";
+                error = $"通道 '{parts[1]}' 应为 0~31 的数字（0 = 第 1 路）";
                 return false;
             }
             return true;

@@ -85,6 +85,20 @@ namespace BarometerWinform.Controls
 
         public override Type FormattedValueType => typeof(string);
 
+        /// <summary>
+        /// DataGridView 由 CellTemplate 克隆出实际单元格时只复制基类属性，
+        /// 这里手动把自定义属性带过去（否则 Maximum/HexDigits/ShowPrefix 等会被默认值覆盖）
+        /// </summary>
+        public override object Clone()
+        {
+            var c = base.Clone() as DataGridViewNumericUpDownCell;
+            c.Minimum = Minimum;
+            c.Maximum = Maximum;
+            c.Increment = Increment;
+            c.DecimalPlaces = DecimalPlaces;
+            return c;
+        }
+
         /// <summary>非编辑状态下把数值按小数位格式化成文本显示（修复点击前不显示的问题）</summary>
         protected override object GetFormattedValue(object value, int rowIndex, ref DataGridViewCellStyle cellStyle,
             TypeConverter valueTypeConverter, TypeConverter formattedValueTypeConverter,
@@ -137,6 +151,10 @@ namespace BarometerWinform.Controls
     {
         public decimal Minimum { get; set; } = 0;
         public decimal Maximum { get; set; } = 0xFF;
+        /// <summary>显示位数（寄存器用 4 位，通道用 2 位）</summary>
+        public int HexDigits { get; set; } = 2;
+        /// <summary>是否显示 0x 前缀（寄存器地址显示 0x2000，通道号不显示）</summary>
+        public bool ShowPrefix { get; set; } = false;
 
         public override Type EditType => typeof(DataGridViewHexNumericUpDownEditingControl);
 
@@ -144,14 +162,29 @@ namespace BarometerWinform.Controls
 
         public override Type FormattedValueType => typeof(string);
 
-        /// <summary>非编辑状态下把数值格式化为两位十六进制显示；空值显示为空</summary>
+        /// <summary>
+        /// 由 CellTemplate 克隆实际单元格时带上自定义属性（HexDigits/ShowPrefix 等），
+        /// 否则会回落成默认值，导致寄存器只显示 2 位、无 0x 前缀。
+        /// </summary>
+        public override object Clone()
+        {
+            var c = base.Clone() as DataGridViewHexNumericUpDownCell;
+            c.Minimum = Minimum;
+            c.Maximum = Maximum;
+            c.HexDigits = HexDigits;
+            c.ShowPrefix = ShowPrefix;
+            return c;
+        }
+
+        /// <summary>非编辑状态下把数值格式化为十六进制显示；空值显示为空</summary>
         protected override object GetFormattedValue(object value, int rowIndex, ref DataGridViewCellStyle cellStyle,
             TypeConverter valueTypeConverter, TypeConverter formattedValueTypeConverter,
             DataGridViewDataErrorContexts context)
         {
             if (value is decimal d)
             {
-                return ((int)d).ToString("X2", CultureInfo.CurrentCulture);
+                string hex = ((int)d).ToString("X" + HexDigits, CultureInfo.CurrentCulture);
+                return ShowPrefix ? "0x" + hex : hex;
             }
             return "";
         }

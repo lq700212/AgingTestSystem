@@ -73,6 +73,12 @@ namespace BarometerWinform.Dialogs
         private readonly Timer _pressTimer = new Timer { Interval = 700 };
         /// <summary>长按复制的提示气泡</summary>
         private readonly ToolTip _copyTip = new ToolTip();
+        /// <summary>长按复制已触发、等待松开鼠标后弹出的提示内容（显示太早会被鼠标捕获盖住）</summary>
+        private string _pendingCopyTip;
+        /// <summary>长按复制时所在的表格/单元格，松开鼠标后用于定位气泡</summary>
+        private DataGridView _pressTooltipGrid;
+        private int _pressTooltipRow = -1;
+        private int _pressTooltipCol = -1;
 
         /// <summary>
         /// 每个分类是否显示（搜索过滤时置为是否有匹配行）。
@@ -284,6 +290,19 @@ namespace BarometerWinform.Dialogs
 
             // 创建搜索框（位于布局顶部）
             SetupSearchBox();
+        }
+
+        /// <summary>
+        /// 窗体显示后预激活复制提示气泡：
+        /// ToolTip 首次 Show 时原生窗口尚未创建，点坐标版会直接不显示，
+        /// 这里先空转一次（Show 一个空格并立即 Hide）把内部窗口建好，后续 Show 才可靠。
+        /// 必须在窗体句柄创建之后做，构造函数里调用会因窗口未激活而无效。
+        /// </summary>
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            _copyTip.Show(" ", this, 1);
+            _copyTip.Hide(this);
         }
 
         /// <summary>
@@ -657,13 +676,16 @@ namespace BarometerWinform.Dialogs
             _pressGrid = grid;
             _pressRow = e.RowIndex;
             _pressCol = e.ColumnIndex;
+            _pressTooltipGrid = grid;
+            _pressTooltipRow = e.RowIndex;
+            _pressTooltipCol = e.ColumnIndex;
             _pressTimer.Stop();
             _pressTimer.Tick -= PressTimer_Tick;
             _pressTimer.Tick += PressTimer_Tick;
             _pressTimer.Start();
         }
 
-        /// <summary>松开鼠标左键时取消长按计时（不足 700ms 则未触发复制）</summary>
+        /// <summary>松开鼠标左键时取消长按计时（不足 700ms 则未触发复制）；若复制已触发，此刻鼠标已松开，再显示气泡</summary>
         private void Grid_CellMouseUp(object sender, DataGridViewCellMouseEventArgs e)
         {
             _pressTimer.Stop();
@@ -671,11 +693,14 @@ namespace BarometerWinform.Dialogs
             _pressGrid = null;
             _pressRow = -1;
             _pressCol = -1;
+
+            ShowPendingCopyTip();
         }
 
         /// <summary>
-        /// 长按计时到点：把设置名称复制到剪贴板并给出气泡提示。
-        /// 气泡用屏幕坐标定位到单元格附近（ToolTip 的 Point 参数是屏幕坐标）。
+        /// 长按计时到点：把设置名称复制到剪贴板。
+        /// 气泡提示不在这里显示——此时鼠标仍被表格按住/捕获，ToolTip 不会渲染；
+        /// 先记录待提示内容，等松开鼠标（Grid_CellMouseUp）后再弹出。
         /// </summary>
         private void PressTimer_Tick(object sender, EventArgs e)
         {
@@ -702,11 +727,35 @@ namespace BarometerWinform.Dialogs
                 return;
             }
 
-            // 单元格矩形 → 屏幕坐标，气泡显示在单元格正下方
-            Rectangle cellRect = grid.GetCellDisplayRectangle(colIndex, rowIndex, false);
-            Point screenPoint = grid.RectangleToScreen(cellRect).Location;
-            screenPoint.Offset(0, cellRect.Height + 2);
-            _copyTip.Show("已复制：" + text, grid, screenPoint, 1500);
+            _pendingCopyTip = text;
+        }
+
+        /// <summary>
+        /// 松开鼠标后弹出"已复制"气泡。
+        /// 用 Show(text, window, duration) 重载（显示在当前鼠标位置）：
+        /// - 松开鼠标时光标就在该单元格上，气泡自然落在单元格附近，无需换算坐标；
+        /// - 该重载走与悬停提示相同的 SemiAbsolute 显示路径，比点坐标版可靠
+        ///   （点坐标版首次调用因原生窗口未建好会不显示，已通过 OnShown 预激活兜底）。
+        /// 目标单元格取 MouseDown 时记录的 _pressTooltipRow/_pressTooltipCol，
+        /// 不受 Timer 重置 _pressRow/_pressCol 影响。
+        /// </summary>
+        private void ShowPendingCopyTip()
+        {
+            string text = _pendingCopyTip;
+            _pendingCopyTip = null;
+            if (text == null) return;
+
+            DataGridView grid = _pressTooltipGrid;
+            _pressTooltipGrid = null;
+            int rowIndex = _pressTooltipRow;
+            int colIndex = _pressTooltipCol;
+            _pressTooltipRow = -1;
+            _pressTooltipCol = -1;
+            if (grid == null || grid.IsDisposed) return;
+            if (rowIndex < 0 || rowIndex >= grid.Rows.Count) return;
+
+            // 光标当前位于该单元格上，气泡显示在光标附近即可
+            _copyTip.Show("已复制：" + text, grid, 1500);
         }
 
         /// <summary>
@@ -744,13 +793,11 @@ namespace BarometerWinform.Dialogs
 
         /// <summary>
         /// 弹出 IO 备用通道映射编辑器，并把编辑结果写回单元格。
-        /// 界面显示十六进制通道号（0x00~0xFF），保存时自动换算回"寄存器@位"原配置格式。
+        /// 界面与配置同构（寄存器@位），寄存器、通道号直接十六进制显示，保存无需换算。
         /// </summary>
         private void ShowIoMappingPopup(DataGridView grid, int rowIndex, string currentValue)
         {
-            // 换算需要 IO 输出寄存器起始地址
-            int baseRegister = _config.IoOutputRegisterStartAddress;
-            var popup = new Controls.IoMappingEditorPopup(currentValue, baseRegister);
+            var popup = new Controls.IoMappingEditorPopup(currentValue);
 
             // 定位到该单元格正下方
             Rectangle cellRect = grid.GetCellDisplayRectangle(grid.Columns["colValue"].Index, rowIndex, true);
