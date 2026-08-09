@@ -169,7 +169,7 @@
             // 
             // panelPermission - 当前操作权限显示容器（V1.19.7：拆为"前缀 + 角色名"两个标签）
             // FlowLayoutPanel 水平排列：前缀标签固定黑色，角色名标签由
-            // MainForm.UpdatePermissionDisplay 按权限设置 ForeColor（管理员=红/技术员=天蓝/操作员=绿）。
+            // MainForm.UpdatePermissionDisplay 按权限设置 ForeColor（管理员=红/技术员=蓝/操作员=绿）。
             // 背景色与顶栏一致，观感与普通标签相同。
             // 
             this.panelPermission.BackColor = System.Drawing.SystemColors.Control;
@@ -672,7 +672,7 @@
         private System.Windows.Forms.FlowLayoutPanel panelPermission;
         /// <summary>固定前缀"当前操作权限: "（默认黑字）</summary>
         private System.Windows.Forms.Label lblPermissionPrefix;
-        /// <summary>角色名标签（V1.19.7：ForeColor 按权限着色——管理员=红/技术员=天蓝/操作员=绿）</summary>
+        /// <summary>角色名标签（V1.19.7：ForeColor 按权限着色——管理员=红/技术员=蓝/操作员=绿）</summary>
         private System.Windows.Forms.Label lblPermissionRole;
         /// <summary>"通讯连接状态:"标签（V1.16 更名：现场无 PLC，改为通讯连接状态）</summary>
         private System.Windows.Forms.Label lblCommStatusLabel;

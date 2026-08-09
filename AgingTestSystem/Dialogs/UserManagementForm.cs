@@ -15,10 +15,16 @@ namespace AgingTestSystem.Dialogs
     ///
     /// 【操作流程】
     /// 1. 从角色下拉框选择要管理的角色（操作员/技术员）
-    /// 2. 从账号下拉框选择要操作的账号（该角色下所有已有账号）
-    /// 3. "应用修改"：修改选中账号的用户名/密码（留空表示不修改对应项）
+    /// 2. 从用户名下拉框选择要操作的账号（下拉列表自动列出该角色下所有已有账号）
+    /// 3. "应用修改"：修改选中账号的密码；如需改用户名，直接在用户名框输入新名字后点应用
     /// 4. "添加账号"：为当前角色新增一个账号（弹出输入窗口）
     /// 5. "删除账号"：删除选中的账号（每角色至少保留一个）
+    ///
+    /// 【用户名下拉框语义（可编辑）】
+    /// - 点击展开：列出当前角色下已创建的全部账号，供选择要修改的目标账号
+    /// - 保持原样点"应用修改"：只修改该账号密码
+    /// - 在框内输入新名字点"应用修改"：同时把该账号改名（新名字须全局唯一）
+    /// - 输入的文本若能匹配某个已有账号，则视为选中该账号
     ///
     /// 【校验规则】
     /// - 新密码和确认密码必须一致
@@ -30,6 +36,13 @@ namespace AgingTestSystem.Dialogs
     {
         /// <summary>用户管理器实例</summary>
         private readonly UserManager _userManager;
+
+        /// <summary>
+        /// 上次通过下拉框选中的账号
+        /// 用户选择账号后编辑用户名文本（SelectedIndex 会变为 -1）时，
+        /// 仍以该账号作为"改用户名"的目标。
+        /// </summary>
+        private UserAccount _lastSelectedAccount;
 
         /// <summary>
         /// 构造函数
@@ -74,55 +87,94 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 账号下拉框选择变更事件
-        /// 切换账号时重置输入框，避免误把上一账号的修改内容应用到新账号
+        /// 用户名下拉框选择变更事件
+        /// 记录选中的目标账号，并重置密码输入框，
+        /// 避免误把上一账号的修改内容应用到新账号
         /// </summary>
-        private void cboAccount_SelectedIndexChanged(object sender, EventArgs e)
+        private void cboUsername_SelectedIndexChanged(object sender, EventArgs e)
         {
+            UserRole role = GetSelectedRole();
+            IReadOnlyList<UserAccount> accounts = _userManager.GetAccounts(role);
+            int index = cboUsername.SelectedIndex;
+            if (index >= 0 && index < accounts.Count)
+            {
+                _lastSelectedAccount = accounts[index];
+            }
             ResetInputFields();
         }
 
         /// <summary>
-        /// 刷新账号下拉框：列出指定角色下的全部已有账号
+        /// 刷新用户名下拉框：列出指定角色下的全部已有账号，默认选中第一个
         /// </summary>
         /// <param name="role">目标角色</param>
         private void RefreshAccountList(UserRole role)
         {
-            cboAccount.Items.Clear();
+            // 记住当前选中用户名（切角色/刷新后尽量保持选中）
+            string previous = cboUsername.Text.Trim();
+
+            cboUsername.Items.Clear();
             foreach (UserAccount account in _userManager.GetAccounts(role))
             {
-                cboAccount.Items.Add(account.Username);
+                cboUsername.Items.Add(account.Username);
             }
 
-            // 默认选中第一个账号
-            if (cboAccount.Items.Count > 0)
+            if (cboUsername.Items.Count > 0)
             {
-                cboAccount.SelectedIndex = 0;
+                // 优先恢复之前的选中项，否则默认选中第一个账号
+                int index = previous.Length > 0 ? cboUsername.Items.IndexOf(previous) : -1;
+                cboUsername.SelectedIndex = index >= 0 ? index : 0;
             }
         }
 
         /// <summary>
-        /// 获取账号下拉框中当前选中的账号对象
+        /// 获取当前要操作的账号对象
+        ///
+        /// 【匹配规则】
+        /// 1. 下拉框已选中某项：目标为该选中账号（用户可能同时修改了文本，视为"改用户名"）
+        /// 2. 下拉框未选中（用户直接输入文本定位）：先按文本匹配已有账号（忽略大小写）；
+        ///    匹配不上则回退到上次下拉选中的账号（_lastSelectedAccount，作为改名目标）
+        /// 3. 均无法确定时返回 null
         /// </summary>
-        /// <returns>选中的账号（未选中返回 null）</returns>
+        /// <returns>目标账号（未确定返回 null）</returns>
         private UserAccount GetSelectedAccount()
         {
             UserRole role = GetSelectedRole();
             IReadOnlyList<UserAccount> accounts = _userManager.GetAccounts(role);
-            int index = cboAccount.SelectedIndex;
+            string username = cboUsername.Text.Trim();
+
+            // 下拉框已选中某项：直接返回该账号（文本可能已被用户改为新用户名）
+            int index = cboUsername.SelectedIndex;
             if (index >= 0 && index < accounts.Count)
             {
                 return accounts[index];
             }
+
+            // 下拉框未选中：先按文本匹配已有账号（用户直接输入已有账号名定位）
+            if (username.Length > 0)
+            {
+                foreach (UserAccount account in accounts)
+                {
+                    if (string.Equals(account.Username, username, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return account;
+                    }
+                }
+            }
+
+            // 文本不匹配任何账号：回退到上次下拉选中的账号（视为改用户名的目标）
+            if (_lastSelectedAccount != null)
+            {
+                return _lastSelectedAccount;
+            }
+
             return null;
         }
 
         /// <summary>
-        /// 清空新用户名/新密码/确认密码输入框
+        /// 清空密码/确认密码输入框（用户名下拉框保留，作为选择/改名载体）
         /// </summary>
         private void ResetInputFields()
         {
-            txtNewUsername.Clear();
             txtNewPassword.Clear();
             txtConfirmPassword.Clear();
         }
@@ -194,7 +246,7 @@ namespace AgingTestSystem.Dialogs
                 return;
             }
 
-            // 获取选中的账号
+            // 获取目标账号（用户名框文本匹配已有账号，或作为改名目标取下拉选中账号）
             UserAccount account = GetSelectedAccount();
             if (account == null)
             {
@@ -203,16 +255,16 @@ namespace AgingTestSystem.Dialogs
                 return;
             }
 
-            // 读取输入值（去除首尾空格）
-            string newUsername = txtNewUsername.Text.Trim();
+            // 读取输入值（用户名去除首尾空格，密码原样保留）
+            string newUsername = cboUsername.Text.Trim();
             string newPassword = txtNewPassword.Text;
             string confirmPassword = txtConfirmPassword.Text;
 
-            // 标记是否有修改
-            bool hasUsernameChange = !string.IsNullOrEmpty(newUsername);
+            // 标记是否有修改：用户名与当前账号不同视为改用户名；密码非空视为改密码
+            bool hasUsernameChange = !string.Equals(account.Username, newUsername, StringComparison.Ordinal);
             bool hasPasswordChange = !string.IsNullOrEmpty(newPassword);
 
-            // 如果两个输入都为空，提示用户
+            // 如果两个输入都没有修改，提示用户
             if (!hasUsernameChange && !hasPasswordChange)
             {
                 MessageBox.Show("请至少填写一项要修改的内容", "提示",
@@ -245,7 +297,7 @@ namespace AgingTestSystem.Dialogs
             bool anySuccess = false;
             string lastMessage = "";
 
-            // 修改用户名
+            // 修改用户名（输入的用户名与目标账号不同才需要改）
             if (hasUsernameChange)
             {
                 var (success, message) = _userManager.UpdateUsername(account, newUsername);
@@ -286,10 +338,11 @@ namespace AgingTestSystem.Dialogs
                 MessageBox.Show(lastMessage, "修改成功",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-                // 用户名可能已变更，刷新账号列表（V1.19.7：显示中文角色名并按角色着色）
+                // 用户名可能已变更，刷新账号列表（尽量保持选中该账号）
                 RefreshAccountList(targetRole);
+                cboUsername.Text = account.Username;
 
-                // 清空输入框，方便继续修改其他账号
+                // 清空密码输入框，方便继续修改其他账号
                 ResetInputFields();
             }
         }
@@ -327,7 +380,7 @@ namespace AgingTestSystem.Dialogs
             {
                 // 刷新账号列表并选中新添加的账号
                 RefreshAccountList(targetRole);
-                cboAccount.SelectedIndex = cboAccount.Items.Count - 1;
+                cboUsername.Text = username;
                 ResetInputFields();
             }
         }

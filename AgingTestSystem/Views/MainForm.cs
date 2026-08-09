@@ -209,7 +209,7 @@ namespace AgingTestSystem.Views
             // 连接状态变化（连接成功/未找到端口/错误）→ 写日志
             _scanner.OnStatusChanged += Scanner_OnStatusChanged;
 
-            // 5. 更新权限显示（V1.19.7：角色名着色——管理员=红/技术员=天蓝/操作员=绿）
+            // 5. 更新权限显示（V1.19.7：角色名着色——管理员=红/技术员=蓝/操作员=绿；V1.47 技术员蓝色加深）
             UpdatePermissionDisplay(_currentPermission);
 
             // 6. 更新状态栏信息
@@ -1725,6 +1725,12 @@ namespace AgingTestSystem.Views
                 items.Add(("用户管理", MenuPermissionUserManagement_Click));
             }
 
+            // 【新增】任意已登录角色可修改自己的密码（操作员/技术员/管理员）
+            if (_userManager.CurrentUser != null)
+            {
+                items.Add(("修改密码", MenuPermissionChangePassword_Click));
+            }
+
             ShowDropdownPopup(btnUserPermission, items.ToArray());
         }
 
@@ -1832,6 +1838,22 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
+        /// 【新增】修改密码菜单项点击事件
+        /// 任意已登录角色可见，弹出 ChangePasswordForm 修改当前用户自己的密码
+        /// </summary>
+        private void MenuPermissionChangePassword_Click(object sender, EventArgs e)
+        {
+            using (var form = new ChangePasswordForm(_userManager))
+            {
+                if (form.ShowDialog(this) == DialogResult.OK)
+                {
+                    // 密码修改成功，若已记住该角色登录信息则已被自动清除，写日志提示
+                    WriteLog($"用户 {_userManager.CurrentUser?.Username} 修改了自己的密码");
+                }
+            }
+        }
+
+        /// <summary>
         /// 【新增】尝试登录并切换权限
         ///
         /// 【流程】
@@ -1858,7 +1880,7 @@ namespace AgingTestSystem.Views
                     // 登录成功，更新权限显示
                     string roleName = GetRoleDisplayName(targetRole);
                     _currentPermission = roleName;
-                    // V1.19.7：角色名着色（管理员=红/技术员=天蓝/操作员=绿）
+                    // V1.19.7：角色名着色（管理员=红/技术员=蓝/操作员=绿；V1.47 技术员蓝色加深）
                     UpdatePermissionDisplay(roleName);
 
                     // 更新按钮可用状态（根据权限启用/禁用）
@@ -1900,7 +1922,7 @@ namespace AgingTestSystem.Views
         /// 拆为"前缀 + 角色名"两个标签（panelPermission 内 FlowLayoutPanel 水平排列）：
         /// 前缀 lblPermissionPrefix 固定默认黑字；角色名 lblPermissionRole 按权限设置 ForeColor：
         /// - 管理员 → 红色（Red）
-        /// - 技术员 → 天蓝色（SkyBlue）
+        /// - 技术员 → 深蓝色（RoyalBlue，V1.47 起由天蓝加深，更醒目）
         /// - 操作员 → 绿色（Green）
         /// - 未知角色 → 默认文字色
         /// </summary>
@@ -1914,7 +1936,7 @@ namespace AgingTestSystem.Views
                     roleColor = Color.Red;
                     break;
                 case "技术员":
-                    roleColor = Color.SkyBlue;
+                    roleColor = Color.RoyalBlue;
                     break;
                 case "操作员":
                     roleColor = Color.Green;

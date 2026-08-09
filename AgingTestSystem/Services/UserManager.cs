@@ -12,7 +12,7 @@ namespace AgingTestSystem.Services
     /// 【功能说明】
     /// 1. 维护系统中所有用户账号（操作员/技术员/管理员）
     /// 2. 提供登录验证功能（校验用户名和密码）
-    /// 3. 提供密码修改功能（仅管理员可调用）
+    /// 3. 提供密码修改功能：任意角色可修改自己的密码（ChangeOwnPassword，验证旧密码）；管理员可修改操作员/技术员密码（UpdatePassword）
     /// 4. 提供用户名修改功能（仅管理员可调用）
     /// 5. 用户数据持久化到 JSON 文件（程序重启后数据不丢失）
     ///
@@ -380,6 +380,66 @@ namespace AgingTestSystem.Services
             SaveUsersToFile();
 
             return (true, "用户名修改成功");
+        }
+
+        /// <summary>
+        /// 修改当前登录用户自己的密码（操作员/技术员/管理员均可调用）
+        ///
+        /// 【场景】
+        /// 操作员/技术员/管理员修改自己的密码，必须验证旧密码，
+        /// 防止他人在无人值守时篡改账号密码。
+        /// 管理员修改其他账号（操作员/技术员）密码请使用 UpdatePassword。
+        /// </summary>
+        /// <param name="oldPassword">当前密码</param>
+        /// <param name="newPassword">新密码</param>
+        /// <returns>修改结果（成功/失败及信息）</returns>
+        public (bool Success, string Message) ChangeOwnPassword(string oldPassword, string newPassword)
+        {
+            // 必须已登录才能修改自己的密码
+            if (CurrentUser == null)
+            {
+                return (false, "当前未登录，无法修改密码");
+            }
+
+            // 当前密码不能为空
+            if (string.IsNullOrWhiteSpace(oldPassword))
+            {
+                return (false, "请输入当前密码");
+            }
+
+            // 验证当前密码是否正确
+            if (!string.Equals(CurrentUser.Password, oldPassword, StringComparison.Ordinal))
+            {
+                return (false, "当前密码错误");
+            }
+
+            // 新密码不能为空
+            if (string.IsNullOrWhiteSpace(newPassword))
+            {
+                return (false, "新密码不能为空");
+            }
+
+            if (newPassword.Length < 4)
+            {
+                return (false, "新密码至少需要4个字符");
+            }
+
+            // 新密码不能与当前密码相同
+            if (string.Equals(CurrentUser.Password, newPassword, StringComparison.Ordinal))
+            {
+                return (false, "新密码不能与当前密码相同");
+            }
+
+            // 修改当前登录用户的密码
+            CurrentUser.Password = newPassword;
+
+            // 修改成功后保存到文件
+            SaveUsersToFile();
+
+            // 密码已变更，清除该角色记住的登录信息（避免下次自动填充旧密码导致登录失败）
+            ClearRememberedLogin(CurrentUser.Role);
+
+            return (true, "密码修改成功");
         }
 
         /// <summary>
