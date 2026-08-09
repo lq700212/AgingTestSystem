@@ -220,7 +220,7 @@ namespace AgingTestSystem.Dialogs
                 return;
             }
 
-            // 载台上电输出内部编号（依据显耀 IO 表：Y110~Y217）
+            // 载台上电输出内部编号（依据IO分配表：Y110~Y217）
             int carrierOutputId = _config.TotalInputs + _config.TotalBarometers + _deviceId;
 
             // 读取当前状态，仅当下电状态为"已上电"时才下发关闭命令

@@ -38,7 +38,7 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 所属气压表编号（1 ~ TotalBarometers）
-        /// 一个气压表对应 1 个输入 + 2 个输出（V1.09 更新，依据显耀IO表）
+        /// 一个气压表对应 1 个输入 + 2 个输出（V1.09 更新，依据IO分配表）
         /// </summary>
         public int DeviceId { get; set; }
 
@@ -97,7 +97,7 @@ namespace AgingTestSystem.Models
 
     /// <summary>
     /// IO功能类型枚举
-    /// 【V1.09 新增】依据"显耀IO表"定义每个IO点的业务功能
+    /// 【V1.09 新增】依据"IO分配表"定义每个IO点的业务功能
     /// </summary>
     public enum IoFunction
     {

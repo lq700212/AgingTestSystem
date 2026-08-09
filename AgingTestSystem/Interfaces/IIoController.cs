@@ -8,8 +8,8 @@ namespace AgingTestSystem.Interfaces
     /// IO控制器接口
     /// 定义了对IO输入/输出进行控制的标准方法
     ///
-    /// 【V1.09 更新 —— 显耀IO表接入】
-    /// 现场IO配置已明确，依据"显耀IO表":
+    /// 【V1.09 更新 —— IO分配表接入】
+    /// 现场IO配置已明确，依据"IO分配表":
     /// - 输入: 72 个 NPN 型输入点, 三菱PLC X 地址(八进制编址)
     /// - 输出: 144 个 PNP 型输出点, 三菱PLC Y 地址(八进制编址)
     ///
@@ -19,7 +19,7 @@ namespace AgingTestSystem.Interfaces
     ///   输出: TotalInputs+1 ~ TotalInputs+TotalOutputs (73 ~ 216)
     /// 与硬件通信时，需通过 <see cref="Services.IoMapBuilder"/> 转换为物理地址。
     ///
-    /// 【IO点编号规则】(依据显耀IO表)
+    /// 【IO点编号规则】(依据IO分配表)
     /// 输入点(1~72, NPN, X地址):
     ///   内部编号 n → 物理地址 X + octal(n-1)
     ///   1→X000, 8→X007, 9→X010, 72→X107

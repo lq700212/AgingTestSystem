@@ -5,7 +5,7 @@ namespace AgingTestSystem.Models
     /// IO点定义模型
     /// 【V1.09 新增】描述单个IO点的静态配置信息（地址、功能、电气类型等）
     ///
-    /// 该模型基于现场"显耀IO表"整理而成，用于建立"内部连续编号"与"物理地址"之间的映射。
+    /// 该模型基于现场"IO分配表"整理而成，用于建立"内部连续编号"与"物理地址"之间的映射。
     /// 程序内部使用 <see cref="IoId"/>（十进制连续编号）进行索引，
     /// 与硬件通信时使用 <see cref="PhysicalAddress"/>（三菱PLC八进制地址，如 X000 / Y107）。
     /// </summary>
@@ -30,7 +30,7 @@ namespace AgingTestSystem.Models
         public string PhysicalAddress { get; set; }
 
         /// <summary>
-        /// IO点设备名称（来自显耀IO表）
+        /// IO点设备名称（来自IO分配表）
         /// 如：真空负压表-1、真空电磁阀-1、载台上电-1
         /// </summary>
         public string DeviceName { get; set; }
