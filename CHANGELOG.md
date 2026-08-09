@@ -3,6 +3,24 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.45 — 移除未被使用的单台手动控制窗体 DeviceManualForm（2026-08-09）
+
+### 改动范围
+- 删除 `Dialogs/DeviceManualForm.cs`、`DeviceManualForm.Designer.cs` 两个文件（项目内从未实例化调用，属死代码）
+- `AgingTestSystem.csproj` — 移除上述文件的项目引用
+- `Services/IoMapBuilder.cs` — 注释里对 DeviceManualForm 的说明已过时，顺手去掉
+
+## V1.44 — 移除已停用的启动 Splash 页面及其图片资源（2026-08-09）
+
+### 改动范围
+- `Program.cs` — 删除 `ShowSplashScreen()` 方法及其相关注释（含类注释里修复 L3 说明、Main 里的调用注释），并移除随之不再使用的 `using System.Threading`
+- 删除 `Views/mForm_Progress.cs`、`mForm_Progress.Designer.cs`、`mForm_Progress.resx` 三个文件
+- `AgingTestSystem.csproj` — 移除上述文件与 `Resources` 下两张启动图（`华际光电(1)(1).png`、`华际光电(1)(1)(1).png`）的项目引用
+- `Properties/Resources.resx` / `Resources.Designer.cs` — 移除两张图片的嵌入资源与对应访问属性
+
+### 为什么这么改
+- 启动流程早已改为直接进入主界面（Splash 调用被注释），此功能不再使用，属历史遗留死代码，彻底删除避免维护困惑
+
 ## V1.43 — 公共参数窗口负压值输入框改为数值框（支持正负数）（2026-08-09）
 
 ### 改动范围
