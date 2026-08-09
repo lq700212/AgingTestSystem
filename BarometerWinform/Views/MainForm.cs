@@ -521,7 +521,8 @@ namespace BarometerWinform.Views
                 config.IoBackupChannelMappingEnabled = ioBackupEnabled;
             }
 
-            // 备用通道映射表：格式 "0x2000@0->0x2009@10;0x2008@0->0x2009@11"
+            // 备用通道映射表：格式 "0x2000@0x00->0x2009@0x10;0x2008@0x00->0x2009@0x11"
+            // （寄存器@通道均为十六进制，与设置界面显示一致）
             // 解析失败的项会跳过（不影响合法项）；若有解析问题且开关为 true，额外记一条告警日志方便排查。
             string ioBackupMappingsRaw = System.Configuration.ConfigurationManager.AppSettings["IoBackupChannelMappings"];
             if (!string.IsNullOrWhiteSpace(ioBackupMappingsRaw))

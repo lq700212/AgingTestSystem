@@ -8,13 +8,13 @@ namespace BarometerWinform.Controls
     /// <summary>
     /// IO 备用通道映射编辑弹出框（供系统设置窗口 IoBackupChannelMappings 配置项使用）：
     /// 以"一行一条映射"的表格展示，每行四列输入 + 中间箭头：
-    ///   原寄存器 0x2000 | 原通道 00 → 新寄存器 0x2009 | 新通道 01
-    /// 寄存器地址（0x0000~0xFFFF）与通道号（00~1F）均为十六进制，可微调。
+    ///   原寄存器 0x2000 | 原通道 0x00 → 新寄存器 0x2009 | 新通道 0x10
+    /// 寄存器地址（0x0000~0xFFFF）与通道号（0x00~0x1F）均为十六进制，可微调。
     /// 支持直接修改、添加新行、选中删除。
     ///
-    /// 【与配置格式的对应】配置里存的即是"寄存器@位"（如 0x2000@0-&gt;0x2009@10），
-    /// 与界面四列一一对应，无需额外换算，只是把配置里的十进制位号显示成十六进制：
-    ///   位号 0~31 → 显示 00~1F；保存时再转回十进制位号，保证与其它代码解析一致。
+    /// 【与配置格式的对应】配置里存的即是"寄存器@通道"（如 0x2000@0x00->0x2009@0x10），
+    /// 与界面显示完全一致（所见即所得），无需换算；十六进制通道由 IoOutputChannelRemap
+    /// 在解析时统一转成十进制位号（0~31）供位运算使用。
     /// </summary>
     public class IoMappingEditorPopup : Form
     {
@@ -33,7 +33,7 @@ namespace BarometerWinform.Controls
         /// <summary>
         /// 构造弹出框
         /// </summary>
-        /// <param name="currentValue">当前配置值（如 "0x2000@0->0x2009@10;0x2008@0->0x2009@11"）</param>
+        /// <param name="currentValue">当前配置值（如 "0x2000@0x00->0x2009@0x10;0x2008@0x00->0x2009@0x11"）</param>
         public IoMappingEditorPopup(string currentValue)
         {
             FormBorderStyle = FormBorderStyle.None;
@@ -91,20 +91,20 @@ namespace BarometerWinform.Controls
                 HexDigits = 4,
                 ShowPrefix = true
             };
-            // 原/新通道：十六进制微调框（00~1F，兼容 32 点/模块）
-            _dgv.Columns["colSrcCh"].CellTemplate = new DataGridViewHexNumericUpDownCell { Maximum = 0x1F };
-            _dgv.Columns["colDstCh"].CellTemplate = new DataGridViewHexNumericUpDownCell { Maximum = 0x1F };
+            // 原/新通道：十六进制微调框（0x00~0x1F，兼容 32 点/模块），与寄存器一样带 0x 前缀
+            _dgv.Columns["colSrcCh"].CellTemplate = new DataGridViewHexNumericUpDownCell { Maximum = 0x1F, ShowPrefix = true };
+            _dgv.Columns["colDstCh"].CellTemplate = new DataGridViewHexNumericUpDownCell { Maximum = 0x1F, ShowPrefix = true };
 
             _dgv.Columns["colSrcReg"].Width = 148;
             _dgv.Columns["colSrcReg"].AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
             _dgv.Columns["colSrcReg"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
-            _dgv.Columns["colSrcCh"].Width = 78;
+            _dgv.Columns["colSrcCh"].Width = 92;
             _dgv.Columns["colSrcCh"].AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
             _dgv.Columns["colSrcCh"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
             _dgv.Columns["colDstReg"].Width = 148;
             _dgv.Columns["colDstReg"].AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
             _dgv.Columns["colDstReg"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
-            _dgv.Columns["colDstCh"].Width = 78;
+            _dgv.Columns["colDstCh"].Width = 92;
             _dgv.Columns["colDstCh"].AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
             _dgv.Columns["colDstCh"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
 
@@ -122,7 +122,7 @@ namespace BarometerWinform.Controls
             // 操作提示
             var lblHint = new Label
             {
-                Text = "寄存器（0x0000~0xFFFF）与通道（00~1F）均为十六进制；保存时自动换算回配置格式",
+                Text = "寄存器（0x0000~0xFFFF）与通道（0x00~0x1F）均为十六进制；保存后配置与界面显示一致，无需换算",
                 Location = new Point(12, 176),
                 Size = new Size(536, 18),
                 TextAlign = ContentAlignment.MiddleLeft,
@@ -251,8 +251,9 @@ namespace BarometerWinform.Controls
                     return;
                 }
 
-                // 通道号转回十进制位号（0~31），寄存器保持 0x 十六进制，与 IoOutputChannelRemap 解析格式一致
-                parts.Add($"0x{srcReg:X4}@{srcCh}->0x{dstReg:X4}@{dstCh}");
+                // 寄存器与通道均以十六进制输出，与界面显示完全一致（所见即所得）；
+                // 十六进制通道由 IoOutputChannelRemap 解析时转成十进制位号（0~31）
+                parts.Add($"0x{srcReg:X4}@0x{srcCh:X2}->0x{dstReg:X4}@0x{dstCh:X2}");
             }
 
             ResultValue = string.Join(";", parts);
