@@ -84,11 +84,16 @@ namespace AgingTestSystem.Dialogs
             //
             // 【V1.53】AutoScroll 关闭：滚动已交给内部填满的 UIDataGridView（虚拟化绘制，
             // 只重绘可见行），避免 8 个独立表格在滚动容器中整块移动重绘导致滚动卡顿。
+            // 【V1.54d】Padding=12,0,12,0：用户反馈表格左边缘离窗口左边缘太近、
+            // 缺空隙；左右各 12px Padding 后，表格与窗口左右各留约 12px 空白带，
+            // 视觉上表格"居中悬浮"在中部，与右侧对称。表格（_grid）仍 Dock=Fill，
+            // 撑满 padding 之内；pnlScroll 自身 RectColor 仍可见作为表格外框。
             this.pnlScroll.AutoScroll = false;
             this.pnlScroll.Dock = System.Windows.Forms.DockStyle.Fill;
             this.pnlScroll.FillColor = System.Drawing.Color.White;
             this.pnlScroll.Name = "pnlScroll";
-            this.pnlScroll.RectColor = System.Drawing.Color.FromArgb(((int)(((byte)230))), ((int)(((byte)234))), ((int)(((byte)240))));
+            this.pnlScroll.Padding = new System.Windows.Forms.Padding(12, 0, 12, 0);
+            this.pnlScroll.RectColor = System.Drawing.Color.FromArgb(((int)(((byte)(230)))), ((int)(((byte)(234)))), ((int)(((byte)(240)))));
             this.pnlScroll.Size = new System.Drawing.Size(960, 614);
             this.pnlScroll.TabIndex = 1;
             //

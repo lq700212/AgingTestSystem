@@ -479,6 +479,15 @@ namespace AgingTestSystem.Dialogs
             grid.CellMouseDown += Grid_CellMouseDown;
             grid.CellMouseUp += Grid_CellMouseUp;
 
+            // 分组标题行自绘：去掉表格分割线，让标题看起来不在表格内（见 Grid_CellPainting 注释）
+            grid.CellPainting += Grid_CellPainting;
+            // 行级画完后再补一刀：把分组标题行上下两条水平线以及三列之间残留的垂直线
+            // 用浅蓝（与标题行背景同色）覆盖，消除"标题是表格里的一行"的视觉感。
+            // CellPainting + e.Handled=true 在 SunnyUI UIDataGridView 下不一定能完全阻止
+            // 控件画 cell border（SunnyUI 可能在 CellPainting 返回后再补画 gridline），
+            // 这里在 RowPostPaint 阶段主动用背景色覆盖这些线，最稳。
+            grid.RowPostPaint += Grid_RowPostPaint;
+
             return grid;
         }
 
@@ -505,6 +514,92 @@ namespace AgingTestSystem.Dialogs
                 }
             }
             e.ThrowException = false;
+        }
+
+        /// <summary>
+        /// 分组标题行自绘：去掉表格分割线（水平/垂直边框），只保留浅蓝背景 + 深蓝粗体标题文字，
+        /// 从视觉上让标题行看起来**不在表格内部**，更像一条独立的分类色带。
+        ///
+        /// 原理：DataGridView 默认渲染每个单元格时都会画出边框（CellBorderStyle=Single），
+        /// 分组标题行如果走默认绘制，三列之间会有垂直分割线、上下行之间有水平分割线，
+        /// 看起来就是"表格里的一行"。
+        /// 这里拦截分组标题行的 CellPainting，只画 Background（浅蓝铺满整格），
+        /// 再手动画标题文字，不画 Border 也不画 ContentBackground/Foreground，
+        /// 最终标题行看起来就是"放在表格里的一个色带"，而不是"表格的一行"。
+        /// </summary>
+        private void Grid_CellPainting(object sender, DataGridViewCellPaintingEventArgs e)
+        {
+            // 只处理分组标题行，非分组行/表头/-1 行一律跳过
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (!_groupRows.Contains(e.RowIndex)) return;
+
+            // 只画背景（浅蓝），不画任何边框/分割线
+            e.Paint(e.CellBounds, DataGridViewPaintParts.Background);
+
+            // 第一列（colKey）画标题文字，其他列留空不画
+            var cellValue = _grid.Rows[e.RowIndex].Cells[e.ColumnIndex].Value?.ToString() ?? "";
+            if (!string.IsNullOrEmpty(cellValue))
+            {
+                var textBounds = e.CellBounds;
+                textBounds.X += 8;   // 左内边距 8px，与数据行设置名称列文字对齐
+                textBounds.Width -= 8;
+                TextRenderer.DrawText(e.Graphics, cellValue, _groupFont, textBounds,
+                    Color.FromArgb(48, 119, 238),
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter
+                    | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+            }
+
+            // 标记已由我们完整绘制，阻止系统再画边框/焦点/选择态等
+            e.Handled = true;
+        }
+
+        /// <summary>
+        /// 分组标题行画完后：去掉**列间垂直线** + _grid 右侧残留竖线，**下边线**用蓝色（标题色带延伸）。
+        /// 视觉上让标题行像"一条横跨表格的标题带"：
+        ///   上边线：DataGridView 默认 cell border（与数据行统一，不另画避免叠色）
+        ///   下边线：自画蓝色（与标题文字同色，色带延伸）
+        ///   中间：列与列之间、_grid 右边缘都不再有垂直线
+        /// </summary>
+        private void Grid_RowPostPaint(object sender, DataGridViewRowPostPaintEventArgs e)
+        {
+            if (!_groupRows.Contains(e.RowIndex)) return;
+
+            Color groupBack = Color.FromArgb(237, 243, 253);   // 标题行浅蓝底
+            // 【V1.54d】下边线：与标题文字同色（深蓝 48,119,238），色带延伸
+            Color groupLine = Color.FromArgb(48, 119, 238);
+            // 【V1.54g】覆盖右边缘扩 1 像素：DataGridView 的 cell border 画在 _grid.Right 那一像素
+            // （半开区间 [0, _grid.Width) 内的 cell 在 X=_grid.Width-1，border 在 X=_grid.Width），
+            // 之前覆盖矩形 Width=_grid.Width 漏掉 _grid.Right 的 border，导致每个标题行最右侧仍有一条竖线。
+            // 改为 _grid.Width + 1 像素正好覆盖住。
+            int coverRight = _grid.Width + 1;
+            using (var bgBrush = new SolidBrush(groupBack))
+            using (var linePen = new Pen(groupLine, 1f))
+            {
+                // ① 整行宽矩形（X=0 到 _grid.Right，包含 cell border 那一像素），覆盖列间垂直线 + 右侧 cell border
+                Rectangle rowRect = e.RowBounds;
+                rowRect.X = 0;
+                rowRect.Width = coverRight;
+                e.Graphics.FillRectangle(bgBrush, rowRect);
+
+                // ② 只画下边一条蓝色水平线（用户明确要求"标题下面的横线要蓝色"）
+                // 上边不画，避免与 DataGridView 自己的 cell border 叠色成"颜色深很多"
+                e.Graphics.DrawLine(linePen, 0, e.RowBounds.Bottom - 1, coverRight - 1, e.RowBounds.Bottom - 1);
+
+                // ③ 重画标题文字（RowPostPaint 在 CellPainting 之后执行，文字可能被覆盖）
+                DataGridViewRow row = _grid.Rows[e.RowIndex];
+                var cell = row.Cells["colKey"];
+                string text = cell.Value?.ToString() ?? "";
+                if (!string.IsNullOrEmpty(text))
+                {
+                    var textBounds = _grid.GetCellDisplayRectangle(cell.ColumnIndex, e.RowIndex, false);
+                    textBounds.X += 8;
+                    textBounds.Width -= 8;
+                    TextRenderer.DrawText(e.Graphics, text, _groupFont, textBounds,
+                        Color.FromArgb(48, 119, 238),
+                        TextFormatFlags.Left | TextFormatFlags.VerticalCenter
+                        | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+                }
+            }
         }
 
         /// <summary>
@@ -634,19 +729,23 @@ namespace AgingTestSystem.Dialogs
             var lblSearch = new Label
             {
                 Text = "搜索配置项：",
-                Location = new Point(14, 5),
+                // 【V1.54d】左对齐：与下面"基础配置"等分组标题对齐（pnlScroll.Padding.Left=12 + 8=20）
+                Location = new Point(20, 5),
                 Size = new Size(110, 26),
                 TextAlign = ContentAlignment.MiddleLeft,
-                Font = new Font(this.Font.FontFamily, 11F, FontStyle.Bold),
+                // 【V1.54d】字体大小一致：与分组标题行同款（10F Bold），视觉上"搜索配置项："和"基础配置"是同一族标题
+                Font = new Font(this.Font.FontFamily, 10F, FontStyle.Bold),
                 ForeColor = Color.FromArgb(48, 119, 238)
             };
             pnlSearch.Controls.Add(lblSearch);
 
             _txtSearch = new Sunny.UI.UITextBox
             {
-                Location = new Point(124, 5),
+                // 文本框也左移 6px（与 label 对齐到同一起点）
+                Location = new Point(130, 5),
                 Size = new Size(320, 26),
-                Font = new Font(this.Font.FontFamily, 11F),
+                // 【V1.54d】文本框字体 11F → 10F，与分组标题字号一致；保持表格内文字的视觉协调
+                Font = new Font(this.Font.FontFamily, 10F),
                 Watermark = "输入关键字过滤配置项"
             };
             _txtSearch.TextChanged += TxtSearch_TextChanged;
@@ -655,7 +754,8 @@ namespace AgingTestSystem.Dialogs
             _btnClearSearch = new Button
             {
                 Text = "✕",
-                Location = new Point(448, 5),
+                // 清除按钮 X 跟着文本框左移 6px（保持与文本框的相对间距 4px）
+                Location = new Point(454, 5),
                 Size = new Size(26, 26),
                 FlatStyle = FlatStyle.Flat,
                 TabStop = false

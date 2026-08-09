@@ -3,6 +3,122 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.54c — 设置窗口分组标题行去掉表格分割线（2026-08-09）
+
+### 改动范围
+- `Dialogs/SettingsForm.cs` — **分组标题行去掉列间垂直线、保留上下水平线**：
+  - **首发版（未生效）**：仅在 `CellPainting` 自绘分组标题行 + `e.Handled = true`，但 SunnyUI `UIDataGridView` 内部在 `CellPainting` 返回后还会自己补画 cell border / gridline，导致列间垂直线仍可见
+  - **二次修复（去掉全部线）**：再补 `RowPostPaint` 用浅蓝覆盖整行矩形 + 上下 1px，但用户反馈"上下那条横线还是要的，不然整个表格看起来好丑"
+  - **本版（最终）**：在 `RowPostPaint` 阶段用浅蓝覆盖**整行矩形但上下边各内缩 1px**——只抹掉列间垂直线、保留 DataGridView 默认的上下水平线
+  - **最终调整（横线改蓝色）**：用户反馈默认的黑色/灰色水平线"很丑"，改为在 `RowPostPaint` 里**自己用蓝色 (`214,229,255`，与表头边框同系) 重画**上下两条水平线，不再依赖 DataGridView 默认 cell border
+
+## V1.54g — 标题行右侧竖线 / 上边叠色深度修复（2026-08-09）
+
+### 改动范围
+- `Dialogs/SettingsForm.cs` — **V1.54f 修复未生效 + 上边横线叠色修复**：
+  - **V1.54f 没生效的根因**：之前用 `pnlScroll.ClientSize.Width` 作覆盖右边界，但 `RowPostPaint` 的 Graphics 坐标系实际是 `_grid` 控件的，`pnlScroll.ClientSize.Width` 值超出 `_grid` 实际可绘范围；且 cell border 画在 X=`_grid.Width` 那一像素（半开区间），之前覆盖矩形 Width=`_grid.Width` 漏掉那一像素
+  - **修复**：覆盖右边界改为 `_grid.Width + 1` 像素（Graphics 坐标系下），正好覆盖到 `_grid.Right` 位置那条 cell border
+  - **上边叠色修复**：之前同时画上下两条蓝色线，**上边线**与 DataGridView 在标题行顶画的 cell border 叠在同一像素 → 颜色叠加"深很多"。改为**只画下边线**（用户明确要求"标题下面的横线要蓝色"），上边线直接用 DataGridView 默认 cell border（与数据行颜色一致）
+
+### 为什么这么改
+- 用户反馈 V1.54f "没生效" + "基础配置这些区域标题上面的表格横线好像多画了一次是不是？颜色明显深很多"
+
+### 优化点
+- 标题行最右侧的竖线真正消失（覆盖到 _grid.Right 那一像素）
+- 上边横线与数据行 cell border 同色（无叠色），下边横线保持深蓝（色带延伸）
+- Graphics 坐标系明确为 _grid 控件，不再误用 pnlScroll 坐标系
+
+## V1.54f — 标题行最右侧残留垂直线修复（2026-08-09）
+
+### 改动范围
+- `Dialogs/SettingsForm.cs` — **覆盖范围扩展到 pnlScroll.ClientSize.Width**：
+  - 之前 `Grid_RowPostPaint` 里 `rowRect.Width = _grid.Width`，只覆盖到 `_grid.Right`
+  - DataGridView 在 `_grid` 右边缘外侧还会画一条 cell border（垂直线），导致"基础配置"等每个标题行最右侧仍有一条竖线
+  - 改为 `coverRight = pnlScroll.ClientSize.Width`，覆盖矩形和上下水平线都延伸到 pnlScroll 右边缘
+
+### 为什么这么改
+- 用户反馈"基础配置 这行最右侧还有表格的竖线，去掉，下面的很多区域标题的右侧都有这个问题"
+- RowPostPaint 的 Graphics 是 pnlScroll 级别的（不是 _grid 级别），所以可以画到 pnlScroll 整个宽度
+
+### 优化点
+- 标题色带现在横跨整个 pnlScroll 宽度（从 X=0 到 pnlScroll.Right），右侧不再有残留竖线
+- 上下蓝色水平线也跟着延长
+
+## V1.54e — 搜索框与分组标题对齐 + 标题横线改为深蓝（2026-08-09）
+
+### 改动范围
+- `Dialogs/SettingsForm.cs` — **搜索框与表格分组标题对齐 + 字号一致**：
+  - `lblSearch` X 14 → 20（pnlScroll.Padding.Left=12 + colKey 文字左内边距 8 = 20），与下面"基础配置"等分组标题完美左对齐
+  - `lblSearch` 字体 11F Bold → **10F Bold**（与分组标题行同款），视觉上"搜索配置项："和"基础配置"是同一族标题
+  - `_txtSearch` 文本框 X 124 → 130（左移 6px 保持与 label 起点对齐），字体 11F → 10F
+  - `_btnClearSearch` 清除按钮 X 448 → 454（左移 6px 保持与文本框的相对间距）
+- `Dialogs/SettingsForm.cs` — **标题行上下水平线颜色修正**：
+  - 之前用 `214,229,255`（极浅蓝，视觉接近白），用户反馈"颜色不对"
+  - 改为 `48,119,238`（与标题文字同色，深蓝），视觉上与"基础配置"等标题字同色，是"标题带"的延伸
+
+### 为什么这么改
+- 用户反馈"搜索配置项 和 下面的 基础配置 左侧对齐，字体大小一样" + "标题下面的横线要蓝色"
+- 之前搜索 label 在 X=14（pnlScroll 容器内）、表格第一列 colKey 在 pnlScroll.Padding.Left+8=20（容器内 X 坐标），错位 6px；且字号 11F vs 10F 不一致
+- 横线 `214,229,255` 太浅，视觉上几乎看不到，不算"蓝色"
+
+### 优化点
+- 搜索框与表格标题完美对齐（X 20 + 字号 10F Bold），整张设置窗口视觉一致
+- 标题横线改为与标题文字同色（深蓝 `48,119,238`），与标题色带融为一体
+
+## V1.54d — 设置窗口表格与窗口边缘留出左右空隙（2026-08-09）
+
+### 改动范围
+- `Dialogs/SettingsForm.Designer.cs` — **`pnlScroll.Padding = (12,0,12,0)`**：让内部 `_grid`（仍 `Dock=Fill`）相对 pnlScroll 边缘左右各缩 12px，从而表格与窗口左右各留约 12px 空白带
+- 之前 `pnlScroll` 无 padding、`_grid` Dock=Fill 撑满，表格左右边缘几乎贴窗口边缘，缺空隙；现在右侧已有 pnlScroll RectColor 边框做分隔，左侧也补上对称空隙
+
+### 为什么这么改
+- 用户反馈"表格的左边缘离整个窗口的左边缘太近了，稍微有点空隙吧，就像右边那样"
+- 用 Padding 是最小侵入：不动表格列宽、不动控件结构，仅容器留白
+
+### 优化点
+- 表格左右对称，视觉上"居中悬浮"在中部
+
+### 为什么这么改
+- 用户反馈 V1.54c 首发版"目前还没有搞好"
+- SunnyUI UIDataGridView 走自己的 OnPaint，单纯靠 e.Handled=true 拦不住；用 RowPostPaint 主动覆盖是 SunnyUI 自定义控件的标准做法
+
+### 优化点
+- 标题行从视觉上完全脱离表格样式（无列间垂直线、无上下水平线）
+- 不改变数据行任何样式（RowPostPaint 跳过非分组行）
+- 文字重画在覆盖层之后，保证标题文字仍清晰可见
+
+## V1.54b — IO 备用通道映射弹窗箭头加粗 + 弹窗适度加宽（2026-08-09）
+
+### 改动范围
+- `Controls/IoMappingEditorPopup.cs` — **箭头列字符加粗 + 弹窗适度加宽**：
+  - **加粗（V1.54 续）**：V1.54 首发版表头与数据行箭头都用"微软雅黑 12F, Regular"，但用户反馈"和下面还是有点差别"。根因是"→"是细线条字符、微软雅黑 Regular 视觉偏纤细，**数据行与表头都改 12F, Bold**，像素级一致；自绘路径（`Dgv_CellPainting`）与数据列 `DefaultCellStyle.Font` 同步更新
+  - **加宽**：弹窗 `ClientSize` 560×268 → **640×268**；表格宽 536 → **616**；列宽 148+92+56+148+92=536 → 172+104+60+172+104=612。**根因**：原 5 列总宽 536 等于 `dgv.Width`，最右侧"新通道"列十六进制微调框按钮被裁切；现表格宽 616（多 4px 余量），刚好不裁切
+  - 提示 `lblHint` 宽度 536 → 616 同步；取消/确定按钮重新靠右（398/466 → 476/546）
+
+### 为什么这么改
+- 用户反馈之前加太多（720 太宽），只需要刚好看到右侧边缘即可
+
+### 优化点
+- 弹窗从 720 缩回 640，刚好够用不臃肿
+- 箭头表头与数据行像素级一致（加粗、12F、48,48,48、居中）
+
+## V1.54 — IO 备用通道映射弹窗表头箭头样式自绘修复（2026-08-09）
+
+### 改动范围
+- `Controls/IoMappingEditorPopup.cs` — **表头箭头与数据行箭头样式彻底一致（自绘）**：
+  - V1.53 通过 `_dgv.Columns["colArrow"].HeaderCell.Style.Font/ForeColor/Alignment` 子属性赋值想让表头箭头"→"与数据行一致（微软雅黑 12F、未加粗、黑色 48,48,48、居中），但 SunnyUI `UIDataGridView` 下 `HeaderCell.Style` 仍会被 `ColumnHeadersDefaultCellStyle`（9 号**加粗**、左对齐）覆盖——子属性赋值不能整段替换父样式，且加粗属性必须显式 `FontStyle.Regular` 才会去除。效果上表头"→"还是 9 号加粗，与下方数据行的 12 号未加粗箭头观感割裂
+  - 改为 **`CellPainting` 自绘该列表头**：用 `e.Paint(CellBounds, Background|Border|SelectionBackground)` 走默认表头背景/边框，再用 `TextRenderer.DrawText` 以"微软雅黑 12F、`FontStyle.Regular`、黑色 48,48,48、居中"画"→"；表头与数据行像素级一致
+
+### 为什么这么改
+- 试过把 `ColumnHeadersDefaultCellStyle.Font` 直接改成 12F 也会同时影响"原寄存器/原通道/新寄存器/新通道"四列表头（这些列要求 9 号加粗，标题文字与数据列对齐明确），不可行
+- 试过 `colArrow.HeaderCell.Style.Font = new Font(..., 12F, FontStyle.Regular)` 仍被 `ColumnHeadersDefaultCellStyle`（9F,Bold）继承下来（实测表头依然加粗、9 号）
+- 自绘只针对箭头这一列的表头单元格，最小侵入、不污染其他列表头
+
+### 优化点
+- 表头箭头与数据行箭头视觉完全一致（字号/字色/居中/未加粗）
+- 仍然走 SunnyUI 默认表头背景色（浅蓝 237,243,253）与边框，与其他表头保持风格统一
+- 注释里把"V1.53 为什么没生效"也写清楚，后续如果要把同样套路迁到其他列可直接参考
+
 ## V1.53 — 系统设置窗口滚动卡顿根治 + 复制气泡 ToolTip 修复（2026-08-09）
 
 ### 改动范围
