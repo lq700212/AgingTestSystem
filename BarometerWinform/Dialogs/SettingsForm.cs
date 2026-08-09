@@ -65,6 +65,14 @@ namespace BarometerWinform.Dialogs
         /// <summary>清除搜索按钮</summary>
         private Button _btnClearSearch;
 
+        /// <summary>设置名称长按复制：记录按下时的表格 / 单元格 / 时间</summary>
+        private DataGridView _pressGrid;
+        private int _pressRow = -1;
+        private int _pressCol = -1;
+        private DateTime _pressTime;
+        /// <summary>长按复制的提示气泡</summary>
+        private readonly ToolTip _copyTip = new ToolTip();
+
         /// <summary>
         /// 每个分类是否显示（搜索过滤时置为是否有匹配行）。
         /// 不用控件 Visible 判断：窗体尚未显示时控件 Visible 恒为 false，会导致初始布局错乱。
@@ -373,6 +381,12 @@ namespace BarometerWinform.Dialogs
             // 可手输下拉（波特率）允许输入列表外的自定义值：捕获校验异常，把新值补进列表后提交
             grid.DataError += Grid_DataError;
 
+            // IP 列表单元格（FanIpCandidates）点击弹出编辑器
+            grid.CellClick += Grid_CellClick;
+            // 设置名称列支持鼠标左键长按复制
+            grid.CellMouseDown += Grid_CellMouseDown;
+            grid.CellMouseUp += Grid_CellMouseUp;
+
             return grid;
         }
 
@@ -607,6 +621,108 @@ namespace BarometerWinform.Dialogs
         }
 
         /// <summary>
+        /// 点击"设置值"列时，若该行是 FanIpCandidates（候选 IP 列表），弹出 IP 编辑器。
+        /// </summary>
+        private void Grid_CellClick(object sender, DataGridViewCellEventArgs e)
+        {
+            var grid = sender as DataGridView;
+            if (grid == null || e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (e.ColumnIndex != grid.Columns["colValue"].Index) return;
+
+            string key = grid.Rows[e.RowIndex].Cells["colKey"].Value?.ToString();
+            if (key != "FanIpCandidates") return;
+
+            string currentValue = grid.Rows[e.RowIndex].Cells["colValue"].Value?.ToString() ?? "";
+            ShowIpListPopup(grid, e.RowIndex, currentValue);
+        }
+
+        /// <summary>
+        /// 在"设置名称"列按下鼠标左键时记录按下位置与时间，用于长按复制。
+        /// </summary>
+        private void Grid_CellMouseDown(object sender, DataGridViewCellMouseEventArgs e)
+        {
+            var grid = sender as DataGridView;
+            if (grid == null || e.Button != MouseButtons.Left || e.RowIndex < 0) return;
+            if (e.ColumnIndex != grid.Columns["colKey"].Index) return;
+
+            _pressGrid = grid;
+            _pressRow = e.RowIndex;
+            _pressCol = e.ColumnIndex;
+            _pressTime = DateTime.Now;
+        }
+
+        /// <summary>
+        /// 松开鼠标左键时判断是否满足"长按"（约 700ms 以上），
+        /// 满足则把设置名称复制到剪贴板并给出气泡提示。
+        /// </summary>
+        private void Grid_CellMouseUp(object sender, DataGridViewCellMouseEventArgs e)
+        {
+            var grid = sender as DataGridView;
+            if (grid == null || _pressGrid == null) return;
+
+            // 是否同一单元格长按后松开
+            bool sameCell = ReferenceEquals(grid, _pressGrid)
+                            && e.RowIndex == _pressRow
+                            && e.ColumnIndex == _pressCol;
+            bool longPress = (DateTime.Now - _pressTime).TotalMilliseconds >= 700;
+
+            _pressGrid = null;
+            _pressRow = -1;
+            _pressCol = -1;
+
+            if (!sameCell || !longPress) return;
+
+            string text = grid.Rows[e.RowIndex].Cells["colKey"].Value?.ToString();
+            if (string.IsNullOrEmpty(text)) return;
+
+            try
+            {
+                System.Windows.Forms.Clipboard.SetText(text);
+            }
+            catch (Exception)
+            {
+                return;
+            }
+
+            // 在单元格附近弹出"已复制"提示
+            _copyTip.Show("已复制：" + text, grid,
+                grid.GetCellDisplayRectangle(e.ColumnIndex, e.RowIndex, false).Location, 1500);
+        }
+
+        /// <summary>
+        /// 弹出候选 IP 列表编辑器，并把编辑结果写回单元格。
+        /// </summary>
+        private void ShowIpListPopup(DataGridView grid, int rowIndex, string currentValue)
+        {
+            var popup = new Controls.IpListEditorPopup(currentValue);
+
+            // 定位到该单元格正下方
+            Rectangle cellRect = grid.GetCellDisplayRectangle(grid.Columns["colValue"].Index, rowIndex, true);
+            Rectangle screenRect = grid.RectangleToScreen(cellRect);
+            popup.Location = new Point(screenRect.Left, screenRect.Bottom + 2);
+
+            // 越界保护：弹窗底部超出屏幕时改为显示在单元格上方
+            var workArea = Screen.FromControl(grid).WorkingArea;
+            if (popup.Bottom > workArea.Bottom)
+            {
+                popup.Location = new Point(screenRect.Left, screenRect.Top - popup.Height - 2);
+            }
+
+            popup.FormClosed += (s, args) =>
+            {
+                if (!string.IsNullOrEmpty(popup.ResultValue))
+                {
+                    grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
+                    // 值可能变化，重新按内容算行高
+                    LayoutSections();
+                }
+            };
+
+            popup.Show(this);
+            popup.Activate();
+        }
+
+        /// <summary>
         /// 获取配置项的当前值
         /// 优先读 ConfigurationManager.AppSettings（与程序启动读取一致）；
         /// 若配置里没有该键，则用内存中 DeviceConfig 的属性值兜底
@@ -645,6 +761,14 @@ namespace BarometerWinform.Dialogs
             if (key == "PortName" || key == "ScannerPort")
             {
                 return CreatePortComboCell(value);
+            }
+
+            // 送风机候选 IP 列表：只读单元格 + 点击弹出编辑器（可修改/新增/删除 IP）
+            if (key == "FanIpCandidates")
+            {
+                var cell = new DataGridViewIpListCell();
+                cell.Value = value;
+                return cell;
             }
 
             // 串口通讯参数：波特率（含扫码枪）用可手输下拉，支持自定义波特率
