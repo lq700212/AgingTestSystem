@@ -40,14 +40,18 @@ namespace AgingTestSystem.Controls
             StartPosition = FormStartPosition.Manual;
             ShowInTaskbar = false;
             BackColor = Color.White;
-            ClientSize = new Size(560, 268);
+            // 弹窗整体尺寸：【V1.54b】从 560×268 调到 640×268——
+            // 原 560 时表格 5 列总宽 148+92+56+148+92=536 等于 dgv.Width，最右侧列微调按钮
+            // 被裁切。现列宽 172+104+60+172+104=612，表格宽 616（多 4px 余量保证不裁切），
+            // 弹窗宽 640（=616+左右各 12 边距）。
+            ClientSize = new Size(640, 268);
 
             // 映射表格：蓝主题，五列（原寄存器/原通道/箭头/新寄存器/新通道）
             _dgv = new Sunny.UI.UIDataGridView
             {
                 Style = Sunny.UI.UIStyle.Blue,
                 Location = new Point(12, 12),
-                Size = new Size(536, 158),
+                Size = new Size(616, 158),
                 BorderStyle = BorderStyle.None,
                 AllowUserToAddRows = false,
                 AllowUserToDeleteRows = false,
@@ -95,33 +99,39 @@ namespace AgingTestSystem.Controls
             _dgv.Columns["colSrcCh"].CellTemplate = new DataGridViewHexNumericUpDownCell { Maximum = 0x1F, ShowPrefix = true };
             _dgv.Columns["colDstCh"].CellTemplate = new DataGridViewHexNumericUpDownCell { Maximum = 0x1F, ShowPrefix = true };
 
-            _dgv.Columns["colSrcReg"].Width = 148;
+            // 列宽分配：【V1.54b】整体放大——寄存器列 148→172、通道列 92→104、箭头列 56→60，
+            // 总宽 172+104+60+172+104=612，表格宽 616（多 4px 余量保证不裁切）。
+            // 放大原因：十六进制微调框右侧有上下调按钮，最右侧一列"新通道"内容（0x00~0x1F）
+            // 在原列宽下被部分遮挡、调节按钮也按不到。
+            _dgv.Columns["colSrcReg"].Width = 172;
             _dgv.Columns["colSrcReg"].AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
             _dgv.Columns["colSrcReg"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
-            _dgv.Columns["colSrcCh"].Width = 92;
+            _dgv.Columns["colSrcCh"].Width = 104;
             _dgv.Columns["colSrcCh"].AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
             _dgv.Columns["colSrcCh"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
-            _dgv.Columns["colDstReg"].Width = 148;
+            _dgv.Columns["colDstReg"].Width = 172;
             _dgv.Columns["colDstReg"].AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
             _dgv.Columns["colDstReg"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
-            _dgv.Columns["colDstCh"].Width = 92;
+            _dgv.Columns["colDstCh"].Width = 104;
             _dgv.Columns["colDstCh"].AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
             _dgv.Columns["colDstCh"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
 
-            // 中间箭头列：不可编辑，始终显示 "→"
-            _dgv.Columns["colArrow"].Width = 56;
+            // 中间箭头列：不可编辑，始终显示 "→"（12 号加粗、黑色、居中）
+            _dgv.Columns["colArrow"].Width = 60;
             _dgv.Columns["colArrow"].ReadOnly = true;
             _dgv.Columns["colArrow"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
-            _dgv.Columns["colArrow"].DefaultCellStyle.Font = new Font("微软雅黑", 12F);
+            // 加粗：与表头"→"（自绘 12F,Bold）像素级一致；微软雅黑"→"是细线条字符，
+            // Regular 视觉上偏纤细，统一 Bold 后表头与数据行箭头粗细完全相同。
+            _dgv.Columns["colArrow"].DefaultCellStyle.Font = new Font("微软雅黑", 12F, FontStyle.Bold);
             _dgv.Columns["colArrow"].DefaultCellStyle.ForeColor = Color.FromArgb(48, 48, 48);
 
-            // 表头箭头与数据行箭头样式保持一致（同字号/同色/同居中）：
-            // 全局表头默认是 9 号加粗、默认左对齐，直接沿用会与数据箭头
-            // （12 号黑色居中）字号、加粗、位置都不一样，视觉割裂；
-            // 这里把本列头样式单独覆盖成与数据箭头完全一致。
-            _dgv.Columns["colArrow"].HeaderCell.Style.Font = new Font("微软雅黑", 12F);
-            _dgv.Columns["colArrow"].HeaderCell.Style.ForeColor = Color.FromArgb(48, 48, 48);
-            _dgv.Columns["colArrow"].HeaderCell.Style.Alignment = DataGridViewContentAlignment.MiddleCenter;
+            // 表头箭头与数据行箭头样式保持一致（同字号/同色/同居中、**加粗**）：
+            // V1.54 首发版表头用 12F Regular、数据行 12F Regular，视觉上仍有差异（"→"是细线条字符，
+            // 微软雅黑 12F Regular 本身偏纤细，与下方数据箭头放一起看会显"轻"；与表头其他列
+            // 9F Bold 标题放一起又显"弱"）。用户反馈"和下面还是有点差别"，**统一加粗**最稳——
+            // 数据行与表头都用 12F Bold，标题与正文箭头像素级一致；
+            // 自绘实现（_dgv.CellPainting → Dgv_CellPainting），彻底绕开 HeaderCell.Style 继承。
+            _dgv.CellPainting += Dgv_CellPainting;
 
             // 支持按 Delete 键直接删除选中行
             _dgv.KeyDown += Dgv_KeyDown;
@@ -132,7 +142,7 @@ namespace AgingTestSystem.Controls
             {
                 Text = "寄存器（0x0000~0xFFFF）与通道（0x00~0x1F）均为十六进制；保存后配置与界面显示一致，无需换算",
                 Location = new Point(12, 176),
-                Size = new Size(536, 18),
+                Size = new Size(616, 18),
                 TextAlign = ContentAlignment.MiddleLeft,
                 Font = new Font("微软雅黑", 8.5F),
                 ForeColor = Color.FromArgb(130, 138, 150)
@@ -148,12 +158,12 @@ namespace AgingTestSystem.Controls
             _btnDelete.Click += (s, e) => DeleteSelected();
             Controls.Add(_btnDelete);
 
-            // 取消 / 确定
-            _btnCancel = CreateButton("取消", new Point(398, 198), new Size(62, 30), Sunny.UI.UIStyle.Gray);
+            // 取消 / 确定（【V1.54b】弹窗宽 640，按钮靠右：取消 X=640-12-152=476，确定 X=640-12-82=546）
+            _btnCancel = CreateButton("取消", new Point(476, 198), new Size(62, 30), Sunny.UI.UIStyle.Gray);
             _btnCancel.Click += (s, e) => CloseAsCancel();
             Controls.Add(_btnCancel);
 
-            _btnOk = CreateButton("确定", new Point(466, 198), new Size(82, 30), Sunny.UI.UIStyle.Blue);
+            _btnOk = CreateButton("确定", new Point(546, 198), new Size(82, 30), Sunny.UI.UIStyle.Blue);
             _btnOk.Click += (s, e) => Confirm();
             Controls.Add(_btnOk);
 
@@ -205,6 +215,50 @@ namespace AgingTestSystem.Controls
             {
                 DeleteSelected();
             }
+        }
+
+        /// <summary>
+        /// 自绘箭头列表头：与数据行箭头"→"完全一致的样式（微软雅黑 12F、**加粗**、黑色 48,48,48、居中）。
+        /// 这里必须手绘，因为 HeaderCell.Style 在 SunnyUI UIDataGridView 下会被
+        /// ColumnHeadersDefaultCellStyle（9 号加粗、左对齐）覆盖，无法靠子属性赋值让它与数据行一致；
+        /// 自绘则完全可控——把 HeaderBackground/Background 走默认，再用 TextRenderer 以
+        /// 与数据行 DataGridView 走 GDI+ 一致的居中格式画出"→"，最终表头与数据行像素级一致。
+        /// </summary>
+        private void Dgv_CellPainting(object sender, DataGridViewCellPaintingEventArgs e)
+        {
+            if (e.RowIndex != -1) return;                    // 只处理表头
+            if (e.ColumnIndex < 0) return;
+            if (_dgv.Columns[e.ColumnIndex].Name != "colArrow") return;
+
+            // 走一次默认绘制（含 HeaderBackground/边框/选择态等），随后我们在其上覆写文本
+            e.Paint(e.CellBounds, DataGridViewPaintParts.Background
+                | DataGridViewPaintParts.Border
+                | DataGridViewPaintParts.SelectionBackground);
+
+            // 文本绘制参数与数据列保持完全一致：
+            //   字体：微软雅黑 12F、FontStyle.Bold（与数据箭头 DefaultCellStyle.Font 一致）
+            //   颜色：48,48,48（与数据箭头 ForeColor 一致）
+            //   居中：DataGridViewContentAlignment.MiddleCenter
+            // 走 GDI（TextRenderer），与 WinForms DataGridView 默认文本绘制路径一致，
+            // 不会出现 GDI+ 与 GDI 混用导致的文字模糊/位置偏移。
+            var font = new Font("微软雅黑", 12F, FontStyle.Bold);
+            try
+            {
+                TextRenderer.DrawText(
+                    e.Graphics,
+                    "→",
+                    font,
+                    e.CellBounds,
+                    Color.FromArgb(48, 48, 48),
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+            }
+            finally
+            {
+                font.Dispose();
+            }
+
+            // 通知 DataGridView 这一格已由我们完整绘制，避免系统再次覆绘内容
+            e.Handled = true;
         }
 
         /// <summary>删除当前选中的行（先收集索引再删，避免删除当前行时误删全部）</summary>
