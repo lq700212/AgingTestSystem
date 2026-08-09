@@ -38,6 +38,16 @@ namespace AgingTestSystem
             // 【修复 L2】DPI 感知通过 app.manifest 声明，此处无需额外代码
             // manifest 中 <dpiAware>true</dpiAware> 使程序在高 DPI 屏幕下自动缩放
 
+            // 【修复 L3】SunnyUI 全局 DPI 缩放开关（V1.56 推广高 DPI 适配到全部页面）
+            // 作用范围：只对 SunnyUI 的 UIForm 子类生效（FanTestForm、CommunicationTestForm 等）。
+            // 原理：UIBaseForm.OnShown 会调用 SetDPIScale()，当 UIStyles.DPIScale=true 时，
+            //   遍历窗体内所有 IStyleInterface 控件，把字体大小除以缩放系数（DPI/96=1.5），
+            //   使控件字体在高分屏下保持设计时的物理大小，避免文字溢出/错位。
+            // 注意：普通 Form（MainForm、SettingsForm、LoginForm）不走 UIBaseForm.OnShown，
+            //   不受此开关影响，仍走 WinForms 自带的 AutoScaleMode 缩放（已验证正常）。
+            // 若将来要临时关闭，注释掉下面一行即可，不影响其余 DPI 适配。
+            Sunny.UI.UIStyles.DPIScale = true;
+
             // 运行主窗体
             Application.Run(new Views.MainForm());
         }
