@@ -14,7 +14,7 @@ namespace AgingTestSystem.Dialogs
     ///
     /// 【功能说明】
     /// 把 App.config 里分散的配置项按【业务分类】单页纵向展示（不使用选项卡），
-    /// 每个分类用一个分隔标题条（SunnyUI UILine）隔开，下面紧跟该分类的配置表格：
+    /// 所有分类合并到一个 UIDataGridView，分类标题用"分组标题行"（浅蓝底深蓝粗体）分隔：
     /// - 设置名称（配置项 key，只读）
     /// - 说明（每个配置项的中文含义，只读）
     /// - 设置值（可直接编辑输入）
@@ -23,8 +23,9 @@ namespace AgingTestSystem.Dialogs
     ///   基础配置 / 气压表串口通讯 / IO耦合器（Modbus TCP）/ 气压表寄存器 /
     ///   报警参数 / 冷却送风机 / 老化测试业务 / 扫码枪
     ///
-    /// 内容整体放在一个可滚动面板（pnlScroll）里，页面内容超高时自动出现滚动条，
-    /// 所有分类一眼看全，不用来回切页签。
+    /// 内容放在单个 UIDataGridView（填满 pnlScroll）里，表格自带垂直滚动条
+    /// （DataGridView 虚拟化绘制，只重绘可见行），所有分类一眼看全，不用来回切页签，
+    /// 滚动流畅不卡顿。
     ///
     /// 点击【保存设置】后，把所有改动写回程序运行目录下的 exe.config
     /// （即程序实际读取的配置文件，与 App.config 同源），
@@ -34,41 +35,42 @@ namespace AgingTestSystem.Dialogs
     /// （设备数量/布局/Mock/送风机启用）需重启程序才生效（保存时已提示）。
     ///
     /// 【实现要点】
-    /// - 分类与 key 顺序在 _categories 中集中维护，分类标题条 + 表格在 SetupSections 里
-    ///   动态创建、在 LayoutSections 里按 Y 坐标依次排布，表格高度按可见行行高之和自动计算。
+    /// - 分类与 key 顺序在 _categories 中集中维护；所有分类合并为 **1 个 UIDataGridView**，
+    ///   分类标题用"分组标题行"（浅蓝底深蓝粗体，见 AddGroupRowStyle）呈现。
+    ///   【V1.53】不再使用 8 个独立表格 + 滚动容器——多表格在 AutoScroll 容器中物理移动、
+    ///   逐帧整块重绘是滚动卡顿的根源（与主视图 V1.50 把 72 面板合并为单画布同理）；
+    ///   单表格由 DataGridView 自身滚动（虚拟化，只重绘可见行），滚动流畅。
     ///   新增配置项只需在 _descriptions 和 _categories 里各加一行，无需改界面布局
     /// - 表格三列均启用内容换行，行高按内容（TextRenderer 测量换行高度）在 LayoutSections 中
-    ///   逐行计算，保证说明 / 设置值等长文本全部显示不被截断
-    /// - 搜索过滤：无匹配的分类不参与排布（_sectionVisible 状态数组，不用控件 Visible——
-    ///   窗体未显示时控件 Visible 恒为 false），网格高度仅统计可见行，避免结果区留大片空白
-    /// - 界面使用 SunnyUI 控件（UILine 分类标题 / UIDataGridView 表格 / UIButton 按钮）
-    ///   呈现，风格与主程序一致、观感更佳
+    ///   逐行计算，保证说明 / 设置值等长文本全部显示不被截断；分组标题行固定高度 30
+    /// - 搜索过滤：无匹配的分类整组隐藏（分组标题行 + 数据行一起隐藏，_sectionVisible 状态数组），
+    ///   避免结果区留大片空白
+    /// - 界面使用 SunnyUI 控件（UIDataGridView 表格 / UIButton 按钮）呈现，风格与主程序一致
     /// - 保存前按配置项类型做合法性校验（整数/小数/布尔/十六进制地址），
     ///   不合法项会整批拦截并列出，避免写坏配置文件
     /// - 使用 System.Configuration.ConfigurationManager.OpenExeConfiguration
     ///   读写 exe.config，配置值来源为运行时的 ConfigurationManager.AppSettings，
     ///   与程序启动加载的取值完全一致
     ///
-    /// 【界面布局】（单页纵向展示，不用选项卡；分类标题条 + 配置表格动态创建）
+    /// 【界面布局】（单页纵向展示；分类标题 = 表格内分组标题行，表格自身滚动）
     /// ┌──────────────────────────────────────────────┐
     /// │ 顶部提示条（浅蓝底白字：修改后保存立即/重启生效提示）│
     /// ├──────────────────────────────────────────────┤
-    /// │ ↓ pnlScroll（整页滚动，内容超高时出现滚动条）  │
-    /// │ ── 基础配置 ────────────────────────────     │ ← UILine 分类标题
-    /// │ ┌──────────────────────────────────────────┐ │ ← UIDataGridView 配置表格
+    /// │ ↓ pnlScroll（容器不滚动，仅承载下方内容）      │
+    /// │ [搜索配置项：____________] [✕]               │ ← pnlSearch（Dock=Top）
+    /// │ ┌──────────────────────────────────────────┐ │ ← UIDataGridView（Dock=Fill，自带垂直滚动条）
+    /// │ │ ▓ 基础配置（分组标题行，浅蓝底深蓝粗体）    │ │
     /// │ │ 设置名称(key) │ 说明       │ 设置值       │ │
     /// │ │ ...           │ ...        │ [编辑控件]   │ │
+    /// │ │ ▓ 气压表串口通讯（分组标题行）              │ │
+    /// │ │ ...（每个分类 = 分组标题行 + 数据行）       │ │
+    /// │ │ ……（其余分类依次向下，搜索无匹配整组隐藏） │ │
     /// │ └──────────────────────────────────────────┘ │
-    /// │ ── 气压表串口通讯 ──────────────────────     │
-    /// │ ┌──────────────────────────────────────────┐ │
-    /// │ │ ...（每个分类重复：UILine + 表格）         │ │
-    /// │ └──────────────────────────────────────────┘ │
-    /// │ ……（其余分类依次向下排列，搜索无匹配的分类隐藏）│
     /// ├──────────────────────────────────────────────┤
     /// │                    [保存设置] [关闭]           │
     /// └──────────────────────────────────────────────┘
     /// 表格三列（设置名称/说明/设置值），值列控件由 CreateValueCell 按 key 分发
-    /// （布尔=勾选框 / 串口波特率等=下拉框 / 数字=数字框 / 文本=文本框）。
+    /// （布尔=下拉框 / 串口波特率等=下拉框 / 数字=数字框 / 文本=文本框）。
     ///</summary>
     public partial class SettingsForm : Form
     {
@@ -78,11 +80,20 @@ namespace AgingTestSystem.Dialogs
         private readonly DeviceConfig _config;
 
         /// <summary>
-        /// 每个分类的界面元素：分类标题条 + 该分类的配置表格
-        /// 与 _categories 顺序一一对应，保存时遍历全部表格收集用户修改
+        /// 唯一一张配置表格（合并了所有分类）。【V1.53】不再为每个分类单独建表：
+        /// 8 个独立表格放在 AutoScroll 容器中滚动会逐帧整块重绘导致卡顿；
+        /// 合并为单表格后由 DataGridView 自身滚动（虚拟化，只重绘可见行），滚动流畅。
         /// </summary>
-        private readonly List<KeyValuePair<Sunny.UI.UILine, Sunny.UI.UIDataGridView>> _sections =
-            new List<KeyValuePair<Sunny.UI.UILine, Sunny.UI.UIDataGridView>>();
+        private Sunny.UI.UIDataGridView _grid;
+
+        /// <summary>分组标题行的行号集合（分类标题不再用 UILine，改为表格内的"分组行"）</summary>
+        private readonly HashSet<int> _groupRows = new HashSet<int>();
+
+        /// <summary>分组标题行的行号列表（按行号升序，搜索过滤时用相邻行号定位每组的行范围）</summary>
+        private readonly List<int> _groupRowList = new List<int>();
+
+        /// <summary>分组标题行字体（深蓝粗体，与 UILine 标题字号一致）</summary>
+        private Font _groupFont;
 
         /// <summary>搜索框控件</summary>
         private Sunny.UI.UITextBox _txtSearch;
@@ -95,8 +106,8 @@ namespace AgingTestSystem.Dialogs
         private int _pressCol = -1;
         /// <summary>长按计时器：按够 700ms 即触发复制（不用等松开，体验更跟手）</summary>
         private readonly Timer _pressTimer = new Timer { Interval = 700 };
-        /// <summary>长按复制的提示气泡</summary>
-        private readonly ToolTip _copyTip = new ToolTip();
+        /// <summary>长按复制的提示气泡（ShowAlways=true 保证模态对话框内也可靠显示）</summary>
+        private readonly ToolTip _copyTip = new ToolTip { ShowAlways = true };
         /// <summary>长按复制已触发、等待松开鼠标后弹出的提示内容（显示太早会被鼠标捕获盖住）</summary>
         private string _pendingCopyTip;
         /// <summary>长按复制时所在的表格/单元格，松开鼠标后用于定位气泡</summary>
@@ -364,53 +375,42 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 窗体显示后预激活复制提示气泡：
-        /// ToolTip 首次 Show 时原生窗口尚未创建，点坐标版会直接不显示，
-        /// 这里先空转一次（Show 一个空格并立即 Hide）把内部窗口建好，后续 Show 才可靠。
+        /// ToolTip 首次 Show 时原生窗口尚未创建，直接 Show 会不显示；
+        /// 这里先空转一次（带坐标 Show 一个空格并立即 Hide）把内部窗口建好，后续 Show 才可靠。
         /// 必须在窗体句柄创建之后做，构造函数里调用会因窗口未激活而无效。
         /// </summary>
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
-            _copyTip.Show(" ", this, 1);
+            _copyTip.Show(" ", this, new Point(1, 1), 1);
             _copyTip.Hide(this);
         }
 
         /// <summary>
-        /// 按 _categories 逐个创建“分类标题条（UILine）+ 配置表格（UIDataGridView）”
-        /// 全部添加到可滚动面板 pnlScroll 中，并把表格记录到 _sections，供加载 / 保存遍历
+        /// 创建唯一一张配置表格（UIDataGridView）填满 pnlScroll。
+        /// 【V1.53】分类不再各自建表：8 个独立表格放滚动容器里滚动会逐帧整块重绘导致卡顿，
+        /// 合并为单表格后由 DataGridView 自身滚动（虚拟化，只重绘可见行）；
+        /// 分类标题用”分组标题行”（见 LoadSettings 的 AddGroupRowStyle）。
         /// </summary>
         private void SetupSections()
         {
-            _sections.Clear();
-            pnlScroll.Controls.Clear();
-
-            foreach (var category in _categories)
-            {
-                // 分类标题分隔条：一段文字 + 一条水平线，起分组标题作用
-                var line = new Sunny.UI.UILine
-                {
-                    Text = category.Title,
-                    TextAlign = ContentAlignment.MiddleLeft,
-                    Font = new Font(this.Font.FontFamily, 10F, FontStyle.Bold),
-                    ForeColor = Color.FromArgb(48, 119, 238),
-                    LineColor = Color.FromArgb(48, 119, 238),
-                    TextInterval = 12
-                };
-                pnlScroll.Controls.Add(line);
-
-                // 该分类的配置表格
-                Sunny.UI.UIDataGridView grid = CreateGrid();
-                pnlScroll.Controls.Add(grid);
-
-                _sections.Add(new KeyValuePair<Sunny.UI.UILine, Sunny.UI.UIDataGridView>(line, grid));
-            }
+            _groupRows.Clear();
+            _groupRowList.Clear();
 
             // 每节分类的显示状态（搜索过滤用）：初始全部显示
-            _sectionVisible = new bool[_sections.Count];
+            _sectionVisible = new bool[_categories.Length];
             for (int i = 0; i < _sectionVisible.Length; i++)
             {
                 _sectionVisible[i] = true;
             }
+
+            // 分组标题行字体（与旧 UILine 标题同款：10 号加粗）
+            _groupFont = new Font(this.Font.FontFamily, 10F, FontStyle.Bold);
+
+            // 唯一一张配置表格，Dock=Fill 撑满滚动容器；滚动条由表格自带
+            _grid = CreateGrid();
+            _grid.Dock = DockStyle.Fill;
+            pnlScroll.Controls.Add(_grid);
         }
 
         /// <summary>
@@ -432,7 +432,9 @@ namespace AgingTestSystem.Dialogs
                 RowTemplate = { Height = 24 },
                 BackgroundColor = Color.White,
                 BorderStyle = BorderStyle.None,
-                ScrollBars = ScrollBars.None
+                // 【V1.53】单表格自带垂直滚动条（虚拟化绘制，只重绘可见行），
+                // 不再靠外层 pnlScroll 滚动整页（8 个表格整块移动重绘会卡顿）。
+                ScrollBars = ScrollBars.Vertical
             };
 
             // 三列表头
@@ -512,72 +514,77 @@ namespace AgingTestSystem.Dialogs
         /// </summary>
         private void LoadSettings()
         {
+            _groupRows.Clear();
+            _groupRowList.Clear();
+            _grid.Rows.Clear();
+
             for (int i = 0; i < _categories.Length; i++)
             {
-                Sunny.UI.UIDataGridView grid = _sections[i].Value;
-                grid.Rows.Clear();
+                // 每个分类先加一行"分组标题行"（浅蓝底深蓝粗体，占一行宽作为分类分隔）
+                int groupRow = _grid.Rows.Add();
+                AddGroupRowStyle(groupRow, _categories[i].Title);
+                _groupRows.Add(groupRow);
+                _groupRowList.Add(groupRow);
 
                 foreach (string key in _categories[i].Keys)
                 {
                     // 说明列：取不到说明（配置被移除）时显示为空，不阻塞加载
                     _descriptions.TryGetValue(key, out string desc);
 
-                    int rowIdx = grid.Rows.Add();
-                    grid.Rows[rowIdx].Cells["colKey"].Value = key;
-                    grid.Rows[rowIdx].Cells["colDesc"].Value = desc ?? "";
-                    grid.Rows[rowIdx].Cells["colValue"] = CreateValueCell(key, GetEffectiveValue(key));
+                    int rowIdx = _grid.Rows.Add();
+                    _grid.Rows[rowIdx].Cells["colKey"].Value = key;
+                    _grid.Rows[rowIdx].Cells["colDesc"].Value = desc ?? "";
+                    _grid.Rows[rowIdx].Cells["colValue"] = CreateValueCell(key, GetEffectiveValue(key));
                 }
             }
         }
 
         /// <summary>
-        /// 单页纵向排布：按 Y 坐标依次放置每个分类的标题条和表格，
-        /// 表格高度按自身行数自动计算，最后设置滚动面板的内容总高
+        /// 把指定行设置为"分组标题行"：浅蓝底 + 深蓝粗体标题，整行只读、选中不变色。
+        /// 三列背景统一为浅蓝，视觉上是一条贯穿表格宽度的标题带（替代旧 UILine 分类分隔条）。
+        /// </summary>
+        private void AddGroupRowStyle(int rowIndex, string title)
+        {
+            DataGridViewRow row = _grid.Rows[rowIndex];
+            row.ReadOnly = true;
+
+            Color back = Color.FromArgb(237, 243, 253);   // 浅蓝底（与表头同色系）
+            Color fore = Color.FromArgb(48, 119, 238);    // 深蓝字（与旧 UILine 标题同色）
+            foreach (DataGridViewCell cell in row.Cells)
+            {
+                cell.Style.BackColor = back;
+                cell.Style.ForeColor = fore;
+                // 选中/点击时保持同色，避免分组行出现高亮变色
+                cell.Style.SelectionBackColor = back;
+                cell.Style.SelectionForeColor = fore;
+                cell.Style.Font = _groupFont;
+            }
+
+            row.Cells["colKey"].Value = title;
+            row.Cells["colDesc"].Value = "";
+            row.Cells["colValue"].Value = "";
+        }
+
+        /// <summary>
+        /// 设置表格每行行高：分组标题行固定 30，数据行按内容换行后的高度计算。
+        /// 表格本身 Dock=Fill 撑满 pnlScroll 并由 DataGridView 自带滚动，
+        /// 不再需要手动摆放多个控件 / 设置 AutoScrollMinSize。
         /// </summary>
         private void LayoutSections()
         {
-            const int margin = 14;    // 左右留白
-            const int gap = 14;       // 分类之间的垂直间距
-            int y = margin + 36;      // 36 = 搜索框面板高度
-            int width = pnlScroll.ClientSize.Width - margin * 2;
-            if (width < 100) width = 100;
+            if (_grid == null) return;
 
-            for (int i = 0; i < _sections.Count; i++)
+            foreach (DataGridViewRow row in _grid.Rows)
             {
-                Sunny.UI.UILine line = _sections[i].Key;
-                Sunny.UI.UIDataGridView grid = _sections[i].Value;
-
-                // 被搜索过滤掉的分类不参与排布，避免在结果上方留下大片空白
-                if (!_sectionVisible[i])
+                if (_groupRows.Contains(row.Index))
                 {
-                    continue;
+                    row.Height = 30;   // 分组标题行固定高度
                 }
-
-                // 标题条：占满可用宽度
-                line.Location = new Point(margin, y);
-                line.Width = width;
-                line.Height = 28;
-                y += line.Height + 4;
-
-                // 表格：占满可用宽度。先定宽（设置值列按剩余宽度自适应），
-                // 再按内容换行计算每个可见行的行高，表格高度 = 表头 + 可见行高之和 + 边距
-                grid.Location = new Point(margin, y);
-                grid.Width = width;
-
-                int totalRowHeight = 0;
-                foreach (DataGridViewRow row in grid.Rows)
+                else
                 {
-                    if (!row.Visible) continue;
-                    row.Height = ComputeRowHeight(grid, row);
-                    totalRowHeight += row.Height;
+                    row.Height = ComputeRowHeight(_grid, row);
                 }
-                int gridHeight = grid.ColumnHeadersHeight + totalRowHeight + 2;
-                grid.Height = gridHeight;
-                y += gridHeight + gap;
             }
-
-            // 内容总高（超出可视区时 pnlScroll 自动出现滚动条）
-            pnlScroll.AutoScrollMinSize = new Size(0, y + margin);
         }
 
         /// <summary>
@@ -617,9 +624,10 @@ namespace AgingTestSystem.Dialogs
         {
             var pnlSearch = new Panel
             {
-                Location = new Point(0, 0),
+                // Dock=Top 占据 pnlScroll 顶部 36px，下方的表格（Dock=Fill）占剩余区域；
+                // Location/Width 交给 Dock 管理，无需手动设置
+                Dock = DockStyle.Top,
                 Height = 36,
-                Width = pnlScroll.ClientSize.Width,
                 BackColor = Color.FromArgb(245, 248, 255)
             };
 
@@ -656,6 +664,11 @@ namespace AgingTestSystem.Dialogs
             pnlSearch.Controls.Add(_btnClearSearch);
 
             pnlScroll.Controls.Add(pnlSearch);
+
+            // Dock 布局按 Controls 集合顺序：把搜索框（Dock=Top）排到表格（Dock=Fill）前面，
+            // 保证搜索框占顶部、表格占剩余区域而不互相覆盖（SetupSections 先添加了表格）。
+            pnlScroll.Controls.SetChildIndex(pnlSearch, 0);
+            if (_grid != null) pnlScroll.Controls.SetChildIndex(_grid, 1);
         }
 
         private void TxtSearch_TextChanged(object sender, EventArgs e)
@@ -668,46 +681,44 @@ namespace AgingTestSystem.Dialogs
             string keyword = _txtSearch.Text.Trim();
             bool hasKeyword = !string.IsNullOrEmpty(keyword);
 
-            for (int i = 0; i < _categories.Length; i++)
+            if (!hasKeyword)
             {
-                var section = _sections[i];
-                Sunny.UI.UILine line = section.Key;
-                Sunny.UI.UIDataGridView grid = section.Value;
-
-                if (!hasKeyword)
+                // 无搜索关键字 → 全部行显示
+                foreach (DataGridViewRow row in _grid.Rows)
                 {
-                    // 无搜索关键字 → 显示全部
-                    line.Visible = true;
-                    grid.Visible = true;
-                    _sectionVisible[i] = true;
-                    foreach (DataGridViewRow row in grid.Rows)
-                    {
-                        row.Visible = true;
-                    }
-                    continue;
+                    row.Visible = true;
                 }
-
-                // 按关键字过滤行
-                bool anyVisible = false;
-                foreach (DataGridViewRow row in grid.Rows)
-                {
-                    if (row.IsNewRow) continue;
-
-                    string key = row.Cells["colKey"].Value?.ToString() ?? "";
-                    string desc = row.Cells["colDesc"].Value?.ToString() ?? "";
-                    bool match = key.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0
-                              || desc.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0;
-                    row.Visible = match;
-                    if (match) anyVisible = true;
-                }
-
-                // 隐藏无匹配行的分类
-                line.Visible = anyVisible;
-                grid.Visible = anyVisible;
-                _sectionVisible[i] = anyVisible;
+                for (int i = 0; i < _sectionVisible.Length; i++) _sectionVisible[i] = true;
+                return;
             }
 
-            LayoutSections();
+            // ① 先按关键字过滤数据行（分组标题行跳过，稍后统一处理）
+            foreach (DataGridViewRow row in _grid.Rows)
+            {
+                if (row.IsNewRow || _groupRows.Contains(row.Index)) continue;
+
+                string key = row.Cells["colKey"].Value?.ToString() ?? "";
+                string desc = row.Cells["colDesc"].Value?.ToString() ?? "";
+                bool match = key.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0
+                          || desc.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0;
+                row.Visible = match;
+            }
+
+            // ② 分组标题行：其下方（到下一个分组行之前）有可见数据行才显示，实现整组隐藏
+            for (int i = 0; i < _groupRowList.Count; i++)
+            {
+                int groupRow = _groupRowList[i];
+                int next = (i + 1 < _groupRowList.Count) ? _groupRowList[i + 1] : _grid.Rows.Count;
+
+                bool anyVisible = false;
+                for (int r = groupRow + 1; r < next; r++)
+                {
+                    if (_grid.Rows[r].Visible) { anyVisible = true; break; }
+                }
+
+                _grid.Rows[groupRow].Visible = anyVisible;
+                _sectionVisible[i] = anyVisible;
+            }
         }
 
         /// <summary>
@@ -755,7 +766,9 @@ namespace AgingTestSystem.Dialogs
             _pressTimer.Start();
         }
 
-        /// <summary>松开鼠标左键时取消长按计时（不足 700ms 则未触发复制）；若复制已触发，此刻鼠标已松开，再显示气泡</summary>
+        /// <summary>松开鼠标左键：取消长按计时（不足 700ms 则未触发复制）。
+        /// 气泡已在长按到点（PressTimer_Tick）时即时弹出，这里再 BeginInvoke 一次做兜底——
+        /// 若按住时气泡已显示过（_pendingCopyTip 已被消费为 null），本次调用直接返回，不会重复弹。</summary>
         private void Grid_CellMouseUp(object sender, DataGridViewCellMouseEventArgs e)
         {
             _pressTimer.Stop();
@@ -764,13 +777,16 @@ namespace AgingTestSystem.Dialogs
             _pressRow = -1;
             _pressCol = -1;
 
-            ShowPendingCopyTip();
+            // 兜底：万一按住状态下气泡因表格鼠标捕获未成功渲染，松开后再弹一次；
+            // 已显示过则 _pendingCopyTip 已为 null，此调用是空转（见 ShowPendingCopyTip）。
+            BeginInvoke(new Action(ShowPendingCopyTip));
         }
 
         /// <summary>
-        /// 长按计时到点：把设置名称复制到剪贴板。
-        /// 气泡提示不在这里显示——此时鼠标仍被表格按住/捕获，ToolTip 不会渲染；
-        /// 先记录待提示内容，等松开鼠标（Grid_CellMouseUp）后再弹出。
+        /// 长按计时到点：把设置名称复制到剪贴板，并立即弹出"已复制"气泡。
+        /// 无需等松开鼠标——复制与提示都在按住过程中完成，松开仅结束长按。
+        /// 用 BeginInvoke 延迟到本事件处理完再弹：避免长按时表格仍捕获鼠标
+        /// 干扰 ToolTip 渲染；宿主窗体用 this（见 ShowPendingCopyTip）。
         /// </summary>
         private void PressTimer_Tick(object sender, EventArgs e)
         {
@@ -798,14 +814,22 @@ namespace AgingTestSystem.Dialogs
             }
 
             _pendingCopyTip = text;
+
+            // 长按到点即弹提示（无需等松开鼠标）
+            BeginInvoke(new Action(ShowPendingCopyTip));
         }
 
         /// <summary>
-        /// 松开鼠标后弹出"已复制"气泡。
-        /// 用 Show(text, window, duration) 重载（显示在当前鼠标位置）：
-        /// - 松开鼠标时光标就在该单元格上，气泡自然落在单元格附近，无需换算坐标；
-        /// - 该重载走与悬停提示相同的 SemiAbsolute 显示路径，比点坐标版可靠
-        ///   （点坐标版首次调用因原生窗口未建好会不显示，已通过 OnShown 预激活兜底）。
+        /// 弹出"已复制"气泡（长按到点即弹；松开鼠标时兜底再调一次，已显示过则空转）。
+        /// 用带坐标重载 Show(text, window, Point, duration)，与主视图悬停提示同一可靠路径：
+        /// - **宿主窗口用 SettingsForm 本身（this）**：主视图悬停提示（已验证可靠）就是
+        ///   用宿主控件 this 作 window。DataGridView 内部窗口结构复杂，把气泡挂到 grid 上
+        ///   可能被其窗口消息干扰导致不渲染；窗体是普通窗口，作为宿主最稳。
+        /// - 锚点取光标当前位置（松开鼠标时仍在长按的单元格附近），显示在光标右下 12px，
+        ///   不用换算单元格坐标、不受表格滚动影响；
+        /// - 该重载（而非无坐标的 Show(text, window, duration)）在首次调用前需原生窗口
+        ///   已建好（OnShown 已用带坐标版本预激活）；无坐标版会把气泡定位到窗口默认位置，
+        ///   首次可能落到屏幕角落，看起来就像"没显示"。
         /// 目标单元格取 MouseDown 时记录的 _pressTooltipRow/_pressTooltipCol，
         /// 不受 Timer 重置 _pressRow/_pressCol 影响。
         /// </summary>
@@ -823,9 +847,17 @@ namespace AgingTestSystem.Dialogs
             _pressTooltipCol = -1;
             if (grid == null || grid.IsDisposed) return;
             if (rowIndex < 0 || rowIndex >= grid.Rows.Count) return;
+            if (colIndex < 0) return;
 
-            // 光标当前位于该单元格上，气泡显示在光标附近即可
-            _copyTip.Show("已复制：" + text, grid, 1500);
+            // 先 Hide 清掉 ToolTip 残留的显示状态，避免残留状态导致本次 Show 失效
+            _copyTip.Hide(this);
+
+            // 宿主窗口用窗体自身，锚点取光标位置（光标仍在刚复制的单元格附近），
+            // 显示在光标右下 12px（Show 的 Point 是相对宿主窗体客户区的坐标）
+            Point tipPoint = this.PointToClient(Cursor.Position);
+            tipPoint.Offset(12, 12);
+            // 时长 2500ms：长按触发时用户往往仍按住鼠标，气泡要多停留一会儿才看得清
+            _copyTip.Show("已复制：" + text, this, tipPoint, 2500);
         }
 
         /// <summary>
@@ -1303,25 +1335,22 @@ namespace AgingTestSystem.Dialogs
             var changes = new Dictionary<string, string>();
             var invalid = new List<string>();
 
-            // 遍历每个分类下的配置表格
-            foreach (var section in _sections)
+            // 遍历唯一表格的每一行（跳过分组标题行），收集各配置项的修改
+            foreach (DataGridViewRow row in _grid.Rows)
             {
-                DataGridView grid = section.Value;
-                foreach (DataGridViewRow row in grid.Rows)
+                if (row.IsNewRow) continue;
+                if (_groupRows.Contains(row.Index)) continue;   // 分组标题行不参与收集
+
+                string key = row.Cells["colKey"].Value?.ToString();
+                if (string.IsNullOrWhiteSpace(key)) continue;
+
+                string value = (row.Cells["colValue"].Value?.ToString() ?? "").Trim();
+                if (!ValidateValue(key, value, out string error))
                 {
-                    if (row.IsNewRow) continue;
-
-                    string key = row.Cells["colKey"].Value?.ToString();
-                    if (string.IsNullOrWhiteSpace(key)) continue;
-
-                    string value = (row.Cells["colValue"].Value?.ToString() ?? "").Trim();
-                    if (!ValidateValue(key, value, out string error))
-                    {
-                        invalid.Add($"【{key}】 {value}  →  {error}");
-                        continue;
-                    }
-                    changes[key] = value;
+                    invalid.Add($"【{key}】 {value}  →  {error}");
+                    continue;
                 }
+                changes[key] = value;
             }
 
             if (invalid.Count > 0)

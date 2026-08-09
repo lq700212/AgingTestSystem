@@ -113,7 +113,15 @@ namespace AgingTestSystem.Controls
             _dgv.Columns["colArrow"].ReadOnly = true;
             _dgv.Columns["colArrow"].DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
             _dgv.Columns["colArrow"].DefaultCellStyle.Font = new Font("微软雅黑", 12F);
-            _dgv.Columns["colArrow"].DefaultCellStyle.ForeColor = Color.FromArgb(48, 119, 238);
+            _dgv.Columns["colArrow"].DefaultCellStyle.ForeColor = Color.FromArgb(48, 48, 48);
+
+            // 表头箭头与数据行箭头样式保持一致（同字号/同色/同居中）：
+            // 全局表头默认是 9 号加粗、默认左对齐，直接沿用会与数据箭头
+            // （12 号黑色居中）字号、加粗、位置都不一样，视觉割裂；
+            // 这里把本列头样式单独覆盖成与数据箭头完全一致。
+            _dgv.Columns["colArrow"].HeaderCell.Style.Font = new Font("微软雅黑", 12F);
+            _dgv.Columns["colArrow"].HeaderCell.Style.ForeColor = Color.FromArgb(48, 48, 48);
+            _dgv.Columns["colArrow"].HeaderCell.Style.Alignment = DataGridViewContentAlignment.MiddleCenter;
 
             // 支持按 Delete 键直接删除选中行
             _dgv.KeyDown += Dgv_KeyDown;
