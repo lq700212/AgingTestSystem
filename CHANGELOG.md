@@ -3,6 +3,24 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.40 — 系统设置保存后热生效，无需重启（结构型配置除外）（2026-08-09）
+
+### 改动范围
+- `Dialogs/SettingsForm.cs` — 保存成功后把非结构型配置**就地回写内存中的 DeviceConfig 实例**（主窗体传入的同一引用），并把本次保存的配置项 key 集合暴露给主窗体（`SavedKeys`）；弹窗改为分层提示：只有结构型配置改动时才提示"需重启程序后生效"，其余提示"已即时生效"。新增结构型 / 各连接参数分类集合（`StructuralKeys` / `BarometerConnectionKeys` / `IoConnectionKeys` / `FanConnectionKeys` / `ScannerConnectionKeys`），新增 `ApplyChangesToConfig` / `ConvertConfigValue`（反射按属性类型转换，支持 0x 十六进制地址、IO 映射表、候选 IP 列表）
+- `Views/MainForm.cs` — 设置窗口关闭后调用 `ApplySettingsHotReload`：采集间隔更新主定时器；气压表串口 / 耦合器 / 送风机 / 扫码枪连接参数改动时在后台线程触发重连
+- `Services/DeviceManager.cs` — 新增 `ReconnectBarometerReader`（Connect 内部先断开旧串口再按新参数连接）、`ReconnectIo` / `ForceReconnectFan`（即使已连接也先断开，用新 IP/端口/候选列表重连）、`UpdateCollectInterval`
+- `Dialogs/SettingsForm.Designer.cs` — 顶部提示文案更新为"保存后立即生效（连接参数自动重连），仅结构型配置需重启"
+
+### 为什么这么改
+1. **原实现所有配置改动都要重启才生效**：服务在启动时一次性把 AppSettings 读进 DeviceConfig 后就不再更新，设置窗口只写 exe.config 不回写内存，导致现场改个寄存器地址 / IO 映射都要重启软件，体验差。
+2. **各服务每次读写都实时访问 `_config.xxx`**（同一 DeviceConfig 实例）：只要保存后就地回写该实例，业务逻辑类配置（寄存器地址 / IO 映射 / 取反 / 小数位 / 缩放 / 报警阈值 / 老化参数等）立即生效；连接参数（串口 / IP / 端口 / 超时）在回写后触发对应设备重连即生效。
+3. **结构型配置不能热改**：设备数量 / 面板布局 / Mock 开关 / 送风机启用影响运行期一次性建立的结构（状态数组、UI 面板、Reader/Controller 实现），热改会造成越界或状态不一致，因此不回写内存、照常写入配置文件并弹窗提示重启生效。
+
+### 优化点
+- 弹窗按改动内容区分文案，避免误导（不再一律说"重启程序后生效"）
+- 重连均在后台线程执行（`Task.Run`），不阻塞 UI；复用各控制器已有的同步锁，避免与采集线程并发冲突
+- 保存弹窗仍只弹一次：结构型提醒已并入设置窗口的保存提示，主窗体不再重复弹
+
 ## V1.39 — IO 备用通道映射界面/配置全链路十六进制统一（2026-08-09）
 
 ### 改动范围

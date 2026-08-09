@@ -2035,7 +2035,67 @@ namespace BarometerWinform.Views
 
             using (var form = new SettingsForm(_config))
             {
-                form.ShowDialog(this);
+                if (form.ShowDialog(this) == DialogResult.OK &&
+                    form.SavedKeys != null && form.SavedKeys.Count > 0)
+                {
+                    ApplySettingsHotReload(form.SavedKeys);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 系统设置保存后热生效（V1.40）：
+        /// SettingsForm 已把非结构型配置就地回写内存 _config 实例，各服务实时读取自动生效；
+        /// 这里只处理"需要额外动作"的部分：
+        /// - CollectInterval：更新主采集定时器间隔
+        /// - 连接参数类：触发对应设备重连（气压表串口 / 耦合器 / 送风机 / 扫码枪）
+        /// - 结构型配置（设备数量/布局/Mock/送风机启用）：设置窗体已提示需重启，无需重复提醒
+        /// </summary>
+        private void ApplySettingsHotReload(HashSet<string> keys)
+        {
+            // 采集间隔：A 类，直接更新定时器间隔（状态栏随之刷新）
+            if (keys.Contains("CollectInterval"))
+            {
+                _deviceManager.UpdateCollectInterval(_config.CollectInterval);
+                UpdateStatusBar();
+            }
+
+            // 气压表串口参数：重连（Connect 内部先断开旧串口，再按新参数连接）
+            if (keys.Overlaps(Dialogs.SettingsForm.BarometerConnectionKeys))
+            {
+                System.Threading.Tasks.Task.Run(() => _deviceManager.ReconnectBarometerReader());
+            }
+
+            // IO 耦合器连接参数：强制重连 TCP（IP/端口/超时变化需断开重连才生效）
+            if (keys.Overlaps(Dialogs.SettingsForm.IoConnectionKeys))
+            {
+                System.Threading.Tasks.Task.Run(() => _deviceManager.ReconnectIo());
+            }
+
+            // 送风机连接参数：强制重连
+            if (keys.Overlaps(Dialogs.SettingsForm.FanConnectionKeys))
+            {
+                System.Threading.Tasks.Task.Run(() => _deviceManager.ForceReconnectFan());
+            }
+
+            // 扫码枪：启用开关走 Start/Stop（内部按最新 ScannerEnabled 决定是否连接）；
+            // 其余参数改动走立即重连一次（用最新串口参数）。串口/WMI 操作放后台线程，避免卡 UI。
+            bool scannerEnabledChanged = keys.Contains("ScannerEnabled");
+            bool scannerParamChanged = keys.Overlaps(Dialogs.SettingsForm.ScannerConnectionKeys) && !scannerEnabledChanged;
+            if (scannerEnabledChanged || scannerParamChanged)
+            {
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    if (scannerEnabledChanged)
+                    {
+                        if (_config.ScannerEnabled) _scanner?.Start();
+                        else _scanner?.Stop();
+                    }
+                    else
+                    {
+                        _scanner?.TryReconnectNow();
+                    }
+                });
             }
         }
 
