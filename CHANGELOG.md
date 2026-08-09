@@ -3,6 +3,22 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.56 — 高 DPI 适配推广到全部页面：SunnyUI 全局 DPIScale 开关（2026-08-10）
+
+### 改动范围
+- `Program.cs`：程序启动时（`Application.Run` 之前）设置 `Sunny.UI.UIStyles.DPIScale = true`，等价于 SunnyUI 官方"主窗体放 UIStyleManager 控件并勾选 DPIScale"的推荐做法
+
+### 为什么这么改
+- V1.55 已适配主界面（自绘网格手动 DPI 缩放 + 标准控件走 WinForms AutoScaleMode）。排查其余页面后发现还有 3 个**继承 SunnyUI.UIForm 的窗体**（FanTestForm 送风机测试、CommunicationTestForm 通讯测试、其内部 RemapNoticeForm）在 150% 缩放下"文字溢出/偏大"：
+  - 它们 Designer 里是 `AutoScaleMode.None`（SunnyUI 设计如此，`UIBaseForm.OnShown` 还会强制把 Font 模式改回 None，所以 V1.55 曾尝试改 `AutoScaleMode.Font` 完全无效，实测 `CurrentAutoScale={0,0}`）
+  - SunnyUI 官方的 DPI 方案是：`AutoScaleMode.None + app.manifest dpiAware + UIStyles.DPIScale=true` 三件套。DPIScale 开启后，`UIForm.OnShown` 会遍历窗体所有 SunnyUI 控件调用 `SetDPIScale()`，把字体大小除以缩放系数（DPI/96=1.5），使控件字体在高分屏下保持设计时的物理大小
+- 不用逐个改窗体：`UIStyles.DPIScale` 是全局静态开关，只在 **UIForm 子类**的 `OnShown` 路径生效；普通 Form（MainForm/SettingsForm/LoginForm/RecipeManagerForm 等）不走该路径，仍然只靠 WinForms 的 `AutoScaleMode.Font` 缩放，二者互不干扰（实测 SettingsForm 开/关 DPIScale 字体与尺寸完全一致）
+
+### 优化点
+- 一行代码覆盖全部 UIForm，零侵入各窗体
+- 验证（144 DPI harness 实测）：FanTestForm 控件字体 10.5pt→7.0pt、CommunicationTestForm 同步缩小，物理渲染尺寸恢复设计值；SettingsForm/LoginForm/RecipeManagerForm 的 `ClientSize` 缩放与字体不受影响
+- UIForm 窗体尺寸本身不放大（AutoScaleMode.None 行为），CommunicationTestForm 高度 1100 不会超出 1600 物理屏高，无超屏风险
+
 ## V1.55 — 高 DPI（150% 缩放）屏幕主界面适配：自绘工位网格按 DPI 放大（2026-08-10）
 
 ### 改动范围
