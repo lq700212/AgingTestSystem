@@ -22,7 +22,7 @@ WinForms 桌面程序（.NET Framework 4.7.2 / C#）：监控 72 台气压表真
 | 设备 | 数量 | 协议 / 接入 | 关键实现 |
 | :--- | :---: | :--- | :--- |
 | 真空负压表（气压表） | 72 | Modbus RTU，RS485→CH340 USB，**19200 8N1**，从站=设备号 1~72 | `ModbusRtuBarometerReader` |
-| IO 耦合器 | 1 | 显耀 GX-CL140，Modbus TCP `192.168.1.20:502`，80DI/160DO | `ModbusTcpIoController` |
+| IO 耦合器 | 1 | GX-CL140，Modbus TCP `192.168.1.20:502`，80DI/160DO | `ModbusTcpIoController` |
 | 冷却送风机 | 1 | 厂商控制屏，Modbus TCP 端口 **50000**，定值启停 + 温湿度监视 | `FanControllerClient` |
 | 扫码枪 | 1 | Honeywell Xenon 1902 虚拟串口 **115200**，WMI 自动识别串口 | `ScannerService` |
 
@@ -201,7 +201,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | V1.14 | 接入真实通讯链路（RTU+TCP），报警边沿联动 |
 | V1.13 | 用户数据持久化 Users.json |
 | V1.12 | 配方管理窗口左右分栏 |
-| V1.09 | 接入显耀 IO 表（IoMapBuilder 八进制映射，1 输入+2 输出） |
+| V1.09 | 接入 IO 分配表（IoMapBuilder 八进制映射，1 输入+2 输出） |
 | V1.08 | 用户权限系统（登录/用户管理/权限按钮）+ 自适应分辨率滚动条 |
 | ≤V1.07 | 早期：下拉菜单、修复记录、初始 Mock 架构 |
 

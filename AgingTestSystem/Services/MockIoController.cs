@@ -11,8 +11,8 @@ namespace AgingTestSystem.Services
     /// 用于开发和测试阶段，模拟IO输入输出操作
     /// 实际使用时需要替换为真实的硬件通信实现
     ///
-    /// 【V1.09 更新 —— 显耀IO表】
-    /// IO点编号规则(依据显耀IO表):
+    /// 【V1.09 更新 —— IO分配表】
+    /// IO点编号规则(依据IO分配表):
     /// - 输入点(NPN, X地址): 1 ~ TotalInputs(默认 1 ~ 72)
     ///   对应物理地址 X000~X107(三菱八进制), 设备名: 真空负压表-1~72
     /// - 输出点(PNP, Y地址): TotalInputs+1 ~ TotalInputs+TotalOutputs(默认 73 ~ 216)

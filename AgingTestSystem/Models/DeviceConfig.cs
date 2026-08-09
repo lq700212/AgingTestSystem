@@ -26,7 +26,7 @@ namespace AgingTestSystem.Models
         ///
         /// 输入点编号范围：1 ~ TotalInputs（默认 1 ~ 80）
         ///
-        /// 【V1.09 更新】依据显耀IO表:
+        /// 【V1.09 更新】依据IO分配表:
         /// - 72 个输入点均为 NPN 型, 对应三菱PLC X 地址(八进制编址 X000~X107)
         /// - 设备名: 真空负压表-1 ~ 真空负压表-72
         /// - 物理地址映射详见 <see cref="Services.IoMapBuilder"/>
@@ -44,7 +44,7 @@ namespace AgingTestSystem.Models
         ///
         /// 输出点编号范围：TotalInputs+1 ~ TotalInputs+TotalOutputs（默认 81 ~ 240）
         ///
-        /// 【V1.09 更新】依据显耀IO表:
+        /// 【V1.09 更新】依据IO分配表:
         /// - 144 个输出点均为 PNP 型, 对应三菱PLC Y 地址(八进制编址)
         /// - 真空电磁阀-1~72: Y000~Y107 (内部编号 = TotalInputs + deviceId)
         /// - 载台上电-1~72:  Y110~Y217 (内部编号 = TotalInputs + TotalBarometers + deviceId)

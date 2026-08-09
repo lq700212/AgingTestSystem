@@ -80,7 +80,7 @@ namespace AgingTestSystem.Services
             }
 
             // 使用 lock 保护 Random 访问（修复 M5）
-            // 【V1.09 更新】依据显耀IO表: 1输入(真空负压表) + 2输出(真空电磁阀 + 载台上电)
+            // 【V1.09 更新】依据IO分配表: 1输入(真空负压表) + 2输出(真空电磁阀 + 载台上电)
             int pressureInt;
             int delayStartMin, delayStartSec;
             int delayArriveMin, delayArriveSec;
