@@ -12,7 +12,7 @@ namespace BarometerWinform.Controls
     /// 在"设置值"单元格下方弹出，以"一行一个 IP"的可编辑表格展示，
     /// 支持直接修改已有 IP、通过输入框添加新 IP、选中删除。
     /// 点【确定】校验并提交；点击弹出框外部或【取消】放弃修改。
-    /// 界面风格与系统设置窗口一致（SunnyUI 蓝主题 + 白底）。
+    /// 界面风格与系统设置窗口一致（SunnyUI 蓝主题控件 + 白底，无标题栏）。
     /// </summary>
     public class IpListEditorPopup : Form
     {
@@ -39,44 +39,13 @@ namespace BarometerWinform.Controls
             StartPosition = FormStartPosition.Manual;
             ShowInTaskbar = false;
             BackColor = Color.White;
-            ClientSize = new Size(400, 306);
-
-            // 顶部蓝色标题栏（与 SunnyUI 蓝主题一致）
-            var header = new Sunny.UI.UIPanel
-            {
-                Dock = DockStyle.Top,
-                Height = 40,
-                FillColor = Color.FromArgb(48, 119, 238),
-                RectColor = Color.FromArgb(48, 119, 238),
-                Style = Sunny.UI.UIStyle.Custom
-            };
-            var lblTitle = new Label
-            {
-                Text = "候选 IP 列表编辑",
-                Location = new Point(12, 0),
-                Size = new Size(240, 40),
-                TextAlign = ContentAlignment.MiddleLeft,
-                Font = new Font("微软雅黑", 11F, FontStyle.Bold),
-                ForeColor = Color.White
-            };
-            var lblHeaderHint = new Label
-            {
-                Text = "可修改 / 新增 / 删除",
-                Location = new Point(252, 0),
-                Size = new Size(140, 40),
-                TextAlign = ContentAlignment.MiddleRight,
-                Font = new Font("微软雅黑", 9F),
-                ForeColor = Color.FromArgb(220, 228, 245)
-            };
-            header.Controls.Add(lblTitle);
-            header.Controls.Add(lblHeaderHint);
-            Controls.Add(header);
+            ClientSize = new Size(400, 268);
 
             // 候选 IP 表格：蓝主题，与设置表格同风格
             _dgv = new Sunny.UI.UIDataGridView
             {
                 Style = Sunny.UI.UIStyle.Blue,
-                Location = new Point(12, 50),
+                Location = new Point(12, 12),
                 Size = new Size(376, 158),
                 BorderStyle = BorderStyle.None,
                 AllowUserToAddRows = false,
@@ -112,7 +81,7 @@ namespace BarometerWinform.Controls
             var lblHint = new Label
             {
                 Text = "一行一个 IP，可直接修改 / 输入新增 / 选中删除",
-                Location = new Point(12, 214),
+                Location = new Point(12, 176),
                 Size = new Size(376, 18),
                 TextAlign = ContentAlignment.MiddleLeft,
                 Font = new Font("微软雅黑", 8.5F),
@@ -123,7 +92,7 @@ namespace BarometerWinform.Controls
             // 输入新增：文本框 + 添加按钮
             _txtNewIp = new Sunny.UI.UITextBox
             {
-                Location = new Point(12, 236),
+                Location = new Point(12, 198),
                 Size = new Size(270, 30),
                 Font = new Font("微软雅黑", 9.5F),
                 Watermark = "输入 IP 地址，如 192.168.1.220"
@@ -131,20 +100,20 @@ namespace BarometerWinform.Controls
             _txtNewIp.KeyDown += TxtNewIp_KeyDown;
             Controls.Add(_txtNewIp);
 
-            _btnAdd = CreateButton("添加", new Point(290, 236), new Size(98, 30), Sunny.UI.UIStyle.Blue);
+            _btnAdd = CreateButton("添加", new Point(290, 198), new Size(98, 30), Sunny.UI.UIStyle.Blue);
             _btnAdd.Click += (s, e) => AddIp();
             Controls.Add(_btnAdd);
 
             // 底部按钮：删除选中（左），取消 / 确定（右）
-            _btnDelete = CreateButton("删除选中", new Point(12, 272), new Size(88, 30), Sunny.UI.UIStyle.Orange);
+            _btnDelete = CreateButton("删除选中", new Point(12, 234), new Size(88, 30), Sunny.UI.UIStyle.Orange);
             _btnDelete.Click += (s, e) => DeleteSelected();
             Controls.Add(_btnDelete);
 
-            _btnCancel = CreateButton("取消", new Point(216, 272), new Size(62, 30), Sunny.UI.UIStyle.Gray);
+            _btnCancel = CreateButton("取消", new Point(216, 234), new Size(62, 30), Sunny.UI.UIStyle.Gray);
             _btnCancel.Click += (s, e) => CloseAsCancel();
             Controls.Add(_btnCancel);
 
-            _btnOk = CreateButton("确定", new Point(284, 272), new Size(104, 30), Sunny.UI.UIStyle.Blue);
+            _btnOk = CreateButton("确定", new Point(284, 234), new Size(104, 30), Sunny.UI.UIStyle.Blue);
             _btnOk.Click += (s, e) => Confirm();
             Controls.Add(_btnOk);
 
@@ -290,6 +259,19 @@ namespace BarometerWinform.Controls
             ResultValue = null;
             _closing = true;
             Close();
+        }
+
+        /// <summary>无边框窗体，用浅灰描边勾出弹窗边界，与表格底框视觉统一</summary>
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            using (var pen = new Pen(Color.FromArgb(214, 220, 228)))
+            {
+                Rectangle rect = ClientRectangle;
+                rect.Width -= 1;
+                rect.Height -= 1;
+                e.Graphics.DrawRectangle(pen, rect);
+            }
         }
 
         /// <summary>点击弹出框外部（窗体失焦）视为取消</summary>
