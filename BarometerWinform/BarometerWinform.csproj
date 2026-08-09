@@ -105,7 +105,12 @@
     <Compile Include="Services\UserManager.cs" />
     <Compile Include="Services\RecipeStorage.cs" />
     <Compile Include="Controls\DataGridViewNumericUpDownCell.cs" />
-    <Compile Include="Controls\IpListEditorPopup.cs" />
+    <Compile Include="Controls\IpListEditorPopup.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Controls\IoMappingEditorPopup.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Services\RecipeAutoCompleteProvider.cs" />
     <Compile Include="Services\StationSettingsCache.cs" />
     <Compile Include="Views\WorkstationPanelView.cs">
