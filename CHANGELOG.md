@@ -3,6 +3,26 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.55 — 高 DPI（150% 缩放）屏幕主界面适配：自绘工位网格按 DPI 放大（2026-08-10）
+
+### 改动范围
+- `Views/WorkstationGridView.cs`：**给自绘工位网格增加 DPI 缩放支持**，适配高分辨率屏幕（如 2560×1600 @150% 缩放，实际 DPI 144）：
+  - 新增字段 `_dpiScale`（缩放因子 = 实际 DPI / 96，150% 缩放下 = 1.5）
+  - 新增 `OnHandleCreated` + `UpdateDpiScale`：句柄创建后计算缩放因子，并按缩放后的尺寸重新设置画布 `Size`
+  - 新增 `Scaled(int/Point/Rectangle)` 辅助方法：所有绘制/命中坐标统一从"96DPI 逻辑像素"换算成"物理像素"
+  - `OnPaint`、`DrawPanel`、`DrawValueBox`（含值框文字左内边距）、命中检测（`TryHitPanel`/`TryHitRowButton`）、悬停提示（`GetTooltipText`）、局部重绘（`GetPanelBounds`）、行全选按钮列全部改为经 `Scaled()` 放大
+- `App.config`：`<runtime>` 增加 `AppContextSwitchOverrides value="Switch.System.Windows.Forms.DpiAwareness=PerMonitorV2"`（与已有 `app.manifest` 的 PerMonitorV2 声明配套，让 WinForms 在 DPI 变化时自动缩放标准控件布局）
+
+### 为什么这么改
+- 用户新电脑分辨率高（2560×1600 @150%），主界面"很多 UI 显示不正常"。根因：自绘网格是 `AutoScaleMode.None`，画布尺寸与坐标是 96DPI 逻辑像素**不随 DPI 放大**，而 pt 字体会自动放大 1.5 倍 → 文字溢出格子/重叠，且与周围被 AutoScaleMode.Font 放大的标准控件比例失调
+- 不能用 `Graphics.ScaleTransform`（TextRenderer 走 GDI 不认坐标系变换，V1.51 已踩坑），只能手动把每个坐标乘缩放因子；字体保持 pt 单位自动放大，两者同步放大后比例与 96DPI 完全一致
+- 踩坑：`Control.DeviceDpi` 在 PerMonitorV2 下返回 96（句柄刚创建时 DPI 上下文未生效），实测 `CreateGraphics().DpiX` 才是真实值 144，故以 CreateGraphics 为准
+
+### 优化点
+- 96DPI（100% 缩放）老电脑上 `_dpiScale = 1.0`，坐标与历史完全一致，零回归
+- 像素级验证：画布 2040×2025 → 3060×3038（×1.5）；离屏渲染后扫描 7 个关键点（标题文字/状态块浅灰/边框黑线/行全选列位置颜色）全部命中
+- 冒烟测试进程存活；本版本先只适配主界面，其余页面待用户确认效果后按同思路推广
+
 ## V1.54j — 设置窗口数据行最右边缘恢复竖线（分组标题行仍无）（2026-08-09）
 
 ### 改动范围
