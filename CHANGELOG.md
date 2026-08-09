@@ -6,21 +6,26 @@
 ## V1.38 — IO 备用通道映射可视化编辑 + 修复设置名称长按复制（2026-08-09）
 
 ### 改动范围
-- `Controls/IoMappingEditorPopup.cs`（新增）— IO 备用通道映射编辑器：一行一条映射，三列"原 IO 通道 → 新 IO 通道"，左右为十六进制通道号微调框（0x00~0xFF），支持修改/添加/删除
-- `Controls/DataGridViewNumericUpDownCell.cs` — 新增十六进制数字单元格 `DataGridViewHexNumericUpDownCell`（编辑时弹出 Hexadecimal NumericUpDown 微调框）
+- `Controls/IoMappingEditorPopup.cs`（新增）— IO 备用通道映射编辑器：一行一条映射，五列"原寄存器 → 原通道 → 新寄存器 → 新通道"，寄存器（0x0000~0xFFFF）与通道（00~1F）均为十六进制微调框，支持修改/添加/删除
+- `Controls/DataGridViewNumericUpDownCell.cs` — 新增十六进制数字单元格 `DataGridViewHexNumericUpDownCell`（编辑时弹出 Hexadecimal NumericUpDown 微调框），支持 `HexDigits`（显示位数）与 `ShowPrefix`（0x 前缀）配置，寄存器与通道共用
+- `Models/IoOutputChannelRemap.cs` — 通道号合法范围由 0~15 放宽到 0~31
 - `Controls/IpListEditorPopup.cs` — 单元格类由 `DataGridViewIpListCell` 更名/泛化为 `DataGridViewPopupEditCell`（点击弹编辑器），供 IP 列表与 IO 映射共用
-- `SettingsForm.cs` — IoBackupChannelMappings 改用弹窗编辑器；修复"设置名称长按复制"气泡定位错误
+- `SettingsForm.cs` — IoBackupChannelMappings 改用弹窗编辑器；修复"设置名称长按复制"气泡不显示
 - `BarometerWinform.csproj` — 注册新控件文件
 
 ### 为什么这么改
-1. **IO 映射手输易错**：原 IoBackupChannelMappings 是自由文本，需手输"寄存器@位->寄存器@位"（如 `0x2000@0->0x2009@10`），格式/寄存器偏移极易写错。改为弹窗可视化编辑：一行一条映射、左右各一个十六进制通道号微调框，保存时自动换算回原配置格式，既直观又杜绝非法项。
-2. **通道号 ↔ 原配置格式换算**：界面用"通道号"（0x00~0xFF），配置存"寄存器@位"。换算规则：寄存器 = 起始寄存器地址 + (通道号>>4)，位 = 通道号 & 0x0F；反向同理。已在代码注释中说明，确保与 ModbusTcpIoController / IoOutputChannelRemap.ParseAll 解析格式完全一致。
-3. **长按复制"没生效"**：原实现气泡用 `ToolTip.Show(..., Point, ...)`，该重载的 Point 是**屏幕坐标**，却传了控件相对坐标，气泡显示在屏幕左上角/不可见，看起来像功能没生效。改为先 `RectangleToScreen` 换算到屏幕坐标；同时把"判断长按"从 MouseUp 比较时间改为 700ms Timer（按下即计时，到点即复制，无需等松开，体验更跟手）。
+1. **IO 映射手输易错**：原 IoBackupChannelMappings 是自由文本，需手输"寄存器@位->寄存器@位"（如 `0x2000@0->0x2009@10`），格式/寄存器偏移极易写错。改为弹窗可视化编辑：一行一条映射、左右各显示"寄存器 + 通道"两个十六进制微调框，保存时自动换回原配置格式，既直观又杜绝非法项。
+2. **界面与配置同构、无需换算**：界面四列（原寄存器/原通道/新寄存器/新通道）与配置格式"寄存器@位"一一对应，只是把配置里的十进制位号（0~31）显示成两位十六进制（00~1F），保存时再转回十进制位号，与 `IoOutputChannelRemap.ParseAll` 解析格式完全一致，不再依赖起始寄存器地址换算。通道号放宽到 0~31（00~1F），兼容 32 点/模块。
+3. **长按复制气泡不显示（根因）**：
+   - 长按计时到点（鼠标仍按住、被表格捕获）时调用 `ToolTip.Show`，气泡被鼠标捕获盖住不渲染。改为 Timer 到点只负责复制、先暂存提示内容，等松开鼠标（MouseUp）后再弹出气泡。
+   - `ToolTip.Show(..., Point, ...)` 的 Point 是**控件客户端坐标**（内部实现 `windowRect.left + point.X`），原实现误用 `RectangleToScreen` 传了屏幕坐标，气泡被移到屏幕外看不到；且点坐标版首次调用时原生窗口尚未建好会**直接不显示**。改为 `OnShown` 里先空转一次预激活气泡，并改用 `Show(text, window, duration)`（光标定位版，走与悬停提示相同的 SemiAbsolute 路径）——松开鼠标时光标就在单元格上，气泡自然落在单元格附近。
+   - 松开鼠标时目标单元格行列被 Timer 重置成了 -1，气泡定位失败直接返回。改为在 MouseDown 时把行列记到独立的 `_pressTooltipRow/_pressTooltipCol`，与复制计时用的 `_pressRow/_pressCol` 分开。
 
 ### 优化点
-- IO 映射弹窗：原/新通道用十六进制微调框（0x00~0xFF）防误输；中间箭头列只读固定显示 "→"；支持 Delete 键删行；添加按钮直接新增一行空白映射
+- IO 映射弹窗：原/新寄存器用 4 位十六进制（带 0x 前缀）、原/新通道用 2 位十六进制微调框防误输；中间箭头列只读固定显示 "→"；支持 Delete 键删行；添加按钮直接新增一行空白映射
+- `DataGridViewNumericUpDownCell` / `DataGridViewHexNumericUpDownCell` 重写 `Clone()` 带出自定义属性（`Maximum`/`HexDigits`/`ShowPrefix` 等），否则 CellTemplate 克隆成实际单元格时会回落默认值——修复寄存器只显示 2 位、无 0x 前缀的问题
 - 删除行逻辑沿用"先收集索引再删"，避免 DataGridView 删除当前行时误删全部
-- 设置名称长按复制改为 Timer 触发，按住 700ms 即复制并气泡提示（气泡定位到单元格正下方）
+- 设置名称长按复制改为 Timer 触发，按住 700ms 即复制，松开鼠标后气泡提示（气泡定位到单元格正下方）
 
 ## V1.37 — 候选 IP 弹窗去掉顶部蓝色标题栏（2026-08-09）
 
