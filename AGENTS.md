@@ -24,7 +24,7 @@
 2. **不提交运行时数据与机密**：`Users.json`（明文密码）、`Recipes.json`、`StationSettings.json` 等程序运行生成的 json 一律 gitignore，绝不入库。
 3. **改动后必须构建验证**，禁止提交编译不过的代码。
 4. **不主动 commit/push**，除非用户明确要求；提交前先 `git status` + `git diff` 确认只包含预期改动。
-5. **不添加无必要注释**（除非项目已用 XML 注释风格，可跟随）。
+5. **代码注释要详细，让小白能看懂学会**：关键方法/流程/边界条件/配置依赖必须写清"做什么 + 为什么这么写 + 怎么改"，杜绝只写变量名的废话注释（如 `i++ // 自增`）。允许的详细注释样式参考 `WorkstationGridView.cs` / `RecipeManagerForm.cs` 头部与关键方法。
 
 ## 代码约定
 
@@ -34,6 +34,8 @@
   - `StopBits` 存字符串 `1` / `15`（=1.5）/ `2`；校验位 `Parity` 存标准枚举名 `None`/`Odd`/`Even`/`Mark`/`Space`。读写两端大小写兼容（ModbusRtu 用 `Enum.TryParse(…, true)`，ScannerService 用 `ToLowerInvariant()` 匹配）。
   - 界面可显示中文/友好文案，但**存到 App.config 的值必须经过归一化映射**（见 `SettingsForm.NormalizeParity` / `NormalizeStopBits`），禁止把非规范字符写进配置。
 - 配置项编辑控件统一在 `SettingsForm.CreateValueCell` 按 key 分发（布尔/串口/波特率/数据位/停止位/校验位/数字/文本）。新增串口类配置项时，**气压表与扫码枪两套 key（如 `PortName`+`ScannerPort`）都要覆盖**，共用同一套映射逻辑。
+- **界面文件头注释必须带 ASCII 布局图**：所有 View/Dialog（`Views/*.cs`、`Dialogs/*.cs`）的类 XML 注释里都要有一段用 `┌─┐│└┘` 画出的界面布局图（参考 `RecipeManagerForm.cs` / `WorkstationGridView.cs` 头部注释），框内标注控件名与关键交互点。AI 无法看图，改界面全靠这段文本图，故**每次新增/修改界面文件都补画或同步更新该图**，且要和实际控件布局一致（坐标、控件名、按钮文字都对上）。
+- **自绘控件（WorkstationGridView 等）的坐标类常量一律外部化**：不写死像素常量，放到布局配置模型（如 `Models/PanelLayoutConfig.cs`，可被 `PanelLayout.json` 覆盖），并把坐标标注进头部注释的 ASCII 图里，便于现场改配置微调间距/颜色/字号。
 
 ## 关键文件导航
 
@@ -60,8 +62,12 @@
 - 有 GUI 改动时可冒烟测试：`Start-Process` 启动 exe，等几秒确认进程存活再 `Stop-Process`。
 - 无单元测试框架；以构建通过 + 冒烟测试作为验证手段。
 
-## 文档同步
+## 文档同步（每次任务完成必做，逐条核对）
 
-- 功能/修复完成后在 `CHANGELOG.md` 顶部新增或更新当前版本小节：改动范围、为什么这么改、优化点。
-- 寄存器/通讯协议类改动同步到 `docs/通讯接入.md`。
-- 注释里的中文请保持 UTF-8，写完后自查编码。
+- **`CHANGELOG.md`**：功能/修复完成后必须在顶部新增或更新当前版本小节，写明"改动范围、为什么这么改、优化点"三部分（参考既有 V1.xx 小节格式）。改动再小也要记，防止现场追溯不到。
+- **`README.md`**：若改动了目录结构、新增/删除文件、核心业务流、构建方式，同步更新对应章节（如"目录结构表"、`WorkstationGridView` 等条目），保持与实际代码一致。
+- **`docs/通讯接入.md`**：寄存器/寄存器地址/Modbus 协议/串口参数/IO 映射等通讯类改动，必须同步到该文档，并写明对应版本号。
+- **`AGENTS.md` 自身**：若本次工作中发现了新的约定、红线、套路（如"界面注释要画 ASCII 图"、"坐标要外部化到配置"），立刻沉淀进本文件，让下次任务自动遵守。
+- **代码注释**：改动处的代码注释要详细到小白能看懂（做什么 + 为什么 + 怎么改），样式参考 `WorkstationGridView.cs` / `RecipeManagerForm.cs`；新文件/新方法尤其要写清头部说明。
+- 注释里的中文请保持 UTF-8，写完后自查编码：`[IO.File]::ReadAllText(path, UTF8).Contains("预期中文")` 能命中。
+- **提交前自检**：`git status` + `git diff` 确认改动范围与文档同步都完成后再交付；用户不要求 commit 时只留工作区改动即可。

@@ -23,7 +23,19 @@ namespace AgingTestSystem.Dialogs
     /// - 新密码不能为空，至少4个字符
     /// - 新密码不能与当前密码相同
     /// - 新密码和确认新密码必须一致
-    /// </summary>
+    ///
+    /// 【界面布局】
+    /// ┌──────────────────────────────┐
+    /// │          修改密码             │ ← 窗体标题
+    /// ├──────────────────────────────┤
+    /// │  当前用户:  operator          │ ← lblCurrentUser（只读显示当前登录用户）
+    /// │  当前密码: [________________] │ ← txtOldPassword（密码框）
+    /// │  新  密  码: [________________]│ ← txtNewPassword（密码框）
+    /// │  确认密码: [________________] │ ← txtConfirmPassword（密码框）
+    /// ├──────────────────────────────┤
+    /// │          [确认]    [取消]     │ ← btnConfirm / btnCancel
+    /// └──────────────────────────────┘
+    ///</summary>
     public partial class ChangePasswordForm : Form
     {
         /// <summary>用户管理器（提供修改密码功能）</summary>

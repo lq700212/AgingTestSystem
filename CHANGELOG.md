@@ -3,6 +3,72 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.52 — 工位网格值框文字内边距 + View 界面注释补齐（2026-08-09）
+
+### 改动范围
+- `Models/PanelLayoutConfig.cs` + `bin\Debug\PanelLayout.json` — **值框文字左内边距**：新增 `ValueTextLeftPadding`（默认 6px），值框坐标不变，仅让框内文字与左边框留出间隔（解决"文字贴边/紧贴"观感）；该值可在 PanelLayout.json 中自行微调
+- `Views/WorkstationGridView.cs` — `DrawValueBox` 绘制文字时矩形左移内边距（宽度同步缩短，文字不溢出右边框）；类头部注释新增**界面 ASCII 图**（整体网格 + 单面板内容布局 + 坐标标注 + 状态块配色说明），后续改界面可直接把该注释贴给 AI
+- `Dialogs/CommunicationTestForm.cs` / `FanTestForm.cs` / `LoginForm.cs` / `ChangePasswordForm.cs` / `UserManagementForm.cs` / `HistoryRecordForm.cs` / `SettingsForm.cs` — 头部注释**补齐界面 ASCII 图**（原来只有文字描述或无布局说明），与 RecipeManagerForm 风格统一
+
+### 为什么这么改
+- 用户反馈值框内文字"紧贴左边界"；**首版方案（右移值框 X 57→70）会连带整个框移动，观感是"文本框左边界跟着文本移动"，被用户否决**，改为只加文字内边距、值框本身不动
+- 界面图注释让 AI 助手（无法看图）能凭文本理解各窗体布局，便于后续直接按注释改界面
+
+### 优化点
+- 文字内边距在配置文件中可调，现场无需重新编译
+- 值框坐标与 V1.51 完全一致，无布局错位风险
+
+## V1.51 — 工位网格文字"糊成一坨"修复 + 布局外部化（2026-08-09）
+
+### 改动范围
+- `Views/WorkstationGridView.cs` — **重写绘制逻辑**：
+  - **修复文字模糊/叠糊**：原实现 `OnPaint` 用 `g.TranslateTransform` 平移坐标系后再调 `TextRenderer.DrawText` 绘制文字，TextRenderer 走 GDI 绘制路径，与 Graphics 坐标变换叠加时位置/尺寸错乱，文字溢出到相邻元素上互相叠加（"糊成一坨"）。现在全部元素（背景/状态块/值框/标签/按钮/文字）一律改为**绝对坐标**绘制（元素坐标 = 面板左上角 + 设计坐标），彻底去掉 Transform 与 GDI 文字混用
+  - **字体显式创建**：正文改用独立的 `_panelFont`（取自布局配置，默认微软雅黑 9pt），不再用 `this.Font`（后者继承主窗体 AutoScale 缩放字体，与固定像素矩形不匹配导致文字溢出）
+  - **布局外部化**：面板坐标/颜色/字号/按钮与提示文字全部改读 `PanelLayoutConfig`，不再写死常量；`Configure` 首次运行时自动向程序目录导出默认 `PanelLayout.json`，现场改配置文件即可微调界面，无需重新编译
+- `Models/PanelLayoutConfig.cs` — **新增布局配置模型**：面板网格尺寸、面板内各元素坐标（RcPower/RcWorkState/RcVacuumOpen/RcPressureValue/RcSNValue/RcRecipeValue/RcDelayStart*/RcSetButton/RcSelectBox/标签位置）、字体（字体名/正文字号/标题字号/标题加粗）、颜色（"R,G,B"字符串，覆盖背景/状态块/按钮/边框等全部配色）、提示文字；提供 `LoadOrDefault`（文件缺失/损坏回退默认值）与 `SaveDefault`（导出配置）；配套 `ElementRect`/`ElementPoint` 可序列化坐标类
+- `Views/WorkstationGridView.Designer.cs` — Dispose 补充释放 `_panelFont`
+- `AgingTestSystem.csproj` — 注册 `Models/PanelLayoutConfig.cs`
+
+### 为什么这么改
+- 用户反馈自绘画布上文字"看不清、糊成一坨"：根因是 TextRenderer（GDI）与 `g.TranslateTransform`（GDI+ 变换）混用导致文字绘制错乱，叠加到相邻元素上
+- 同时把用户多次要求的"改坐标/改色/改字号"诉求从改代码升级为改配置文件，降低现场维护门槛
+
+### 优化点
+- 默认配置值与历史版本布局完全一致，升级后界面无感变化
+- 布局配置只解析一次（构造时），绘制热路径零字符串解析开销
+
+## V1.50 — 主界面工位网格滚动撕裂彻底解决：单窗口自绘大画布（2026-08-09）
+
+### 改动范围
+- `Views/WorkstationGridView.cs` + `WorkstationGridView.Designer.cs` — **新增自绘大画布控件**：整个网格（8列×9行面板 + 行全选按钮列）合并为 **1 个 UserControl**，尺寸 = 内容总尺寸（8×245+80 宽、9×225 高），由 `OnPaint` 按坐标绘制全部面板内容与行全选按钮；`UpdateAll`/`UpdateSingle` 只改内存字段 + `Invalidate`，并支持可见区域局部重绘（按 ClipRectangle 计算行列范围）；交互（长按选中/设置按钮/选中框/行全选/悬停提示）全部用坐标命中实现
+- `Views/MainForm.cs` — `CreateWorkstationPanels` 重写：删除 TableLayoutPanel + 72 个面板 + 行全选按钮的创建逻辑，改为创建 1 个 `WorkstationGridView` 放入外层 `Panel.AutoScroll` 滚动容器（容器反射开启双缓冲）；`_panelViews`/`_rowSelectButtons` 两个字典字段及 `BtnSelectRow_Click`/`UpdateRowSelectButton`/`UpdateSelectionBoxVisibility`/`Panel_ClearAllSelectionRequested` 等方法整体删除（逻辑已内聚到 GridView 内部）；数据更新改走 `_gridView.UpdateAll`/`UpdateSingle`；`Panel_OnSetClicked` 改用 GridView 的 `SetSelected`/`GetSelectedDeviceIds`；`ShowBatchRecipeForm`/`GetSelectedDeviceIds` 改读 GridView 选中集合；GridView 行全选动作通过 `OnLog` 事件通知主窗体写日志
+- `Views/WorkstationPanelView.cs` + `.Designer.cs` + `.resx` — **删除**：功能完全被 WorkstationGridView 替代，项目内已无任何实例化调用（对齐 V1.44/V1.45 移除死代码惯例）；csproj 相应移除三个文件的项目引用
+- `AgingTestSystem.csproj` — 注册 `WorkstationGridView.cs` / `WorkstationGridView.Designer.cs`，移除 WorkstationPanelView 三件套
+- `README.md` — 目录结构表把 WorkstationPanelView 条目替换为 WorkstationGridView
+
+### 为什么这么改
+- V1.49 把每面板内部 13+ 子控件改为自绘，滚动时仍需逐帧移动 72 个面板窗口，拖动滚动条仍有撕裂/卡顿
+- V1.50 改为 RecyclerView 同源的"单窗口大画布"：滚动时系统只需移动 **1 个窗口**（内存 BitBlt 移动位图），72 个面板全部由 OnPaint 按坐标绘制且只重绘可见区域 → 无撕裂、无卡顿
+
+### 优化点
+- **完全不影响 1Hz 全量实时刷新与监控**：`UpdateAll` 只改内存字段 + Invalidate，1Hz 全量刷新开销极小
+- 行全选/选中交互/悬停提示与 V1.49 行为完全一致，只是实现从"多控件事件"迁到"坐标命中"
+- 后续若表数量继续增加（数百台），可按相同思路再做"按屏虚拟化"（只保留可见面板），当前 72 台规模不需要
+
+## V1.49 — 主界面工位网格滚动撕裂优化：面板自绘重构（2026-08-09）
+
+### 改动范围
+- `Views/WorkstationPanelView.cs` + `WorkstationPanelView.Designer.cs` — **面板自绘重构**：原每面板 13+ 个子控件（Label/TextBox/Button/选中指示）全部删除，改为单个 UserControl 由 `OnPaint` 按坐标自绘全部内容（设备编号/上电灯/工作状态/真空压力/SN/配方/延时/设置按钮/选中框）；"设置按钮、选中框"等交互改用坐标命中（hit-testing），长按选中/单击切换/状态块悬停提示（ToolTip）逻辑全部保留；面板开启双缓冲
+- `Views/MainForm.cs` — 主窗体与工位网格 `TableLayoutPanel` 开启双缓冲（TableLayoutPanel 的 `DoubleBuffered` 受保护，通过反射开启）
+
+### 为什么这么改
+- 原实现 72 面板 × 13+ 控件 ≈ 936 个控件窗口。WinForms 滚动时 ScrollableControl 要逐帧移动这些子控件窗口（MoveWindow），开销巨大，拖动滚动条必然撕裂/卡顿——双缓冲只能减轻"重绘闪烁"，救不了"移动窗口"本身，因此第一阶段"TextBox 换 Label + 三层双缓冲"现场实测无改善
+- 自绘后 72 面板 = 72 个顶层控件，滚动时只需移动 72 个窗口，性能提升一个数量级，撕裂基本消除
+
+### 优化点
+- **完全不影响 1Hz 全量实时刷新与监控**：`UpdateData` 只改内存字段 + `Invalidate()`，72 面板全量刷新开销极小；无任何"滚动暂停刷新"逻辑（该方案会滞后数据，已弃用）
+- 后续若表数量继续增加（数百台），可按相同思路再做"按屏虚拟化"（只保留可见面板 + 滚动回收复用），当前 72 台规模不需要
+
 ## V1.48 — 主界面技术员权限字体颜色加深（2026-08-09）
 
 ### 改动范围
