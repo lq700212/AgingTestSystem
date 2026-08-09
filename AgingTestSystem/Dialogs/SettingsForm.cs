@@ -57,7 +57,7 @@ namespace AgingTestSystem.Dialogs
     /// │ 顶部提示条（浅蓝底白字：修改后保存立即/重启生效提示）│
     /// ├──────────────────────────────────────────────┤
     /// │ ↓ pnlScroll（容器不滚动，仅承载下方内容）      │
-    /// │ [搜索配置项：____________] [✕]               │ ← pnlSearch（Dock=Top）
+    /// │ [________________________] [✕]               │ ← pnlSearch（Dock=Top；【V1.54i】已去掉"搜索配置项："文字，输入框左边缘与分组标题文字左边缘严格对齐）
     /// │ ┌──────────────────────────────────────────┐ │ ← UIDataGridView（Dock=Fill，自带垂直滚动条）
     /// │ │ ▓ 基础配置（分组标题行，浅蓝底深蓝粗体）    │ │
     /// │ │ 设置名称(key) │ 说明       │ 设置值       │ │
@@ -88,6 +88,14 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>分组标题行的行号集合（分类标题不再用 UILine，改为表格内的"分组行"）</summary>
         private readonly HashSet<int> _groupRows = new HashSet<int>();
+
+        /// <summary>
+        /// 表格自带垂直滚动条子控件（SunnyUI UIDataGridView 内部创建，盖在表格右边缘 X=1377 起）。
+        /// CreateGrid 里关闭了它的 ShowLeftLine（去掉贯穿所有行的左竖线），
+        /// 但 V1.54j 又需要"数据行最右边缘有表格右边界竖线"，于是改由 RowPostPaint
+        /// 给非分组行补画；这里保存引用用于读取 Bounds.Left 定位竖线 X。
+        /// </summary>
+        private Sunny.UI.UIScrollBar _gridScrollBar;
 
         /// <summary>分组标题行的行号列表（按行号升序，搜索过滤时用相邻行号定位每组的行范围）</summary>
         private readonly List<int> _groupRowList = new List<int>();
@@ -488,6 +496,28 @@ namespace AgingTestSystem.Dialogs
             // 这里在 RowPostPaint 阶段主动用背景色覆盖这些线，最稳。
             grid.RowPostPaint += Grid_RowPostPaint;
 
+            // 【V1.54h】关闭表格自带垂直滚动条的"左侧竖线"。
+            // 之前用户反馈"分组标题行最右侧有表格的竖线"，真正的元凶不是 cell border：
+            // SunnyUI UIDataGridView 内置一个 UIScrollBar 子控件覆盖在表格右边缘
+            // （X = 最后一列右边界 ~ 表格右边界），它默认 ShowLeftLine = True，
+            // 会在 X=918（逻辑像素）画一条 80,160,255 的蓝色竖线，横跨整张表格每一行，
+            // 于是浅蓝色的分组标题色带最右侧也被切出一条竖线，看起来像"还在表格里"。
+            // 之前的 V1.54f/g 用 RowPostPaint 填充 _grid.Width+1 想盖住它，
+            // 但 RowPostPaint 的 Graphics 被裁剪在行显示矩形内（X < 919），够不到这一像素，
+            // 而 UIScrollBar 是子控件、永远画在表格内容之上，所以一直没生效。
+            // 正解就是关闭该子控件的 ShowLeftLine：竖线彻底消失，
+            // 分组标题色带一路延伸到滚动条处；数据行右侧也只留下滚动条轨道（浅蓝），观感更干净。
+            // 该子控件在 UIDataGridView 创建时就已存在（无需等 HandleCreated），这里直接找出来关掉。
+            // 【V1.54j】但用户需要"数据行最右边缘有表格右边界竖线"（见 Grid_RowPostPaint），
+            // 该竖线不能再靠 UIScrollBar 的 ShowLeftLine（会连分组标题行一起画），
+            // 所以这里保存滚动条引用，由 RowPostPaint 用 Bounds.Left 定位并只给数据行补画。
+            var uiScroll = grid.Controls.OfType<Sunny.UI.UIScrollBar>().FirstOrDefault();
+            if (uiScroll != null)
+            {
+                uiScroll.ShowLeftLine = false;
+                _gridScrollBar = uiScroll;
+            }
+
             return grid;
         }
 
@@ -554,28 +584,42 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 分组标题行画完后：去掉**列间垂直线** + _grid 右侧残留竖线，**下边线**用蓝色（标题色带延伸）。
+        /// 分组标题行画完后：去掉**列间垂直线** + 表格右边缘残留竖线，**下边线**用蓝色（标题色带延伸）。
         /// 视觉上让标题行像"一条横跨表格的标题带"：
         ///   上边线：DataGridView 默认 cell border（与数据行统一，不另画避免叠色）
         ///   下边线：自画蓝色（与标题文字同色，色带延伸）
         ///   中间：列与列之间、_grid 右边缘都不再有垂直线
+        /// 【V1.54h】说明：之前"最右侧那条竖线"其实是表格自带滚动条 UIScrollBar 的
+        /// ShowLeftLine（见 CreateGrid 里 V1.54h 注释），由 CreateGrid 直接关闭；
+        /// 这里 fill 的右边界仍取 _grid.Width + 1，保证覆盖到 RowPostPaint 能被绘制的
+        /// 最大范围（Graphics 被裁剪在行显示矩形内，超出部分本来就画不上，不影响结果）。
+        /// 【V1.54j】补充：ShowLeftLine 关掉后，**数据行**最右边缘也失去了表格右边界竖线，
+        /// 用户在设置窗口需要"最右边有一条竖线"来明确表格边界，于是这里对非分组行
+        /// （即普通配置行）补画一条 1px 竖线，位置在滚动条子控件左边缘左侧 1px
+        /// （= colValue 列右边界可视处），颜色用 _grid.GridColor（与默认 cell border 一致）。
+        /// 分组标题行故意不画：标题是"横跨表格的色带"，右侧不该有竖线切断它。
         /// </summary>
         private void Grid_RowPostPaint(object sender, DataGridViewRowPostPaintEventArgs e)
         {
-            if (!_groupRows.Contains(e.RowIndex)) return;
+            // 分组标题行走原有"色带填充 + 蓝色下边线"逻辑；普通数据行只需补画右边缘竖线
+            if (!_groupRows.Contains(e.RowIndex))
+            {
+                DrawDataRowRightBorder(e);
+                return;
+            }
 
             Color groupBack = Color.FromArgb(237, 243, 253);   // 标题行浅蓝底
             // 【V1.54d】下边线：与标题文字同色（深蓝 48,119,238），色带延伸
             Color groupLine = Color.FromArgb(48, 119, 238);
-            // 【V1.54g】覆盖右边缘扩 1 像素：DataGridView 的 cell border 画在 _grid.Right 那一像素
-            // （半开区间 [0, _grid.Width) 内的 cell 在 X=_grid.Width-1，border 在 X=_grid.Width），
-            // 之前覆盖矩形 Width=_grid.Width 漏掉 _grid.Right 的 border，导致每个标题行最右侧仍有一条竖线。
-            // 改为 _grid.Width + 1 像素正好覆盖住。
+            // 【V1.54h】右边界覆盖范围：fill 到 _grid.Width + 1（Graphics 坐标系下）。
+            // 实测 RowPostPaint 的 Graphics 被裁剪在行显示矩形内（最右像素 X=918 逻辑），
+            // 即使填到 _grid.Width+1 也画不到 _grid.Right；但保留它没坏处，
+            // 而"标题行最右侧竖线"的真正来源是滚动条 ShowLeftLine，已在 CreateGrid 关闭。
             int coverRight = _grid.Width + 1;
             using (var bgBrush = new SolidBrush(groupBack))
             using (var linePen = new Pen(groupLine, 1f))
             {
-                // ① 整行宽矩形（X=0 到 _grid.Right，包含 cell border 那一像素），覆盖列间垂直线 + 右侧 cell border
+                // ① 整行宽矩形：覆盖列间垂直线（画到行显示矩形的最大可绘范围）
                 Rectangle rowRect = e.RowBounds;
                 rowRect.X = 0;
                 rowRect.Width = coverRight;
@@ -599,6 +643,31 @@ namespace AgingTestSystem.Dialogs
                         TextFormatFlags.Left | TextFormatFlags.VerticalCenter
                         | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
                 }
+            }
+        }
+
+        /// <summary>
+        /// 给普通配置行（非分组标题行）补画表格最右边缘的 1px 竖线。
+        /// 背景：ShowLeftLine 被关闭后（V1.54h），数据行最右侧没有右边界线；
+        /// 但分组标题行是"横跨表格的色带"，不需要这条线，所以不能直接恢复 ShowLeftLine
+        /// （它会连分组行一起画，回到 V1.54g 的老 bug）。折中：这里用 RowPostPaint
+        /// 只对非分组行画竖线，颜色取 _grid.GridColor（104,173,255，与数据行 cell border 一致），
+        /// X 取滚动条子控件左边缘 - 1：滚动条 Bounds.X=1377 是最后一列右边界处的
+        /// 第一个不可见像素（被滚动条覆盖），它的左侧 1px 正是 colValue 列可见的最右像素。
+        /// </summary>
+        private void DrawDataRowRightBorder(DataGridViewRowPostPaintEventArgs e)
+        {
+            // 没有滚动条引用时（理论上不会发生）退化为用 DisplayRectangle 右边界定位
+            int lineX = _gridScrollBar != null
+                ? _gridScrollBar.Bounds.Left - 1
+                : _grid.DisplayRectangle.Right - 1;
+
+            // 只画行显示矩形范围内有效的那段竖线（Graphics 已被裁剪在行矩形内，超出自动无效）
+            using (var pen = new Pen(_grid.GridColor, 1f))
+            {
+                e.Graphics.DrawLine(pen,
+                    lineX, e.RowBounds.Top,
+                    lineX, e.RowBounds.Bottom - 1);
             }
         }
 
@@ -726,25 +795,19 @@ namespace AgingTestSystem.Dialogs
                 BackColor = Color.FromArgb(245, 248, 255)
             };
 
-            var lblSearch = new Label
-            {
-                Text = "搜索配置项：",
-                // 【V1.54d】左对齐：与下面"基础配置"等分组标题对齐（pnlScroll.Padding.Left=12 + 8=20）
-                Location = new Point(20, 5),
-                Size = new Size(110, 26),
-                TextAlign = ContentAlignment.MiddleLeft,
-                // 【V1.54d】字体大小一致：与分组标题行同款（10F Bold），视觉上"搜索配置项："和"基础配置"是同一族标题
-                Font = new Font(this.Font.FontFamily, 10F, FontStyle.Bold),
-                ForeColor = Color.FromArgb(48, 119, 238)
-            };
-            pnlSearch.Controls.Add(lblSearch);
-
+            // 【V1.54i】去掉"搜索配置项："文字标题（多余，直接看输入框占位符就明白用途），
+            // 并让搜索框左边缘与下面"基础配置"等分组标题文字左边缘**严格对齐**：
+            //   分组标题文字左边缘在 pnlScroll 客户区 = pnlScroll.Padding.Left + 8
+            //     （grid 填满 Padding 内区，Grid_CellPainting 给 colKey 文字留 8px 左内边距）
+            //   pnlSearch（Dock=Top）左边缘在 pnlScroll 客户区 = pnlScroll.Padding.Left
+            //   所以 _txtSearch.Location.X = Padding.Left + 8 - Padding.Left = **8**（恒等，与 Padding 无关）
+            // 实测 pnlScroll.Padding.Left=18 时，旧值 20 会让输入框比文字右偏 12px；改为 8 后逐像素对齐。
+            // 文本框右边缘保持与旧布局一致（8+宽442=450），清除按钮 X=454 不动，间距 4px 不变。
             _txtSearch = new Sunny.UI.UITextBox
             {
-                // 文本框也左移 6px（与 label 对齐到同一起点）
-                Location = new Point(130, 5),
-                Size = new Size(320, 26),
-                // 【V1.54d】文本框字体 11F → 10F，与分组标题字号一致；保持表格内文字的视觉协调
+                Location = new Point(8, 5),
+                Size = new Size(442, 26),
+                // 【V1.54d】文本框字体 10F，与分组标题字号一致；保持表格内文字的视觉协调
                 Font = new Font(this.Font.FontFamily, 10F),
                 Watermark = "输入关键字过滤配置项"
             };
@@ -754,7 +817,7 @@ namespace AgingTestSystem.Dialogs
             _btnClearSearch = new Button
             {
                 Text = "✕",
-                // 清除按钮 X 跟着文本框左移 6px（保持与文本框的相对间距 4px）
+                // 清除按钮紧贴文本框右侧（文本框右边缘 450 + 间距 4）
                 Location = new Point(454, 5),
                 Size = new Size(26, 26),
                 FlatStyle = FlatStyle.Flat,
