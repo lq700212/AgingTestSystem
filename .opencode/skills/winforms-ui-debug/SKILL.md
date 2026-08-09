@@ -181,6 +181,27 @@ Console.WriteLine("lastCol cell0=" + cr);                            // Right=13
 9. **"某行有、某行没有"这类需求，用行号集合分流，不要另开事件**：需在 RowPostPaint 里给普通数据行画线、给分组行不画时，直接复用已有的 `_groupRows`（行号集合）做分支：`if (!_groupRows.Contains(e.RowIndex)) { 数据行逻辑; return; } else { 分组行逻辑; }`。既不动行样式、也不用区分事件，一次画绘里处理两类，可读性好。
 10. **善用"批量纵向扫描多行"一次性确认规则**：改完"按行分支画线"后，harness 里循环前 N 行（`for r in 0..13`）对固定 X 取色，对照行号集合打印 `行号 [GROUP|data] 色值`，能一眼确认"分组行=浅蓝、数据行=线色"全部命中，比单看两行更稳。
 
+## 五·五、高 DPI 适配专项（V1.55 沉淀）
+
+用户报"高分辨率屏幕界面显示不正常"时，先分清两类控件，再决定适配方式：
+
+### 判断根因：先确认是"不缩放"还是"缩放比例不一致"
+- 打印 `form.DeviceDpi`、各关键控件 `CreateGraphics().DpiX`、`AutoScaleMode`。
+- **标准控件窗体（AutoScaleMode.Font）**：WinForms 会自动按字体比例放大，通常无需动代码，只需保证 `app.manifest` 有 `PerMonitorV2` + `App.config` 有 `Switch.System.Windows.Forms.DpiAwareness=PerMonitorV2` 运行时开关（**两个缺一不可**）。
+- **自绘控件（AutoScaleMode.None，如 WorkstationGridView）**：画布尺寸和坐标是"96DPI 逻辑像素"，**不随 DPI 放大**，但 pt 字体会自动放大 → 文字溢出格子、与周围标准控件比例失调。这是"主界面显示不正常"的典型根因。
+
+### 自绘控件 DPI 适配三步
+1. **计算缩放因子**：句柄创建后（`OnHandleCreated`）算 `_dpiScale = 实际DPI / 96`。**踩坑：`Control.DeviceDpi` 在 PerMonitorV2 下句柄刚创建时返回 96（不准确），必须用 `CreateGraphics().DpiX`（实测 144 才是真值）**。
+2. **手动乘坐标，别用 ScaleTransform**：自绘里 TextRenderer 走 GDI 不认 `Graphics.ScaleTransform/TranslateTransform`（见坑 1、V1.51 踩坑），必须写 `Scaled(int/Point/Rectangle)` 辅助方法，把所有绘制坐标、画布 Size、命中检测（鼠标坐标是物理像素）、tooltip、局部重绘矩形统一乘 `_dpiScale`。字体保持 pt 单位自动放大，两者同步放大比例才一致。
+3. **命中检测别漏**：鼠标 `e.Location` 是物理像素，与缩放后的布局矩形比较；可见列/行范围计算（`clip.Left / 列宽`）也要用缩放后的列宽，否则只重绘左上角一小块。
+
+### 验证超画布自绘控件：用离屏 OnPaint，别用 PrintWindow
+- 自绘画布 3060×3038 远超屏幕，**PrintWindow 只截可见区**，超屏部分全是背景残留色（Magenta），像素扫描全假失败。
+- 正解：反射调用 `Control.OnPaint` 渲染到完整尺寸 Bitmap（`new PaintEventArgs(g, new Rectangle(0,0,宽,高))`），无视屏幕限制，再逐像素验证。
+- 验证点示例（150% 缩放 = 逻辑坐标 ×1.5）：面板左上角 = `Scaled(2)=3`；上电块 = `Offset(Scaled(RcPower),3,3)`；行全选列 x = `Scaled(8*245+2)=2943`。
+
+
+
 ## 六、验证与收尾（必做）
 
 - 构建通过（MSBuild 输出 exe、无 error）。

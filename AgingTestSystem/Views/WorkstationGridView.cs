@@ -32,6 +32,17 @@ namespace AgingTestSystem.Views
     /// 【V1.51】值框左边界与左侧标签文字间距加大（值框 X 由 57→62，宽相应缩短），
     /// 解决"数据框紧贴左侧标签"问题；间距可在 PanelLayout.json 中微调。
     ///
+    /// 【V1.55 高DPI适配】
+    /// 本控件是 AutoScaleMode.None 的自绘控件，若完全脱离 DPI，150% 缩放下会出现：
+    /// 画布尺寸（逻辑像素）不放大、而 pt 字体的文字自动变大 → 文字溢出格子、重叠，
+    /// 且与周围被 AutoScaleMode.Font 放大的标准控件比例失调（"界面显示不正常"）。
+    /// 适配方案：布局配置仍是"96DPI 逻辑像素"，但 <see cref="UpdateDpiScale"/> 在
+    /// 句柄创建后计算缩放因子 _dpiScale = DeviceDpi / 96（150% 缩放下 = 1.5），
+    /// 所有绘制/命中坐标、画布尺寸一律经 <see cref="Scaled(int)"/> 放大，字体保持
+    /// pt 单位自动放大 → 文字与格子同步放大、比例与 96DPI 完全一致。
+    /// 注意：不能用 Graphics.ScaleTransform，因为 TextRenderer 走 GDI 不认坐标系变换
+    /// （见上方 V1.51 踩坑），必须手动把每个坐标乘缩放因子。
+    ///
     /// 【界面布局】
     /// 一、整体结构（外层 Panel.AutoScroll 滚动容器 + 本控件 = 画布）
     /// ┌───────────────────────────────────────────┬──────────┐
@@ -121,6 +132,16 @@ namespace AgingTestSystem.Views
         /// <summary>总设备（工位）数</summary>
         private int _totalDevices;
 
+        /// <summary>
+        /// DPI 缩放因子 = DeviceDpi / 96（【V1.55 高DPI适配】）。
+        /// 布局配置里的坐标/尺寸都是"96DPI 逻辑像素"，在 150% 缩放的屏幕上
+        /// 必须整体放大 DeviceDpi/96 倍，否则格子不变、而 pt 字体的字会自动变大，
+        /// 导致文字溢出格子、与周围被 AutoScaleMode.Font 放大的控件比例失调。
+        /// 由于 TextRenderer 走 GDI 不能配合 Graphics 坐标变换（见头部 V1.51 踩坑），
+        /// 这里采用"手动把所有逻辑像素乘 _dpiScale"的方式，字体保持 pt 单位自动放大，比例一致。
+        /// </summary>
+        private float _dpiScale = 1f;
+
         /// <summary>所有工位的显示状态（key = 设备编号，从1开始）</summary>
         private readonly Dictionary<int, GridItem> _items = new Dictionary<int, GridItem>();
 
@@ -189,6 +210,49 @@ namespace AgingTestSystem.Views
             this.MouseLeave += GridView_MouseLeave;
         }
 
+        /// <summary>
+        /// 控件句柄创建后计算 DPI 缩放因子（【V1.55 高DPI适配】）。
+        /// DeviceDpi 只有在句柄创建后才能取到真实值；必须在 Configure 之后、
+        /// 首次绘制之前调用，否则画布尺寸仍是 96DPI 逻辑大小。
+        /// </summary>
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            UpdateDpiScale();
+        }
+
+        /// <summary>
+        /// 根据当前设备 DPI 更新缩放因子，并重新计算画布尺寸。
+        /// DPI 缩放因子 = DeviceDpi / 96（96 是布局配置的逻辑像素基准）。
+        /// 该方法在句柄创建时调用一次；后续若发生 DPI 变更（跨屏拖动）也会触发。
+        ///
+        /// 【踩坑】不能用 Control.DeviceDpi 属性——在 PerMonitorV2 环境下它有时返回 96
+        /// （句柄刚创建时 DPI 上下文尚未生效），而 CreateGraphics().DpiX 才是真实值。
+        /// 实测同屏：DeviceDpi=96、CreateGraphics().DpiX=144，所以这里以 CreateGraphics 为准。
+        /// </summary>
+        private void UpdateDpiScale()
+        {
+            float dpi = 96f;
+            try
+            {
+                using (var g = CreateGraphics())
+                {
+                    if (g != null && g.DpiX > 0) dpi = g.DpiX;
+                }
+            }
+            catch
+            {
+                // 图形上下文创建失败时保持 1.0（96DPI），不影响 100% 缩放的旧环境
+            }
+            _dpiScale = dpi / 96f;
+            if (_columns > 0)
+            {
+                this.Size = new Size(Scaled(_columns * _layout.PanelColumnWidth + _layout.RowSelectButtonColumnWidth),
+                                     Scaled(_rows * _layout.PanelRowHeight));
+                Invalidate();
+            }
+        }
+
         /// <summary>解析配置颜色字符串（"R,G,B"），失败时回退默认色</summary>
         private static Color Parse(string rgb, Color fallback)
         {
@@ -215,10 +279,34 @@ namespace AgingTestSystem.Views
             {
                 _items[i + 1] = new GridItem { DeviceId = i + 1 };
             }
-            this.Size = new Size(_columns * _layout.PanelColumnWidth + _layout.RowSelectButtonColumnWidth,
-                                 _rows * _layout.PanelRowHeight);
+            // 【V1.55 高DPI适配】画布总尺寸 = 逻辑像素尺寸 × DPI缩放因子。
+            // 若不放大，150% 缩放下格子保持 96DPI 大小、文字却自动变大 → 溢出重叠。
+            this.Size = new Size(Scaled(_columns * _layout.PanelColumnWidth + _layout.RowSelectButtonColumnWidth),
+                                 Scaled(_rows * _layout.PanelRowHeight));
             Invalidate();
         }
+
+        #region DPI 缩放辅助
+
+        /// <summary>逻辑像素 → 物理像素（× _dpiScale，四舍五入）</summary>
+        private int Scaled(int v)
+        {
+            return (int)Math.Round(v * _dpiScale);
+        }
+
+        /// <summary>逻辑像素 Point → 物理像素 Point</summary>
+        private Point Scaled(Point p)
+        {
+            return new Point(Scaled(p.X), Scaled(p.Y));
+        }
+
+        /// <summary>逻辑像素 Rectangle → 物理像素 Rectangle（坐标与尺寸同步放大）</summary>
+        private Rectangle Scaled(Rectangle r)
+        {
+            return new Rectangle(Scaled(r.X), Scaled(r.Y), Scaled(r.Width), Scaled(r.Height));
+        }
+
+        #endregion
 
         /// <summary>
         /// 批量更新所有面板数据（1Hz 采集周期全量刷新入口）
@@ -352,11 +440,16 @@ namespace AgingTestSystem.Views
 
             if (_columns == 0) return;
 
+            // 【V1.55 高DPI适配】e.ClipRectangle 是物理像素坐标，而布局配置是 96DPI 逻辑像素，
+            // 所以可见列/行范围计算必须先乘缩放因子，否则 150% 缩放下只重绘左上角一小块。
+            int colW = Scaled(_layout.PanelColumnWidth);
+            int rowH = Scaled(_layout.PanelRowHeight);
+
             Rectangle clip = e.ClipRectangle;
-            int startCol = Math.Max(0, clip.Left / _layout.PanelColumnWidth);
-            int endCol = Math.Min(_columns - 1, (clip.Right + _layout.PanelColumnWidth - 1) / _layout.PanelColumnWidth);
-            int startRow = Math.Max(0, clip.Top / _layout.PanelRowHeight);
-            int endRow = Math.Min(_rows - 1, (clip.Bottom + _layout.PanelRowHeight - 1) / _layout.PanelRowHeight);
+            int startCol = Math.Max(0, clip.Left / colW);
+            int endCol = Math.Min(_columns - 1, (clip.Right + colW - 1) / colW);
+            int startRow = Math.Max(0, clip.Top / rowH);
+            int endRow = Math.Min(_rows - 1, (clip.Bottom + rowH - 1) / rowH);
 
             bool anySelected = IsAnySelected;
 
@@ -367,23 +460,23 @@ namespace AgingTestSystem.Views
                     int deviceId = row * _columns + col + 1;
                     if (!_items.TryGetValue(deviceId, out GridItem item)) continue;
 
-                    // 面板左上角绝对坐标（面板内容设计尺寸 + 上下左右各 2px 外边距）
-                    int panelLeft = col * _layout.PanelColumnWidth + 2;
-                    int panelTop = row * _layout.PanelRowHeight + 2;
+                    // 面板左上角绝对坐标（面板内容设计尺寸 + 上下左右各 2px 外边距，均按 DPI 放大）
+                    int panelLeft = Scaled(col * _layout.PanelColumnWidth + 2);
+                    int panelTop = Scaled(row * _layout.PanelRowHeight + 2);
                     DrawPanel(g, item, anySelected, panelLeft, panelTop);
                 }
             }
 
             // 行全选按钮列
-            if (clip.Right > _columns * _layout.PanelColumnWidth)
+            if (clip.Right > Scaled(_columns * _layout.PanelColumnWidth))
             {
                 for (int row = startRow; row <= endRow; row++)
                 {
                     Rectangle btnRect = new Rectangle(
-                        _columns * _layout.PanelColumnWidth + 2,
-                        row * _layout.PanelRowHeight + 2,
-                        _layout.RowSelectButtonColumnWidth - 4,
-                        _layout.PanelRowHeight - 4);
+                        Scaled(_columns * _layout.PanelColumnWidth + 2),
+                        Scaled(row * _layout.PanelRowHeight + 2),
+                        Scaled(_layout.RowSelectButtonColumnWidth - 4),
+                        Scaled(_layout.PanelRowHeight - 4));
                     DrawRowSelectButton(g, btnRect, row);
                 }
             }
@@ -395,40 +488,40 @@ namespace AgingTestSystem.Views
         /// </summary>
         private void DrawPanel(Graphics g, GridItem item, bool anySelected, int panelLeft, int panelTop)
         {
-            // 面板背景（状态色）
+            // 面板背景（状态色），尺寸按 DPI 放大
             using (var bg = new SolidBrush(item.BackColor))
             {
-                g.FillRectangle(bg, panelLeft, panelTop, _layout.PanelInnerWidth, _layout.PanelInnerHeight);
+                g.FillRectangle(bg, panelLeft, panelTop, Scaled(_layout.PanelInnerWidth), Scaled(_layout.PanelInnerHeight));
             }
 
             // 设备编号（左上角）
             TextRenderer.DrawText(g, $"NO.{item.DeviceId}", _titleFont,
-                new Point(panelLeft + _layout.TitlePosition.X, panelTop + _layout.TitlePosition.Y), _colorText);
+                new Point(panelLeft + Scaled(_layout.TitlePosition.X), panelTop + Scaled(_layout.TitlePosition.Y)), _colorText);
 
             // 状态块
-            DrawStatusBlock(g, Offset(_layout.RcPower.ToRectangle(), panelLeft, panelTop),
+            DrawStatusBlock(g, Offset(Scaled(_layout.RcPower.ToRectangle()), panelLeft, panelTop),
                 item.PowerColor, item.PowerForeColor, item.PowerText);
-            DrawStatusBlock(g, Offset(_layout.RcWorkState.ToRectangle(), panelLeft, panelTop),
+            DrawStatusBlock(g, Offset(Scaled(_layout.RcWorkState.ToRectangle()), panelLeft, panelTop),
                 item.WorkColor, item.WorkForeColor, item.WorkText);
-            DrawStatusBlock(g, Offset(_layout.RcVacuumOpen.ToRectangle(), panelLeft, panelTop),
+            DrawStatusBlock(g, Offset(Scaled(_layout.RcVacuumOpen.ToRectangle()), panelLeft, panelTop),
                 item.VacuumColor, item.VacuumForeColor, item.VacuumText);
 
             // 值框
-            DrawValueBox(g, Offset(_layout.RcPressureValue.ToRectangle(), panelLeft, panelTop), item.PressureText);
-            DrawValueBox(g, Offset(_layout.RcSNValue.ToRectangle(), panelLeft, panelTop), item.SnText);
-            DrawValueBox(g, Offset(_layout.RcRecipeValue.ToRectangle(), panelLeft, panelTop), item.RecipeText);
-            DrawValueBox(g, Offset(_layout.RcDelayStartValue.ToRectangle(), panelLeft, panelTop), item.DelayStartText);
-            DrawValueBox(g, Offset(_layout.RcDelayArriveValue.ToRectangle(), panelLeft, panelTop), item.DelayArriveText);
+            DrawValueBox(g, Offset(Scaled(_layout.RcPressureValue.ToRectangle()), panelLeft, panelTop), item.PressureText);
+            DrawValueBox(g, Offset(Scaled(_layout.RcSNValue.ToRectangle()), panelLeft, panelTop), item.SnText);
+            DrawValueBox(g, Offset(Scaled(_layout.RcRecipeValue.ToRectangle()), panelLeft, panelTop), item.RecipeText);
+            DrawValueBox(g, Offset(Scaled(_layout.RcDelayStartValue.ToRectangle()), panelLeft, panelTop), item.DelayStartText);
+            DrawValueBox(g, Offset(Scaled(_layout.RcDelayArriveValue.ToRectangle()), panelLeft, panelTop), item.DelayArriveText);
 
             // 静态标签
-            DrawLabel(g, new Point(panelLeft + _layout.LabelPressurePosition.X, panelTop + _layout.LabelPressurePosition.Y), "真空压力");
-            DrawLabel(g, new Point(panelLeft + _layout.LabelSnPosition.X, panelTop + _layout.LabelSnPosition.Y), "SN:");
-            DrawLabel(g, new Point(panelLeft + _layout.LabelRecipePosition.X, panelTop + _layout.LabelRecipePosition.Y), "配方:");
-            DrawLabel(g, new Point(panelLeft + _layout.LabelDelayStartPosition.X, panelTop + _layout.LabelDelayStartPosition.Y), "延时开启");
-            DrawLabel(g, new Point(panelLeft + _layout.LabelDelayArrivePosition.X, panelTop + _layout.LabelDelayArrivePosition.Y), "延时到达");
+            DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelPressurePosition.X), panelTop + Scaled(_layout.LabelPressurePosition.Y)), "真空压力");
+            DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelSnPosition.X), panelTop + Scaled(_layout.LabelSnPosition.Y)), "SN:");
+            DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelRecipePosition.X), panelTop + Scaled(_layout.LabelRecipePosition.Y)), "配方:");
+            DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelDelayStartPosition.X), panelTop + Scaled(_layout.LabelDelayStartPosition.Y)), "延时开启");
+            DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelDelayArrivePosition.X), panelTop + Scaled(_layout.LabelDelayArrivePosition.Y)), "延时到达");
 
             // 设置按钮（绿底白字）
-            Rectangle rcSet = Offset(_layout.RcSetButton.ToRectangle(), panelLeft, panelTop);
+            Rectangle rcSet = Offset(Scaled(_layout.RcSetButton.ToRectangle()), panelLeft, panelTop);
             using (var brush = new SolidBrush(_colorSetButton))
             {
                 g.FillRectangle(brush, rcSet);
@@ -443,7 +536,7 @@ namespace AgingTestSystem.Views
             // 选中指示（有任一选中才显示：选中=绿底白✓，未选中=空心白框）
             if (anySelected)
             {
-                Rectangle rcSelect = Offset(_layout.RcSelectBox.ToRectangle(), panelLeft, panelTop);
+                Rectangle rcSelect = Offset(Scaled(_layout.RcSelectBox.ToRectangle()), panelLeft, panelTop);
                 if (item.IsSelected)
                 {
                     using (var brush = new SolidBrush(_colorWorkIdle))
@@ -517,10 +610,12 @@ namespace AgingTestSystem.Views
                 g.DrawRectangle(pen, rc);
             }
             // 文本绘制矩形 = 值框矩形左移内边距（宽度同步缩短，防止文字溢出到右边框）
+            // 【V1.55】内边距按 DPI 放大，保证 150% 缩放下文字仍与值框左边框保持合理间距
+            int pad = Scaled(_layout.ValueTextLeftPadding);
             Rectangle textRc = new Rectangle(
-                rc.X + _layout.ValueTextLeftPadding,
+                rc.X + pad,
                 rc.Y,
-                Math.Max(1, rc.Width - _layout.ValueTextLeftPadding),
+                Math.Max(1, rc.Width - pad),
                 rc.Height);
             TextRenderer.DrawText(g, text, _panelFont, textRc, _colorText,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
@@ -554,8 +649,9 @@ namespace AgingTestSystem.Views
 
             if (TryHitPanel(e.Location, out int deviceId, out Point local))
             {
-                Rectangle rcSet = _layout.RcSetButton.ToRectangle();
-                Rectangle rcSelect = _layout.RcSelectBox.ToRectangle();
+                // 【V1.55】local 是物理像素坐标，布局矩形需缩放后比较
+                Rectangle rcSet = Scaled(_layout.RcSetButton.ToRectangle());
+                Rectangle rcSelect = Scaled(_layout.RcSelectBox.ToRectangle());
                 if (!rcSet.Contains(local) && !rcSelect.Contains(local))
                 {
                     _pressDeviceId = deviceId;
@@ -586,8 +682,9 @@ namespace AgingTestSystem.Views
 
             if (TryHitPanel(e.Location, out int deviceId, out Point local))
             {
-                Rectangle rcSet = _layout.RcSetButton.ToRectangle();
-                Rectangle rcSelect = _layout.RcSelectBox.ToRectangle();
+                // 【V1.55】local 是物理像素坐标，布局矩形需缩放后比较
+                Rectangle rcSet = Scaled(_layout.RcSetButton.ToRectangle());
+                Rectangle rcSelect = Scaled(_layout.RcSelectBox.ToRectangle());
                 if (rcSet.Contains(local))
                 {
                     OnSetClicked?.Invoke(this, deviceId);
@@ -723,31 +820,36 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 坐标命中面板：返回设备编号与面板内局部坐标
+        /// 【V1.55】p 是物理像素坐标，需与缩放后的列宽/行高比对
         /// </summary>
         private bool TryHitPanel(Point p, out int deviceId, out Point local)
         {
             deviceId = 0;
             local = Point.Empty;
             if (_columns == 0) return false;
-            if (p.X < 0 || p.Y < 0 || p.X >= _columns * _layout.PanelColumnWidth || p.Y >= _rows * _layout.PanelRowHeight) return false;
 
-            int col = p.X / _layout.PanelColumnWidth;
-            int row = p.Y / _layout.PanelRowHeight;
+            int colW = Scaled(_layout.PanelColumnWidth);
+            int rowH = Scaled(_layout.PanelRowHeight);
+            if (p.X < 0 || p.Y < 0 || p.X >= Scaled(_columns * _layout.PanelColumnWidth) || p.Y >= Scaled(_rows * _layout.PanelRowHeight)) return false;
+
+            int col = p.X / colW;
+            int row = p.Y / rowH;
             if (col >= _columns || row >= _rows) return false;
 
             deviceId = row * _columns + col + 1;
             if (deviceId > _totalDevices) return false;
 
-            local = new Point(p.X - (col * _layout.PanelColumnWidth + 2), p.Y - (row * _layout.PanelRowHeight + 2));
+            // 面板内局部坐标 = 鼠标物理坐标 - 面板左上角物理坐标（含 2px 外边距，已缩放）
+            local = new Point(p.X - Scaled(col * _layout.PanelColumnWidth + 2), p.Y - Scaled(row * _layout.PanelRowHeight + 2));
             return true;
         }
 
-        /// <summary>坐标是否命中行全选按钮列，返回行号</summary>
+        /// <summary>坐标是否命中行全选按钮列，返回行号（物理像素比对）</summary>
         private bool TryHitRowButton(Point p, out int row)
         {
             row = -1;
-            if (p.X < _columns * _layout.PanelColumnWidth || p.Y < 0 || p.Y >= _rows * _layout.PanelRowHeight) return false;
-            row = p.Y / _layout.PanelRowHeight;
+            if (p.X < Scaled(_columns * _layout.PanelColumnWidth) || p.Y < 0 || p.Y >= Scaled(_rows * _layout.PanelRowHeight)) return false;
+            row = p.Y / Scaled(_layout.PanelRowHeight);
             return row >= 0 && row < _rows;
         }
 
@@ -755,19 +857,21 @@ namespace AgingTestSystem.Views
         private string GetTooltipText(Point p)
         {
             if (!TryHitPanel(p, out int deviceId, out Point local)) return null;
-            if (_layout.RcPower.ToRectangle().Contains(local)) return "上电状态：绿=上电，浅灰=下电";
-            if (_layout.RcWorkState.ToRectangle().Contains(local)) return "工作状态：空闲=绿 / 选中(已上电待测试)=橙 / 繁忙(测试中)=黄 / 故障=红";
-            if (_layout.RcVacuumOpen.ToRectangle().Contains(local)) return "真空开启状态：真空开=绿底，真空关=浅灰底";
+            // 【V1.55】local 是物理像素坐标，布局矩形需缩放后比较
+            if (Scaled(_layout.RcPower.ToRectangle()).Contains(local)) return "上电状态：绿=上电，浅灰=下电";
+            if (Scaled(_layout.RcWorkState.ToRectangle()).Contains(local)) return "工作状态：空闲=绿 / 选中(已上电待测试)=橙 / 繁忙(测试中)=黄 / 故障=红";
+            if (Scaled(_layout.RcVacuumOpen.ToRectangle()).Contains(local)) return "真空开启状态：真空开=绿底，真空关=浅灰底";
             return null;
         }
 
-        /// <summary>获取指定工位面板在画布中的边界（用于局部重绘）</summary>
+        /// <summary>获取指定工位面板在画布中的边界（物理像素，用于局部重绘）</summary>
         private Rectangle GetPanelBounds(int deviceId)
         {
             int index = deviceId - 1;
             int col = index % _columns;
             int row = index / _columns;
-            return new Rectangle(col * _layout.PanelColumnWidth, row * _layout.PanelRowHeight, _layout.PanelColumnWidth, _layout.PanelRowHeight);
+            return new Rectangle(Scaled(col * _layout.PanelColumnWidth), Scaled(row * _layout.PanelRowHeight),
+                                 Scaled(_layout.PanelColumnWidth), Scaled(_layout.PanelRowHeight));
         }
 
         #endregion
