@@ -5,7 +5,7 @@ namespace BarometerWinform.Dialogs
     ///
     /// 【界面布局】（所有控件居中显示）
     /// ┌───────────────────────────────┐
-    /// │  负压值设定(kPa)：[_________]  │ ← Label + 输入框（水平居中成一组）
+    /// │  负压值设定(kPa)：[  -95.0  ]  │ ← Label + 数值框（支持正负数，水平居中成一组）
     /// │         [  保存设置   ]         │ ← 保存按钮（水平居中）
     /// └───────────────────────────────┘
     /// 说明：控件在 InitializeComponent 里按固定位置摆放，
@@ -30,7 +30,7 @@ namespace BarometerWinform.Dialogs
         private void InitializeComponent()
         {
             this.lblThreshold = new System.Windows.Forms.Label();
-            this.txtThreshold = new System.Windows.Forms.TextBox();
+            this.nudThreshold = new System.Windows.Forms.NumericUpDown();
             this.btnSave = new System.Windows.Forms.Button();
             this.SuspendLayout();
             // 
@@ -43,13 +43,17 @@ namespace BarometerWinform.Dialogs
             this.lblThreshold.TabIndex = 4;
             this.lblThreshold.Text = "负压值设定(kPa)：";
             // 
-            // txtThreshold
+            // nudThreshold - 负压值数值框（支持正负数，范围 -9999~9999）
             // 
-            this.txtThreshold.Location = new System.Drawing.Point(167, 27);
-            this.txtThreshold.Name = "txtThreshold";
-            this.txtThreshold.Size = new System.Drawing.Size(91, 21);
-            this.txtThreshold.TabIndex = 3;
-            this.txtThreshold.Text = "-95";
+            this.nudThreshold.DecimalPlaces = 1;
+            this.nudThreshold.Increment = 1m;
+            this.nudThreshold.Location = new System.Drawing.Point(167, 27);
+            this.nudThreshold.Maximum = 9999m;
+            this.nudThreshold.Minimum = -9999m;
+            this.nudThreshold.Name = "nudThreshold";
+            this.nudThreshold.Size = new System.Drawing.Size(91, 21);
+            this.nudThreshold.TabIndex = 3;
+            this.nudThreshold.Value = -95m;
             // 
             // btnSave
             // 
@@ -67,7 +71,7 @@ namespace BarometerWinform.Dialogs
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(320, 140);
             this.Controls.Add(this.btnSave);
-            this.Controls.Add(this.txtThreshold);
+            this.Controls.Add(this.nudThreshold);
             this.Controls.Add(this.lblThreshold);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
@@ -83,7 +87,7 @@ namespace BarometerWinform.Dialogs
         #endregion
 
         private System.Windows.Forms.Label lblThreshold;
-        private System.Windows.Forms.TextBox txtThreshold;
+        private System.Windows.Forms.NumericUpDown nudThreshold;
         private System.Windows.Forms.Button btnSave;
     }
 }

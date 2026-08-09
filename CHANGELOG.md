@@ -3,6 +3,19 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.43 — 公共参数窗口负压值输入框改为数值框（支持正负数）（2026-08-09）
+
+### 改动范围
+- `Dialogs/CommonParameterForm.Designer.cs` — `txtThreshold`（TextBox）改为 `nudThreshold`（NumericUpDown）：范围 -9999~9999（支持正负数）、保留 1 位小数、步进 1、默认 -95
+- `Dialogs/CommonParameterForm.cs` — 保存逻辑去掉"非空/非数字"文本校验（NumericUpDown 天然保证输入为有效数字），直接读取 `Value`；居中定位代码同步改引 `nudThreshold`
+
+### 为什么这么改
+- 原 TextBox 需手输数字且无法防止非法字符；改为数值框后可点上下箭头调整、输入更直观，且天然限制范围，杜绝误输非法值
+
+### 优化点
+- 支持正负数（负压现场为负值，但需求要求正负数都允许）
+- 保留 1 位小数（如 -95.5），与 `SetAllBarometerThresholds` 接收 decimal 的能力一致
+
 ## V1.42 — 登录窗体新增"记住密码"功能（2026-08-09）
 
 ### 改动范围

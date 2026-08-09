@@ -20,14 +20,14 @@ namespace BarometerWinform.Dialogs
     ///
     /// 【界面布局】（所有控件居中显示）
     /// ┌───────────────────────────────┐
-    /// │  负压值设定(kPa)：[_________]  │ ← Label + 输入框
+    /// │  负压值设定(kPa)：[  -95.0  ]  │ ← Label + 数值框（支持正负数）
     /// │         [  保存设置   ]         │ ← 保存按钮
     /// └───────────────────────────────┘
     ///
     /// 【工作流程】
-    /// 1. 用户在输入框填写负压值（默认 -95，单位 kPa，与气压表读数一致）
+    /// 1. 用户在数值框设置负压值（默认 -95，支持正负数，单位 kPa，与气压表读数一致）
     /// 2. 点击"保存设置"按钮
-    /// 3. 校验输入是否合法（非空、必须是数字）
+    /// 3. 数值框限制范围（-9999~9999），保证输入为有效数字
     /// 4. 后台线程逐台写入全部气压表（避免 72 台连写阻塞 UI 线程）
     /// 5. 写入完成，切回 UI 线程汇总显示成功/失败台数：
     ///    - 全部成功：提示后关闭窗口
@@ -79,16 +79,16 @@ namespace BarometerWinform.Dialogs
             int labelWidth = System.Windows.Forms.TextRenderer.MeasureText(
                 lblThreshold.Text, lblThreshold.Font).Width;
 
-            // 一组控件（标签 + 间距 + 输入框）的整体宽度
-            const int gap = 8;                      // 标签与输入框之间的间距
-            int groupWidth = labelWidth + gap + txtThreshold.Width;
+            // 一组控件（标签 + 间距 + 数值框）的整体宽度
+            const int gap = 8;                      // 标签与数值框之间的间距
+            int groupWidth = labelWidth + gap + nudThreshold.Width;
 
             // 整组水平居中：左边距 = (窗体宽度 - 整组宽度) / 2
             int groupLeft = (ClientSize.Width - groupWidth) / 2;
 
-            // 第一行：标签在上、输入框微调垂直对齐（标签高 12，输入框高 21，y 差 3 即居中）
+            // 第一行：标签在上、数值框微调垂直对齐（标签高 12，数值框高 21，y 差 3 即居中）
             lblThreshold.Location = new System.Drawing.Point(groupLeft, 30);
-            txtThreshold.Location = new System.Drawing.Point(groupLeft + labelWidth + gap, 27);
+            nudThreshold.Location = new System.Drawing.Point(groupLeft + labelWidth + gap, 27);
 
             // 第二行：保存按钮水平居中
             btnSave.Location = new System.Drawing.Point((ClientSize.Width - btnSave.Width) / 2, 75);
@@ -98,33 +98,16 @@ namespace BarometerWinform.Dialogs
         /// "保存设置"按钮点击事件
         ///
         /// 【流程】
-        /// 1. 校验输入（非空、是数字）
+        /// 1. 读取数值框的值（NumericUpDown 保证为有效数字，含正负数）
         /// 2. 保存期间禁用按钮、把文字改成"保存中..."，防止重复点击
         /// 3. 后台线程批量写入所有气压表（SetAllBarometerThresholds）
         /// 4. 写完后切回 UI 线程调用 OnBatchWriteCompleted 汇总显示结果
         /// </summary>
         private void btnSave_Click(object sender, EventArgs e)
         {
-            // ===== 1) 校验输入 =====
-            string text = txtThreshold.Text.Trim();
-
-            // 空输入：提示并聚焦输入框
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                MessageBox.Show("请输入负压值", "提示",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                txtThreshold.Focus();
-                return;
-            }
-
-            // 非数字：提示并聚焦输入框
-            if (!decimal.TryParse(text, out decimal thresholdValue))
-            {
-                MessageBox.Show("请输入有效的数字", "提示",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                txtThreshold.Focus();
-                return;
-            }
+            // ===== 1) 读取负压值 =====
+            // NumericUpDown 已限制范围（-9999~9999）且保证为有效数字，无需再做文本校验
+            decimal thresholdValue = nudThreshold.Value;
 
             // ===== 2) 保存期间锁定按钮，防止重复点击 =====
             btnSave.Enabled = false;
