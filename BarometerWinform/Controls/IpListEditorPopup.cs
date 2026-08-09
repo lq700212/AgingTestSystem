@@ -6,20 +6,22 @@ using System.Net;
 using System.Windows.Forms;
 
 namespace BarometerWinform.Controls
-{    /// <summary>
+{
+    /// <summary>
     /// 候选 IP 列表编辑弹出框（供系统设置窗口 FanIpCandidates 配置项使用）：
     /// 在"设置值"单元格下方弹出，以"一行一个 IP"的可编辑表格展示，
     /// 支持直接修改已有 IP、通过输入框添加新 IP、选中删除。
     /// 点【确定】校验并提交；点击弹出框外部或【取消】放弃修改。
+    /// 界面风格与系统设置窗口一致（SunnyUI 蓝主题 + 白底）。
     /// </summary>
     public class IpListEditorPopup : Form
     {
-        private readonly DataGridView _dgv;
-        private readonly TextBox _txtNewIp;
-        private readonly Button _btnAdd;
-        private readonly Button _btnDelete;
-        private readonly Button _btnOk;
-        private readonly Button _btnCancel;
+        private readonly Sunny.UI.UIDataGridView _dgv;
+        private readonly Sunny.UI.UITextBox _txtNewIp;
+        private readonly Sunny.UI.UIButton _btnAdd;
+        private readonly Sunny.UI.UIButton _btnDelete;
+        private readonly Sunny.UI.UIButton _btnOk;
+        private readonly Sunny.UI.UIButton _btnCancel;
         private bool _closing;
 
         /// <summary>
@@ -37,28 +39,51 @@ namespace BarometerWinform.Controls
             StartPosition = FormStartPosition.Manual;
             ShowInTaskbar = false;
             BackColor = Color.White;
-            ClientSize = new Size(360, 248);
+            ClientSize = new Size(400, 306);
 
-            var lblHint = new Label
+            // 顶部蓝色标题栏（与 SunnyUI 蓝主题一致）
+            var header = new Sunny.UI.UIPanel
             {
-                Text = "候选 IP 列表（一行一个，支持修改 / 新增 / 删除）：",
-                Location = new Point(10, 8),
-                Size = new Size(340, 20),
-                TextAlign = ContentAlignment.MiddleLeft,
-                Font = new Font("微软雅黑", 9F),
-                ForeColor = Color.FromArgb(48, 48, 48)
+                Dock = DockStyle.Top,
+                Height = 40,
+                FillColor = Color.FromArgb(48, 119, 238),
+                RectColor = Color.FromArgb(48, 119, 238),
+                Style = Sunny.UI.UIStyle.Custom
             };
-            Controls.Add(lblHint);
-
-            _dgv = new DataGridView
+            var lblTitle = new Label
             {
-                Location = new Point(10, 30),
-                Size = new Size(340, 132),
-                BorderStyle = BorderStyle.FixedSingle,
+                Text = "候选 IP 列表编辑",
+                Location = new Point(12, 0),
+                Size = new Size(240, 40),
+                TextAlign = ContentAlignment.MiddleLeft,
+                Font = new Font("微软雅黑", 11F, FontStyle.Bold),
+                ForeColor = Color.White
+            };
+            var lblHeaderHint = new Label
+            {
+                Text = "可修改 / 新增 / 删除",
+                Location = new Point(252, 0),
+                Size = new Size(140, 40),
+                TextAlign = ContentAlignment.MiddleRight,
+                Font = new Font("微软雅黑", 9F),
+                ForeColor = Color.FromArgb(220, 228, 245)
+            };
+            header.Controls.Add(lblTitle);
+            header.Controls.Add(lblHeaderHint);
+            Controls.Add(header);
+
+            // 候选 IP 表格：蓝主题，与设置表格同风格
+            _dgv = new Sunny.UI.UIDataGridView
+            {
+                Style = Sunny.UI.UIStyle.Blue,
+                Location = new Point(12, 50),
+                Size = new Size(376, 158),
+                BorderStyle = BorderStyle.None,
                 AllowUserToAddRows = false,
                 AllowUserToDeleteRows = false,
                 AllowUserToResizeRows = false,
                 RowHeadersVisible = false,
+                MultiSelect = true,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
                 EditMode = DataGridViewEditMode.EditOnEnter,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
@@ -71,52 +96,73 @@ namespace BarometerWinform.Controls
             _dgv.DefaultCellStyle.ForeColor = Color.FromArgb(48, 48, 48);
             _dgv.DefaultCellStyle.SelectionBackColor = Color.FromArgb(48, 119, 238);
             _dgv.DefaultCellStyle.SelectionForeColor = Color.White;
+            _dgv.DefaultCellStyle.Font = new Font("微软雅黑", 9.5F);
             _dgv.EnableHeadersVisualStyles = false;
             _dgv.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(237, 243, 253);
             _dgv.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(48, 48, 48);
+            _dgv.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.FromArgb(237, 243, 253);
+            _dgv.ColumnHeadersDefaultCellStyle.SelectionForeColor = Color.FromArgb(48, 48, 48);
+            _dgv.ColumnHeadersDefaultCellStyle.Font = new Font("微软雅黑", 9F, FontStyle.Bold);
+            _dgv.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+            // 支持按 Delete 键直接删除选中行
+            _dgv.KeyDown += Dgv_KeyDown;
             Controls.Add(_dgv);
 
-            _txtNewIp = new TextBox
+            // 操作提示
+            var lblHint = new Label
             {
-                Location = new Point(10, 170),
-                Size = new Size(226, 26),
-                Font = new Font("微软雅黑", 10F)
+                Text = "一行一个 IP，可直接修改 / 输入新增 / 选中删除",
+                Location = new Point(12, 214),
+                Size = new Size(376, 18),
+                TextAlign = ContentAlignment.MiddleLeft,
+                Font = new Font("微软雅黑", 8.5F),
+                ForeColor = Color.FromArgb(130, 138, 150)
+            };
+            Controls.Add(lblHint);
+
+            // 输入新增：文本框 + 添加按钮
+            _txtNewIp = new Sunny.UI.UITextBox
+            {
+                Location = new Point(12, 236),
+                Size = new Size(270, 30),
+                Font = new Font("微软雅黑", 9.5F),
+                Watermark = "输入 IP 地址，如 192.168.1.220"
             };
             _txtNewIp.KeyDown += TxtNewIp_KeyDown;
             Controls.Add(_txtNewIp);
 
-            _btnAdd = CreateButton("添加", new Point(244, 168), new Size(106, 30));
+            _btnAdd = CreateButton("添加", new Point(290, 236), new Size(98, 30), Sunny.UI.UIStyle.Blue);
             _btnAdd.Click += (s, e) => AddIp();
             Controls.Add(_btnAdd);
 
-            _btnDelete = CreateButton("删除选中", new Point(10, 206), new Size(106, 30));
+            // 底部按钮：删除选中（左），取消 / 确定（右）
+            _btnDelete = CreateButton("删除选中", new Point(12, 272), new Size(88, 30), Sunny.UI.UIStyle.Orange);
             _btnDelete.Click += (s, e) => DeleteSelected();
             Controls.Add(_btnDelete);
 
-            _btnCancel = CreateButton("取消", new Point(292, 206), new Size(58, 30));
+            _btnCancel = CreateButton("取消", new Point(216, 272), new Size(62, 30), Sunny.UI.UIStyle.Gray);
             _btnCancel.Click += (s, e) => CloseAsCancel();
             Controls.Add(_btnCancel);
 
-            _btnOk = CreateButton("确定", new Point(228, 206), new Size(60, 30), true);
+            _btnOk = CreateButton("确定", new Point(284, 272), new Size(104, 30), Sunny.UI.UIStyle.Blue);
             _btnOk.Click += (s, e) => Confirm();
             Controls.Add(_btnOk);
 
             LoadValue(currentValue);
         }
 
-        private static Button CreateButton(string text, Point location, Size size, bool primary = false)
+        /// <summary>创建 SunnyUI 风格的按钮（按样式区分主色）</summary>
+        private static Sunny.UI.UIButton CreateButton(string text, Point location, Size size, Sunny.UI.UIStyle style)
         {
-            return new Button
+            var btn = new Sunny.UI.UIButton
             {
                 Text = text,
                 Location = location,
                 Size = size,
-                FlatStyle = FlatStyle.Flat,
-                Font = new Font("微软雅黑", 9F),
-                BackColor = primary ? Color.FromArgb(48, 119, 238) : Color.FromArgb(237, 243, 253),
-                ForeColor = primary ? Color.White : Color.FromArgb(48, 48, 48),
-                FlatAppearance = { BorderColor = Color.FromArgb(200, 214, 240) }
+                Style = style,
+                Font = new Font("微软雅黑", 9F)
             };
+            return btn;
         }
 
         /// <summary>把当前配置值拆分成一行一个 IP 填入表格</summary>
@@ -145,6 +191,15 @@ namespace BarometerWinform.Controls
             }
         }
 
+        /// <summary>表格内按 Delete 键删除选中的行</summary>
+        private void Dgv_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Delete)
+            {
+                DeleteSelected();
+            }
+        }
+
         /// <summary>校验输入框中的 IP 并追加到表格</summary>
         private void AddIp()
         {
@@ -169,23 +224,35 @@ namespace BarometerWinform.Controls
 
             int rowIdx = _dgv.Rows.Add(ip);
             _dgv.CurrentCell = _dgv.Rows[rowIdx].Cells[0];
+            _dgv.Rows[rowIdx].Selected = true;
             _txtNewIp.Clear();
             _txtNewIp.Focus();
         }
 
-        /// <summary>删除当前选中的行</summary>
+        /// <summary>删除当前选中的行。
+        /// 先收集要删除的行索引再统一删除，避免删除当前行时
+        /// DataGridView 自动重选"锚点→当前行"区间导致误删全部行。</summary>
         private void DeleteSelected()
         {
-            if (_dgv.CurrentCell == null) return;
-
             _dgv.EndEdit();
-            for (int i = _dgv.Rows.Count - 1; i >= 0; i--)
+
+            // 先记下选中的行索引，再进行删除
+            var indices = new List<int>();
+            for (int i = 0; i < _dgv.Rows.Count; i++)
             {
-                if (_dgv.Rows[i].Selected)
-                {
-                    _dgv.Rows.RemoveAt(i);
-                }
+                if (_dgv.Rows[i].Selected) indices.Add(i);
             }
+            if (indices.Count == 0) return;
+
+            // 倒序删除，索引不受影响
+            indices.Sort();
+            for (int i = indices.Count - 1; i >= 0; i--)
+            {
+                _dgv.Rows.RemoveAt(indices[i]);
+            }
+
+            // 删除后清除自动选区，避免残留整列选中
+            _dgv.ClearSelection();
         }
 
         /// <summary>逐行校验 IP 格式，全部合法则提交关闭；否则提示留在弹窗</summary>
