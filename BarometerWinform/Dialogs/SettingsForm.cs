@@ -61,7 +61,7 @@ namespace BarometerWinform.Dialogs
             new List<KeyValuePair<Sunny.UI.UILine, Sunny.UI.UIDataGridView>>();
 
         /// <summary>搜索框控件</summary>
-        private TextBox _txtSearch;
+        private Sunny.UI.UITextBox _txtSearch;
         /// <summary>清除搜索按钮</summary>
         private Button _btnClearSearch;
 
@@ -334,7 +334,7 @@ namespace BarometerWinform.Dialogs
                 RowTemplate = { Height = 24 },
                 BackgroundColor = Color.White,
                 BorderStyle = BorderStyle.None,
-                ScrollBars = ScrollBars.Vertical
+                ScrollBars = ScrollBars.None
             };
 
             // 三列表头
@@ -530,11 +530,12 @@ namespace BarometerWinform.Dialogs
             };
             pnlSearch.Controls.Add(lblSearch);
 
-            _txtSearch = new TextBox
+            _txtSearch = new Sunny.UI.UITextBox
             {
-                Location = new Point(124, 7),
-                Size = new Size(300, 22),
-                Font = new Font(this.Font.FontFamily, 9F)
+                Location = new Point(124, 5),
+                Size = new Size(320, 26),
+                Font = new Font(this.Font.FontFamily, 11F),
+                Watermark = "输入关键字过滤配置项"
             };
             _txtSearch.TextChanged += TxtSearch_TextChanged;
             pnlSearch.Controls.Add(_txtSearch);
@@ -542,8 +543,8 @@ namespace BarometerWinform.Dialogs
             _btnClearSearch = new Button
             {
                 Text = "✕",
-                Location = new Point(428, 7),
-                Size = new Size(24, 22),
+                Location = new Point(448, 5),
+                Size = new Size(26, 26),
                 FlatStyle = FlatStyle.Flat,
                 TabStop = false
             };
