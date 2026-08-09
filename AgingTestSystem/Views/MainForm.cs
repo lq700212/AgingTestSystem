@@ -42,10 +42,10 @@ namespace AgingTestSystem.Views
     /// │   工位显示区域               │ │ 空闲/测试中(D4204)  │   │
     /// │   (动态加载72个工位面板)      │ └────────────────────┘   │
     /// │                              │                         │
-    /// │   WorkstationPanelView × 72    │ 监视                    │
-    /// │   (9列 × 8行布局)           │ 设置温度: [D4700]       │
-    /// │                              │ 上部温度: [D4702]       │
-    /// │                              │ 下部温度: [D4704]       │
+    /// │   自绘大画布                 │ 监视                    │
+    /// │   WorkstationGridView       │ 设置温度: [D4700]       │
+    /// │   (9列 × 8行布局)           │ 上部温度: [D4702]       │
+    /// │   (V1.50 单窗口滚动容器)    │ 下部温度: [D4704]       │
     /// │                              │                         │
     /// │                              │ 操作                    │
     /// │                              │ [温控操作(D4203)]      │
@@ -106,19 +106,11 @@ namespace AgingTestSystem.Views
         private ScannerService _scanner;
 
         /// <summary>
-        /// 存储所有工位显示面板
-        /// Key: 设备编号，Value: 显示面板控件
-        /// 用于快速查找指定设备的面板进行数据更新
+        /// 工位网格（自绘大画布，【V1.50】）。
+        /// 整个工位区域 = 1 个自绘 UserControl（含全部面板 + 行全选按钮列），
+        /// 由 <see cref="CreateWorkstationPanels"/> 创建并放入 AutoScroll 滚动容器。
         /// </summary>
-        private readonly Dictionary<int, WorkstationPanelView> _panelViews = new Dictionary<int, WorkstationPanelView>();
-
-        /// <summary>
-        /// 每行的"全选/取消"按钮（行索引 → 按钮，【V1.19 新增】）
-        /// 供 UpdateRowSelectButton 在任意单个面板选中状态变化时刷新按钮文字：
-        /// 仅当该行所有面板都选中时按钮才显示"取消"，否则显示"全选"。
-        /// 行索引从 0 开始，与 _panelViews 按 (deviceId-1)/cols 换算的行号一致。
-        /// </summary>
-        private readonly Dictionary<int, Button> _rowSelectButtons = new Dictionary<int, Button>();
+        private WorkstationGridView _gridView;
 
         /// <summary>
         /// 当前操作权限（中文显示名：操作员/技术员/管理员）
@@ -149,19 +141,6 @@ namespace AgingTestSystem.Views
         // 改用 ShowDropdownPopup 方法在按钮点击时动态创建无边框弹出窗体
         // 这样下拉菜单项的尺寸可以和主按钮完全一致
 
-        // ===== 布局相关常量（修复 L6：避免魔法数字散落代码各处） =====
-        /// <summary>行全选按钮列的固定宽度（像素）</summary>
-        private const int RowSelectButtonColumnWidth = 80;
-        /// <summary>工位面板的行高（像素），包含面板高度和上下边距（V1.16 加高容纳新布局；V1.19.12 随面板高度 225→205 同步减小）</summary>
-        private const int PanelRowHeight = 225;
-        /// <summary>
-        /// 工位面板的列宽（像素）= 面板设计宽度240 + 左右边距4 + 边框余量1
-        /// 【说明】使用绝对列宽而非百分比，确保每个单元格足够宽容纳面板内容，
-        ///        避免窗口缩小时面板被压缩导致内容显示不全。
-        ///        窗口宽度不够时由 TableLayoutPanel.AutoScroll 显示水平滚动条。
-        ///        V1.16 工位面板重新设计后加宽到 245。
-        /// </summary>
-        private const int PanelColumnWidth = 245;
         /// <summary>日志文本框的最大字符数，超过时自动裁剪旧内容（修复 M8）</summary>
         private const int MaxLogTextLength = 100_000;
         /// <summary>日志裁剪后保留的字符数（保留最近一半内容）</summary>
@@ -175,6 +154,9 @@ namespace AgingTestSystem.Views
             // 1. 先初始化界面控件（Designer.cs 中的 InitializeComponent）
             //    必须最先调用，否则其他代码访问控件会报空引用
             InitializeComponent();
+
+            // 【V1.49】主窗体开启双缓冲，与工位面板/网格双缓冲配合，消除滚动撕裂
+            this.DoubleBuffered = true;
 
             // 1.5 自适应调整右侧操作面板宽度（不写死, 根据内容自动计算）
             AdjustRightPanelWidth();
@@ -821,16 +803,15 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 动态创建工位显示面板（V1.16 更名：本质是 72 个工位，每个工位对应一台气压表）
-        /// 根据配置的设备数量（默认72个）创建对应的工位面板
-        /// 面板按行列网格布局排列在中间区域
+        /// 创建工位网格（【V1.50】自绘大画布替代 72 面板 + TableLayoutPanel）
         ///
         /// 【布局说明】
-        /// 使用 TableLayoutPanel 实现网格布局（8列×9行=72个面板 + 1列行全选按钮）
-        /// 共 9 列：前 8 列放工位面板（固定宽度），最后 1 列放行全选按钮（固定宽度）
-        /// 直接将 TableLayoutPanel 添加到 splitContainerMain.Panel1
+        /// - 整个工位区域（8列×9行面板 + 行全选按钮列）合并为 1 个自绘
+        ///   <see cref="WorkstationGridView"/>，尺寸 = 内容总尺寸；
+        /// - 外层用 Panel.AutoScroll 容器托管，内容超出时出现滚动条；
+        /// - 滚动时系统只需移动 1 个窗口（而非 V1.49 的 72 个），无撕裂。
         /// 【注意】不能放在 FlowLayoutPanel 中，因为 FlowLayoutPanel
-        /// 不尊重子控件的 Dock=Fill 属性，会导致 TableLayoutPanel 尺寸为0
+        /// 不尊重子控件的 Dock=Fill 属性。
         /// </summary>
         private void CreateWorkstationPanels()
         {
@@ -841,251 +822,48 @@ namespace AgingTestSystem.Views
             {
                 c.Dispose();
             }
-            // 清空左侧面板容器和字典（防止重复调用时残留）
+            // 清空左侧面板容器
             splitContainerMain.Panel1.Controls.Clear();
-            _panelViews.Clear();
 
-            // 创建 TableLayoutPanel 作为面板容器，实现网格布局
-            var tableLayoutPanel = new TableLayoutPanel();
-            tableLayoutPanel.Dock = DockStyle.Fill;  // 填满整个左侧区域
-            tableLayoutPanel.AutoScroll = true;      // 内容超出时显示滚动条
+            // 外层滚动容器：网格画布尺寸=内容总尺寸，由本容器托管滚动条
+            var scrollContainer = new Panel();
+            scrollContainer.Dock = DockStyle.Fill;      // 填满整个左侧区域
+            scrollContainer.AutoScroll = true;          // 内容超出时显示滚动条
+            // 【V1.50】滚动容器开启双缓冲，配合自绘网格消除滚动撕裂/闪烁
+            EnableDoubleBuffering(scrollContainer);
 
-            // 设置行列数（根据配置：默认8列9行）
-            int rows = _config.PanelRows;
-            int cols = _config.PanelColumns;
+            // 自绘工位网格（1 个 UserControl 画全部面板 + 行全选按钮列）
+            _gridView = new WorkstationGridView();
+            _gridView.Configure(_config.PanelColumns, _config.PanelRows, _config.TotalBarometers);
 
-            // 列数 = 工位列数 + 1（额外一列用于放置行全选按钮）
-            tableLayoutPanel.ColumnCount = cols + 1;
-            tableLayoutPanel.RowCount = rows;
+            // 订阅"设置"按钮点击事件（V1.18：打开工位设置窗口；V1.24：按选中数量分流）
+            _gridView.OnSetClicked += Panel_OnSetClicked;
 
-            // 设置前 cols 列宽（绝对值，确保每个单元格足够宽容纳面板内容）
-            // 【修复】之前用百分比列宽，窗口缩小时单元格会压缩到~107px，
-            //        远小于面板设计宽度，导致面板重叠、内容被裁剪。
-            //        改用绝对列宽（V1.16 工位面板加宽到 245），确保单元格始终足够宽。
-            for (int i = 0; i < cols; i++)
-            {
-                tableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, PanelColumnWidth));
-            }
-            // 最后一列：行全选按钮列，使用绝对宽度
-            tableLayoutPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, RowSelectButtonColumnWidth));
+            // 订阅网格内部动作日志（如行全选/取消全选），写入主窗体 LOG
+            _gridView.OnLog += (sender, message) => WriteLog(message);
 
-            // 设置行高（绝对值，每个面板高度固定 + 边距）
-            // 使用 Absolute 固定行高，确保面板完整显示
-            for (int i = 0; i < rows; i++)
-            {
-                tableLayoutPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, PanelRowHeight));
-            }
-
-            // 循环创建每个工位面板
-            for (int i = 0; i < _config.TotalBarometers; i++)
-            {
-                int deviceId = i + 1;  // 设备编号从1开始
-
-                // 创建面板实例（只需设备编号；载台上电输出编号由主窗体用 _config 计算）
-                var panel = new WorkstationPanelView(deviceId);
-
-                // 【修复】设置 Dock=Fill 让面板填满单元格，避免与相邻面板重叠
-                panel.Dock = DockStyle.Fill;
-
-                // 设置面板边距和内边距，避免面板挤在一起
-                panel.Margin = new Padding(2);
-                panel.Padding = new Padding(2);
-
-                // 订阅面板的"设置"按钮点击事件（V1.18：打开工位设置窗口）
-                panel.OnSetClicked += Panel_OnSetClicked;
-
-                // 【V1.24】订阅面板"取消全部选中"请求：
-                // 长按空白处且已有选中（选中框可见）时，取消全部选中并隐藏所有选中框。
-                panel.ClearAllSelectionRequested += Panel_ClearAllSelectionRequested;
-
-                // 【V1.19】订阅面板选中状态变化事件：
-                // 任一面板被单独选中/取消（V1.19.5：空白处长按约0.8秒选中 / 单击空白处或点击选中框取消）时，
-                // 立即刷新所在行的"全选/取消"按钮文字——只要该行有一台被取消，
-                // 按钮就从"取消"恢复为"全选"；
-                // 同时刷新所有面板选中框的显示/隐藏（V1.19.5：有任一选中→全部显示，全未选中→全部隐藏）。
-                // 【注意】row 是每轮 for 循环新建的局部变量，闭包捕获安全，无循环变量污染。
-                int row = i / cols;
-                panel.IsSelectedChanged += (s, e2) =>
-                {
-                    UpdateRowSelectButton(row);
-                    UpdateSelectionBoxVisibility();
-                };
-
-                // 保存到字典，便于后续按设备编号查找更新
-                _panelViews[deviceId] = panel;
-
-                // 计算面板在网格中的行列位置
-                int col = i % cols;
-
-                // 添加到 TableLayoutPanel 的指定单元格
-                tableLayoutPanel.Controls.Add(panel, col, row);
-            }
-
-            // 【V1.19.5】初始刷新一次选中框显示状态（启动时全部未选中 → 全部隐藏）
-            UpdateSelectionBoxVisibility();
-
-            // 在每行最后一列添加"行全选"按钮
-            // 【V1.18】按钮名由 Set(SEL_N) 改为"全选"：点击后该行所有工位面板被选中
-            // （选中状态通过右上角选中指示体现；V1.19.2 起面板背景色/工作状态不再变化）。
-            // 按钮样式：浅灰背景（V1.19.4 由深灰 Gray 改为浅灰 LightGray，与面板上电状态灯 boxPower 同色，
-            // 深灰显得笨重不好看；浅灰下文字改黑色以保证对比度）。
-            for (int row = 0; row < rows; row++)
-            {
-                var btnSelectRow = new Button();
-                btnSelectRow.Name = $"btnSelectRow_{row + 1}";              // 控件名（用于代码查找）
-                btnSelectRow.Text = "全选";                                  // 显示文本（V1.18 更名）
-                btnSelectRow.BackColor = Color.LightGray;                   // 背景色：浅灰（V1.19.4 与 boxPower 同色）
-                btnSelectRow.ForeColor = Color.Black;                       // 文字颜色：黑色（浅灰底保证对比度）
-                btnSelectRow.Dock = DockStyle.Fill;                         // 填满单元格（自动随窗体缩放）
-                btnSelectRow.Margin = new Padding(2);                       // 外边距，避免按钮贴边
-                btnSelectRow.FlatStyle = FlatStyle.Flat;                    // 扁平化样式，更现代
-                btnSelectRow.Cursor = Cursors.Hand;                         // 鼠标悬停时显示手型光标
-
-                // 通过闭包捕获行号，避免循环变量捕获问题
-                // 【注意】不能直接用 row，否则所有按钮的点击事件都会拿到循环结束后的 row 值
-                int capturedRow = row;
-                btnSelectRow.Click += (sender, e) => BtnSelectRow_Click(sender, e, capturedRow);
-
-                // 【V1.19】保存该行按钮引用，供 UpdateRowSelectButton 在选中状态变化时刷新文字
-                _rowSelectButtons[capturedRow] = btnSelectRow;
-
-                // 添加到最后一列（列索引 = cols）的对应行
-                tableLayoutPanel.Controls.Add(btnSelectRow, cols, row);
-            }
-
-            // 将 TableLayoutPanel 直接添加到 splitContainerMain 的左侧面板
-            // 【关键】不能用 FlowLayoutPanel，因为它不尊重 Dock=Fill
-            splitContainerMain.Panel1.Controls.Add(tableLayoutPanel);
+            scrollContainer.Controls.Add(_gridView);
+            splitContainerMain.Panel1.Controls.Add(scrollContainer);
         }
 
         /// <summary>
-        /// 行全选按钮点击事件（【V1.18】按钮名由 Set(SEL_N) 改为"全选"）
-        /// 选中该行所有工位面板（V1.19.2 起选中仅通过右上角选中指示体现，
-        /// 不再改变面板背景色与工作状态文字）。
-        ///
-        /// 【V1.19】按钮文字改为"实时反映该行当前选中状态"：
-        /// - 该行所有面板都选中 → 按钮显示"取消"（此时点击执行整行取消选中）；
-        /// - 只要有一台被单独取消选中 → 按钮立即恢复显示"全选"（此时点击执行整行全部选中）。
-        /// 注意：按钮文字不是由本次点击简单取反，而是通过 UpdateRowSelectButton
-        /// 重新计算该行所有面板的选中状态得来——任一面板被单独选中/取消（点击面板本身、
-        /// 点击右上角选中指示）都会触发 IsSelectedChanged 事件刷新按钮文字。
-        ///
-        /// 【预留说明】
-        /// 当前仅切换选中状态（选中指示 ✓ 显示/隐藏；V1.19.2 起面板背景色不再叠加高亮），
-        /// 具体的批量操作（如批量设置配方、批量启动等）待业务流程明确后实现，
-        /// 可通过遍历 _panelViews 找到所有 IsSelected=true 的面板执行批量操作。
+        /// 通过反射给控件开启双缓冲（OptimizedDoubleBuffer + AllPaintingInWmPaint）（【V1.49】）
+        /// Control.DoubleBuffered 是受保护属性，TableLayoutPanel 等 ScrollableControl 子类
+        /// 无法直接访问，故用反射统一开启。开启后控件绘制先在离屏缓冲完成，再一次性
+        /// 复制到屏幕，消除滚动/重绘时的闪烁与撕裂。
+        /// 【V1.50】网格自身的行全选按钮列、选中交互、按钮文字刷新已全部移入
+        /// <see cref="WorkstationGridView"/> 内部（OnLog 通知主窗体写日志），
+        /// 本方法仅保留给外层 AutoScroll 滚动容器开启双缓冲。
         /// </summary>
-        /// <param name="sender">触发事件的按钮</param>
-        /// <param name="e">事件参数</param>
-        /// <param name="rowIndex">行索引（从0开始）</param>
-        private void BtnSelectRow_Click(object sender, EventArgs e, int rowIndex)
+        /// <param name="control">目标控件</param>
+        private static void EnableDoubleBuffering(Control control)
         {
-            int cols = _config.PanelColumns;
-            int rowStartDeviceId = rowIndex * cols + 1;  // 该行第一个设备编号
-            int rowEndDeviceId = rowStartDeviceId + cols - 1;  // 该行最后一个设备编号
-
-            // 检查该行是否所有面板都已选中
-            bool allSelected = true;
-            for (int deviceId = rowStartDeviceId; deviceId <= rowEndDeviceId; deviceId++)
+            if (control == null) return;
+            var prop = typeof(Control).GetProperty("DoubleBuffered",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            if (prop != null && prop.CanWrite)
             {
-                if (_panelViews.TryGetValue(deviceId, out WorkstationPanelView panel))
-                {
-                    if (!panel.IsSelected)
-                    {
-                        allSelected = false;
-                        break;
-                    }
-                }
-            }
-
-            // 切换选中状态：全选 ↔ 全不选
-            bool newSelectionState = !allSelected;
-            for (int deviceId = rowStartDeviceId; deviceId <= rowEndDeviceId; deviceId++)
-            {
-                if (_panelViews.TryGetValue(deviceId, out WorkstationPanelView panel))
-                {
-                    panel.IsSelected = newSelectionState;
-                }
-            }
-
-            // 【V1.19】按钮文字交由 UpdateRowSelectButton 统一刷新：
-            // 逐个设置 panel.IsSelected 时会触发 IsSelectedChanged 事件，
-            // 该事件已在每次变化时调用 UpdateRowSelectButton 刷新按钮文字，
-            // 这里再调用一次兜底，确保文字与最终状态一致。
-            UpdateRowSelectButton(rowIndex);
-
-            // 写入日志
-            string action = newSelectionState ? "全选" : "取消全选";
-            WriteLog($"第 {rowIndex + 1} 行 {action}（设备 {rowStartDeviceId}-{rowEndDeviceId}）");
-        }
-
-        /// <summary>
-        /// 刷新指定行的"全选/取消"按钮文字（【V1.19 新增】）
-        ///
-        /// 【规则】按钮文字实时反映该行当前选中状态：
-        /// - 该行**所有**工位面板都处于选中状态 → 按钮显示"取消"（点击整行取消选中）；
-        /// - 只要有一台未被选中（含被单独取消）→ 按钮显示"全选"（点击整行全部选中）。
-        ///
-        /// 【触发时机】在以下任一时刻调用：
-        /// 1) 单个面板选中状态变化：主窗体订阅了每个面板的 IsSelectedChanged 事件
-        ///    （面板点击本身 / 点击右上角选中指示都会触发），事件处理器按所在行调用本方法；
-        /// 2) 行全选按钮点击后：BtnSelectRow_Click 末尾调用本方法兜底刷新。
-        /// </summary>
-        /// <param name="rowIndex">行索引（从0开始）</param>
-        private void UpdateRowSelectButton(int rowIndex)
-        {
-            // 找不到该行按钮（例如行按钮尚未创建）则直接返回
-            if (!_rowSelectButtons.TryGetValue(rowIndex, out Button btnSelectRow)) return;
-
-            int cols = _config.PanelColumns;
-            int rowStartDeviceId = rowIndex * cols + 1;  // 该行第一个设备编号
-            int rowEndDeviceId = rowStartDeviceId + cols - 1;  // 该行最后一个设备编号
-
-            // 检查该行是否所有面板都已选中（TryGetValue 跳过不存在的面板，保证最后一行兼容）
-            bool allSelected = true;
-            for (int deviceId = rowStartDeviceId; deviceId <= rowEndDeviceId; deviceId++)
-            {
-                if (_panelViews.TryGetValue(deviceId, out WorkstationPanelView panel))
-                {
-                    if (!panel.IsSelected)
-                    {
-                        allSelected = false;
-                        break;
-                    }
-                }
-            }
-
-            // 全部选中 → "取消"；否则 → "全选"
-            btnSelectRow.Text = allSelected ? "取消" : "全选";
-        }
-
-        /// <summary>
-        /// 刷新所有面板选中框的显示/隐藏（【V1.19.5】）
-        ///
-        /// 【规则】选中框"平时全隐藏，有选中才显示"：
-        /// - 只要有任一工位被选中 → 所有面板都显示选中框（选中项=绿底白✓，未选中项=空心白框）；
-        /// - 全部未选中 → 所有面板隐藏选中框。
-        ///
-        /// 【触发时机】在任一工位选中状态变化时（面板 IsSelectedChanged 事件）调用，
-        /// 让"长按选中某台"或"行全选"后，其余项也能同步显示各自的选中框状态。
-        /// </summary>
-        private void UpdateSelectionBoxVisibility()
-        {
-            // 判断是否存在至少一个已选中的工位
-            bool anySelected = false;
-            foreach (var panel in _panelViews.Values)
-            {
-                if (panel.IsSelected)
-                {
-                    anySelected = true;
-                    break;
-                }
-            }
-
-            // 通知每个面板按"是否有选中"刷新选中框显示/隐藏
-            foreach (var panel in _panelViews.Values)
-            {
-                panel.SetSelectionBoxVisible(anySelected);
+                prop.SetValue(control, true, null);
             }
         }
 
@@ -1202,15 +980,14 @@ namespace AgingTestSystem.Views
             // 窗体已释放则不更新
             if (this.IsDisposed || data == null) return;
 
-            if (_panelViews.TryGetValue(data.DeviceId, out WorkstationPanelView panel))
+            if (_gridView != null)
             {
-                panel.UpdateData(data);
+                _gridView.UpdateSingle(data);
             }
         }
 
         /// <summary>
         /// 批量更新所有面板数据显示
-        /// 遍历数据数组，根据设备编号找到对应的面板并调用其 UpdateData 方法
         /// 一次调用完成所有面板更新，减少 UI 线程切换次数
         /// </summary>
         /// <param name="allData">本次采集的所有气压表数据</param>
@@ -1219,12 +996,9 @@ namespace AgingTestSystem.Views
             // 窗体已释放则不更新
             if (this.IsDisposed || allData == null) return;
 
-            foreach (var data in allData)
+            if (_gridView != null)
             {
-                if (data != null && _panelViews.TryGetValue(data.DeviceId, out WorkstationPanelView panel))
-                {
-                    panel.UpdateData(data);
-                }
+                _gridView.UpdateAll(allData);
             }
 
             // 【V1.10 新增】顺便更新右侧整机状态汇总（测试中 N 台 / 在线 M / 报警 Z）
@@ -1526,28 +1300,17 @@ namespace AgingTestSystem.Views
         /// 2. 再按当前选中数量决定弹出窗口：
         ///    - 选中 2 个及以上工位：弹出批量设置配方窗口（BatchRecipeForm）；
         ///    - 只选中 1 个工位：弹出该选中工位的工位设置窗口（StationSettingsForm）。
+        /// 【V1.50】选中状态统一由 <see cref="WorkstationGridView"/> 内部维护。
         /// </summary>
         private void Panel_OnSetClicked(object sender, int deviceId)
         {
             // 确保被点击"设置"按钮所在的工位被选中
-            if (_panelViews.TryGetValue(deviceId, out var clickedPanel) && !clickedPanel.IsSelected)
-            {
-                clickedPanel.IsSelected = true;
-            }
+            _gridView.SetSelected(deviceId, true);
 
-            int selectedCount = 0;
-            int selectedDeviceId = 0;
-            foreach (var kvp in _panelViews)
-            {
-                if (kvp.Value.IsSelected)
-                {
-                    selectedCount++;
-                    selectedDeviceId = kvp.Key;
-                }
-            }
+            int[] selectedIds = _gridView.GetSelectedDeviceIds();
 
             // 选中 2 个及以上工位 → 批量设置配方窗口
-            if (selectedCount >= 2)
+            if (selectedIds.Length >= 2)
             {
                 ShowBatchRecipeForm();
                 return;
@@ -1555,27 +1318,11 @@ namespace AgingTestSystem.Views
 
             // 只选中 1 个工位（此时必为被点击的工位）→ 打开该工位的设置窗口
             // 传入共享配方列表 _recipes，供"保存/加入对列"把当前配方写入本地配方存储
+            int selectedDeviceId = selectedIds.Length == 1 ? selectedIds[0] : deviceId;
             using (var form = new StationSettingsForm(_deviceManager, _config, _recipes, selectedDeviceId))
             {
                 form.ShowDialog(this);
             }
-        }
-
-        /// <summary>
-        /// 面板"取消全部选中"请求处理（【V1.24 新增】）
-        /// 长按空白处且已有选中（选中框可见）时触发：将所有工位取消选中，
-        /// 并刷新选中框（全部未选中 → 自动隐藏所有面板的选中框）。
-        /// </summary>
-        private void Panel_ClearAllSelectionRequested(object sender, EventArgs e)
-        {
-            foreach (var panel in _panelViews.Values)
-            {
-                if (panel.IsSelected)
-                {
-                    panel.IsSelected = false;
-                }
-            }
-            UpdateSelectionBoxVisibility();
         }
 
         /// <summary>
@@ -2275,14 +2022,8 @@ namespace AgingTestSystem.Views
         {
             // 收集当前选中的工位编号（允许为 0 个：是否满足"至少选中一个"由批量窗口判断并提示，
             // 因此这里不弹提示、也不返回 null）
-            var selectedIds = new List<int>();
-            foreach (var kvp in _panelViews)
-            {
-                if (kvp.Value.IsSelected)
-                {
-                    selectedIds.Add(kvp.Key);
-                }
-            }
+            int[] selectedArray = _gridView != null ? _gridView.GetSelectedDeviceIds() : new int[0];
+            var selectedIds = new List<int>(selectedArray);
 
             using (var form = new BatchRecipeForm(_deviceManager, _recipes, selectedIds))
             {
@@ -2461,29 +2202,22 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 获取当前选中的设备编号数组（【V1.10 新增】）
-        /// 遍历所有面板，收集 IsSelected=true 的设备。
+        /// 从工位网格读取所有选中工位。
         /// 一个都没选时弹提示并返回 null。
         /// </summary>
         /// <returns>选中的设备编号数组；未选择时返回 null</returns>
         private int[] GetSelectedDeviceIds()
         {
-            var ids = new List<int>();
-            foreach (var kvp in _panelViews)
-            {
-                if (kvp.Value.IsSelected)
-                {
-                    ids.Add(kvp.Key);
-                }
-            }
+            int[] ids = _gridView != null ? _gridView.GetSelectedDeviceIds() : new int[0];
 
-            if (ids.Count == 0)
+            if (ids.Length == 0)
             {
                 MessageBox.Show("请先在气压表区域选中要操作的设备\n（点击面板或用行全选按钮）",
                     "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return null;
             }
 
-            return ids.ToArray();
+            return ids;
         }
 
         /// <summary>
