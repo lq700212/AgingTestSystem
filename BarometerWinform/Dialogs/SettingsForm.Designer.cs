@@ -70,7 +70,7 @@
             this.lblHint.Padding = new System.Windows.Forms.Padding(14, 0, 0, 0);
             this.lblHint.Size = new System.Drawing.Size(960, 36);
             this.lblHint.TabIndex = 0;
-            this.lblHint.Text = "以下为 App.config 中的全部配置项（按业务分类排列），可直接在“设置值”列修改；点击【保存设置】写入配置文件，重启程序后生效。";
+            this.lblHint.Text = "以下为 App.config 中的全部配置项（按业务分类排列），可直接在“设置值”列修改；点击【保存设置】后立即生效（连接参数自动重连），仅设备数量/布局/模拟开关等结构型配置需重启后生效。";
             this.lblHint.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // pnlScroll

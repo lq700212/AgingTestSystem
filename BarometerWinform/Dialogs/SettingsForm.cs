@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 using BarometerWinform.Controls;
 using BarometerWinform.Models;
@@ -27,8 +28,10 @@ namespace BarometerWinform.Dialogs
     ///
     /// 点击【保存设置】后，把所有改动写回程序运行目录下的 exe.config
     /// （即程序实际读取的配置文件，与 App.config 同源），
-    /// 写完后刷新 appSettings 缓存。由于设备参数在程序启动时一次性加载，
-    /// 修改后需重启程序才生效。
+    /// 写完后刷新 appSettings 缓存，并把非结构型配置就地回写内存中的 DeviceConfig 实例：
+    /// 各服务每次读写实时访问该实例，因此业务逻辑类配置（寄存器地址/IO 映射/取反/阈值等）
+    /// 保存后立即生效；连接参数类由主窗体触发重连后生效；只有结构型配置
+    /// （设备数量/布局/Mock/送风机启用）需重启程序才生效（保存时已提示）。
     ///
     /// 【实现要点】
     /// - 分类与 key 顺序在 _categories 中集中维护，分类标题条 + 表格在 SetupSections 里
@@ -102,6 +105,52 @@ namespace BarometerWinform.Dialogs
             "ScannerEnabled",
             "ScannerDebugLog",
         };
+
+        /// <summary>
+        /// 结构型配置：改动影响设备数量 / 界面布局 / 实现类选择，
+        /// 需重启程序才生效（保存时照常写入配置文件，但【不回写内存】，避免运行期结构不一致）。
+        /// 判断依据：运行期结构（状态数组、面板布局、Reader/Controller 实现）在启动时一次性建立。
+        /// </summary>
+        public static readonly HashSet<string> StructuralKeys = new HashSet<string>
+        {
+            "TotalBarometers", "TotalInputs", "TotalOutputs",
+            "PanelColumns", "PanelRows",
+            "UseMockCommunication",
+            "FanEnabled",
+        };
+
+        /// <summary>气压表串口连接参数：改动后需重连串口才生效</summary>
+        public static readonly HashSet<string> BarometerConnectionKeys = new HashSet<string>
+        {
+            "PortName", "BaudRate", "DataBits", "StopBits", "Parity",
+            "SerialReadTimeoutMs", "SerialWriteTimeoutMs",
+        };
+
+        /// <summary>IO 耦合器连接参数：改动后需重连 TCP 才生效</summary>
+        public static readonly HashSet<string> IoConnectionKeys = new HashSet<string>
+        {
+            "PlcAddress", "PlcPort",
+            "TcpSendTimeoutMs", "TcpReceiveTimeoutMs",
+        };
+
+        /// <summary>送风机连接参数：改动后需重连 TCP 才生效（FanEnabled 属结构型）</summary>
+        public static readonly HashSet<string> FanConnectionKeys = new HashSet<string>
+        {
+            "FanIpAddress", "FanPort", "FanTimeoutMs",
+            "FanAutoDetectEnabled", "FanIpCandidates",
+        };
+
+        /// <summary>扫码枪连接参数：改动后需重连串口才生效</summary>
+        public static readonly HashSet<string> ScannerConnectionKeys = new HashSet<string>
+        {
+            "ScannerEnabled", "ScannerPort", "ScannerDeviceKeyword",
+            "ScannerBaudRate", "ScannerDataBits", "ScannerStopBits", "ScannerParity",
+        };
+
+        /// <summary>
+        /// 本次保存成功写回配置文件的配置项 key 集合（供主窗体分发重连 / 判断需重启项）
+        /// </summary>
+        public HashSet<string> SavedKeys { get; private set; }
 
         /// <summary>
         /// 数字类配置项的范围约束（防输入越界/乱输），保存前仍会按 ValidateValue 二次校验。
@@ -1201,13 +1250,22 @@ namespace BarometerWinform.Dialogs
         /// </summary>
         private static bool TryParseUShort(string value)
         {
+            return TryParseUShort(value, out _);
+        }
+
+        /// <summary>
+        /// 解析 ushort（支持 "4096" 或 "0x1000" 两种写法），并输出解析结果
+        /// </summary>
+        private static bool TryParseUShort(string value, out ushort result)
+        {
+            result = 0;
             if (string.IsNullOrWhiteSpace(value)) return false;
             if (value.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
             {
                 return ushort.TryParse(value.Substring(2), System.Globalization.NumberStyles.HexNumber,
-                    System.Globalization.CultureInfo.InvariantCulture, out _);
+                    System.Globalization.CultureInfo.InvariantCulture, out result);
             }
-            return ushort.TryParse(value, out _);
+            return ushort.TryParse(value, out result);
         }
 
         /// <summary>
@@ -1282,10 +1340,78 @@ namespace BarometerWinform.Dialogs
                 return;
             }
 
-            MessageBox.Show("设置已保存，重启程序后生效。", "提示",
+            // 【热生效】保存成功后就地回写内存中的 DeviceConfig 实例（主窗体传入的同一引用）：
+            // 各服务每次读写实时访问 _config.xxx，回写后业务逻辑类配置立即生效；
+            // 结构型配置不回写（避免运行期结构不一致），需重启后生效。
+            ApplyChangesToConfig(changes);
+
+            // 本次保存的配置项 key 交给主窗体，由主窗体按需触发重连（串口/耦合器/送风机/扫码枪）
+            SavedKeys = new HashSet<string>(changes.Keys);
+
+            // 弹窗提示：是否包含需重启生效的结构型配置
+            var structuralChanged = changes.Keys.Where(k => StructuralKeys.Contains(k)).ToList();
+            string saveMessage;
+            if (structuralChanged.Count > 0)
+            {
+                saveMessage = "设置已保存。以下配置项需重启程序后生效：\r\n\r\n" +
+                    string.Join("、", structuralChanged.Select(k =>
+                        _descriptions.TryGetValue(k, out string d) ? d : k)) +
+                    "\r\n\r\n其余配置项已即时生效。";
+            }
+            else
+            {
+                saveMessage = "设置已保存并即时生效。";
+            }
+
+            MessageBox.Show(saveMessage, "提示",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             this.DialogResult = DialogResult.OK;
             this.Close();
+        }
+
+        /// <summary>
+        /// 把本次保存的配置项就地回写内存中的 DeviceConfig 实例（热生效核心）：
+        /// 各服务持有的都是主窗体传入的同一实例，且每次读写实时访问 _config.xxx，
+        /// 回写后业务逻辑类配置（寄存器地址 / IO 映射 / 取反 / 小数位 / 阈值等）立即生效，
+        /// 无需重启；连接参数类由主窗体另触发重连。
+        /// 结构型配置（<see cref="StructuralKeys"/>）不回写，需重启后生效。
+        /// </summary>
+        private void ApplyChangesToConfig(Dictionary<string, string> changes)
+        {
+            foreach (var kv in changes)
+            {
+                if (StructuralKeys.Contains(kv.Key)) continue;
+                var prop = typeof(DeviceConfig).GetProperty(kv.Key);
+                if (prop == null || !prop.CanWrite) continue;
+                try
+                {
+                    object converted = ConvertConfigValue(prop.PropertyType, kv.Value);
+                    if (converted != null) prop.SetValue(_config, converted);
+                }
+                catch
+                {
+                    // 单项转换失败不影响其它项（保存前已过类型校验，正常不会发生）
+                }
+            }
+        }
+
+        /// <summary>
+        /// 把配置字符串按目标属性类型转换（与主窗体启动加载逻辑一致：
+        /// 支持 0x 十六进制寄存器地址、IO 映射表 / 候选 IP 列表等复合类型）
+        /// </summary>
+        private static object ConvertConfigValue(Type propType, string value)
+        {
+            if (value == null) return null;
+            if (propType == typeof(bool))   { return bool.TryParse(value, out bool b) ? b : (object)null; }
+            if (propType == typeof(int))    { return int.TryParse(value, out int i) ? i : (object)null; }
+            if (propType == typeof(ushort)) { return TryParseUShort(value, out ushort u) ? u : (object)null; }
+            if (propType == typeof(byte))   { return byte.TryParse(value, out byte b) ? b : (object)null; }
+            if (propType == typeof(decimal)){ return decimal.TryParse(value, out decimal d) ? d : (object)null; }
+            if (propType == typeof(float))  { return float.TryParse(value, out float f) ? f : (object)null; }
+            if (propType == typeof(string)) { return value; }
+            if (propType == typeof(List<IoOutputChannelRemap>)) { return IoOutputChannelRemap.ParseAll(value, out _); }
+            if (propType == typeof(List<string>)) { return DeviceConfig.ParseFanIpCandidates(value); }
+            return null;
         }
 
         /// <summary>

@@ -642,6 +642,87 @@ namespace BarometerWinform.Services
         }
 
         /// <summary>
+        /// 按最新配置重连气压表串口（系统设置保存后热生效）
+        /// Connect 内部会先断开旧串口，再按新参数（端口 / 波特率 / 超时等）重新连接。
+        /// 【注意】应在后台线程调用（打开串口 + 建 Modbus 主站耗时）。
+        /// </summary>
+        public void ReconnectBarometerReader()
+        {
+            try
+            {
+                bool ok = _barometerReader.Connect(_config);
+                if (ok)
+                {
+                    _barometerWasConnected = true;
+                    Diagnostic($"气压表串口已按新配置重连：{(_barometerReader.CurrentPortName ?? _config.PortName)}");
+                }
+                else
+                {
+                    Diagnostic("气压表串口重连失败（新配置端口不可用），请检查串口参数");
+                }
+            }
+            catch (Exception ex)
+            {
+                Diagnostic($"气压表串口重连异常：{ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 按最新配置强制重连 IO 耦合器（系统设置保存后热生效）
+        /// 与 <see cref="EnsureIoConnected"/> 不同：即使当前已连接也先断开，
+        /// 用新 IP / 端口 / 超时重新连接。
+        /// 【注意】应在后台线程调用（TCP 连接超时最长约 3 秒）。
+        /// </summary>
+        public void ReconnectIo()
+        {
+            try
+            {
+                _ioController.Disconnect();
+                bool ok = _ioController.Connect(_config);
+                _lastIoConnected = ok;
+                OnConnectionStatusChanged?.Invoke(this, ok);
+                Diagnostic(ok
+                    ? $"IO耦合器已按新配置重连：{_config.PlcAddress}:{_config.PlcPort}"
+                    : $"IO耦合器重连失败：{_config.PlcAddress}:{_config.PlcPort}，后台将自动重试");
+            }
+            catch (Exception ex)
+            {
+                Diagnostic($"IO耦合器重连异常：{ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 按最新配置强制重连送风机（系统设置保存后热生效）
+        /// 与 <see cref="ReconnectFan"/> 不同：即使已连接也先断开，
+        /// 用新 IP / 端口 / 候选列表重新连接。
+        /// 【注意】应在后台线程调用。
+        /// </summary>
+        public void ForceReconnectFan()
+        {
+            if (_fanController == null) return;
+            try
+            {
+                _fanController.Disconnect();
+                bool ok = _fanController.ReconnectNow();
+                Diagnostic(ok
+                    ? $"冷却送风机已按新配置重连：{(_fanController.ActiveIp ?? _config.FanIpAddress)}:{_config.FanPort}"
+                    : "冷却送风机重连失败（新配置 IP 不可用），请检查 IP/网线");
+            }
+            catch (Exception ex)
+            {
+                Diagnostic($"冷却送风机重连异常：{ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 更新主采集定时器间隔（系统设置保存 CollectInterval 后热生效）
+        /// </summary>
+        public void UpdateCollectInterval(int intervalMs)
+        {
+            _collectTimer.Interval = intervalMs;
+        }
+
+        /// <summary>
         /// 气压表串口心跳 + 后台自动重连（【V1.16.2 新增】）
         /// 每个采集周期调用一次：
         /// - 状态边沿：气压表由"已连接 → 未连接"时，记一次"气压表串口已断开"日志，
