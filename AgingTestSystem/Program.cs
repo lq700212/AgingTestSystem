@@ -1,5 +1,4 @@
 using System;
-using System.Threading;
 using System.Windows.Forms;
 
 namespace AgingTestSystem
@@ -13,9 +12,6 @@ namespace AgingTestSystem
     ///   - AppDomain.UnhandledException：非 UI 线程异常
     /// 修复 L2：通过 app.manifest 启用 DPI 感知，避免高 DPI 屏幕下界面模糊
     ///   （manifest 文件已添加到项目，由 .csproj 的 ApplicationManifest 引用）
-    /// 修复 L3：实现 Splash 页面效果，程序启动时先显示进度页面，再显示主界面
-    ///   【2026-08-07】启动流程暂时不再显示 Splash 页面（mForm_Progress 控件代码保留，
-    ///   后续需要时可恢复 ShowSplashScreen() 调用）
     /// </summary>
     static class Program
     {
@@ -42,40 +38,8 @@ namespace AgingTestSystem
             // 【修复 L2】DPI 感知通过 app.manifest 声明，此处无需额外代码
             // manifest 中 <dpiAware>true</dpiAware> 使程序在高 DPI 屏幕下自动缩放
 
-            // 【修复 L3】Splash 页面效果：先显示进度页面，模拟启动过程
-            // 【2026-08-07】暂时不再显示启动进度页，直接进入主界面，加快启动速度。
-            // mForm_Progress 控件代码保留未删，后续需要时可取消下面这行注释恢复：
-            // ShowSplashScreen();
-
             // 运行主窗体
             Application.Run(new Views.MainForm());
-        }
-
-        /// <summary>
-        /// 显示 Splash 启动页面，模拟应用程序启动过程
-        /// 类似 Android 的 Splash Screen 效果
-        ///
-        /// 【2026-08-07】当前启动流程暂不使用本方法（Main 里已注释调用）。
-        /// 控件 mForm_Progress 及本方法保留未删，后续需要恢复启动进度页时，
-        /// 取消 Main() 里对 ShowSplashScreen() 的注释即可。
-        /// </summary>
-        private static void ShowSplashScreen()
-        {
-            using (var splashForm = new Views.mForm_Progress())
-            {
-                // 显示 Splash 页面（非模态，允许后台操作）
-                splashForm.Show();
-
-                // 强制刷新界面，确保显示内容
-                splashForm.Refresh();
-
-                // 模拟启动耗时操作（如加载配置、初始化服务等）
-                // 实际项目中可以在这里执行真实的初始化逻辑
-                Thread.Sleep(2000);
-
-                // 关闭 Splash 页面
-                splashForm.Close();
-            }
         }
 
         /// <summary>

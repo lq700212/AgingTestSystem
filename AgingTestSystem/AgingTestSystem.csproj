@@ -125,12 +125,6 @@
     <Compile Include="Views\MainForm.Designer.cs">
       <DependentUpon>MainForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="Views\mForm_Progress.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="Views\mForm_Progress.Designer.cs">
-      <DependentUpon>mForm_Progress.cs</DependentUpon>
-    </Compile>
     <EmbeddedResource Include="Dialogs\BatchRecipeForm.resx">
       <DependentUpon>BatchRecipeForm.cs</DependentUpon>
     </EmbeddedResource>
@@ -155,9 +149,6 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Views\MainForm.resx">
       <DependentUpon>MainForm.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Views\mForm_Progress.resx">
-      <DependentUpon>mForm_Progress.cs</DependentUpon>
     </EmbeddedResource>
     <Compile Include="Dialogs\CommonParameterForm.cs">
       <SubType>Form</SubType>
@@ -207,12 +198,6 @@
     <Compile Include="Dialogs\IdBindingForm.Designer.cs">
       <DependentUpon>IdBindingForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="Dialogs\DeviceManualForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="Dialogs\DeviceManualForm.Designer.cs">
-      <DependentUpon>DeviceManualForm.cs</DependentUpon>
-    </Compile>
     <Compile Include="Dialogs\SettingsForm.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -247,11 +232,6 @@
     <!-- 【修复 L2】应用程序清单文件，启用 DPI 感知 -->
     <None Include="app.manifest" />
     <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup />
-  <ItemGroup>
-    <Content Include="Resources\华际光电%281%29%281%29%281%29.png" />
-    <Content Include="Resources\华际光电%281%29%281%29.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
