@@ -45,8 +45,9 @@
             this.lblTitle = new System.Windows.Forms.Label();
             this.lblUsername = new System.Windows.Forms.Label();
             this.lblPassword = new System.Windows.Forms.Label();
-            this.txtUsername = new System.Windows.Forms.TextBox();
+            this.txtUsername = new System.Windows.Forms.ComboBox();
             this.txtPassword = new System.Windows.Forms.TextBox();
+            this.chkRemember = new System.Windows.Forms.CheckBox();
             this.btnOK = new System.Windows.Forms.Button();
             this.btnCancel = new System.Windows.Forms.Button();
             this.SuspendLayout();
@@ -82,12 +83,14 @@
             this.lblPassword.TabIndex = 3;
             this.lblPassword.Text = "密  码:";
             //
-            // txtUsername - 用户名输入框
+            // txtUsername - 用户名下拉框（列出该角色已有账号，可下拉选择或手动输入）
             //
+            this.txtUsername.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDown;
             this.txtUsername.Font = new System.Drawing.Font("微软雅黑", 9F);
+            this.txtUsername.FormattingEnabled = true;
             this.txtUsername.Location = new System.Drawing.Point(100, 72);
             this.txtUsername.Name = "txtUsername";
-            this.txtUsername.Size = new System.Drawing.Size(220, 23);
+            this.txtUsername.Size = new System.Drawing.Size(220, 25);
             this.txtUsername.TabIndex = 2;
             this.txtUsername.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.txtUsername_KeyPress);
             //
@@ -102,16 +105,27 @@
             this.txtPassword.UseSystemPasswordChar = true;
             this.txtPassword.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.txtPassword_KeyPress);
             //
+            // chkRemember - 记住密码复选框
+            //
+            this.chkRemember.AutoSize = true;
+            this.chkRemember.Font = new System.Drawing.Font("微软雅黑", 9F);
+            this.chkRemember.Location = new System.Drawing.Point(100, 148);
+            this.chkRemember.Name = "chkRemember";
+            this.chkRemember.Size = new System.Drawing.Size(75, 21);
+            this.chkRemember.TabIndex = 5;
+            this.chkRemember.Text = "记住密码";
+            this.chkRemember.UseVisualStyleBackColor = true;
+            //
             // btnOK - 确认按钮
             //
             this.btnOK.BackColor = System.Drawing.Color.LimeGreen;
             this.btnOK.ForeColor = System.Drawing.Color.White;
             this.btnOK.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.btnOK.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.btnOK.Location = new System.Drawing.Point(100, 165);
+            this.btnOK.Location = new System.Drawing.Point(100, 180);
             this.btnOK.Name = "btnOK";
             this.btnOK.Size = new System.Drawing.Size(100, 32);
-            this.btnOK.TabIndex = 5;
+            this.btnOK.TabIndex = 6;
             this.btnOK.Text = "确认";
             this.btnOK.UseVisualStyleBackColor = false;
             this.btnOK.Click += new System.EventHandler(this.btnOK_Click);
@@ -122,10 +136,10 @@
             this.btnCancel.ForeColor = System.Drawing.Color.White;
             this.btnCancel.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.btnCancel.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.btnCancel.Location = new System.Drawing.Point(220, 165);
+            this.btnCancel.Location = new System.Drawing.Point(220, 180);
             this.btnCancel.Name = "btnCancel";
             this.btnCancel.Size = new System.Drawing.Size(100, 32);
-            this.btnCancel.TabIndex = 6;
+            this.btnCancel.TabIndex = 7;
             this.btnCancel.Text = "取消";
             this.btnCancel.UseVisualStyleBackColor = false;
             this.btnCancel.Click += new System.EventHandler(this.btnCancel_Click);
@@ -143,9 +157,10 @@
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             // 固定边框，禁止拖动调整大小
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
-            this.ClientSize = new System.Drawing.Size(380, 220);
+            this.ClientSize = new System.Drawing.Size(380, 240);
             this.Controls.Add(this.btnCancel);
             this.Controls.Add(this.btnOK);
+            this.Controls.Add(this.chkRemember);
             this.Controls.Add(this.txtPassword);
             this.Controls.Add(this.txtUsername);
             this.Controls.Add(this.lblPassword);
@@ -168,10 +183,12 @@
         private System.Windows.Forms.Label lblUsername;
         /// <summary>"密  码:"标签</summary>
         private System.Windows.Forms.Label lblPassword;
-        /// <summary>用户名输入框</summary>
-        private System.Windows.Forms.TextBox txtUsername;
+        /// <summary>用户名下拉框（列出该角色已有账号）</summary>
+        private System.Windows.Forms.ComboBox txtUsername;
         /// <summary>密码输入框（密码模式）</summary>
         private System.Windows.Forms.TextBox txtPassword;
+        /// <summary>记住密码复选框</summary>
+        private System.Windows.Forms.CheckBox chkRemember;
         /// <summary>确认按钮</summary>
         private System.Windows.Forms.Button btnOK;
         /// <summary>取消按钮</summary>
