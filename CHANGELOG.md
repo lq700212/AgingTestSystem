@@ -3,6 +3,25 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.38 — IO 备用通道映射可视化编辑 + 修复设置名称长按复制（2026-08-09）
+
+### 改动范围
+- `Controls/IoMappingEditorPopup.cs`（新增）— IO 备用通道映射编辑器：一行一条映射，三列"原 IO 通道 → 新 IO 通道"，左右为十六进制通道号微调框（0x00~0xFF），支持修改/添加/删除
+- `Controls/DataGridViewNumericUpDownCell.cs` — 新增十六进制数字单元格 `DataGridViewHexNumericUpDownCell`（编辑时弹出 Hexadecimal NumericUpDown 微调框）
+- `Controls/IpListEditorPopup.cs` — 单元格类由 `DataGridViewIpListCell` 更名/泛化为 `DataGridViewPopupEditCell`（点击弹编辑器），供 IP 列表与 IO 映射共用
+- `SettingsForm.cs` — IoBackupChannelMappings 改用弹窗编辑器；修复"设置名称长按复制"气泡定位错误
+- `BarometerWinform.csproj` — 注册新控件文件
+
+### 为什么这么改
+1. **IO 映射手输易错**：原 IoBackupChannelMappings 是自由文本，需手输"寄存器@位->寄存器@位"（如 `0x2000@0->0x2009@10`），格式/寄存器偏移极易写错。改为弹窗可视化编辑：一行一条映射、左右各一个十六进制通道号微调框，保存时自动换算回原配置格式，既直观又杜绝非法项。
+2. **通道号 ↔ 原配置格式换算**：界面用"通道号"（0x00~0xFF），配置存"寄存器@位"。换算规则：寄存器 = 起始寄存器地址 + (通道号>>4)，位 = 通道号 & 0x0F；反向同理。已在代码注释中说明，确保与 ModbusTcpIoController / IoOutputChannelRemap.ParseAll 解析格式完全一致。
+3. **长按复制"没生效"**：原实现气泡用 `ToolTip.Show(..., Point, ...)`，该重载的 Point 是**屏幕坐标**，却传了控件相对坐标，气泡显示在屏幕左上角/不可见，看起来像功能没生效。改为先 `RectangleToScreen` 换算到屏幕坐标；同时把"判断长按"从 MouseUp 比较时间改为 700ms Timer（按下即计时，到点即复制，无需等松开，体验更跟手）。
+
+### 优化点
+- IO 映射弹窗：原/新通道用十六进制微调框（0x00~0xFF）防误输；中间箭头列只读固定显示 "→"；支持 Delete 键删行；添加按钮直接新增一行空白映射
+- 删除行逻辑沿用"先收集索引再删"，避免 DataGridView 删除当前行时误删全部
+- 设置名称长按复制改为 Timer 触发，按住 700ms 即复制并气泡提示（气泡定位到单元格正下方）
+
 ## V1.37 — 候选 IP 弹窗去掉顶部蓝色标题栏（2026-08-09）
 
 ### 改动范围

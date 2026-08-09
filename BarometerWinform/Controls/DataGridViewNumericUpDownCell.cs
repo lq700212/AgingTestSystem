@@ -129,6 +129,142 @@ namespace BarometerWinform.Controls
     }
 
     /// <summary>
+    /// 十六进制数字型单元格：进入编辑状态时弹出 NumericUpDown（Hexadecimal=true）微调框，
+    /// 用于 IO 备用通道映射弹窗中"通道号（0x00~0xFF）"的输入。
+    /// 非编辑状态显示为两位大写十六进制文本。
+    /// </summary>
+    public class DataGridViewHexNumericUpDownCell : DataGridViewTextBoxCell
+    {
+        public decimal Minimum { get; set; } = 0;
+        public decimal Maximum { get; set; } = 0xFF;
+
+        public override Type EditType => typeof(DataGridViewHexNumericUpDownEditingControl);
+
+        public override Type ValueType => typeof(decimal);
+
+        public override Type FormattedValueType => typeof(string);
+
+        /// <summary>非编辑状态下把数值格式化为两位十六进制显示；空值显示为空</summary>
+        protected override object GetFormattedValue(object value, int rowIndex, ref DataGridViewCellStyle cellStyle,
+            TypeConverter valueTypeConverter, TypeConverter formattedValueTypeConverter,
+            DataGridViewDataErrorContexts context)
+        {
+            if (value is decimal d)
+            {
+                return ((int)d).ToString("X2", CultureInfo.CurrentCulture);
+            }
+            return "";
+        }
+
+        /// <summary>编辑结束后把值还原为 decimal 存入单元格，并钳制到范围</summary>
+        public override object ParseFormattedValue(object formattedValue, DataGridViewCellStyle cellStyle,
+            TypeConverter formattedValueTypeConverter, TypeConverter valueTypeConverter)
+        {
+            if (formattedValue is decimal dm) return Math.Max(Minimum, Math.Min(Maximum, dm));
+            if (formattedValue is string s && decimal.TryParse(s, NumberStyles.HexNumber,
+                CultureInfo.CurrentCulture, out decimal parsed))
+            {
+                return Math.Max(Minimum, Math.Min(Maximum, parsed));
+            }
+            return base.ParseFormattedValue(formattedValue, cellStyle,
+                formattedValueTypeConverter, valueTypeConverter);
+        }
+
+        /// <summary>进入编辑状态时把范围 / 十六进制同步给微调控件</summary>
+        public override void InitializeEditingControl(int rowIndex, object initialFormattedValue,
+            DataGridViewCellStyle dataGridViewCellStyle)
+        {
+            base.InitializeEditingControl(rowIndex, initialFormattedValue, dataGridViewCellStyle);
+            if (DataGridView.EditingControl is DataGridViewHexNumericUpDownEditingControl ctl)
+            {
+                ctl.Minimum = Minimum;
+                ctl.Maximum = Maximum;
+                ctl.Value = Value is decimal d ? Math.Max(Minimum, Math.Min(Maximum, d)) : Minimum;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 十六进制 NumericUpDown 编辑控件：Hexadecimal=true，显示/输入均为十六进制
+    /// </summary>
+    public class DataGridViewHexNumericUpDownEditingControl : NumericUpDown, IDataGridViewEditingControl
+    {
+        private DataGridView _dataGridView;
+        private int _rowIndex;
+        private bool _valueChanged;
+
+        public DataGridViewHexNumericUpDownEditingControl()
+        {
+            Hexadecimal = true;
+            ThousandsSeparator = false;
+        }
+
+        public DataGridView EditingControlDataGridView
+        {
+            get => _dataGridView;
+            set => _dataGridView = value;
+        }
+
+        public object EditingControlFormattedValue
+        {
+            get => Value;
+            set
+            {
+                if (value is decimal d)
+                {
+                    Value = Math.Max(Minimum, Math.Min(Maximum, d));
+                }
+            }
+        }
+
+        public object GetEditingControlFormattedValue(DataGridViewDataErrorContexts context)
+        {
+            return Value;
+        }
+
+        public int EditingControlRowIndex
+        {
+            get => _rowIndex;
+            set => _rowIndex = value;
+        }
+
+        public bool EditingControlValueChanged
+        {
+            get => _valueChanged;
+            set => _valueChanged = value;
+        }
+
+        public Cursor EditingPanelCursor => Cursors.Default;
+
+        public bool RepositionEditingControlOnValueChange => false;
+
+        public void ApplyCellStyleToEditingControl(DataGridViewCellStyle dataGridViewCellStyle)
+        {
+            Font = dataGridViewCellStyle.Font;
+            ForeColor = dataGridViewCellStyle.ForeColor;
+            BackColor = dataGridViewCellStyle.BackColor;
+        }
+
+        public bool EditingControlWantsInputKey(Keys keyData, bool dataGridViewWantsInputKey)
+        {
+            return keyData == Keys.Left || keyData == Keys.Right ||
+                   keyData == Keys.Up || keyData == Keys.Down ||
+                   keyData == Keys.Home || keyData == Keys.End;
+        }
+
+        public void PrepareEditingControlForEdit(bool selectAll)
+        {
+        }
+
+        protected override void OnValueChanged(EventArgs e)
+        {
+            _valueChanged = true;
+            EditingControlDataGridView?.NotifyCurrentCellDirty(true);
+            base.OnValueChanged(e);
+        }
+    }
+
+    /// <summary>
     /// NumericUpDown 编辑控件，实现 IDataGridViewEditingControl 接口以嵌入 DataGridView
     /// </summary>
     public class DataGridViewNumericUpDownEditingControl : NumericUpDown, IDataGridViewEditingControl

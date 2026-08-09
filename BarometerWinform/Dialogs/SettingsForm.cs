@@ -69,7 +69,8 @@ namespace BarometerWinform.Dialogs
         private DataGridView _pressGrid;
         private int _pressRow = -1;
         private int _pressCol = -1;
-        private DateTime _pressTime;
+        /// <summary>长按计时器：按够 700ms 即触发复制（不用等松开，体验更跟手）</summary>
+        private readonly Timer _pressTimer = new Timer { Interval = 700 };
         /// <summary>长按复制的提示气泡</summary>
         private readonly ToolTip _copyTip = new ToolTip();
 
@@ -165,7 +166,7 @@ namespace BarometerWinform.Dialogs
             { "InvertInputs", "输入点逻辑是否取反（false/true）" },
             { "InvertOutputs", "输出点逻辑是否取反（false/true）" },
             { "IoBackupChannelMappingEnabled", "是否启用 IO 输出备用通道映射（false/true）" },
-            { "IoBackupChannelMappings", "IO 备用通道映射表（格式：0x2000@0->0x2009@10;0x2008@0->0x2009@11）" },
+            { "IoBackupChannelMappings", "IO 备用通道映射表（点击编辑：一行一条，原IO通道→新IO通道）" },
             { "TcpSendTimeoutMs", "TCP 发送超时（毫秒，耦合器/送风机通用）" },
             { "TcpReceiveTimeoutMs", "TCP 接收超时（毫秒，耦合器/送风机通用）" },
 
@@ -621,7 +622,8 @@ namespace BarometerWinform.Dialogs
         }
 
         /// <summary>
-        /// 点击"设置值"列时，若该行是 FanIpCandidates（候选 IP 列表），弹出 IP 编辑器。
+        /// 点击"设置值"列时，若该行是列表/映射类配置项，弹出对应的编辑器：
+        /// FanIpCandidates → IP 列表编辑器；IoBackupChannelMappings → IO 映射编辑器。
         /// </summary>
         private void Grid_CellClick(object sender, DataGridViewCellEventArgs e)
         {
@@ -630,14 +632,21 @@ namespace BarometerWinform.Dialogs
             if (e.ColumnIndex != grid.Columns["colValue"].Index) return;
 
             string key = grid.Rows[e.RowIndex].Cells["colKey"].Value?.ToString();
-            if (key != "FanIpCandidates") return;
-
-            string currentValue = grid.Rows[e.RowIndex].Cells["colValue"].Value?.ToString() ?? "";
-            ShowIpListPopup(grid, e.RowIndex, currentValue);
+            if (key == "FanIpCandidates")
+            {
+                string currentValue = grid.Rows[e.RowIndex].Cells["colValue"].Value?.ToString() ?? "";
+                ShowIpListPopup(grid, e.RowIndex, currentValue);
+            }
+            else if (key == "IoBackupChannelMappings")
+            {
+                string currentValue = grid.Rows[e.RowIndex].Cells["colValue"].Value?.ToString() ?? "";
+                ShowIoMappingPopup(grid, e.RowIndex, currentValue);
+            }
         }
 
         /// <summary>
-        /// 在"设置名称"列按下鼠标左键时记录按下位置与时间，用于长按复制。
+        /// 在"设置名称"列按下鼠标左键时记录按下位置，并启动长按计时器
+        /// （计时到 700ms 即复制，无需等松开）。
         /// </summary>
         private void Grid_CellMouseDown(object sender, DataGridViewCellMouseEventArgs e)
         {
@@ -648,31 +657,40 @@ namespace BarometerWinform.Dialogs
             _pressGrid = grid;
             _pressRow = e.RowIndex;
             _pressCol = e.ColumnIndex;
-            _pressTime = DateTime.Now;
+            _pressTimer.Stop();
+            _pressTimer.Tick -= PressTimer_Tick;
+            _pressTimer.Tick += PressTimer_Tick;
+            _pressTimer.Start();
+        }
+
+        /// <summary>松开鼠标左键时取消长按计时（不足 700ms 则未触发复制）</summary>
+        private void Grid_CellMouseUp(object sender, DataGridViewCellMouseEventArgs e)
+        {
+            _pressTimer.Stop();
+            _pressTimer.Tick -= PressTimer_Tick;
+            _pressGrid = null;
+            _pressRow = -1;
+            _pressCol = -1;
         }
 
         /// <summary>
-        /// 松开鼠标左键时判断是否满足"长按"（约 700ms 以上），
-        /// 满足则把设置名称复制到剪贴板并给出气泡提示。
+        /// 长按计时到点：把设置名称复制到剪贴板并给出气泡提示。
+        /// 气泡用屏幕坐标定位到单元格附近（ToolTip 的 Point 参数是屏幕坐标）。
         /// </summary>
-        private void Grid_CellMouseUp(object sender, DataGridViewCellMouseEventArgs e)
+        private void PressTimer_Tick(object sender, EventArgs e)
         {
-            var grid = sender as DataGridView;
-            if (grid == null || _pressGrid == null) return;
-
-            // 是否同一单元格长按后松开
-            bool sameCell = ReferenceEquals(grid, _pressGrid)
-                            && e.RowIndex == _pressRow
-                            && e.ColumnIndex == _pressCol;
-            bool longPress = (DateTime.Now - _pressTime).TotalMilliseconds >= 700;
-
+            _pressTimer.Stop();
+            DataGridView grid = _pressGrid;
+            int rowIndex = _pressRow;
+            int colIndex = _pressCol;
             _pressGrid = null;
             _pressRow = -1;
             _pressCol = -1;
 
-            if (!sameCell || !longPress) return;
+            if (grid == null || grid.IsDisposed) return;
+            if (rowIndex < 0 || rowIndex >= grid.Rows.Count) return;
 
-            string text = grid.Rows[e.RowIndex].Cells["colKey"].Value?.ToString();
+            string text = grid.Rows[rowIndex].Cells["colKey"].Value?.ToString();
             if (string.IsNullOrEmpty(text)) return;
 
             try
@@ -684,9 +702,11 @@ namespace BarometerWinform.Dialogs
                 return;
             }
 
-            // 在单元格附近弹出"已复制"提示
-            _copyTip.Show("已复制：" + text, grid,
-                grid.GetCellDisplayRectangle(e.ColumnIndex, e.RowIndex, false).Location, 1500);
+            // 单元格矩形 → 屏幕坐标，气泡显示在单元格正下方
+            Rectangle cellRect = grid.GetCellDisplayRectangle(colIndex, rowIndex, false);
+            Point screenPoint = grid.RectangleToScreen(cellRect).Location;
+            screenPoint.Offset(0, cellRect.Height + 2);
+            _copyTip.Show("已复制：" + text, grid, screenPoint, 1500);
         }
 
         /// <summary>
@@ -695,6 +715,42 @@ namespace BarometerWinform.Dialogs
         private void ShowIpListPopup(DataGridView grid, int rowIndex, string currentValue)
         {
             var popup = new Controls.IpListEditorPopup(currentValue);
+
+            // 定位到该单元格正下方
+            Rectangle cellRect = grid.GetCellDisplayRectangle(grid.Columns["colValue"].Index, rowIndex, true);
+            Rectangle screenRect = grid.RectangleToScreen(cellRect);
+            popup.Location = new Point(screenRect.Left, screenRect.Bottom + 2);
+
+            // 越界保护：弹窗底部超出屏幕时改为显示在单元格上方
+            var workArea = Screen.FromControl(grid).WorkingArea;
+            if (popup.Bottom > workArea.Bottom)
+            {
+                popup.Location = new Point(screenRect.Left, screenRect.Top - popup.Height - 2);
+            }
+
+            popup.FormClosed += (s, args) =>
+            {
+                if (!string.IsNullOrEmpty(popup.ResultValue))
+                {
+                    grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
+                    // 值可能变化，重新按内容算行高
+                    LayoutSections();
+                }
+            };
+
+            popup.Show(this);
+            popup.Activate();
+        }
+
+        /// <summary>
+        /// 弹出 IO 备用通道映射编辑器，并把编辑结果写回单元格。
+        /// 界面显示十六进制通道号（0x00~0xFF），保存时自动换算回"寄存器@位"原配置格式。
+        /// </summary>
+        private void ShowIoMappingPopup(DataGridView grid, int rowIndex, string currentValue)
+        {
+            // 换算需要 IO 输出寄存器起始地址
+            int baseRegister = _config.IoOutputRegisterStartAddress;
+            var popup = new Controls.IoMappingEditorPopup(currentValue, baseRegister);
 
             // 定位到该单元格正下方
             Rectangle cellRect = grid.GetCellDisplayRectangle(grid.Columns["colValue"].Index, rowIndex, true);
@@ -763,10 +819,10 @@ namespace BarometerWinform.Dialogs
                 return CreatePortComboCell(value);
             }
 
-            // 送风机候选 IP 列表：只读单元格 + 点击弹出编辑器（可修改/新增/删除 IP）
-            if (key == "FanIpCandidates")
+            // 送风机候选 IP 列表 / IO 备用通道映射：只读单元格 + 点击弹出编辑器
+            if (key == "FanIpCandidates" || key == "IoBackupChannelMappings")
             {
-                var cell = new DataGridViewIpListCell();
+                var cell = new DataGridViewPopupEditCell();
                 cell.Value = value;
                 return cell;
             }

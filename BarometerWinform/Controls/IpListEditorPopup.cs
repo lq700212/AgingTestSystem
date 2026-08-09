@@ -295,11 +295,12 @@ namespace BarometerWinform.Controls
     }
 
     /// <summary>
-    /// 候选 IP 列表单元格：显示逗号分隔的 IP 列表，右侧画一个向下箭头提示可点击。
-    /// 点击单元格（在 SettingsForm 的 CellClick 中处理）弹出 <see cref="IpListEditorPopup"/> 编辑，
-    /// 单元格本身不可直接编辑（ReadOnly=true），编辑统一走弹窗，避免输入非法 IP。
+    /// "点击弹出编辑器"单元格：显示配置值，右侧画一个向下箭头提示可点击。
+    /// 点击单元格（在 SettingsForm 的 CellClick 中处理）弹出对应的编辑器
+    /// （FanIpCandidates → IP 列表编辑器；IoBackupChannelMappings → IO 映射编辑器），
+    /// 单元格本身不可直接编辑（ReadOnly=true），编辑统一走弹窗，避免输入非法值。
     /// </summary>
-    public class DataGridViewIpListCell : DataGridViewTextBoxCell
+    public class DataGridViewPopupEditCell : DataGridViewTextBoxCell
     {
         /// <summary>只读单元格：不可直接键入，统一通过弹窗编辑</summary>
         public override bool ReadOnly => true;
