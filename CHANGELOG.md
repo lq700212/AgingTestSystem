@@ -93,7 +93,7 @@
 - `Models/IoOutputChannelRemap.cs` — 通道号合法范围由 0~15 放宽到 0~31
 - `Controls/IpListEditorPopup.cs` — 单元格类由 `DataGridViewIpListCell` 更名/泛化为 `DataGridViewPopupEditCell`（点击弹编辑器），供 IP 列表与 IO 映射共用
 - `SettingsForm.cs` — IoBackupChannelMappings 改用弹窗编辑器；修复"设置名称长按复制"气泡不显示
-- `BarometerWinform.csproj` — 注册新控件文件
+- `AgingTestSystem.csproj` — 注册新控件文件
 
 ### 为什么这么改
 1. **IO 映射手输易错**：原 IoBackupChannelMappings 是自由文本，需手输"寄存器@位->寄存器@位"（如 `0x2000@0->0x2009@10`），格式/寄存器偏移极易写错。改为弹窗可视化编辑：一行一条映射、左右各显示"寄存器 + 通道"两个十六进制微调框，保存时自动换回原配置格式，既直观又杜绝非法项。
@@ -140,7 +140,7 @@
 - `Controls/IpListEditorPopup.cs`（新增）— 候选 IP 列表编辑弹窗：一行一个 IP 的可编辑表格，支持直接修改、输入新增、选中删除；确定前逐行校验 IPv4 格式
 - `Controls/IpListEditorPopup.cs` — 新增 `DataGridViewIpListCell` 单元格（只读 + 右侧下拉箭头提示）
 - `SettingsForm.cs` — FanIpCandidates 改用 IP 列表单元格，点击弹出编辑；设置名称列支持鼠标左键长按（≥700ms）复制到剪贴板并气泡提示
-- `BarometerWinform.csproj` — 注册新控件文件
+- `AgingTestSystem.csproj` — 注册新控件文件
 
 ### 为什么这么改
 1. **FanIpCandidates 手输易错**：原为自由文本，需手输逗号分隔的 IP 列表，格式/非法 IP 易出错。改为点击弹出编辑器：一行一个 IP、可逐个修改/新增/删除，提交前逐行校验 IPv4，既直观又杜绝非法 IP 入库。

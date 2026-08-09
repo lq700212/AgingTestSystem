@@ -1,4 +1,4 @@
-# AGENTS.md — BarometerWinform 项目指南
+# AGENTS.md — AgingTestSystem 项目指南
 
 > 本文件是 AI 助手在操作本项目前的**强制前置阅读**。开工前先读本文件，明确角色、约定与红线。
 > 优先级：本文档 > 项目已有代码风格 > 通用最佳实践。
@@ -12,8 +12,8 @@
 - .NET Framework 4.x WinForms（非 .NET Core/.NET 5+，勿引入其语法/API）
 - C#，语言版本取决于编译器（VS2019/2022 默认），以现有代码风格为准
 - 关键库：SunnyUI（界面）、NModbus（Modbus 通讯）、Newtonsoft.Json（序列化）、System.Management（WMI/串口识别）
-- 构建：`MSBuild.exe BarometerWinform/BarometerWinform.csproj`（见下方"构建命令"）
-- 仓库：github.com/lq700212/BarometerWinform，主分支 `main`，提交信息用中文，风格参考 `git log`
+- 构建：`MSBuild.exe AgingTestSystem/AgingTestSystem.csproj`（见下方"构建命令"）
+- 仓库：github.com/lq700212/AgingTestSystem，主分支 `main`，提交信息用中文，风格参考 `git log`
 
 ## 铁律（违反即返工）
 
@@ -39,24 +39,24 @@
 
 | 文件 | 作用 |
 | --- | --- |
-| `BarometerWinform/Views/MainForm.cs` | 主窗体、启动装配、配置加载 |
-| `BarometerWinform/Models/DeviceConfig.cs` | 设备配置模型 |
-| `BarometerWinform/Services/ModbusRtuBarometerReader.cs` | 气压表 Modbus RTU 读取 |
-| `BarometerWinform/Services/ScannerService.cs` | 扫码枪识别/读取 |
-| `BarometerWinform/Services/UserManager.cs` | 用户/权限（Users.json） |
-| `BarometerWinform/Services/RecipeAutoCompleteProvider.cs` | 配方名称自动检索 |
-| `BarometerWinform/Dialogs/SettingsForm.cs` | 系统设置（配置项编辑、校验、保存） |
-| `BarometerWinform/Controls/DataGridViewNumericUpDownCell.cs` | 数字/下拉单元格控件 |
+| `AgingTestSystem/Views/MainForm.cs` | 主窗体、启动装配、配置加载 |
+| `AgingTestSystem/Models/DeviceConfig.cs` | 设备配置模型 |
+| `AgingTestSystem/Services/ModbusRtuBarometerReader.cs` | 气压表 Modbus RTU 读取 |
+| `AgingTestSystem/Services/ScannerService.cs` | 扫码枪识别/读取 |
+| `AgingTestSystem/Services/UserManager.cs` | 用户/权限（Users.json） |
+| `AgingTestSystem/Services/RecipeAutoCompleteProvider.cs` | 配方名称自动检索 |
+| `AgingTestSystem/Dialogs/SettingsForm.cs` | 系统设置（配置项编辑、校验、保存） |
+| `AgingTestSystem/Controls/DataGridViewNumericUpDownCell.cs` | 数字/下拉单元格控件 |
 | `CHANGELOG.md` | 版本改动记录（最新在前，V1.xx 小节） |
 
 ## 构建与验证命令
 
 ```powershell
 # 构建（若提示找不到 MSBuild，先定位：Get-ChildItem 'C:\Program Files*\Microsoft Visual Studio' -Recurse -Filter MSBuild.exe | Select -First 1）
-& "D:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe" BarometerWinform/BarometerWinform.csproj /p:Configuration=Debug /p:Platform=AnyCPU /t:Build /nologo /v:m
+& "D:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe" AgingTestSystem/AgingTestSystem.csproj /p:Configuration=Debug /p:Platform=AnyCPU /t:Build /nologo /v:m
 ```
 
-- 构建成功标准：输出 `BarometerWinform -> ...\bin\Debug\BarometerWinform.exe` 且无 error。
+- 构建成功标准：输出 `AgingTestSystem -> ...\bin\Debug\AgingTestSystem.exe` 且无 error。
 - 有 GUI 改动时可冒烟测试：`Start-Process` 启动 exe，等几秒确认进程存活再 `Stop-Process`。
 - 无单元测试框架；以构建通过 + 冒烟测试作为验证手段。
 

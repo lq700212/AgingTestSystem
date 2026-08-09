@@ -1,4 +1,4 @@
-# 气压表老化测试监控系统（BarometerWinform）
+# 老化测试系统（AgingTestSystem）
 
 WinForms 桌面程序（.NET Framework 4.7.2 / C#）：监控 72 台气压表真空压力，控制 72 路真空电磁阀 + 72 路载台上电，
 接入冷却送风机与扫码枪，实现**老化测试业务闭环 + 报警联动**。
