@@ -131,7 +131,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `InvertInputs` / `InvertOutputs` | false | 输入/输出逻辑取反（NPN/PNP 现场差异，灯亮软件读 OFF 时试 true） |
 | `IoUnitId` | 1 | IO 耦合器从站 |
 | `IoInputRegisterStartAddress` / `IoOutputRegisterStartAddress` | 0x1000 / 0x2000 | DI / DO 起始寄存器 |
-| `IoBackupChannelMappingEnabled` / `IoBackupChannelMappings` | false / `0x2000@0->0x2009@10;0x2008@0->0x2009@11` | **备用通道映射**（DQ 通道烧毁时启用，源寄存器@通道->目标，通道 0~31，写/读 DO 自动重定向） |
+| `IoBackupChannelMappingEnabled` / `IoBackupChannelMappings` | false / `0x2000@0x00->0x2009@0x10;0x2008@0x00->0x2009@0x11` | **备用通道映射**（DQ 通道烧毁时启用，源寄存器@通道->目标，寄存器/通道均十六进制，通道 0x00~0x1F，写/读 DO 自动重定向） |
 | `BarometerPressureRegisterAddress` | 0x0001 | 压力寄存器（0x0002 为小数位，实测不可靠不再使用） |
 | `BarometerDefaultDecimalPlaces` | 1 | 小数位（压力读取与阈值写入统一用，换气压表改这里） |
 | `BarometerPressureScale` | 1 | 压力额外缩放 |

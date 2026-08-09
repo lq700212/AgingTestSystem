@@ -17,10 +17,11 @@ namespace BarometerWinform.Models
     ///
     /// 【配置格式】（App.config → IoBackupChannelMappings）
     ///   源寄存器@源通道->目标寄存器@目标通道，多组用分号(;)分隔
-    ///   - 寄存器：十六进制（可带 0x 前缀），如 0x2000
-    ///   - 通道：0~31 的十进制（0 = 第 1 路，bit0；31 = 第 32 路，bit31）
-    ///   示例（0x2000 的 00 通道烧毁 → 备用到 0x2009 的 10 通道）：
-    ///     0x2000@0->0x2009@10;0x2008@0->0x2009@11
+    ///   - 寄存器：十六进制（带 0x 前缀），如 0x2000
+    ///   - 通道：0x 十六进制（0x00 = 第 1 路，bit0；0x1F = 第 32 路，bit31），
+    ///     与界面 / 配置文件显示完全一致；内部解析成 0~31 的十进制位号做位运算。
+    ///   示例（0x2000 的 0x00 通道烧毁 → 备用到 0x2009 的 0x10 通道）：
+    ///     0x2000@0x00->0x2009@0x10;0x2008@0x00->0x2009@0x11
     /// </summary>
     public class IoOutputChannelRemap
     {
@@ -40,7 +41,7 @@ namespace BarometerWinform.Models
         /// 解析配置字符串为映射列表。
         /// 逐项解析，格式非法的项跳过并汇总到 <paramref name="error"/>（不影响其它合法项）。
         /// </summary>
-        /// <param name="raw">配置字符串，如 "0x2000@0->0x2009@10;0x2008@0->0x2009@11"</param>
+        /// <param name="raw">配置字符串，如 "0x2000@0x00->0x2009@0x10;0x2008@0x00->0x2009@0x11"</param>
         /// <param name="error">非空时说明哪些项被跳过及原因</param>
         /// <returns>解析出的合法映射列表（可能为空）</returns>
         public static List<IoOutputChannelRemap> ParseAll(string raw, out string error)
@@ -101,7 +102,9 @@ namespace BarometerWinform.Models
         }
 
         /// <summary>
-        /// 解析 "寄存器@通道" 形式的一端（如 "0x2000@0"）。
+        /// 解析 "寄存器@通道" 形式的一端（如 "0x2000@0x0A"）。
+        /// 寄存器与通道均为十六进制（带 0x 前缀），内部统一换算成 0~31 的十进制位号
+        /// （0 = 第 1 路，bit0）供位运算使用。
         /// </summary>
         /// <param name="s">原始字符串</param>
         /// <param name="reg">解析出的寄存器地址</param>
@@ -117,7 +120,7 @@ namespace BarometerWinform.Models
             string[] parts = s.Trim().Split('@');
             if (parts.Length != 2)
             {
-                error = "应为 寄存器@通道（如 0x2000@0）";
+                error = "应为 寄存器@通道（如 0x2000@0x0A）";
                 return false;
             }
 
@@ -135,9 +138,19 @@ namespace BarometerWinform.Models
                 return false;
             }
 
-            if (!int.TryParse(parts[1].Trim(), out channel) || channel < 0 || channel > 31)
+            string chStr = parts[1].Trim();
+            // 通道号：统一十六进制（带 0x 前缀，与寄存器一致），如 @0x0A（= 第 11 路）
+            if (!chStr.StartsWith("0x", StringComparison.OrdinalIgnoreCase) &&
+                !chStr.StartsWith("0X", StringComparison.OrdinalIgnoreCase))
             {
-                error = $"通道 '{parts[1]}' 应为 0~31 的数字（0 = 第 1 路）";
+                error = $"通道 '{parts[1]}' 应为 0x00~0x1F 的十六进制（带 0x 前缀，0x00 = 第 1 路）";
+                return false;
+            }
+
+            if (!int.TryParse(chStr.Substring(2), NumberStyles.HexNumber, null, out channel) ||
+                channel < 0 || channel > 31)
+            {
+                error = $"通道 '{parts[1]}' 应为 0x00~0x1F（0x00 = 第 1 路）";
                 return false;
             }
             return true;

@@ -172,7 +172,7 @@ namespace BarometerWinform.Dialogs
             { "InvertInputs", "输入点逻辑是否取反（false/true）" },
             { "InvertOutputs", "输出点逻辑是否取反（false/true）" },
             { "IoBackupChannelMappingEnabled", "是否启用 IO 输出备用通道映射（false/true）" },
-            { "IoBackupChannelMappings", "IO 备用通道映射表（点击编辑：一行一条，原IO通道→新IO通道）" },
+            { "IoBackupChannelMappings", "IO 备用通道映射表（点击编辑：寄存器@通道均为十六进制，如 0x2000@0x00->0x2009@0x10）" },
             { "TcpSendTimeoutMs", "TCP 发送超时（毫秒，耦合器/送风机通用）" },
             { "TcpReceiveTimeoutMs", "TCP 接收超时（毫秒，耦合器/送风机通用）" },
 
@@ -793,7 +793,8 @@ namespace BarometerWinform.Dialogs
 
         /// <summary>
         /// 弹出 IO 备用通道映射编辑器，并把编辑结果写回单元格。
-        /// 界面与配置同构（寄存器@位），寄存器、通道号直接十六进制显示，保存无需换算。
+        /// 界面与配置同构（寄存器@通道）：寄存器（0x0000~0xFFFF）与通道（0x00~0x1F）
+        /// 均为十六进制显示，所见即所得；十六进制通道由 IoOutputChannelRemap 解析时转成十进制位号。
         /// </summary>
         private void ShowIoMappingPopup(DataGridView grid, int rowIndex, string currentValue)
         {

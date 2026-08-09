@@ -153,7 +153,7 @@ namespace BarometerWinform.Controls
         public decimal Maximum { get; set; } = 0xFF;
         /// <summary>显示位数（寄存器用 4 位，通道用 2 位）</summary>
         public int HexDigits { get; set; } = 2;
-        /// <summary>是否显示 0x 前缀（寄存器地址显示 0x2000，通道号不显示）</summary>
+        /// <summary>是否显示 0x 前缀（寄存器地址与通道号均显示，如 0x2000 / 0x0A）</summary>
         public bool ShowPrefix { get; set; } = false;
 
         public override Type EditType => typeof(DataGridViewHexNumericUpDownEditingControl);
