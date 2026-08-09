@@ -19,6 +19,8 @@ namespace BarometerWinform.Dialogs
     /// 2. 按 Enter 键等同点击"确认"按钮（提升操作效率）
     /// 3. 按 Esc 键等同点击"取消"按钮（标准对话框行为）
     /// 4. 密码框使用密码模式，输入字符显示为圆点
+    /// 5. 用户名下拉框自动列出该角色已有账号，可直接选择（也可手动输入）
+    /// 6. 勾选"记住密码"后，下次登录自动填充该角色的用户名和密码
     /// </summary>
     public partial class LoginForm : Form
     {
@@ -59,7 +61,36 @@ namespace BarometerWinform.Dialogs
             // 设置窗体标题栏文本
             this.Text = $"{roleName}登录";
 
-            // 默认聚焦用户名输入框，方便用户直接输入
+            // 加载该角色下已有账号，供用户直接下拉选择（也可手动输入）
+            txtUsername.Items.Clear();
+            foreach (UserAccount account in _userManager.GetAccounts(_targetRole))
+            {
+                txtUsername.Items.Add(account.Username);
+            }
+
+            // 若该角色记住了登录信息，自动填充用户名和密码并勾选"记住密码"
+            var (savedUsername, savedPassword) = _userManager.GetRememberedLogin(_targetRole);
+            if (savedUsername != null && savedPassword != null)
+            {
+                int savedIndex = txtUsername.Items.IndexOf(savedUsername);
+                if (savedIndex >= 0)
+                {
+                    txtUsername.SelectedIndex = savedIndex;
+                }
+                else
+                {
+                    txtUsername.Text = savedUsername;
+                }
+                txtPassword.Text = savedPassword;
+                chkRemember.Checked = true;
+            }
+            else if (txtUsername.Items.Count > 0)
+            {
+                // 默认选中第一个账号（管理员仅一个账号）
+                txtUsername.SelectedIndex = 0;
+            }
+
+            // 默认聚焦用户名下拉框，方便用户直接选择或输入
             txtUsername.Focus();
         }
 
@@ -94,6 +125,16 @@ namespace BarometerWinform.Dialogs
 
             if (result.Success)
             {
+                // 记住密码：勾选则保存本次登录信息，未勾选则清除该角色已记住的信息
+                if (chkRemember.Checked)
+                {
+                    _userManager.SaveRememberedLogin(_targetRole, txtUsername.Text, txtPassword.Text);
+                }
+                else
+                {
+                    _userManager.ClearRememberedLogin(_targetRole);
+                }
+
                 // 登录成功：设置 DialogResult 并关闭窗体
                 // 主窗体通过 ShowDialog 返回值判断是否登录成功
                 this.DialogResult = DialogResult.OK;
