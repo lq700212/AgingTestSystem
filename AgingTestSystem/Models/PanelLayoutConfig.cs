@@ -59,29 +59,29 @@ namespace AgingTestSystem.Models
 
         // ===================== 面板内容坐标（相对面板左上角） =====================
 
-        /// <summary>上电/下电状态块</summary>
+        /// <summary>上电/下电状态块（V1.58.7 校验：与工作状态块同尺寸 52×23）</summary>
         public ElementRect RcPower { get; set; } = new ElementRect { X = 57, Y = 29, Width = 52, Height = 23 };
 
-        /// <summary>工作状态块</summary>
-        public ElementRect RcWorkState { get; set; } = new ElementRect { X = 138, Y = 29, Width = 52, Height = 23 };
+        /// <summary>工作状态块（V1.58.7 右移 15px：X 138→153，右边缘=205 与设置按钮对齐）</summary>
+        public ElementRect RcWorkState { get; set; } = new ElementRect { X = 153, Y = 29, Width = 52, Height = 23 };
 
-        /// <summary>真空开/关状态块</summary>
-        public ElementRect RcVacuumOpen { get; set; } = new ElementRect { X = 138, Y = 67, Width = 48, Height = 21 };
+        /// <summary>真空开/关状态块（V1.58.7 宽调成与工作状态块一致 48→52，并右移：右边缘=205）</summary>
+        public ElementRect RcVacuumOpen { get; set; } = new ElementRect { X = 153, Y = 67, Width = 52, Height = 21 };
 
-        /// <summary>真空压力值框</summary>
-        public ElementRect RcPressureValue { get; set; } = new ElementRect { X = 57, Y = 67, Width = 78, Height = 21 };
+        /// <summary>真空压力值框（V1.58.7 加宽 78→93：右边缘=150，与真空关左边缘 153 保持 3px 间距）</summary>
+        public ElementRect RcPressureValue { get; set; } = new ElementRect { X = 57, Y = 67, Width = 93, Height = 21 };
 
-        /// <summary>SN 值框</summary>
-        public ElementRect RcSNValue { get; set; } = new ElementRect { X = 57, Y = 93, Width = 140, Height = 21 };
+        /// <summary>SN 值框（V1.58.7 加宽 140→148：右边缘=205 对齐）</summary>
+        public ElementRect RcSNValue { get; set; } = new ElementRect { X = 57, Y = 93, Width = 148, Height = 21 };
 
-        /// <summary>配方值框</summary>
-        public ElementRect RcRecipeValue { get; set; } = new ElementRect { X = 57, Y = 118, Width = 140, Height = 21 };
+        /// <summary>配方值框（V1.58.7 加宽 140→148：右边缘=205 对齐）</summary>
+        public ElementRect RcRecipeValue { get; set; } = new ElementRect { X = 57, Y = 118, Width = 148, Height = 21 };
 
-        /// <summary>延时开启值框</summary>
-        public ElementRect RcDelayStartValue { get; set; } = new ElementRect { X = 57, Y = 143, Width = 80, Height = 21 };
+        /// <summary>延时开启值框（Y=147 起：与"设置"按钮垂直居中对齐，V1.58.6 由 143 下移 4px）</summary>
+        public ElementRect RcDelayStartValue { get; set; } = new ElementRect { X = 57, Y = 147, Width = 80, Height = 21 };
 
-        /// <summary>延时到达值框</summary>
-        public ElementRect RcDelayArriveValue { get; set; } = new ElementRect { X = 57, Y = 168, Width = 80, Height = 21 };
+        /// <summary>延时到达值框（Y=172 起：与"设置"按钮垂直居中对齐，V1.58.6 由 168 下移 4px）</summary>
+        public ElementRect RcDelayArriveValue { get; set; } = new ElementRect { X = 57, Y = 172, Width = 80, Height = 21 };
 
         /// <summary>"设置"按钮区域</summary>
         public ElementRect RcSetButton { get; set; } = new ElementRect { X = 145, Y = 145, Width = 60, Height = 50 };
@@ -101,11 +101,11 @@ namespace AgingTestSystem.Models
         /// <summary>静态标签"配方:"位置</summary>
         public ElementPoint LabelRecipePosition { get; set; } = new ElementPoint { X = 3, Y = 121 };
 
-        /// <summary>静态标签"延时开启"位置</summary>
-        public ElementPoint LabelDelayStartPosition { get; set; } = new ElementPoint { X = 3, Y = 146 };
+        /// <summary>静态标签"延时开启"位置（Y=150 起：与值框同步下移，V1.58.6 由 146 下移 4px）</summary>
+        public ElementPoint LabelDelayStartPosition { get; set; } = new ElementPoint { X = 3, Y = 150 };
 
-        /// <summary>静态标签"延时到达"位置</summary>
-        public ElementPoint LabelDelayArrivePosition { get; set; } = new ElementPoint { X = 3, Y = 171 };
+        /// <summary>静态标签"延时到达"位置（Y=175 起：与值框同步下移，V1.58.6 由 171 下移 4px）</summary>
+        public ElementPoint LabelDelayArrivePosition { get; set; } = new ElementPoint { X = 3, Y = 175 };
 
         // ===================== 文字内容 =====================
 
