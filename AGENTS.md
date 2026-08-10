@@ -41,6 +41,7 @@
   - 自绘控件（AutoScaleMode.None）坐标是 96DPI 逻辑像素，必须**内部手动乘 `_dpiScale = CreateGraphics().DpiX / 96`** 做 DPI 缩放（字体保持 pt 自动放大）；**禁用 `Graphics.ScaleTransform`**（TextRenderer 走 GDI 不认坐标变换，V1.51 踩坑）。
   - 获取实际 DPI 用 `CreateGraphics().DpiX`，**不要用 `Control.DeviceDpi`**（PerMonitorV2 下句柄刚创建时返回 96，实测不可靠）。
   - 新增自绘控件/改自绘坐标时，记得同步缩放命中检测（鼠标坐标是物理像素）、tooltip、局部重绘矩形，漏一处点击/重绘就错位。
+- **自绘性能大坑（V1.57.3 血泪教训）**：**禁止用"离屏 Bitmap 整幅预渲染 + OnPaint DrawImage 拷贝"来优化自绘控件**。实测离屏大图（2040×2025）上 `TextRenderer.DrawText` 每处约 **2.2ms**（屏幕 DC 上近 0ms），全量渲染 72 面板一次高达 2247ms，而 `UpdateAll` 每秒全量刷新 → 整个软件每 1 秒卡死。且 `g.Clear(白色)` 会把面板间隙刷白导致"面板连成一片"。**正确做法**：OnPaint 只重绘可见区面板（`e.ClipRectangle` 算行列范围），数据/选中变化仅 `Invalidate`；滚动卡顿用"16ms 定时器节流 AutoScrollPosition + 画刷/画笔缓存字段"解决，不要预渲染。判断优化效果务必用**真实屏幕 DC**（`CreateGraphics`）测，离屏 Graphics 的 TextRenderer 慢是 GDI+ 固有行为、不代表真实帧速。
 
 ## 关键文件导航
 

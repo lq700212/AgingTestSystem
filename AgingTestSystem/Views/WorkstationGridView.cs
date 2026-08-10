@@ -19,13 +19,15 @@ namespace AgingTestSystem.Views
     /// - 72 个面板全部由本控件 OnPaint 按坐标绘制，且只重绘可见区域（配合滚动性能）；
     /// - 交互（长按选中 / 设置按钮 / 选中框 / 行全选 / 悬停提示）全部用坐标命中实现。
     ///
-    /// 【V1.57.2 性能：画布缓存 + 滚动节流】
-    /// 滚动容器在 AutoScrollPosition 变化时会让子控件重绘**整个可见区**（实测 clip=100%），
-    /// 若每次滚动都重画全部可见面板的文本，单帧约 24ms 无法到 60FPS。本版本改为：
-    /// - 整幅网格预先渲染进离屏 `_canvas`（Bitmap），OnPaint 只做 DrawImage 位图拷贝（~2ms）；
-    /// - 数据更新 / 选中变化时先把对应面板画进 `_canvas` 再 Invalidate 对应区域；
-    /// - 拖动滚动用 16ms 定时器合并高频 MouseMove（鼠标回报率 ≫ 屏幕刷新率）。
-    /// 详见类字段 `_canvas`、方法 `RenderToCanvas`/`RenderPanelToCanvas` 注释。
+    /// 【V1.57.2 性能优化（含回退）】
+    /// 先尝试"离屏画布缓存：整幅 RenderToCanvas + OnPaint DrawImage 拷贝"，实测离屏大图
+    /// （2040×2025）上 TextRenderer 每处约 2.2ms，全量 72 面板高达 2247ms，且 UpdateAll
+    /// 每秒全量渲染、选中翻转也全量 → 整个 UI 卡死。故回退为旧版"OnPaint 只重绘可见区"，
+    /// 保留两项仍然有效的优化：
+    /// - 16ms 拖拽滚动合并定时器（_dragScrollTimer）：鼠标回报率 ≫ 屏幕刷新率，
+    ///   高频 MouseMove 只记录目标位置，定时器统一应用 AutoScrollPosition，减少布局/重绘堆积；
+    /// - 画刷/画笔缓存字段（_penBorder/_brushValueBox 等）：绘制热路径不再每帧 new GDI 对象。
+    /// 实测屏幕 DC 上 TextRenderer 近 0ms，直接绘制可见区流畅无卡顿。
     ///
     /// 【V1.51 修复：文字"糊成一坨"】
     /// 原实现 OnPaint 用 g.TranslateTransform 平移坐标系后再用 TextRenderer.DrawText 绘制。
@@ -152,17 +154,6 @@ namespace AgingTestSystem.Views
 
         /// <summary>所有工位的显示状态（key = 设备编号，从1开始）</summary>
         private readonly Dictionary<int, GridItem> _items = new Dictionary<int, GridItem>();
-
-        /// <summary>
-        /// 【V1.57.2】画布缓存（离屏位图）：整幅网格预先渲染到本 Bitmap，OnPaint 只做位图拷贝。
-        /// 【为什么】滚动容器在 AutoScrollPosition 变化时会让子控件重绘**整个可见区**
-        /// （实测 clip = 100% 可见区），若每次滚动都重画全部可见面板的十几处 TextRenderer，
-        /// 单帧约 24ms，无法达到 60FPS 刷新率 → 拖动卡顿。
-        /// 【方案】面板文本/按钮只在数据更新、选中变化时重绘到 _canvas；滚动时 OnPaint
-        /// 直接 DrawImage 拷贝可见区，GDI 走硬件加速约 1~2ms，拖动就顺了。
-        /// 画布尺寸 = 控件尺寸（物理像素），在 EnsureCanvas 里按需创建/重建（DPI 变化时）。
-        /// </summary>
-        private Bitmap _canvas;
 
         /// <summary>状态块悬停提示</summary>
         private readonly ToolTip _toolTip;
@@ -386,9 +377,11 @@ namespace AgingTestSystem.Views
         #endregion
 
         /// <summary>
-        /// 批量更新所有面板数据（1Hz 采集周期全量刷新入口）
-        /// 【V1.57.2 性能】数据全部应用到内存后统一重绘到画布缓存并整窗 Invalidate，
-        /// 由 OnPaint 从缓存拷贝，避免每帧重画文本。
+        /// 批量更新所有面板数据（1Hz 采集周期全量刷新入口）。
+        /// 【V1.57.2 回退】此前尝试"离屏画布缓存 + OnPaint 拷贝"，实测离屏大图上
+        /// TextRenderer 每处 ~2.2ms、全量 72 面板高达 2247ms，1Hz 刷新即卡死 UI，
+        /// 故回退为"只 Invalidate，OnPaint 只重绘可见区面板"（旧版行为，见 OnPaint）。
+        /// 实测屏幕 DC 上 TextRenderer 近 0ms，直接绘制可见区即可流畅。
         /// </summary>
         public void UpdateAll(BarometerData[] allData)
         {
@@ -402,22 +395,17 @@ namespace AgingTestSystem.Views
                     changed = true;
                 }
             }
-            if (changed)
-            {
-                RenderToCanvas();   // 全量刷新：把最新数据整幅画进缓存
-                Invalidate();
-            }
+            if (changed) Invalidate();
         }
 
         /// <summary>
         /// 更新单个面板数据（快速跟踪专用，只重绘该面板区域）
-        /// 【V1.57.2 性能】先把该面板重绘进画布缓存，再只 Invalidate 该区域。
+        /// 【V1.57.2 回退】见 UpdateAll 注释：恢复为旧版"仅 Invalidate 面板区域"。
         /// </summary>
         public void UpdateSingle(BarometerData data)
         {
             if (data == null || !_items.TryGetValue(data.DeviceId, out GridItem item)) return;
             ApplyData(item, data);
-            RenderPanelToCanvas(data.DeviceId);
             Invalidate(GetPanelBounds(data.DeviceId));
         }
 
@@ -513,73 +501,56 @@ namespace AgingTestSystem.Views
         #region 自绘渲染
 
         /// <summary>
-        /// 自绘整个工位网格（OnPaint 入口）。
-        /// 【V1.57.2 性能】改为"画布缓存 + 位图拷贝"：
-        /// 面板文本/按钮在数据或选中变化时经 <see cref="RenderToCanvas"/> 画进 _canvas，
-        /// 这里只把可见区从 _canvas 拷到屏幕（DrawImage，GDI 硬件加速，毫秒级），
-        /// 滚动时不再逐面板重画 TextRenderer，解决拖动卡顿。
+        /// 自绘整个工位网格（OnPaint 入口）——【V1.57.2 回退】
+        /// 【为什么回退】V1.57.2 曾改为"离屏画布缓存：整幅 RenderToCanvas + OnPaint DrawImage 拷贝"，
+        /// 实测离屏大图（2040×2025）上 TextRenderer 绘制极慢（每处约 2.2ms，全量 72 面板 2247ms），
+        /// 而 UpdateAll 每秒触发全量渲染、选中翻转也触发，UI 线程被拖死 →"整个软件都卡"。
+        /// 旧版直接绘制到屏幕 DC（TextRenderer 实测近 0ms），只重绘可见区域，反而流畅。
+        /// 【本版策略】回到旧版"OnPaint 只重绘可见列/行范围的面板"，仅保留 V1.57.2 中仍然有效的
+        /// 两项优化：①16ms 拖拽滚动合并定时器（_dragScrollTimer，避免高频 MouseMove 反复 set）；
+        /// ②画刷/画笔缓存字段（_penBorder/_brushValueBox 等，减少每帧 new GDI 对象）。
         /// 全部使用绝对坐标绘制：每个面板元素的最终坐标 = 面板左上角 + 设计坐标，
         /// 不再使用 TranslateTransform（避免 TextRenderer 的 GDI 绘制与坐标变换错乱导致文字模糊）。
         /// </summary>
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
+            Graphics g = e.Graphics;
 
             if (_columns == 0) return;
 
-            // 确保画布已创建且尺寸匹配（首次绘制 / DPI 变化 / 尺寸变更时重建）
-            EnsureCanvas();
+            // 【V1.55 高DPI适配】e.ClipRectangle 是物理像素坐标，而布局配置是 96DPI 逻辑像素，
+            // 所以可见列/行范围计算必须先乘缩放因子，否则 150% 缩放下只重绘左上角一小块。
+            int colW = Scaled(_layout.PanelColumnWidth);
+            int rowH = Scaled(_layout.PanelRowHeight);
 
-            // 只拷贝可见区到屏幕：源矩形 = 目标矩形 = e.ClipRectangle（坐标都在本控件坐标系内）
             Rectangle clip = e.ClipRectangle;
-            if (clip.Width <= 0 || clip.Height <= 0) return;
-            e.Graphics.DrawImage(_canvas, clip, clip, GraphicsUnit.Pixel);
-        }
+            int startCol = Math.Max(0, clip.Left / colW);
+            int endCol = Math.Min(_columns - 1, (clip.Right + colW - 1) / colW);
+            int startRow = Math.Max(0, clip.Top / rowH);
+            int endRow = Math.Min(_rows - 1, (clip.Bottom + rowH - 1) / rowH);
 
-        /// <summary>
-        /// 【V1.57.2】确保画布存在且尺寸与控件一致；尺寸变化（DPI 变化/Configure 后）时重建并全量重绘。
-        /// 重建后调用 <see cref="RenderToCanvas"/> 把当前所有面板画进缓存。
-        /// </summary>
-        private void EnsureCanvas()
-        {
-            if (_canvas != null && _canvas.Width == Width && _canvas.Height == Height) return;
+            bool anySelected = IsAnySelected;
 
-            if (_canvas != null)
+            for (int row = startRow; row <= endRow; row++)
             {
-                _canvas.Dispose();
-                _canvas = null;
-            }
-            if (Width <= 0 || Height <= 0) return;
-            _canvas = new Bitmap(Width, Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-            RenderToCanvas();
-        }
-
-        /// <summary>
-        /// 【V1.57.2】把整幅网格绘制进画布缓存 _canvas（面板 + 行全选按钮列）。
-        /// 供画布首次创建 / DPI 变化重建 / 全量数据刷新时调用。
-        /// </summary>
-        private void RenderToCanvas()
-        {
-            using (Graphics g = Graphics.FromImage(_canvas))
-            {
-                // 背景铺底（防残留）：默认用面板空闲底色，未覆盖区域也是同色
-                g.Clear(_normalColor);
-
-                bool anySelected = IsAnySelected;
-                for (int row = 0; row < _rows; row++)
+                for (int col = startCol; col <= endCol; col++)
                 {
-                    for (int col = 0; col < _columns; col++)
-                    {
-                        int deviceId = row * _columns + col + 1;
-                        if (!_items.TryGetValue(deviceId, out GridItem item)) continue;
+                    int deviceId = row * _columns + col + 1;
+                    if (!_items.TryGetValue(deviceId, out GridItem item)) continue;
 
-                        // 面板左上角绝对坐标（面板内容设计尺寸 + 上下左右各 2px 外边距，均按 DPI 放大）
-                        int panelLeft = Scaled(col * _layout.PanelColumnWidth + 2);
-                        int panelTop = Scaled(row * _layout.PanelRowHeight + 2);
-                        DrawPanel(g, item, anySelected, panelLeft, panelTop);
-                    }
+                    // 面板左上角绝对坐标（面板内容设计尺寸 + 上下左右各 2px 外边距，均按 DPI 放大）
+                    int panelLeft = Scaled(col * _layout.PanelColumnWidth + 2);
+                    int panelTop = Scaled(row * _layout.PanelRowHeight + 2);
+                    DrawPanel(g, item, anySelected, panelLeft, panelTop);
+                }
+            }
 
-                    // 行全选按钮列（每行右侧）
+            // 行全选按钮列
+            if (clip.Right > Scaled(_columns * _layout.PanelColumnWidth))
+            {
+                for (int row = startRow; row <= endRow; row++)
+                {
                     Rectangle btnRect = new Rectangle(
                         Scaled(_columns * _layout.PanelColumnWidth + 2),
                         Scaled(row * _layout.PanelRowHeight + 2),
@@ -587,35 +558,6 @@ namespace AgingTestSystem.Views
                         Scaled(_layout.PanelRowHeight - 4));
                     DrawRowSelectButton(g, btnRect, row);
                 }
-            }
-        }
-
-        /// <summary>
-        /// 【V1.57.2】把指定工位面板重绘到画布缓存（局部刷新：数据/选中变化时调用，
-        /// 只重画这一块，避免全量重绘）。之后调用方再 Invalidate 对应屏幕区域完成显示。
-        /// </summary>
-        /// <param name="deviceId">工位编号（1 起）</param>
-        private void RenderPanelToCanvas(int deviceId)
-        {
-            if (_canvas == null) return;
-            if (!_items.TryGetValue(deviceId, out GridItem item)) return;
-
-            int index = deviceId - 1;
-            int col = index % _columns;
-            int row = index / _columns;
-            bool anySelected = IsAnySelected;
-
-            using (Graphics g = Graphics.FromImage(_canvas))
-            {
-                // 先把该面板整块清成其背景色，再重画面板（覆盖旧内容）
-                Rectangle panelArea = GetPanelBounds(deviceId);
-                using (var bg = new SolidBrush(item.BackColor))
-                {
-                    g.FillRectangle(bg, panelArea);
-                }
-                int panelLeft = Scaled(col * _layout.PanelColumnWidth + 2);
-                int panelTop = Scaled(row * _layout.PanelRowHeight + 2);
-                DrawPanel(g, item, anySelected, panelLeft, panelTop);
             }
         }
 
@@ -970,12 +912,12 @@ namespace AgingTestSystem.Views
         /// 选中状态改变后的重绘调度——**选中框的显示与否取决于全局 IsAnySelected**：
         /// - 任一选中 → 所有面板都画选中框（选中=绿✓，未选中=空心白框）；
         /// - 一个没选 → 所有面板都不画选中框。
-        /// 所以"从无选中↔有选中"翻转时，**所有面板**的框都要变，必须整幅重绘到缓存 + 全量 Invalidate；
+        /// 所以"从无选中↔有选中"翻转时，**所有面板**的框都要变，必须全量 Invalidate()；
         /// 若只是已选集合内部增删（一直有选中），其他面板框不变，仅需局部重绘当前面板。
         /// 【Bug 修复】此前这里一律只 Invalidate 单面板：长按选中第一个时其他面板
         /// 残留"无框"旧画面，取消到最后一个时其他面板残留"空心框"旧画面。
-        /// 【V1.57.2】配合画布缓存：翻转时整幅 RenderToCanvas（所有面板框一起变），
-        /// 未翻转时只 RenderPanelToCanvas 当前面板，再对应 Invalidate。
+        /// 【V1.57.2 回退】不再重绘画布缓存（画布方案已废弃，见 OnPaint 注释），
+        /// 恢复旧版 Invalidate 调度——屏幕 DC 上直接绘制可见区很快，无性能问题。
         /// </summary>
         /// <param name="deviceId">选中状态被修改的工位编号</param>
         /// <param name="anyBefore">修改前的 IsAnySelected 值</param>
@@ -984,13 +926,11 @@ namespace AgingTestSystem.Views
             bool anyAfter = IsAnySelected;               // 修改后的全局选中状态
             if (anyBefore != anyAfter)
             {
-                RenderToCanvas();                        // 全局翻转：所有面板的选中框一起显示/隐藏
-                Invalidate();
+                Invalidate();                            // 全局翻转：所有面板的选中框一起显示/隐藏
             }
             else
             {
-                RenderPanelToCanvas(deviceId);           // 全局状态未变，只需刷新当前面板
-                Invalidate(GetPanelBounds(deviceId));
+                Invalidate(GetPanelBounds(deviceId));    // 全局状态未变，只需刷新当前面板
             }
         }
 
@@ -1006,11 +946,7 @@ namespace AgingTestSystem.Views
                     any = true;
                 }
             }
-            if (any)
-            {
-                RenderToCanvas();                        // 所有选中框一起消失
-                Invalidate();
-            }
+            if (any) Invalidate();
         }
 
         /// <summary>切换整行选中状态（全选 ↔ 取消全选）</summary>
@@ -1028,7 +964,6 @@ namespace AgingTestSystem.Views
                     item.IsSelected = newState;
                 }
             }
-            RenderToCanvas();   // 行选中状态变化影响该行面板 + 行全选按钮文字，整幅重绘到缓存
             Invalidate();
 
             OnLog?.Invoke(this, $"第 {row + 1} 行 {(newState ? "全选" : "取消全选")}（设备 {startDeviceId}-{endDeviceId}）");

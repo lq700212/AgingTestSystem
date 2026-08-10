@@ -3,7 +3,27 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
-## V1.57.2 — 拖拽滚动性能优化：画布缓存 + 滚动节流 + 画刷复用（2026-08-10）
+## V1.57.3 — 回退画布缓存：修复 V1.57.2 引发的整软件卡死与面板"连成一片"（2026-08-10）
+
+### 改动范围
+- `Views/WorkstationGridView.cs`：**废弃 V1.57.2 的"离屏画布缓存"方案**（`_canvas`、`EnsureCanvas`、`RenderToCanvas`、`RenderPanelToCanvas` 全部删除），恢复旧版"OnPaint 只重绘可见区"；`UpdateAll`/`UpdateSingle`/`InvalidateAfterSelectionChange`/`ClearAllSelection`/`ToggleRow` 回到仅 Invalidate 的旧实现。
+- **保留 V1.57.2 中仍然有效的两项优化**：① 16ms 拖拽滚动合并定时器 `_dragScrollTimer`（MouseMove 只记目标、定时器统一应用 AutoScrollPosition）；② 画刷/画笔缓存字段（`_penBorder`、`_brushValueBox`、`_brushRowSelect`、`_brushSetButton`、`_brushSelectChecked`、`_brushSelectUnchecked`）。
+
+### 为什么这么改（V1.57.2 的教训）
+- V1.57.2 把网格整体预渲染到离屏 Bitmap 想加速滚动，但实测**离屏大图（2040×2025）上 `TextRenderer.DrawText` 每处约 2.2ms**（屏幕 DC 上近 0ms），全量 72 面板渲染一次高达 **2247ms**。
+- 而 `UpdateAll`（1Hz 采集刷新）每次都触发全量渲染 → **整个软件每 1 秒卡死一次**；选中/行全选等操作也走全量渲染 → 点击后"卡住不动"。这就是用户反馈的卡死根因。
+- 另因 `RenderToCanvas` 里 `g.Clear(_normalColor)` 把整幅画布刷成白色，面板之间 2px 间隙（原本显示浅灰 `Control` 底色、形成"一个一个"的分隔感）被填白 → 面板看起来"连成一片"。回退后间隙恢复浅灰底色。
+- 结论：离屏 TextRenderer 慢是 .NET GDI+ 固有行为，画布缓存方案在此场景不可行；屏幕 DC 直接绘制可见区本就流畅，滚动卡顿应靠"节流+少重绘"解决而非"预渲染"。
+
+### 验证
+- 性能（真实屏幕 DC + 真实滚动容器）：`UpdateAll` 全量刷新 2247ms→**23ms/次**；选中翻转 23ms；非翻转选中 4ms；真实滚动帧 22ms（45FPS，恢复至 V1.57.1 基线）。
+- 正确性（像素验证）：面板间隙 = 浅灰 `Control`（"连成一片"修复）；选中 NO.1=绿✓、NO.2=空心白框、取消后消失 全部通过。
+- 端到端回归（SendInput 真实按键+移动）：右拖滚动量减小、反向拖增大、长按 800ms 选中 全部通过。
+- 冒烟测试进程存活。
+
+## V1.57.2 — 拖拽滚动性能优化：画布缓存 + 滚动节流 + 画刷复用（2026-08-10）【已回退，见 V1.57.3】
+
+> ⚠️ 本节方案（离屏画布缓存）因离屏 TextRenderer 性能灾难已由 V1.57.3 整体回退，保留记录供日后避免重蹈覆辙。滚动节流与画刷复用两项有效优化已并入 V1.57.3。
 
 ### 改动范围
 - `Views/WorkstationGridView.cs`，三个优化叠加，拖动帧耗时由 **24.55ms→5.02ms（约 5 倍）**：
