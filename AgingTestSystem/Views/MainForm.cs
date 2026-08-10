@@ -74,6 +74,17 @@ namespace AgingTestSystem.Views
     public partial class MainForm : System.Windows.Forms.Form
     {
         /// <summary>
+        /// 【V1.58.1】右侧状态按钮区宽度的默认值（写死在本窗体，不放在 HomeLayoutConfig）。
+        ///
+        /// 设计约定：
+        /// - 现场未保存过 HomeLayout.json（即没用"主页区域调整"编辑器改过）时，
+        ///   MainForm 直接用它作为右侧面板宽度，调整只需改这一个数字；
+        /// - 一旦现场在编辑器里保存过配置，则以 HomeLayout.json 里的
+        ///   <see cref="HomeLayoutConfig.RightPanelWidth"/> 为准（用户自定义优先）。
+        /// </summary>
+        public const int DefaultRightPanelWidth = 300;
+
+        /// <summary>
         /// 设备配置
         /// 从 App.config 加载，包含设备数量、通信参数等
         /// </summary>
@@ -158,8 +169,15 @@ namespace AgingTestSystem.Views
             // 【V1.49】主窗体开启双缓冲，与工位面板/网格双缓冲配合，消除滚动撕裂
             this.DoubleBuffered = true;
 
-            // 1.5 自适应调整右侧操作面板宽度（不写死, 根据内容自动计算）
-            AdjustRightPanelWidth();
+            // 1.5 应用主页布局（从 HomeLayout.json 读取各区域尺寸；文件不存在则用内置默认）
+            // 【V1.58】原来这里调用 AdjustRightPanelWidth 按内容自动算右侧宽度，
+            // 改为布局配置驱动：右侧宽度 / 顶部标题栏高 / 菜单栏高 / 状态栏高都可在
+            // "关于 → 主页区域调整"可视化编辑器里拖动矩形块边缘调整。
+            ApplyHomeLayout();
+
+            // 【V1.58】右侧面板被用户手动拖动分隔条改宽/改窄时，"操作"分组里的按钮
+            // 宽度也要跟着缩放，否则按钮会溢出分组框。订阅 SizeChanged 每次自动同步。
+            groupBoxOperation.SizeChanged += (s, e) => ResizeOperationButtons();
 
             // 2. 加载配置（从 App.config 读取设备数量、采集间隔等）
             _config = LoadConfig();
@@ -208,41 +226,100 @@ namespace AgingTestSystem.Views
         /// <summary>
         /// 自适应调整右侧操作面板（tableLayoutPanelRight）的宽度
         ///
-        /// 【原理】
-        /// 1. 临时将 tableLayoutPanelRight 切换为 AutoSize + Dock=None，
-        ///    让 WinForms 自动计算包裹所有内容所需的最小宽度
-        /// 2. 读取自动计算的宽度值
-        /// 3. 恢复 Dock=Fill，让面板重新填满 Panel2
-        /// 4. 设置 SplitterDistance 使 Panel2 宽度 = 内容最小宽度
-        /// 5. FixedPanel=Panel2（已在 Designer 中设置）确保窗口缩放时右侧宽度不变
+        /// 【V1.58 改造】原实现用"临时 AutoSize 测量内容最小宽度"来自动定右侧宽度；
+        /// 现在右侧宽度由 <see cref="HomeLayoutConfig.RightPanelWidth"/> 驱动（可在
+        /// "关于 → 主页区域调整"编辑器里拖边缘调整）。本方法改为：
+        /// 1. 设置 splitContainerMain.SplitterDistance，使 Panel2 宽度 = 配置的右侧宽度；
+        /// 2. 同步缩放"操作"分组里的按钮宽度（按钮原设计宽 300，若右侧被调窄则按比例缩，
+        ///    避免按钮溢出分组框）。
+        /// FixedPanel=Panel2（已在 Designer 中设置）确保窗口缩放时右侧宽度不变。
         ///
-        /// 【优点】
-        /// - 不写死宽度数字，内容变化时自动适应
-        /// - 最终效果为 Dock=Fill，无空白区域
+        /// 【默认值来源（V1.58.1 调整）】
+        /// 右侧宽度的默认值写死在 MainForm（<see cref="DefaultRightPanelWidth"/>，300），
+        /// 不放在 HomeLayoutConfig 里——只有现场在编辑器里保存过 HomeLayout.json，
+        /// 才用配置文件里的宽度覆盖默认值。判断依据是"配置文件是否存在"。
+        ///
+        /// 【注意】右侧宽度并非随便能调：若窄到按钮文字放不下会被截断，编辑器里有
+        /// 180~600 的下限保护；现场不满意可在编辑器里再拖回来。
         /// </summary>
         private void AdjustRightPanelWidth()
         {
-            // 1. 临时切换为 AutoSize 模式，让 TableLayoutPanel 自动计算内容所需宽度
-            tableLayoutPanelRight.Dock = DockStyle.None;
-            tableLayoutPanelRight.AutoSize = true;
-            tableLayoutPanelRight.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            // 默认宽度写死在 MainForm（300），与 HomeLayoutConfig 的类默认值（260）解耦。
+            // 若现场保存过 HomeLayout.json（编辑器里改过），则以文件里的值为准。
+            int targetRight = DefaultRightPanelWidth;
+            if (System.IO.File.Exists(HomeLayoutConfig.GetConfigPath()))
+            {
+                var layout = HomeLayoutConfig.LoadOrDefault();
+                targetRight = layout.RightPanelWidth;
+            }
 
-            // 2. 触发布局计算，让 AutoSize 立即生效
-            tableLayoutPanelRight.PerformLayout();
-
-            // 3. 读取自动计算的宽度（刚好包裹内容的最小宽度）
-            int contentWidth = tableLayoutPanelRight.Width;
-
-            // 4. 恢复 Dock=Fill，让 TableLayoutPanel 重新填满 Panel2
-            tableLayoutPanelRight.AutoSize = false;
-            tableLayoutPanelRight.AutoSizeMode = AutoSizeMode.GrowOnly;
-            tableLayoutPanelRight.Dock = DockStyle.Fill;
-
-            // 5. 设置 SplitterDistance，让 Panel2 宽度 = 内容最小宽度
+            // 1. 设置 SplitterDistance，让 Panel2 宽度 = 目标右侧宽度
             //    Panel2 宽度 = splitContainerMain 总宽 - SplitterDistance - 分隔条宽度
-            //    => SplitterDistance = 总宽 - 内容宽度 - 分隔条宽度
-            splitContainerMain.SplitterDistance =
-                splitContainerMain.Width - contentWidth - splitContainerMain.SplitterWidth;
+            //    => SplitterDistance = 总宽 - 右侧宽度 - 分隔条宽度
+            int distance = splitContainerMain.Width - targetRight - splitContainerMain.SplitterWidth;
+            if (distance > 0)
+            {
+                splitContainerMain.SplitterDistance = distance;
+            }
+
+            // 2. 同步缩放"操作"分组里的按钮宽度（按钮 X=15、宽 300 是设计值，
+            //    右侧变窄后按分组可用宽度重新计算，保证按钮不溢出、文字尽量完整）
+            ResizeOperationButtons();
+        }
+
+        /// <summary>
+        /// 【V1.58】应用主页布局：按 HomeLayoutConfig 设置顶部标题栏高 / 菜单栏高 /
+        /// 右侧区域宽 / 状态栏高。入口有二：
+        /// - 程序启动（构造函数调用，读取 json 或默认值）；
+        /// - "主页区域调整"编辑器保存后调用，让新布局立即生效。
+        /// </summary>
+        private void ApplyHomeLayout()
+        {
+            var layout = HomeLayoutConfig.LoadOrDefault();
+
+            // 顶部标题栏高度（tableLayoutPanelMain 第 0 行）
+            tableLayoutPanelMain.RowStyles[0].Height = layout.TopBarHeight;
+            // 菜单栏高度（第 1 行）
+            tableLayoutPanelMain.RowStyles[1].Height = layout.MenuHeight;
+            // 底部状态栏高度（第 3 行；第 2 行是 splitContainerMain，用 Percent 自动占剩余）
+            tableLayoutPanelMain.RowStyles[3].Height = layout.StatusBarHeight;
+
+            // 【V1.58】菜单栏加高后，4 个菜单按钮高度同步填满（上下各留 3px 边距），
+            // 否则按钮仍是固定的 28px 高、底部留一条空白，视觉上不协调。
+            // 算法：菜单栏行高 - tableLayoutPanelMenu 上下 Margin(3×2) - 按钮上下 Margin(3×2)。
+            foreach (Control ctl in tableLayoutPanelMenu.Controls)
+            {
+                if (ctl is Button btn)
+                {
+                    btn.Height = layout.MenuHeight - 12;
+                }
+            }
+
+            // 右侧区域宽度（由 AdjustRightPanelWidth 内部读同一配置设置 SplitterDistance）
+            AdjustRightPanelWidth();
+        }
+
+        /// <summary>
+        /// 【V1.58】把"操作"分组里的 9 个按钮宽度同步为分组可用宽度 - 左右边距。
+        /// 原设计按钮宽 300（groupBox 宽 320）；右侧区域可调后，分组框宽度随之变化，
+        /// 若仍用 300 固定宽会导致按钮溢出分组框或被截断。宽度 = 分组客户区宽 - 30（左右各 15）。
+        /// </summary>
+        private void ResizeOperationButtons()
+        {
+            if (groupBoxOperation == null) return;
+
+            // 分组客户区宽度（已扣除分组框边框），按钮左右各留 15px 边距
+            int buttonWidth = groupBoxOperation.ClientSize.Width - 30;
+            if (buttonWidth < 80) buttonWidth = 80;   // 下限保护：按钮不能窄到没法看
+
+            foreach (Control ctl in groupBoxOperation.Controls)
+            {
+                // 只处理操作按钮（都是普通 Button；若以后加入非按钮控件需排除）
+                if (ctl is Button btn && btn != null)
+                {
+                    btn.Width = buttonWidth;
+                }
+            }
         }
 
         /// <summary>
@@ -1522,6 +1599,11 @@ namespace AgingTestSystem.Views
                 items.Add(("设置", MenuHelpSettings_Click));
             }
 
+            // 【V1.58】"主页区域调整"：可视化拖动矩形块边缘调整主界面各区域尺寸。
+            // 【V1.58.3】权限放开：所有登录用户可见可用（布局微调属非关键操作，
+            // 现场操作员也可能需要按自己习惯微调右侧宽度/行高，故不再限制管理员）。
+            items.Add(("主页区域调整", MenuHelpHomeLayout_Click));
+
             // 【通讯测试】仅技术员及以上权限可见（操作员不可见）
             if (_userManager.HasPermission(UserRole.Technician))
             {
@@ -1808,6 +1890,45 @@ namespace AgingTestSystem.Views
                     form.SavedKeys != null && form.SavedKeys.Count > 0)
                 {
                     ApplySettingsHotReload(form.SavedKeys);
+                }
+
+                // 【V1.58】若在设置里改了主页布局（HomeLayout.json 已更新），立即重新应用
+                if (form.HomeLayoutChanged)
+                {
+                    ApplyHomeLayout();
+                    WriteLog("主页区域调整已保存并应用");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 主页区域调整 → 弹出可视化编辑器，拖动矩形块边缘调整主界面各区域尺寸。
+        ///
+        /// 【V1.58】
+        /// - 编辑器基于当前 HomeLayout.json（或默认值）创建，拖动/输入实时改内存配置；
+        /// - 点击【保存】后 HomeLayout.json 已写入，这里调用 ApplyHomeLayout 让新布局
+        ///   立即生效（无需重启，工作站列表/右侧区域/菜单栏/状态栏当场重排）。
+        /// - 【V1.58.3】权限放开：所有登录用户可用（菜单项不再限制管理员）。
+        /// </summary>
+        private void MenuHelpHomeLayout_Click(object sender, EventArgs e)
+        {
+            // 若现场从未保存过 HomeLayout.json，则当前生效的就是本窗体的默认值
+            // （DefaultRightPanelWidth=300），编辑器里应显示这个值而不是
+            // HomeLayoutConfig 的类默认（260），否则会出现"编辑器里显示 260、
+            // 主界面实际 300"的偏差。因此这里手动把未配置项补成 MainForm 默认。
+            var layout = HomeLayoutConfig.LoadOrDefault();
+            if (!System.IO.File.Exists(HomeLayoutConfig.GetConfigPath()))
+            {
+                layout.RightPanelWidth = DefaultRightPanelWidth;
+            }
+
+            using (var form = new HomeLayoutEditorForm(layout))
+            {
+                if (form.ShowDialog(this) == DialogResult.OK)
+                {
+                    // 保存成功：重新应用布局，让调整立即生效
+                    ApplyHomeLayout();
+                    WriteLog("主页区域调整已保存并应用");
                 }
             }
         }

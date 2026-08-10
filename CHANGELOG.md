@@ -3,6 +3,104 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.58.4 — 主页区域编辑器：修复 150% 高分屏下窗体不缩放（2026-08-10）
+
+### 改动范围
+- `Dialogs/HomeLayoutEditorForm.cs` 构造函数：
+  - 补上 `AutoScaleDimensions = new SizeF(6F, 12F)`（此前只设了 `AutoScaleMode.Font`，WinForms 默认以 96DPI 为基准不缩放，高分屏下整体偏小）。
+  - 用 `SuspendLayout()` / `ResumeLayout(false)` 包裹全部控件创建，并在 `ResumeLayout(false)` 前完成 `AutoScaleDimensions` + `AutoScaleMode` 的设置——**这是本次修复的关键**（详见下）。
+
+### 为什么这么改
+- **根因（实测定位）**：纯代码窗体若在未挂起布局（`SuspendLayout`）时逐次 `Controls.Add`，每次添加都会触发 `PerformLayout → PerformAutoScale`，而此时 `AutoScaleDimensions` 尚未按实际 DPI 计算生效，WinForms 会把它固化成当前 DPI 值（144 DPI 下变成 9×18 = 6×12×1.5），导致"设计基准 == 运行基准"、缩放因子恒为 1，窗体永远不放大。Designer 窗体（如 SettingsForm）天生带 `SuspendLayout`，所以一直正常；纯代码窗体必须手动补齐。
+- 加上 `AutoScaleDimensions(6F,12F)` 后，WinForms 在 `ResumeLayout` 时才以 96DPI 设计基准与运行 DPI 比较，144 DPI 下缩放 1.5 倍，窗体、输入面板、预览区、按钮全部等比放大，与 `app.manifest`/`App.config` 的 PerMonitorV2 配合。
+
+### 验证
+- harness（PerMonitorV2 manifest + App.config 开关，系统 144 DPI / 150%）：
+  - 修复前：ClientSize=640×520 不缩放（构造后 AutoScaleDimensions 被固化为 9×18，与 Current 相同）。
+  - 修复后：ClientSize=960×780（640×1.5）、pnlValues=222（148×1.5）、preview=441，全部正确放大 1.5 倍。
+  - 96 DPI 下缩放因子=1，窗体保持 640×520 不缩放（由缩放公式保证，逻辑一致）。
+- 构建通过。
+
+## V1.58.3 — 主页区域编辑器：修复底部行被裁剪 + 权限放开为所有用户（2026-08-10）
+
+### 改动范围
+- `Dialogs/HomeLayoutEditorForm.cs`：数值输入面板 `pnlValues` 高度 120→**148**，并显式设置 4 行 `RowStyle(Absolute, 34)`——修复第 4 行（"状态栏高"输入框）控件底部被面板裁剪的问题（实测修复前 Y=111+28=139 > 120 面板高，数字输入框只显示上半截）。
+- `Views/MainForm.cs` `btnAbout_Click`：移除"主页区域调整"菜单项的管理员判断，所有登录用户可见；`MenuHelpHomeLayout_Click` 同步移除管理员兜底校验。
+
+### 为什么这么改
+- **裁剪根因**：pnlValues 是 4 行 TableLayoutPanel，每行需容纳 Label(≈26px)+NumericUpDown(≈28px)+上下 margin，行高至少 34px，4 行共需 148px；原高度 120px（每行 30px）装不下，第 4 行溢出被裁剪。显式行高还避免不同字体/DPI 下 AutoSize 差异导致再次溢出。
+- **权限放开**：布局微调（右侧宽度/行高/状态栏）属非关键个性化操作，现场操作员也可能需要按自己习惯调整，故与用户确认后放开为所有用户，与"系统设置"（仍仅管理员）区分开。
+
+### 验证
+- harness（PrintWindow 截图 + 控件矩形映射扫描）：修复后第 4 行 NumericUpDown 完整位于面板内（内容行 first=3/last=22 于高度 28 内，未裁剪）；4 个输入框全部在 pnlValues(148) 内。
+- 构建通过，冒烟测试进程存活。
+
+## V1.58.2 — 右侧宽度默认值改由 MainForm 写死，HomeLayoutConfig 恢复原样（2026-08-10）
+
+### 改动范围
+- `Models/HomeLayoutConfig.cs`：**恢复默认值**（`RightPanelWidth=260`），不再承担右侧宽度的"默认值"职责——默认值改由 MainForm 负责。
+- `Views/MainForm.cs`：
+  - 新增常量 `public const int DefaultRightPanelWidth = 300`，写死在 MainForm 里（右侧状态按钮区宽度的默认值，现场嫌 260 太小，调大到 300）。
+  - `AdjustRightPanelWidth()`：默认用 `DefaultRightPanelWidth`；**仅当现场保存过 HomeLayout.json 时**（`File.Exists(GetConfigPath())`）才读配置文件的 `RightPanelWidth`（用户自定义优先）。
+  - `MenuHelpHomeLayout_Click`：打开编辑器前，若未配置过 json，则把 `layout.RightPanelWidth` 补成 `DefaultRightPanelWidth`，避免编辑器显示 260、主界面实际 300 的偏差。
+- `Dialogs/SettingsForm.cs`：新增 `GetEffectiveHomeLayout()` 辅助方法——未配置 json 时右侧宽补成 `MainForm.DefaultRightPanelWidth`（300）；"主页区域"行的摘要显示、点击编辑、编辑器初始化三处统一走该方法。
+- `Dialogs/HomeLayoutEditorForm.cs`：`BtnRestore_Click` 恢复默认时，右侧宽恢复为 `MainForm.DefaultRightPanelWidth`（300）而非 `HomeLayoutConfig` 类默认（260），与主窗体未配置时的生效值一致。
+
+### 为什么这么改
+- 用户明确要求：右侧宽度的默认值不要放 HomeLayoutConfig.cs，直接写死在 MainForm（调整时只需改一个数字）。
+- HomeLayoutConfig.cs 恢复为"纯配置文件模型"：类默认 260 只作为反序列化兜底，真正生效默认由 MainForm 常量控制。编辑器/设置里三处入口统一走"配置存在→配置值，否则→MainForm 默认"的逻辑，杜绝显示值与实际值不一致。
+
+### 验证
+- 场景1（无 json）：MainForm Panel2.Width=300；编辑器打开右侧输入框经入口修正后 300；恢复默认=300；SettingsForm 摘要入口=300。
+- 场景2（有 json RightPanelWidth=250）：MainForm Panel2.Width=250（配置优先）。
+- HomeLayoutConfig 类默认保持 260，不干扰。
+- 冒烟测试进程存活。
+
+## V1.58.1 — 主页布局默认尺寸调大（标题栏/菜单栏/状态栏增高）（2026-08-10）
+
+### 改动范围
+- `Models/HomeLayoutConfig.cs`：顶部标题栏/菜单栏/状态栏默认高度调大——30→**40**、40→**50**、25→**30**（右侧宽度默认 260 维持原值，V1.58.2 起右侧默认改由 MainForm 常量 300 负责，见下）；Range 上限同步放宽（标题栏 80、菜单栏 100、状态栏 60），保证默认值在可拖范围内仍有上调余量。
+- `Views/MainForm.cs` `ApplyHomeLayout()`：菜单栏加高后，4 个菜单按钮高度同步填满菜单栏（按钮高 = 菜单栏高 − 12，上下各留 3px 边距），避免按钮仍是固定 28px、底部留空白。
+
+### 为什么这么改
+- 现场反馈"标题栏和顶部标题栏太小"——主界面顶部信息行（标题/权限/通讯状态）和菜单栏（用户权限/参数/日志/关于）默认高度偏低，按钮和文字显得挤、不易点按。
+- 可视化编辑器（HomeLayoutEditorForm）本身设计不变：四个区域都仍可拖边缘定制；本次只是把"未配置 HomeLayout.json 时"的默认值调大，让现场开箱即用更舒适。
+
+### 验证
+- harness：默认配置 TopBar=40/Menu=50/Right=300/Status=30；MainForm 应用后 Row0=40、Row1=50、Row3=30、Panel2.Width=300；菜单按钮高 38（50−12）恰好填满菜单栏（44=50−6 面板边距）。
+- 冒烟测试进程存活。
+
+## V1.58 — 主页布局外部化：右侧区域可配置 + 可视化拖拽编辑器（2026-08-10）
+
+### 改动范围
+- 新增 `Models/HomeLayoutConfig.cs`：主页布局配置模型（标题栏高/菜单栏高/右侧区宽/状态栏高），默认 `TopBarHeight=30`、`MenuHeight=40`、`RightPanelWidth=260`、`StatusBarHeight=25`；`LoadOrDefault`（缺文件/损坏回退默认）、`Save`（UTF-8 写 `HomeLayout.json`，程序目录）、各项带 Range 约束（标题栏 15~60、菜单栏 25~80、右侧区 180~600、状态栏 15~50），超范围钳制。
+- 新增 `Dialogs/HomeLayoutEditorForm.cs`：**"主页区域调整"可视化编辑器**（管理员入口）——
+  - `HomeLayoutEditorForm`：预览控件 + 四个 NumericUpDown（值双向同步）、恢复默认/保存/取消按钮；保存写 `HomeLayout.json`，`DialogResult=OK`。
+  - `HomeLayoutPreviewControl`：自绘预览控件（固定 1400×900 逻辑坐标系，按视口等比缩放居中），四个区域用不同底色矩形块显示（标题栏灰/菜单栏蓝/主体白/状态栏橙），四条边缘可拖（标题栏下边/菜单栏下边/右侧区左边缘/状态栏上边），命中容差 6 逻辑像素，拖动时实时回写配置并刷新。自绘坐标全部按 `_dpiScale` 缩放，符合 V1.55 高 DPI 约定。
+- `Views/MainForm.cs`：
+  - `AdjustRightPanelWidth()` 改为配置驱动：`SplitterDistance = splitContainerMain.Width − RightPanelWidth − SplitterWidth`，不再写死；默认 260 使右侧区域（运行状态/监视/操作/日志）整体比原 326 缩窄。
+  - 新增 `ApplyHomeLayout()`：按配置设置 `tableLayoutPanelMain` 三个行高（标题栏/菜单栏/状态栏）+ 调 `AdjustRightPanelWidth()`；保存配置后热生效。
+  - 新增 `ResizeOperationButtons()`：操作区按钮宽度自适应 `groupBoxOperation` 宽度（−30，下限 80），并订阅 `groupBoxOperation.SizeChanged`（右侧区缩窄后操作按钮不溢出）。
+  - "关于"下拉菜单新增"主页区域调整"项（管理员可见，与"系统设置"同级），`MenuHelpHomeLayout_Click` 打开编辑器，保存后 `ApplyHomeLayout()` + 写操作日志。
+- `Dialogs/SettingsForm.cs`：新增"主页区域"分类 + key `HomeLayout`（该值存 `HomeLayout.json`，非 App.config），`GetEffectiveValue`/`CreateValueCell`/`Grid_CellClick` 支持该 key 展示摘要（右侧区域 260px | 标题栏 30px | 菜单栏 40px | 状态栏 25px），点击弹"主页区域调整"编辑器；`btnSave_Click` 跳过该 key（不污染 App.config）；新增 `HomeLayoutChanged` 属性，`MenuHelpSettings_Click` 打开设置保存后据此在 MainForm 重新应用布局。
+
+### 为什么这么改
+- 现场希望右侧区域（运行状态/监视/操作/日志）整体按比例缩小，多让出空间给工位网格；但各现场对标题栏/菜单栏/状态栏高度的偏好不同，硬编码尺寸每次都要改代码重编译。
+- 参考 V1.51 `PanelLayoutConfig`（工位网格布局外部化到 `PanelLayout.json`）的成功套路，把主界面四个区域尺寸也做成"配置文件 + 可视化编辑器"，现场无需重编译即可微调布局。
+- 编辑器用"矩形块 + 拖边缘"而非纯数字输入：现场操作员对"拉边界"比"填数字"更直觉，且拖拽同时看到整体比例变化。
+
+### 优化点
+- 右侧区默认宽 260（原约 326），工位网格可视面积扩大约 20%。
+- 操作按钮自适应宽度，右侧区缩窄后按钮不挤占、不溢出（最小 80px 保证可点）。
+- 布局全部数据驱动：`ApplyHomeLayout`/`AdjustRightPanelWidth`/`ResizeOperationButtons` 不再含硬编码像素。
+
+### 验证
+- harness 验证：默认 `RightPanelWidth=260`（<326）✓；`HitTest` 命中右边缘=3 ✓；MainForm `ApplyHomeLayout` 后 Panel2.Width≈240、三行高 30/45/28 ✓；操作按钮宽 204 自适应 ✓；右侧分组完整 ✓。
+- 编辑器像素验证（PrintWindow 截图 + 像素扫描）：工作区浅绿 `235,250,235` ✓、状态区浅橙 `255,244,230` ✓。
+- 编辑器真实交互（SendInput 真实拖拽）：按住右边缘拖 20px → `RightPanelWidth` 260→204（精确 −56 逻辑，映射比正确）✓，右侧宽输入框同步=204 ✓。
+- SettingsForm：'主页区域'分类行 + HomeLayout 行摘要显示 ✓；编辑器保存写 `HomeLayout.json`（RightPanelWidth=250、MenuHeight=48 读回一致）✓。
+- 冒烟测试进程存活。
+
 ## V1.57.3 — 回退画布缓存：修复 V1.57.2 引发的整软件卡死与面板"连成一片"（2026-08-10）
 
 ### 改动范围

@@ -85,6 +85,7 @@
     <Compile Include="Models\RecipeConfig.cs" />
     <Compile Include="Models\StationInfo.cs" />
     <Compile Include="Models\PanelLayoutConfig.cs" />
+    <Compile Include="Models\HomeLayoutConfig.cs" />
     <Compile Include="Models\UserRole.cs" />
     <Compile Include="Models\UserAccount.cs" />
     <Compile Include="Interfaces\IBarometerReader.cs" />
@@ -209,6 +210,9 @@
       <DependentUpon>IdBindingForm.cs</DependentUpon>
     </Compile>
     <Compile Include="Dialogs\SettingsForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Dialogs\HomeLayoutEditorForm.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Dialogs\SettingsForm.Designer.cs">

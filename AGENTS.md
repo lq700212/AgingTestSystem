@@ -38,6 +38,10 @@
 - **自绘控件（WorkstationGridView 等）的坐标类常量一律外部化**：不写死像素常量，放到布局配置模型（如 `Models/PanelLayoutConfig.cs`，可被 `PanelLayout.json` 覆盖），并把坐标标注进头部注释的 ASCII 图里，便于现场改配置微调间距/颜色/字号。
 - **高 DPI 适配约定（V1.55 起）**：
   - 标准控件窗体用 `AutoScaleMode.Font`，WinForms 自动缩放，前提是 `app.manifest` 声明 `PerMonitorV2` **且** `App.config` 配 `Switch.System.Windows.Forms.DpiAwareness=PerMonitorV2`（两个缺一不可）。
+  - **纯代码窗体（无 Designer）的高 DPI 三要素**（V1.58.4 实测血泪）：
+    1. 必须显式设 `AutoScaleDimensions = new SizeF(6F, 12F)`，只设 `AutoScaleMode.Font` 会以 96DPI 为基准不缩放；
+    2. **必须用 `SuspendLayout()` 包裹全部控件创建、在末尾 `ResumeLayout(false)`**——若未挂起布局时逐次 `Controls.Add`，WinForms 会在每次 Add 触发 PerformAutoScale 时把 AutoScaleDimensions 固化成当前 DPI 值（144 DPI 下变 9×18），导致"设计基准==运行基准"、缩放因子恒为 1、窗体永不放大。Designer 窗体天生带 SuspendLayout 所以正常，纯代码必须手动补齐；
+    3. 验证时注意：纯代码 harness 需配 `app.manifest(PerMonitorV2)` + `.exe.config(AppContextSwitchOverrides)` 才能真正走 PerMonitorV2 缩放路径，只调 `SetProcessDPIAware()` 是 system-aware、AutoScaleDimensions 会被覆盖、测不出缩放。
   - 自绘控件（AutoScaleMode.None）坐标是 96DPI 逻辑像素，必须**内部手动乘 `_dpiScale = CreateGraphics().DpiX / 96`** 做 DPI 缩放（字体保持 pt 自动放大）；**禁用 `Graphics.ScaleTransform`**（TextRenderer 走 GDI 不认坐标变换，V1.51 踩坑）。
   - 获取实际 DPI 用 `CreateGraphics().DpiX`，**不要用 `Control.DeviceDpi`**（PerMonitorV2 下句柄刚创建时返回 96，实测不可靠）。
   - 新增自绘控件/改自绘坐标时，记得同步缩放命中检测（鼠标坐标是物理像素）、tooltip、局部重绘矩形，漏一处点击/重绘就错位。

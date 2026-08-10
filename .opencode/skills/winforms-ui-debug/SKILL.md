@@ -180,6 +180,8 @@ Console.WriteLine("lastCol cell0=" + cr);                            // Right=13
 8. **代码注释里的硬编码坐标可能是错的，以实测为准**：例如 `Grid_RowPostPaint` 注释写"pnlScroll.Padding.Left=12"，实测却是 **18**；注释写"滚动条线在 X=918"，那只是当时窗口宽度的值。调试/改布局时，先反射打印 `Padding`/`Bounds`/`DisplayRectangle` 等真实值，再决定画在哪。自己写注释时也标注"实测"值。
 9. **"某行有、某行没有"这类需求，用行号集合分流，不要另开事件**：需在 RowPostPaint 里给普通数据行画线、给分组行不画时，直接复用已有的 `_groupRows`（行号集合）做分支：`if (!_groupRows.Contains(e.RowIndex)) { 数据行逻辑; return; } else { 分组行逻辑; }`。既不动行样式、也不用区分事件，一次画绘里处理两类，可读性好。
 10. **善用"批量纵向扫描多行"一次性确认规则**：改完"按行分支画线"后，harness 里循环前 N 行（`for r in 0..13`）对固定 X 取色，对照行号集合打印 `行号 [GROUP|data] 色值`，能一眼确认"分组行=浅蓝、数据行=线色"全部命中，比单看两行更稳。
+11. **纯代码窗体的 AutoScale 不生效 = 99% 缺 `SuspendLayout()`**（V1.58.4 血泪）：只设 `AutoScaleMode.Font` + `AutoScaleDimensions` 不够，未挂起布局时逐次 `Controls.Add` 会把 AutoScaleDimensions 固化当前 DPI 值（144 DPI 下 6×12→9×18），缩放因子恒 1。验证时先看 `form.AutoScaleDimensions` 构造后是不是还是 6×12，被改成 9×18 就是缺 SuspendLayout。
+12. **测 AutoScale 缩放必须用 PerMonitorV2 harness**：只 `SetProcessDPIAware()` 是 System-aware，AutoScaleDimensions 自动按当前 DPI 初始化，永远测不出缩放（假结论）。csc 编译带 `/win32manifest:pmv2.manifest` + bin 里放同名 `.exe.config`（`DpiAwareness=PerMonitorV2` 开关）才走真路径；对照 Designer 窗体（SettingsForm）能缩放即证明环境正确。
 
 ## 五·五、高 DPI 适配专项（V1.55 沉淀）
 
@@ -187,7 +189,7 @@ Console.WriteLine("lastCol cell0=" + cr);                            // Right=13
 
 ### 判断根因：先确认是"不缩放"还是"缩放比例不一致"
 - 打印 `form.DeviceDpi`、各关键控件 `CreateGraphics().DpiX`、`AutoScaleMode`。
-- **标准控件窗体（AutoScaleMode.Font）**：WinForms 会自动按字体比例放大，通常无需动代码，只需保证 `app.manifest` 有 `PerMonitorV2` + `App.config` 有 `Switch.System.Windows.Forms.DpiAwareness=PerMonitorV2` 运行时开关（**两个缺一不可**）。
+- **标准控件窗体（AutoScaleMode.Font）**：WinForms 会自动按字体比例放大，通常无需动代码，只需保证 `app.manifest` 有 `PerMonitorV2` + `App.config` 有 `Switch.System.Windows.Forms.DpiAwareness=PerMonitorV2` 运行时开关（**两个缺一不可**）。**注意：这适用于 Designer 生成的窗体；纯代码窗体要额外显式设 `AutoScaleDimensions(6F,12F)` + `SuspendLayout`/`ResumeLayout` 包裹，否则不缩放**（见下文"纯代码窗体 AutoScale 验证专项"）。
 - **自绘控件（AutoScaleMode.None，如 WorkstationGridView）**：画布尺寸和坐标是"96DPI 逻辑像素"，**不随 DPI 放大**，但 pt 字体会自动放大 → 文字溢出格子、与周围标准控件比例失调。这是"主界面显示不正常"的典型根因。
 
 ### 自绘控件 DPI 适配三步
@@ -199,6 +201,53 @@ Console.WriteLine("lastCol cell0=" + cr);                            // Right=13
 - 自绘画布 3060×3038 远超屏幕，**PrintWindow 只截可见区**，超屏部分全是背景残留色（Magenta），像素扫描全假失败。
 - 正解：反射调用 `Control.OnPaint` 渲染到完整尺寸 Bitmap（`new PaintEventArgs(g, new Rectangle(0,0,宽,高))`），无视屏幕限制，再逐像素验证。
 - 验证点示例（150% 缩放 = 逻辑坐标 ×1.5）：面板左上角 = `Scaled(2)=3`；上电块 = `Offset(Scaled(RcPower),3,3)`；行全选列 x = `Scaled(8*245+2)=2943`。
+
+### 纯代码窗体（无 Designer）AutoScale 验证专项（V1.58.4 沉淀）
+用户报"纯代码窗体高分屏不放大/偏小"时，先分清是哪个环节坏了。**这类问题 harness 默认验证不出来，必须按下面的 PerMonitorV2 全套配置跑，否则拿到的是假结果**：
+
+- **harness 只调 `SetProcessDPIAware()` 是 System-aware，测不出 AutoScale 缩放**：System-aware 下 WinForms 会把 `AutoScaleDimensions` 初始化为"当前 DPI 设计值"（144 DPI 下自动变 9×18），导致设计基准==运行基准、缩放因子恒为 1、窗体永不放大。**必须两步配齐才走 PerMonitorV2 路径**：
+  1. 编译时带 manifest：`csc ... "/win32manifest:C:\...\pmv2.manifest"`（manifest 内容见下方模板）。
+  2. 运行时带 config：在 bin 放 `<exe名>.exe.config`，配 `<AppContextSwitchOverrides value="Switch.System.Windows.Forms.DpiAwareness=PerMonitorV2" />`。
+  - 判断依据：同样流程下 **Designer 窗体（如 SettingsForm）能缩放、你的纯代码窗体不缩放**，说明 harness 环境对了，问题在窗体的 AutoScale 写法。
+- **纯代码窗体高 DPI 三要素**（缺一不可，缺任意一个就"永不放大"）：
+  1. `AutoScaleDimensions = new SizeF(6F, 12F)`——只设 `AutoScaleMode.Font` 会以 96DPI 为基准不缩放；
+  2. **`SuspendLayout()` 包裹全部控件创建 + 末尾 `ResumeLayout(false)`**——未挂起时逐次 `Controls.Add` 会触发 PerformAutoScale 并把 AutoScaleDimensions 固化成当前 DPI 值，缩放失效。这是最隐蔽的一环（Designer 窗体天生带，所以从没人发现纯代码窗体缺它）；
+  3. 主程序 `app.manifest`(PerMonitorV2) + `App.config`(DpiAwareness=PerMonitorV2) 两处已配。
+- **验证"是否缩放"的正确探针**：打印 `form.AutoScaleDimensions` / `form.CurrentAutoScaleDimensions` / `form.ClientSize`，以及关键面板 `Size`。144 DPI 下修复后应为 `ClientSize=640×520 → 960×780`、各面板×1.5（`pnlValues 148→222`、预览区 294→441），且 `AutoScaleDimensions` 构造后仍是 `6×12`（**若读回 9×18 说明被固化了，就是 SuspendLayout 缺失**）。96 DPI 下缩放因子=1、保持原尺寸，由公式保证，无需专门模拟。
+
+pmv2.manifest 模板（放临时目录，harness 编译用）：
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+    </windowsSettings>
+  </application>
+</assembly>
+```
+exe.config 模板：
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <runtime>
+    <AppContextSwitchOverrides value="Switch.System.Windows.Forms.DpiAwareness=PerMonitorV2" />
+  </runtime>
+</configuration>
+```
+
+### 自绘控件性能优化（V1.57.3 血泪教训，AGENTS.md 强制红线）
+排查"自绘控件卡顿/掉帧/每秒卡死"时，先背这几条，别走弯路：
+
+- **禁止"离屏 Bitmap 整幅预渲染 + OnPaint DrawImage 拷贝"**：实测离屏大图（2040×2025）上 `TextRenderer.DrawText` 每处约 **2.2ms**（屏幕 DC 上近 0ms），全量渲染 72 面板一次高达 **2247ms**；若再配"每秒全量刷新"，整个软件每 1 秒卡死一次。且 `g.Clear(白色)` 会把面板间隙刷白，导致"面板连成一片"的视觉 bug。
+- **正确做法**：OnPaint 只重绘**可见区**面板——用 `e.ClipRectangle` 反推行列范围，循环里跳过 `!rect.IntersectsWith(e.ClipRectangle)` 的面板；数据/选中变化只 `Invalidate()`（让系统按需合并重绘）；滚动卡顿用 **16ms 定时器节流 AutoScrollPosition + 画刷/画笔缓存字段**，不要每次 OnPaint 现造 Brush/Pen。
+- **性能判断必须用真实屏幕 DC**：用 `CreateGraphics()` 拿屏幕 DC 测帧速/耗时。**离屏 Graphics 上的 TextRenderer 慢是 GDI+ 固有行为，不代表真实帧速**——在离屏 Bitmap 上测得慢不等于真实渲染慢，反之亦然。
+- **改自绘坐标前先查配置模型**：本项目自绘控件（WorkstationGridView 等）的坐标/颜色/字号常量一律**外部化**到 `Models/PanelLayoutConfig.cs`（可被 `PanelLayout.json` 覆盖），**禁止写死像素常量**。改布局先在配置文件里找对应项，改完跑主程序看 `PanelLayout.json` 是否已有现场覆盖值干扰。
+
+### 改界面代码前必读头部 ASCII 图（项目约定，防改错布局）
+- 所有 View/Dialog（`Views/*.cs`、`Dialogs/*.cs`）类 XML 注释里都有一张用 `┌─┐│└┘` 画的界面布局图（参考 `RecipeManagerForm.cs` / `WorkstationGridView.cs` 头部），**框内标注控件名与关键交互点**。AI 无法看图，改界面全靠这张图。
+- 改布局前先读目标窗体的 ASCII 图，确认控件名/坐标；**改完必须同步更新该图**（坐标、控件名、按钮文字都要和实际一致），否则下次维护的 AI 拿到错图会改错布局。
 
 
 
