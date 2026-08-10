@@ -28,6 +28,13 @@ namespace AgingTestSystem.Services
     /// - 文件不存在时使用默认账号并自动创建文件
     /// - 文件损坏或格式错误时使用默认账号并重建文件
     ///
+    /// 【密码安全（V1.58.22 起）】
+    /// - 密码一律以 PBKDF2 哈希存储（见 PasswordHasher），Users.json 中不再出现明文密码。
+    /// - 登录/改密/新增账号全流程走哈希（Hash 写入、Verify 比对）；项目尚未上线，
+    ///   无需兼容旧版明文（存储串非哈希格式一律判定失败）。
+    /// - "记住密码"功能（RememberedLogin.json）因需回填登录框，密码以 Base64 可逆形式保存，
+    ///   该文件属运行时本地数据已被 gitignore，与 Users.json 的不可逆哈希是两条独立路径。
+    ///
     /// 【JSON 持久化方案选择】
     /// 选择 JSON 而非 XML 的原因：
     /// 1. JSON 文件体积更小，键值对结构简洁，无冗余标签
@@ -105,9 +112,9 @@ namespace AgingTestSystem.Services
             _users.Add(UserRole.Technician, new List<UserAccount>());
             _users.Add(UserRole.Administrator, new List<UserAccount>());
 
-            _users[UserRole.Operator].Add(new UserAccount("operator", "123456", UserRole.Operator));
-            _users[UserRole.Technician].Add(new UserAccount("technician", "123456", UserRole.Technician));
-            _users[UserRole.Administrator].Add(new UserAccount("admin", "123456", UserRole.Administrator));
+            _users[UserRole.Operator].Add(new UserAccount("operator", PasswordHasher.Hash("123456"), UserRole.Operator));
+            _users[UserRole.Technician].Add(new UserAccount("technician", PasswordHasher.Hash("123456"), UserRole.Technician));
+            _users[UserRole.Administrator].Add(new UserAccount("admin", PasswordHasher.Hash("123456"), UserRole.Administrator));
         }
 
         /// <summary>
@@ -207,15 +214,15 @@ namespace AgingTestSystem.Services
             // 每个角色至少保留一个默认账号
             if (_users[UserRole.Operator].Count == 0)
             {
-                _users[UserRole.Operator].Add(new UserAccount("operator", "123456", UserRole.Operator));
+                _users[UserRole.Operator].Add(new UserAccount("operator", PasswordHasher.Hash("123456"), UserRole.Operator));
             }
             if (_users[UserRole.Technician].Count == 0)
             {
-                _users[UserRole.Technician].Add(new UserAccount("technician", "123456", UserRole.Technician));
+                _users[UserRole.Technician].Add(new UserAccount("technician", PasswordHasher.Hash("123456"), UserRole.Technician));
             }
             if (_users[UserRole.Administrator].Count == 0)
             {
-                _users[UserRole.Administrator].Add(new UserAccount("admin", "123456", UserRole.Administrator));
+                _users[UserRole.Administrator].Add(new UserAccount("admin", PasswordHasher.Hash("123456"), UserRole.Administrator));
             }
         }
 
@@ -305,8 +312,8 @@ namespace AgingTestSystem.Services
                     continue;
                 }
 
-                // 校验密码
-                if (!string.Equals(account.Password, password, StringComparison.Ordinal))
+                // 校验密码（存储的是 PBKDF2 哈希，Verify 内部会哈希后再比对）
+                if (!PasswordHasher.Verify(password, account.Password))
                 {
                     return LoginResult.Fail("密码错误");
                 }
@@ -407,8 +414,8 @@ namespace AgingTestSystem.Services
                 return (false, "请输入当前密码");
             }
 
-            // 验证当前密码是否正确
-            if (!string.Equals(CurrentUser.Password, oldPassword, StringComparison.Ordinal))
+            // 验证当前密码是否正确（哈希比对）
+            if (!PasswordHasher.Verify(oldPassword, CurrentUser.Password))
             {
                 return (false, "当前密码错误");
             }
@@ -424,14 +431,14 @@ namespace AgingTestSystem.Services
                 return (false, "新密码至少需要4个字符");
             }
 
-            // 新密码不能与当前密码相同
-            if (string.Equals(CurrentUser.Password, newPassword, StringComparison.Ordinal))
+            // 新密码不能与当前密码相同（哈希比对，判断是否仍是同一明文）
+            if (PasswordHasher.Verify(newPassword, CurrentUser.Password))
             {
                 return (false, "新密码不能与当前密码相同");
             }
 
-            // 修改当前登录用户的密码
-            CurrentUser.Password = newPassword;
+            // 修改当前登录用户的密码（存哈希，明文不落盘）
+            CurrentUser.Password = PasswordHasher.Hash(newPassword);
 
             // 修改成功后保存到文件
             SaveUsersToFile();
@@ -472,7 +479,8 @@ namespace AgingTestSystem.Services
                 return (false, "密码至少需要4个字符");
             }
 
-            account.Password = newPassword;
+            // 存哈希，明文不落盘
+            account.Password = PasswordHasher.Hash(newPassword);
 
             // 修改成功后保存到文件
             SaveUsersToFile();
@@ -560,7 +568,8 @@ namespace AgingTestSystem.Services
                 _users.Add(role, accounts);
             }
 
-            accounts.Add(new UserAccount(trimmedUsername, password, role));
+            // 存哈希，明文不落盘
+            accounts.Add(new UserAccount(trimmedUsername, PasswordHasher.Hash(password), role));
 
             // 添加成功后保存到文件
             SaveUsersToFile();
@@ -746,8 +755,13 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 密码编码（Base64 混淆，仅演示用，非安全加密）
-        /// 与 Users.json 一样仅存本地、不提交 git，若需安全存储应改用 DPAPI/哈希
+        /// 密码编码（Base64 混淆，仅用于"记住密码"回填登录框）
+        ///
+        /// 【与 Users.json 哈希的关系】
+        /// 记住密码必须能还原出明文去填充登录框（Login 用明文再哈希比对），
+        /// 所以这里不能像 Users.json 那样用不可逆哈希；只能用可逆编码。
+        /// 该文件仅存本地、已被 gitignore，且泄露面仅限本机登录便利性，
+        /// 与账号体系的主密码存储（PBKDF2 哈希）是两条独立的安全路径。
         /// </summary>
         private string EncodePassword(string password)
             => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(password));

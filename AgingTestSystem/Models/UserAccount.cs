@@ -7,18 +7,20 @@ namespace AgingTestSystem.Models
     /// 用户账号模型
     ///
     /// 【说明】
-    /// 存储一个用户的完整信息：用户名、密码（明文，仅演示用）、角色。
+    /// 存储一个用户的完整信息：用户名、密码、角色。
     ///
-    /// 【安全提示】
-    /// 实际项目中密码不应以明文存储，应使用 SHA256/BCrypt 等哈希算法加密保存。
-    /// 当前为简化演示版本，使用明文密码。
+    /// 【密码安全（V1.58.22 起）】
+    /// Password 字段保存的是 PBKDF2 哈希字符串（格式见 Services/PasswordHasher.cs），
+    /// 而非明文密码，因此 Users.json 中不会出现明文。所有写入入口（UserManager 的
+    /// 添加账号/修改密码/默认账号）都先经 PasswordHasher.Hash 再赋值；
+    /// 所有比对入口（登录/验证旧密码）都经 PasswordHasher.Verify 完成。
     /// </summary>
     public class UserAccount
     {
         /// <summary>用户名（登录时输入）</summary>
         public string Username { get; set; }
 
-        /// <summary>密码（明文，仅演示用，实际项目应哈希存储）</summary>
+        /// <summary>密码（PBKDF2 哈希字符串，非明文；明文不落盘）</summary>
         public string Password { get; set; }
 
         /// <summary>用户角色（决定可操作的功能范围）</summary>
