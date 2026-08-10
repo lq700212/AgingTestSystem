@@ -59,17 +59,17 @@ namespace AgingTestSystem.Models
 
         // ===================== 面板内容坐标（相对面板左上角） =====================
 
-        /// <summary>上电/下电状态块（V1.58.7 校验：与工作状态块同尺寸 52×23）</summary>
-        public ElementRect RcPower { get; set; } = new ElementRect { X = 57, Y = 29, Width = 52, Height = 23 };
+        /// <summary>上电/下电状态块（V1.58.9 width 与工作状态块一致 60）</summary>
+        public ElementRect RcPower { get; set; } = new ElementRect { X = 57, Y = 29, Width = 60, Height = 23 };
 
-        /// <summary>工作状态块（V1.58.7 右移 15px：X 138→153，右边缘=205 与设置按钮对齐）</summary>
-        public ElementRect RcWorkState { get; set; } = new ElementRect { X = 153, Y = 29, Width = 52, Height = 23 };
+        /// <summary>工作状态块（V1.58.9 左移+加宽：X=153→145、W=52→60，左右边缘 145/205 与设置按钮完全一致）</summary>
+        public ElementRect RcWorkState { get; set; } = new ElementRect { X = 145, Y = 29, Width = 60, Height = 23 };
 
-        /// <summary>真空开/关状态块（V1.58.7 宽调成与工作状态块一致 48→52，并右移：右边缘=205）</summary>
-        public ElementRect RcVacuumOpen { get; set; } = new ElementRect { X = 153, Y = 67, Width = 52, Height = 21 };
+        /// <summary>真空开/关状态块（V1.58.9 左移+加宽：X=153→145、W=52→60，左右边缘与设置按钮一致）</summary>
+        public ElementRect RcVacuumOpen { get; set; } = new ElementRect { X = 145, Y = 67, Width = 60, Height = 21 };
 
-        /// <summary>真空压力值框（V1.58.7 加宽 78→93：右边缘=150，与真空关左边缘 153 保持 3px 间距）</summary>
-        public ElementRect RcPressureValue { get; set; } = new ElementRect { X = 57, Y = 67, Width = 93, Height = 21 };
+        /// <summary>真空压力值框（V1.58.9 缩窄 93→85：右边缘=142，与真空关左边缘 145 保持 3px 间距）</summary>
+        public ElementRect RcPressureValue { get; set; } = new ElementRect { X = 57, Y = 67, Width = 85, Height = 21 };
 
         /// <summary>SN 值框（V1.58.7 加宽 140→148：右边缘=205 对齐）</summary>
         public ElementRect RcSNValue { get; set; } = new ElementRect { X = 57, Y = 93, Width = 148, Height = 21 };
