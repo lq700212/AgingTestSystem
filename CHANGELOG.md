@@ -3,6 +3,166 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.58.18 — 锚定机制文档补全（2026-08-10）
+
+### 改动范围
+- `Models/PanelLayoutConfig.cs` 类头注释：新增**【锚定机制总览】**大段——锚定字段总表（ElementRect 6 项 + ElementPoint 5 项）、三步解析流程（ResolveRight→ResolveElementAlign→ResolveLabelAnchors）与依赖顺序铁律、当前完整锚定依赖链（View 右缘→设置按钮→右对齐组→压力框→下电→标签列）、调整指南、注意事项/常见坑（标签 Width 依赖字体、字段互斥、json 与代码默认一致、Y 方向底部锚定待补等）。
+- `Views/WorkstationGridView.cs` 头部注释：补充锚定机制指引（字段摘要 + 指引到 PanelLayoutConfig 类头总览）。
+- `AGENTS.md`：新增"自绘控件坐标一律用锚定，禁止孤岛绝对坐标"约定（含字段清单、三步解析铁律、改坐标前必读指引），供后续 AI 自动遵守。
+
+### 为什么这么改
+- 锚定机制经 V1.58.13~1.58.17 连续演进已较复杂（6+5 个锚定字段、三步解析、链式依赖），代码注释分散在各字段/方法里，缺一份"总览级"说明，后续维护（含 AI 改布局）极易顺序错/字段配错导致错位且难查。
+- 按项目"注释要详细到小白能看懂 + 新约定沉淀 AGENTS.md"规范，把机制集中成可读文档。
+
+### 验证
+- 纯文档改动，构建通过，无逻辑变更。
+
+## V1.58.17 — 边缘锚定补齐：编号左上、选中框右上、延时值框左缘（2026-08-10）
+
+### 改动范围
+- `Models/PanelLayoutConfig.cs`：
+  - `ElementRect` 新增 `TopMargin`（Y=距面板上缘距离，配合 RightMargin 构成右上角锚定）；`ElementPoint` 新增 `LeftMargin`/`TopMargin`（左上角锚定，如编号）。
+  - `ResolveRight` 扩展处理 `TopMargin`；`ResolveLabel` 增加 `LeftMargin`/`TopMargin` 解析（先边缘锚定，再被 RightToLeftAlignTo/LeftAlignTo 覆盖），`ResolveLabelAnchors` 纳入编号。
+  - 锚定关系：编号 `TitlePosition` 加 `LeftMargin=3`+`TopMargin=4`；选中框加 `TopMargin=4`（配 RightMargin=5）；延时开启/到达值框补 `LeftAlignTo="SNValue"`（此前完全未锚定，值框列移动时不跟随）。
+- `bin/Debug/PanelLayout.json`：同步字段。
+- `Views/WorkstationGridView.cs`：头部 ASCII 图与说明同步。
+
+### 为什么这么改
+- 用户要求编号锚定 View 左/上边缘、选中框锚定 View 右/上边缘，并全面检查是否所有控件都已锚定、能随 View 尺寸自适应。
+- 全量盘点：X 方向仅"延时开启/到达值框"未锚定（已补）；Y 方向此前全部元素固定 Y。本次补齐编号/选中框边缘锚定，使左上角与右上角元素在面板尺寸变化时保持相对位置。
+
+### 验证
+- harness 自检：编号 X=3/Y=4（左上）✓；选中框右缘=面板宽-5、Y=4（右上）✓；延时框左缘==SN 左缘 ✓；面板宽 260 时设置按钮右=243、选中框右=255、空闲/SN 右=243、编号 X 仍 3、延时框左缘跟随 SN、压力框右缘=真空关左缘 ✓。
+- 构建通过，冒烟测试进程存活。
+
+> 遗留：中部/底部元素（设置按钮 Y=145、延时到达 Y=172 等）Y 仍为固定坐标，未做底部锚定；面板高(205)当前固定无需处理。若日后需面板高可调，再补 `BottomMargin`（设置按钮/延时到达锚下缘 + 延时两行保持垂直居中）。
+
+## V1.58.16 — 标签锚定："真空压力"右缘贴压力框、其余标签左缘对齐它（2026-08-10）
+
+### 改动范围
+- `Models/PanelLayoutConfig.cs`：
+  - `ElementPoint` 新增 `Width`（标签文字固定宽，配合右缘锚定）、`RightToLeftAlignTo`（右缘贴合目标左缘）、`LeftAlignTo`（左缘对齐目标）。
+  - `ResolveAnchors` 增加第三步 `ResolveLabelAnchors()`；新增 `GetAnchorX`（矩形/标签统一取左缘 X）、`GetLabelByName`（标签名映射）。
+  - 锚定关系：`LabelPressurePosition` 设 `Width=56` + `RightToLeftAlignTo="PressureValue"`（右缘贴压力框左缘，X=57-56=1）；`LabelSnPosition`/`LabelRecipePosition`/`LabelDelayStartPosition`/`LabelDelayArrivePosition` 设 `LeftAlignTo="LabelPressure"`（左缘对齐"真空压力"标签）。
+- `bin/Debug/PanelLayout.json`：同步标签锚定字段。
+- `Views/WorkstationGridView.cs`：头部 ASCII 图与说明同步。
+
+### 为什么这么改
+- 用户要求：真空压力名称右边缘锚定真空压力显示框左边缘（名称文字宽固定）；SN/配方/延时开启/延时到达名称左边缘对齐"真空压力"名称左边缘。
+- 这样压力框左缘（双端锚定自 SN/真空关）一旦变化，真空压力标签自动右缘贴齐，其余标签左缘自动跟随，标签列与值框列始终对齐。
+
+### 验证
+- harness：真空压力标签右缘==压力框左缘、其余四标签左缘==真空压力标签左缘，全 True；压力框左缘变化时标签自动跟随（X=75-56=19）✓。
+- 构建通过，冒烟测试进程存活。
+
+> 提示：LabelPressurePosition.Width=56 依赖字体（微软雅黑 9pt），若改字体需同步该值。
+
+## V1.58.15 — 双端锚定：真空压力框两端跟随、下电左缘对齐压力框（2026-08-10）
+
+### 改动范围
+- `Models/PanelLayoutConfig.cs`：
+  - `ElementRect` 新增 `LeftAlignTo`（左缘对齐目标左缘）、`RightToLeftAlignTo`（右缘贴合目标左缘）。
+  - `AlignSelf` 扩展：`LeftAlignTo`+`RightToLeftAlignTo` 同时设置时构成**双端锚定**，宽度自动推导（宽 = 右锚定目标左缘 - 左锚定目标左缘）；仅 `RightToLeftAlignTo` 时 X = 目标左缘 - 自身宽。
+  - `ResolveElementAlign` 调整依赖顺序：设置按钮 → 右对齐组（空闲/真空关/SN/配方）→ 压力框（依赖 SN+真空关）→ 下电（依赖压力框）。
+  - 锚定关系：`RcPressureValue` 改 `LeftAlignTo="SNValue"` + `RightToLeftAlignTo="VacuumOpen"`（左缘=SN 框左缘、右缘=真空关左缘，宽自动 145-57=88）；`RcPower` 新增 `LeftAlignTo="PressureValue"`（左缘对齐压力框）。
+- `bin/Debug/PanelLayout.json`：同步锚定字段。
+- `Views/WorkstationGridView.cs`：头部 ASCII 图与说明同步。
+
+### 为什么这么改
+- 用户要求：真空压力显示框左缘锚定 SN 框左缘、右缘锚定真空关左缘；下电左缘锚定压力框左缘。
+- 真空关/SN 均右缘跟随设置按钮，压力框双端锚定后：真空关变宽/位置移动时压力框右缘与宽度自动调整，下电左缘始终与压力框左缘对齐，形成完整联动链，后续调布局无需手改。
+
+### 验证
+- harness：压力框左缘==SN 左缘、右缘==真空关左缘（间距 0）、下电左缘==压力框左缘，全 True；真空关 W 60→80 后压力框右缘自动贴合新左缘、宽度 88→68 自动缩短，下电左缘保持跟随，全 True。
+- 构建通过，冒烟测试进程存活。
+
+## V1.58.14 — 链式锚定：空闲/真空关/SN/配方右缘跟随设置按钮、下电上下边缘跟随空闲（2026-08-10）
+
+### 改动范围
+- `Models/PanelLayoutConfig.cs`：
+  - `ElementRect` 新增两个可空锚定字段：`RightAlignTo`（右缘对齐到目标矩形）、`VerticalAlignTo`（Y 与 Height 取目标矩形，上下边缘对齐）。
+  - `ResolveRightAnchors()` 升级为 `ResolveAnchors()`，两步解析：① `RightMargin` 直接锚定面板右缘；② `ResolveElementAlign()` 按 `RightAlignTo`/`VerticalAlignTo` 元素间对齐（含 `GetRectByName` 名称映射）。
+  - 锚定关系调整：设置按钮 `RightMargin=17`（锚定 View 右缘）；空闲/真空关/SN/配方由 `RightMargin` 改 `RightAlignTo="SetButton"`（右缘跟随设置按钮）；下电新增 `VerticalAlignTo="WorkState"`（上下边缘跟随空闲）。
+- `bin/Debug/PanelLayout.json`：同步锚定字段。
+- `Views/WorkstationGridView.cs`：头部 ASCII 图与说明同步。
+
+### 为什么这么改
+- 用户要求更合理的层级锚定：设置按钮直接锚定 View 右缘，其余右对齐元素（空闲/真空关/SN/配方）锚定"设置按钮右缘"而非各自锚定面板——这样改设置按钮尺寸/位置时，它们自动保持右侧对齐；下电与空闲上下对齐。
+- 链式锚定让"右侧对齐组"由基准元素（设置按钮）统一驱动，后续调布局只动基准，跟随元素自动联动。
+
+### 验证
+- harness：初始四者右缘均 = 设置按钮右缘(205)、下电 Y/H = 空闲(29/23) ✓；模拟面板宽 240 + 设置按钮宽 80 → 设置按钮右缘 223，空闲/真空关/SN/配方右缘自动跟随为 223、下电仍跟随空闲 ✓。
+- 构建通过，冒烟测试进程存活。
+
+## V1.58.13 — 坐标右侧锚定（RightMargin）：面板右缘元素随宽度自适应（2026-08-10）
+
+### 改动范围
+- `Models/PanelLayoutConfig.cs`：
+  - `ElementRect` 新增可空字段 `RightMargin`（右侧锚定边距 px）。
+  - 新增 `ResolveRightAnchors()`：把配置了 `RightMargin` 的矩形按 `X = PanelInnerWidth - RightMargin - Width` 重算 X；未设置者保持绝对 X（兼容旧配置）。
+  - `LoadOrDefault()` 加载后（JSON 与内置默认均）调用 `ResolveRightAnchors()`。
+  - 右缘元素改为锚定：`RcSelectBox`=5、`RcWorkState`/`RcVacuumOpen`/`RcSNValue`/`RcRecipeValue`/`RcSetButton`=17。
+- `bin/Debug/PanelLayout.json`：同步补 `RightMargin` 字段。
+- `Views/WorkstationGridView.cs`：头部 ASCII 图与说明同步。
+
+### 为什么这么改
+- 此前面板内坐标全是相对面板左上角的绝对像素：V1.58.11 缩面板（240→222）导致右空隙失控、V1.58.12 选中框溢出面板，每次都要手算一串 X 修正，难维护。
+- 引入轻量版 WinForms Anchor：右缘元素声明"离右缘固定距离"（RightMargin），面板宽度变化时由加载期一次性解析自动跟随，绘制与命中检测逻辑零改动、运行期零开销。
+
+### 验证
+- harness：面板宽 240 时锚定元素 X 自动变为 选中框 212/SN 75/设置 163（=240-RightMargin-Width）✓；还原 222 后回到 194/57/145 ✓；各对齐（右205/左145/行全选/延时）不受影响 ✓。
+- 构建通过，冒烟测试进程存活。
+
+> 后续：如需面板高度变化自适应，可仿照加 `BottomMargin`（当前面板高 205 未变，暂不启用）。
+
+## V1.58.12 — 选中框左移回界（2026-08-10）
+
+### 改动范围
+- `Models/PanelLayoutConfig.cs` / `bin/Debug/PanelLayout.json`：`RcSelectBox` X 212→**194**（Y=4、W=23 不变）。
+- `Views/WorkstationGridView.cs`：头部 ASCII 图坐标标注同步。
+
+### 为什么这么改
+- V1.58.11 面板内容宽由 240 缩至 222 后，选中框原 X=212（右缘 235）有 13px 超出面板右侧边缘。
+- 左移至 X=194，右缘 = 217，与面板右边距保持 5px（与缩面板前的观感一致），不再出界。
+
+### 验证
+- harness：选中框右缘 217 ≤ 面板内容宽 222，不超界 ✓；其余布局与对齐（V1.58.6~11）不受影响。
+- 构建通过，冒烟测试进程存活。
+
+## V1.58.11 — 撤销整体居中，改缩面板宽度减小右空隙（2026-08-10）
+
+### 改动范围
+- `Models/PanelLayoutConfig.cs` 默认值（已同步 `bin/Debug/PanelLayout.json`）：
+  - **撤销 V1.58.10 居中**：所有 X 还原为 V1.58.9 布局（标签列 X=3、值框/状态块 X=57、右对齐元素 X=145，编号 X=3、选中框 X=212 不变）。
+  - **缩小面板宽度**：`PanelInnerWidth` 240→**222**、`PanelColumnWidth` 245→**227**（差保持 5 = 左右边距各 2 + 边框余量 1）。
+- `Views/WorkstationGridView.cs`：头部 ASCII 图与坐标标注同步。
+
+### 为什么这么改
+- 用户反馈整体居中方案不好看，指出根因不是"坐标偏左"，而是**面板本身太宽、右侧留白太多**。
+- 内容实际占用 X=3~205，原面板内容宽 240 → 右空隙 35px，观感空旷偏左；把面板缩到 222 → 右空隙 **17px**，整体紧凑协调。
+- 只动面板整体宽度，元素坐标（V1.58.9 布局）与相对关系零改动，命中检测、绘制逻辑不受影响。
+
+### 验证
+- harness 反射读取运行时配置：内容范围 3~205、面板内容宽 222、右空隙 17（原 35）✓；X 已还原(57/145/3) ✓；网格总宽 = 8×227+80 = 1896 ✓；五者右对齐(205)、空闲/真空关/设置左对齐(145) 均 True ✓；行全选按钮含边框 y=2~206 与面板内容对齐 ✓；编号/选中框不动 ✓。
+- 构建通过，冒烟测试进程存活。
+
+## V1.58.10 — 工位面板主内容区整体水平居中（2026-08-10）
+
+### 改动范围
+- `Models/PanelLayoutConfig.cs` 默认值（已同步 `bin/Debug/PanelLayout.json`）：除左上角编号 `TitlePosition(X=3)`、右上角选中框 `RcSelectBox(X=212)` 外，其余全部元素 **X 右移 16px**：
+  - 标签列 5 个：X 3→**19**；状态块/值框/设置按钮：X 57→**73**、X 145→**161**。
+  - 涉及：RcPower / RcWorkState / RcVacuumOpen / RcPressureValue / RcSNValue / RcRecipeValue / RcDelayStartValue / RcDelayArriveValue / RcSetButton / LabelPressurePosition / LabelSnPosition / LabelRecipePosition / LabelDelayStartPosition / LabelDelayArrivePosition。
+- `Views/WorkstationGridView.cs`：头部 ASCII 图与坐标标注同步。
+
+### 为什么这么改
+- 用户反馈面板内容整体偏左。实测内容范围为 X=3~205，面板宽 240：左边距仅 3px、右边距 35px，视觉明显偏左。
+- 内容宽 202，水平居中应左右各留 (240-202)/2=19px → 整体右移 16px（3+16=19，右缘 205+16=221，右边距 240-221=19）。
+- 通过只改 X 坐标实现整体平移，元素间相对布局、绘制与命中检测逻辑零改动，V1.58.6~1.58.9 各项对齐全部保持（右对齐线 205→221、左对齐线 145→161 同步平移）。
+
+### 验证
+- harness 反射读取运行时配置：内容范围 19~221、宽 202、左/右边距均 19、居中=True ✓；编号 X=3、选中框 X=212 不动 ✓；五者右对齐(221)、空闲/真空关/设置左对齐(161) 均 True ✓；行全选按钮对齐、延时垂直居中等此前调整不受影响 ✓。
+- 构建通过，冒烟测试进程存活。
+
 ## V1.58.9 — 空闲/真空关左边缘与设置按钮对齐：三者左右同界 + 下电加宽（2026-08-10）
 
 ### 改动范围
