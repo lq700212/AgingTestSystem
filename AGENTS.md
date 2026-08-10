@@ -21,7 +21,7 @@
    - **禁止**用 PowerShell `Add-Content` / `Out-File` 默认编码写含中文的文件 —— 会写成 GBK 导致乱码。
    - 写文件用 write 工具；仅追加/改一行用 edit 工具。
    - 新增中文文件后自查：`[IO.File]::ReadAllText(path, UTF8).Contains("预期中文")` 能命中。
-2. **不提交运行时数据与机密**：`Users.json`（明文密码）、`Recipes.json`、`StationSettings.json` 等程序运行生成的 json 一律 gitignore，绝不入库。
+2. **不提交运行时数据与机密**：`Users.json`（密码为 PBKDF2 哈希，明文不落盘，见 `PasswordHasher.cs`）、`Recipes.json`、`StationSettings.json` 等程序运行生成的 json 一律 gitignore，绝不入库。
 3. **改动后必须构建验证**，禁止提交编译不过的代码。
 4. **不主动 commit/push**，除非用户明确要求；提交前先 `git status` + `git diff` 确认只包含预期改动。
 5. **代码注释要详细，让小白能看懂学会**：关键方法/流程/边界条件/配置依赖必须写清"做什么 + 为什么这么写 + 怎么改"，杜绝只写变量名的废话注释（如 `i++ // 自增`）。允许的详细注释样式参考 `WorkstationGridView.cs` / `RecipeManagerForm.cs` 头部与关键方法。
@@ -57,6 +57,7 @@
 | `AgingTestSystem/Services/ModbusRtuBarometerReader.cs` | 气压表 Modbus RTU 读取 |
 | `AgingTestSystem/Services/ScannerService.cs` | 扫码枪识别/读取 |
 | `AgingTestSystem/Services/UserManager.cs` | 用户/权限（Users.json） |
+| `AgingTestSystem/Services/PasswordHasher.cs` | 密码哈希（PBKDF2-SHA256，Users.json 落盘前转换；改密码/登录/迁移入口全在 UserManager） |
 | `AgingTestSystem/Services/RecipeAutoCompleteProvider.cs` | 配方名称自动检索 |
 | `AgingTestSystem/Dialogs/SettingsForm.cs` | 系统设置（配置项编辑、校验、保存） |
 | `AgingTestSystem/Controls/DataGridViewNumericUpDownCell.cs` | 数字/下拉单元格控件 |

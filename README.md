@@ -40,7 +40,7 @@ DeviceManager（服务层核心编排：采集/测试状态机/报警联动/送�
   ├─ IBarometerReader  (MockBarometerReader / ModbusRtuBarometerReader)
   ├─ IIoController     (MockIoController    / ModbusTcpIoController + IoMapBuilder)
   ├─ IFanController    (MockFanController   / FanControllerClient)
-  ├─ ScannerService（扫码枪，独立）   UserManager（用户/权限，Users.json）
+  ├─ ScannerService（扫码枪，独立）   UserManager（用户/权限，Users.json，密码 PBKDF2 哈希）+ PasswordHasher
   ├─ TestEventLogger（测试事件落盘 Logs\TestLog_yyyyMMdd.csv，供历史记录窗体）
   └─ AppLogFileWriter（主窗体 UI 操作日志落盘 Logs\AppLog_yyyyMMdd.log，与文本框逐行一致）
         ↓
@@ -65,7 +65,8 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Services/ScannerService.cs` | 扫码枪：WMI 识别串口、串口读码、断线心跳重连 |
 | `Services/TestEventLogger.cs` | 测试事件 CSV 落盘（启动/停止/报警/复位/急停/真空建立） |
 | `Services/AppLogFileWriter.cs` | 主窗体 UI 操作日志落盘（Logs\AppLog_yyyyMMdd.log，按日期分文件，与文本框逐行一致，写失败静默） |
-| `Services/UserManager.cs` | 用户/登录/权限，Users.json 持久化 |
+| `Services/UserManager.cs` | 用户/登录/权限，Users.json 持久化（密码哈希，V1.58.22） |
+| `Services/PasswordHasher.cs` | 密码哈希（PBKDF2-HMAC-SHA256，随机盐 + 10 万次迭代，`PBKDF2$迭代$盐$哈希` 自描述格式） |
 | `Services/RecipeStorage.cs` | 配方列表持久化（Recipes.json，启动加载/操作即写盘；SaveWithDuplicateCheck 同名覆盖保存，V1.25/1.26） |
 | `Services/StationSettingsCache.cs` | 工位配置缓存（StationSettings.json，按工位缓存 SN/配方/延时/极限温度，设置窗口下次打开自动回填，V1.26） |
 | `Services/Mock*.cs` | Mock 实现（免接线演示） |
@@ -162,7 +163,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | 日志记录 | 历史记录（读 CSV） | 任意 |
 | 关于 | 设置* / 通讯测试** / 送风机测试** / 版本说明 | *仅管理员；**技术员+ |
 
-默认账号（Users.json）：operator / technician / admin，密码均 123456（明文，生产应哈希）。
+默认账号（Users.json）：operator / technician / admin，密码均 123456（PBKDF2 哈希存储，明文不落盘，见 `Services/PasswordHasher.cs`）。
 
 ## 7. 关键设计决策与坑点（排障/新功能必读）
 
@@ -226,6 +227,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 ## 10. 待完善项
 
 - ID 绑定数据持久化、批号关联生产记录
-- 用户密码明文（应哈希）
 - 工位设置窗口"破空"按钮业务待确认（下电/保存/加入对列已实现，V1.26）
-- 界面 LOG 文本框仍未写文件
+
+> 已完成的历史待办：用户密码明文→PBKDF2 哈希（V1.58.22，见 `Services/PasswordHasher.cs`）；
+> 界面 LOG 文本框→落盘 AppLog_yyyyMMdd.log（V1.58.21，见 `Services/AppLogFileWriter.cs`）。

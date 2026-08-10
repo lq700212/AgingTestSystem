@@ -109,6 +109,7 @@
     <Compile Include="Services\TestEventLogger.cs" />
     <Compile Include="Services\DeviceManager.cs" />
     <Compile Include="Services\UserManager.cs" />
+    <Compile Include="Services\PasswordHasher.cs" />
     <Compile Include="Services\RecipeStorage.cs" />
     <Compile Include="Controls\DataGridViewNumericUpDownCell.cs" />
     <Compile Include="Controls\IpListEditorPopup.cs">

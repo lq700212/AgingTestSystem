@@ -3,6 +3,38 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.58.22 — 用户密码哈希存储：新增 PasswordHasher（PBKDF2），Users.json 不再明文（2026-08-10）
+
+### 改动范围
+- 新增 `Services/PasswordHasher.cs`：静态密码哈希工具（PBKDF2-HMAC-SHA256，.NET Framework
+  自带 `Rfc2898DeriveBytes`，无第三方依赖）。
+  - 存储格式 `PBKDF2$迭代次数$盐(Base64)$哈希(Base64)`，盐（16 字节随机）与迭代次数
+    （10 万次）随哈希自描述保存，同一密码每次哈希结果不同；
+  - `Verify` 恒定时间比较（`FixedTimeEquals`）；项目未上线、无旧版明文，存储串非哈希格式一律判失败。
+- `Services/UserManager.cs`：
+  - 登录 `Login`、修改密码 `ChangeOwnPassword`（验证旧密码 + "新旧相同"判断）、管理员改密
+    `UpdatePassword`、新增账号 `AddAccount`、默认/兜底账号全部改为走哈希（`Hash` 写入、`Verify` 比对）。
+- `Models/UserAccount.cs`：`Password` 字段注释改为"PBKDF2 哈希字符串，非明文"。
+
+### 为什么这么改
+- 此前 Users.json 存明文密码，文件一旦泄露所有账号密码直接暴露，且复制给他人即可登录。
+- 裸哈希（MD5/SHA1/SHA256）对 `123456` 这类弱密码可被彩虹表/字典秒破；PBKDF2 用随机盐 +
+  10 万次迭代把暴力破解成本拉高到不可接受，是 .NET Framework 下的标准做法。
+
+### 优化点
+- "记住密码"功能（RememberedLogin.json）必须能回填明文去填充登录框，仍用 Base64 可逆编码，
+  与 Users.json 的不可逆哈希是两条独立路径（该文件本就 gitignore、仅存本机）。
+- 迭代次数作为哈希字符串的明文段保存，未来想提升强度只需改常量，旧密码仍可验证。
+- 未上线、无需新旧兼容：代码不含明文迁移/回退分支，逻辑更简。
+
+### 验证
+- 构建通过（仅既存无关 warning CS0108）。
+- 独立 harness 单测 ALL PASS：哈希不可逆、盐随机（同密码两次结果不同）、对错密码判定、
+  非哈希格式存储串一律判定失败、损坏哈希串静默失败、中文/特殊字符密码。
+- 集成单测 ALL PASS：新目录实例化 UserManager 生成哈希版 Users.json（`PBKDF2$`、无明文）；
+  登录正确密码成功、错误密码失败；新增账号也存哈希。
+- 冒烟测试（真实 exe）：启动约 10~15s（设备连接超时所致）后生成哈希版 Users.json。
+
 ## V1.58.21 — 主窗体操作日志持久化：新增 AppLogFileWriter（2026-08-10）
 
 ### 改动范围
