@@ -68,25 +68,34 @@ namespace AgingTestSystem.Models
     ///   → 真空关/压力框(BottomToTop:SNValue) → 空闲/下电 → 延时两行(VerticalCenter:SetButton) → ③ 标签。
     ///   顺序错会取到目标旧值，表现为"改了不生效 / 元素错位"。
     ///
-    /// 【当前完整锚定链（V1.58.19 起为"横纵双向"，解析结果 = V1.58.18 布局，坐标不变）】
+    /// 【当前完整锚定链（V1.58.19 横纵双向 + V1.58.20 内容居中，解析结果如下）】
     ///   纵链头 = View 面板下缘(内容高 205)：
-    ///     └─ 设置按钮 RcSetButton(RightMargin=17 + BottomMargin=10 → Y=205-10-50=145，下缘距面板底 10px)
-    ///          ├─ 配方框 RcRecipeValue(右缘:SetButton + 下缘贴设置上缘、Gap=6 → Y=145-21-6=118)
-    ///          │    └─ SN 框 RcSNValue(右缘:SetButton + 下缘贴配方上缘、Gap=4 → Y=118-21-4=93)
-    ///          │         ├─ 真空关 RcVacuumOpen(右缘:SetButton + 下缘贴 SN 上缘、Gap=5 → Y=93-21-5=67)
-    ///          │         │    └─ 压力框 RcPressureValue(双端:SN/VacuumOpen+RightToLeftGap=3 → 宽85 右缘142，
-    ///          │         │        与真空关左缘 145 留 3px 间隙；下缘贴 SN 上缘、Gap=5 → Y=67)
-    ///          │         └─ 空闲 RcWorkState(右缘:SetButton；Y=29 固定顶区)
-    ///          │              └─ 下电 RcPower(Y/H=VerticalAlignTo:WorkState, X=LeftAlignTo:PressureValue)
-    ///          ├─ 延时开启/到达 值框(左缘:SNValue + 垂直居中于设置按钮，CenterOffsetY=-12/+13)
-    ///          │         → 两行中心 157.5/182.5 关于按钮中心 170 对称，Y=147/172（=V1.58.18）
+    ///     └─ 设置按钮 RcSetButton(RightMargin=9 + BottomMargin=10 → X=222-9-60=153、Y=205-10-50=145，
+    ///        右缘 213 距面板右缘 9px，下缘距面板底 10px)
+    ///          ├─ 配方框 RcRecipeValue(右缘:SetButton→X=65 + 下缘贴设置上缘、Gap=6 → Y=145-21-6=118)
+    ///          │    └─ SN 框 RcSNValue(右缘:SetButton→X=213-148=65 + 下缘贴配方上缘、Gap=4 → Y=118-21-4=93)
+    ///          │         ├─ 真空关 RcVacuumOpen(右缘:SetButton→X=153 + 下缘贴 SN 上缘、Gap=5 → Y=93-21-5=67)
+    ///          │         │    └─ 压力框 RcPressureValue(双端:SN(65)/VacuumOpen(153)+RightToLeftGap=3 → 宽85 右缘150，
+    ///          │         │        与真空关左缘 153 留 3px 间隙；下缘贴 SN 上缘、Gap=5 → Y=67)
+    ///          │         └─ 空闲 RcWorkState(右缘:SetButton→X=153；Y=29 固定顶区)
+    ///          │              └─ 下电 RcPower(Y/H=VerticalAlignTo:WorkState, X=LeftAlignTo:PressureValue→X=65)
+    ///          ├─ 延时开启/到达 值框(左缘:SNValue→X=65 + 垂直居中于设置按钮，CenterOffsetY=-12/+13)
+    ///          │         → 两行中心 157.5/182.5 关于按钮中心 170 对称，Y=147/172
     ///          └─ 各标签(横向锚定 + VerticalCenterAlignTo 各自框，offset=-1)：真空压力/SN/配方/延时开启/延时到达
-    ///   横链头 = View 面板右缘(内容宽 222)：选中框(RightMargin=5,TopMargin=4)；编号(LeftMargin=3,TopMargin=4)
+    ///   横链头 = View 面板右缘(内容宽 222)：选中框(RightMargin=5,TopMargin=2→X=194,Y=2)；
+    ///   面板左缘：编号(LeftMargin=9,TopMargin=4→X=9)、标签列(X=9)
+    ///   【V1.58.20 内容居中】左边界元素（编号/标签列 LeftMargin=9，X=9）与右边界元素
+    ///   （设置按钮 RightMargin=9，右缘=213）关于面板中线（222/2=111）对称：
+    ///   左留白 9 = 右留白 222-213=9，面板内内容整体水平居中。改 PanelInnerWidth 时
+    ///   左右各留 9px 边距、中间元素按锚定自动联动，始终居中。
     ///
     /// 【调整指南】
     /// - 改面板宽度：改 PanelInnerWidth / PanelColumnWidth，右缘元素自动跟随，无需手改坐标。
     /// - 改面板高度：改 PanelInnerHeight，设置按钮按 BottomMargin 贴底自动下移，整个纵链
     ///   （配方/SN/真空关/压力/延时/标签）按各自 Gap/偏移自动联动。
+    /// - 【V1.58.20 居中调节】想让面板内容保持"左右对称居中"，只需保证 编号/标签列 LeftMargin
+    ///   == 设置按钮 RightMargin（当前都是 9）。改 PanelInnerWidth 后左右各留该边距、中间元素
+    ///   按锚定自动联动，始终居中；想整体加/减左右留白，同步改这两个值即可。
     /// - 想整体让下排元素更紧凑/更松：改各 BottomToTopGap；想只挪某个框：改该元素锚定字段或基准元素。
     /// - 新增元素：优先声明锚定关系（贴到某个已有元素），保持链路完整，避免"孤岛坐标"。
     ///
@@ -146,70 +155,85 @@ namespace AgingTestSystem.Models
         // （PanelInnerWidth 240→222、PanelColumnWidth 245→227）来减小右侧空隙。
 
         /// <summary>上电/下电状态块（V1.58.14 垂直对齐锚定空闲；V1.58.15 增加 LeftAlignTo="PressureValue"
-        /// 左边缘与真空压力显示框左边缘对齐，X 自动=57）</summary>
-        public ElementRect RcPower { get; set; } = new ElementRect { X = 57, Y = 29, Width = 60, Height = 23, LeftAlignTo = "PressureValue", VerticalAlignTo = "WorkState" };
+        /// 左边缘与真空压力显示框左边缘对齐，X 自动=65（V1.58.20 随压力框内容居中））</summary>
+        public ElementRect RcPower { get; set; } = new ElementRect { X = 65, Y = 29, Width = 60, Height = 23, LeftAlignTo = "PressureValue", VerticalAlignTo = "WorkState" };
 
         /// <summary>工作状态块（V1.58.14 右缘对齐锚定设置按钮：RightAlignTo="SetButton"，
-        /// X=设置按钮右缘-自身宽；上下边缘需对齐下电时也由此基准决定）</summary>
-        public ElementRect RcWorkState { get; set; } = new ElementRect { X = 145, Y = 29, Width = 60, Height = 23, RightAlignTo = "SetButton" };
+        /// X=设置按钮右缘(213)-自身宽=153；上下边缘需对齐下电时也由此基准决定。
+        /// 【V1.58.20】跟随设置按钮右缘右移 8px（153），保持右缘对齐、内容居中）</summary>
+        public ElementRect RcWorkState { get; set; } = new ElementRect { X = 153, Y = 29, Width = 60, Height = 23, RightAlignTo = "SetButton" };
 
         /// <summary>真空开/关状态块（V1.58.14 右缘对齐锚定设置按钮；V1.58.19 下缘锚定
-        /// BottomToTopAlignTo="SNValue"+BottomToTopGap=5，保持原 Y=67 不变：93-21-5=67）</summary>
-        public ElementRect RcVacuumOpen { get; set; } = new ElementRect { X = 145, Y = 67, Width = 60, Height = 21, RightAlignTo = "SetButton", BottomToTopAlignTo = "SNValue", BottomToTopGap = 5 };
+        /// BottomToTopAlignTo="SNValue"+BottomToTopGap=5，保持原 Y=67 不变：93-21-5=67。
+        /// 【V1.58.20】右缘跟随设置按钮→153（与工作状态块右缘对齐、内容居中））</summary>
+        public ElementRect RcVacuumOpen { get; set; } = new ElementRect { X = 153, Y = 67, Width = 60, Height = 21, RightAlignTo = "SetButton", BottomToTopAlignTo = "SNValue", BottomToTopGap = 5 };
 
         /// <summary>真空压力值框（V1.58.15 双端锚定：LeftAlignTo="SNValue"（左缘对齐 SN 框左缘）、
         /// RightToLeftAlignTo="VacuumOpen"（右缘贴合真空关左缘）；V1.58.19 补 RightToLeftGap=3，
-        /// 右缘距真空关左缘 3px，宽自动=145-57-3=85（恢复 V1.58.9 的 3px 间距，不再紧贴）；
-        /// 下缘锚定 BottomToTopAlignTo="SNValue"+BottomToTopGap=5，保持原 Y=67 不变）</summary>
-        public ElementRect RcPressureValue { get; set; } = new ElementRect { X = 57, Y = 67, Width = 85, Height = 21, LeftAlignTo = "SNValue", RightToLeftAlignTo = "VacuumOpen", RightToLeftGap = 3, BottomToTopAlignTo = "SNValue", BottomToTopGap = 5 };
+        /// 右缘距真空关左缘 3px，宽自动=153-65-3=85（恢复 V1.58.9 的 3px 间距，不再紧贴）；
+        /// 下缘锚定 BottomToTopAlignTo="SNValue"+BottomToTopGap=5，保持原 Y=67 不变。
+        /// 【V1.58.20】左缘跟随 SN 框→65、右缘贴真空关左缘(153)，整体随内容居中）</summary>
+        public ElementRect RcPressureValue { get; set; } = new ElementRect { X = 65, Y = 67, Width = 85, Height = 21, LeftAlignTo = "SNValue", RightToLeftAlignTo = "VacuumOpen", RightToLeftGap = 3, BottomToTopAlignTo = "SNValue", BottomToTopGap = 5 };
 
         /// <summary>SN 值框（V1.58.7 加宽 148；V1.58.14 右缘对齐锚定设置按钮；V1.58.19 下缘锚定
-        /// BottomToTopAlignTo="RecipeValue"+BottomToTopGap=4，保持原 Y=93 不变：118-21-4=93）</summary>
-        public ElementRect RcSNValue { get; set; } = new ElementRect { X = 57, Y = 93, Width = 148, Height = 21, RightAlignTo = "SetButton", BottomToTopAlignTo = "RecipeValue", BottomToTopGap = 4 };
+        /// BottomToTopAlignTo="RecipeValue"+BottomToTopGap=4，保持原 Y=93 不变：118-21-4=93。
+        /// 【V1.58.20】右缘跟随设置按钮(213)→X=213-148=65，随内容居中）</summary>
+        public ElementRect RcSNValue { get; set; } = new ElementRect { X = 65, Y = 93, Width = 148, Height = 21, RightAlignTo = "SetButton", BottomToTopAlignTo = "RecipeValue", BottomToTopGap = 4 };
 
         /// <summary>配方值框（V1.58.7 加宽 148；V1.58.14 右缘对齐锚定设置按钮；V1.58.19 下缘锚定
         /// BottomToTopAlignTo="SetButton"+BottomToTopGap=6，保持原 Y=118 不变：145-21-6=118。
+        /// 【V1.58.20】右缘跟随设置按钮(213)→X=213-148=65，随内容居中。
         /// 面板高改变时设置按钮下移，配方框以间距 6 跟随其上缘联动）</summary>
-        public ElementRect RcRecipeValue { get; set; } = new ElementRect { X = 57, Y = 118, Width = 148, Height = 21, RightAlignTo = "SetButton", BottomToTopAlignTo = "SetButton", BottomToTopGap = 6 };
+        public ElementRect RcRecipeValue { get; set; } = new ElementRect { X = 65, Y = 118, Width = 148, Height = 21, RightAlignTo = "SetButton", BottomToTopAlignTo = "SetButton", BottomToTopGap = 6 };
 
         /// <summary>延时开启值框（V1.58.17 左缘锚定 SN 框：LeftAlignTo="SNValue"；V1.58.19 垂直居中于
         /// 设置按钮 VerticalCenterAlignTo="SetButton"+CenterOffsetY=-12，保持原 Y=147 不变：
-        /// 145+14-12=147，即框中心 157.5 位于按钮中心 170 上方 12.5px，与到达框对称分布）</summary>
-        public ElementRect RcDelayStartValue { get; set; } = new ElementRect { X = 57, Y = 147, Width = 80, Height = 21, LeftAlignTo = "SNValue", VerticalCenterAlignTo = "SetButton", CenterOffsetY = -12 };
+        /// 145+14-12=147，即框中心 157.5 位于按钮中心 170 上方 12.5px，与到达框对称分布。
+        /// 【V1.58.20】左缘跟随 SN 框→65，随内容居中）</summary>
+        public ElementRect RcDelayStartValue { get; set; } = new ElementRect { X = 65, Y = 147, Width = 80, Height = 21, LeftAlignTo = "SNValue", VerticalCenterAlignTo = "SetButton", CenterOffsetY = -12 };
 
         /// <summary>延时到达值框（V1.58.17 左缘锚定 SN 框；V1.58.19 垂直居中于设置按钮
         /// VerticalCenterAlignTo="SetButton"+CenterOffsetY=13，保持原 Y=172 不变：145+14+13=172，
         /// 即框中心 182.5 位于按钮中心 170 下方 12.5px，与开启框对称分布。
-        /// 说明：因整数除法截断 0.5px，两行偏移取 -12/+13 才能与 V1.58.18 坐标完全一致）</summary>
-        public ElementRect RcDelayArriveValue { get; set; } = new ElementRect { X = 57, Y = 172, Width = 80, Height = 21, LeftAlignTo = "SNValue", VerticalCenterAlignTo = "SetButton", CenterOffsetY = 13 };
+        /// 说明：因整数除法截断 0.5px，两行偏移取 -12/+13 才能与 V1.58.18 坐标完全一致。
+        /// 【V1.58.20】左缘跟随 SN 框→65，随内容居中）</summary>
+        public ElementRect RcDelayArriveValue { get; set; } = new ElementRect { X = 65, Y = 172, Width = 80, Height = 21, LeftAlignTo = "SNValue", VerticalCenterAlignTo = "SetButton", CenterOffsetY = 13 };
 
-        /// <summary>"设置"按钮区域（V1.58.13 右侧锚定 RightMargin=17，X 自动=145；V1.58.19 下缘锚定
+        /// <summary>"设置"按钮区域（V1.58.13 右侧锚定 RightMargin=9，X 自动=153；V1.58.19 下缘锚定
         /// BottomMargin=10，保持原 Y=145 不变：205-10-50=145，即下缘 195 距面板下缘 10px。
-        /// 是"垂直链"的链头：面板高改变时按钮自动贴底跟随）</summary>
-        public ElementRect RcSetButton { get; set; } = new ElementRect { X = 145, Y = 145, Width = 60, Height = 50, RightMargin = 17, BottomMargin = 10 };
+        /// 【V1.58.20 内容居中】RightMargin 由 17→9：按钮右缘=213，与左侧标签左缘(9)关于面板中线
+        /// (222/2=111) 对称 → 面板内容整体水平居中（左留白 9 = 右留白 9）。
+        /// 是"垂直链"的链头：面板高改变时按钮自动贴底跟随；改面板宽时按钮按右留白 9 自动联动）</summary>
+        public ElementRect RcSetButton { get; set; } = new ElementRect { X = 153, Y = 145, Width = 60, Height = 50, RightMargin = 9, BottomMargin = 10 };
 
-        /// <summary>右上角选中指示框（V1.58.17 右上角锚定：RightMargin=5 右缘贴 View 右缘 + TopMargin=4 上缘贴顶）</summary>
-        public ElementRect RcSelectBox { get; set; } = new ElementRect { X = 194, Y = 4, Width = 23, Height = 23, RightMargin = 5, TopMargin = 4 };
+        /// <summary>右上角选中指示框（V1.58.17 右上角锚定：RightMargin=5 右缘贴 View 右缘 + TopMargin=2 上缘贴顶。
+        /// 【V1.58.20】TopMargin 由 4→2：选中框上移 2px，底缘 25 与下方工作状态块（"空闲"，上缘 29）
+        /// 的垂直间隔由 2px 加大到 4px，避免"选中框贴着空闲块上边缘"的拥挤感。
+        /// 注意：选中框属"右上角元素"，不参与内容居中平移，保持右缘距面板右缘 5px）</summary>
+        public ElementRect RcSelectBox { get; set; } = new ElementRect { X = 194, Y = 2, Width = 23, Height = 23, RightMargin = 5, TopMargin = 2 };
 
-        /// <summary>设备编号文字位置（V1.58.17 左上角锚定：LeftMargin=3 左缘贴 View 左缘 + TopMargin=4 上缘贴顶）</summary>
-        public ElementPoint TitlePosition { get; set; } = new ElementPoint { X = 3, Y = 4, LeftMargin = 3, TopMargin = 4 };
+        /// <summary>设备编号文字位置（V1.58.17 左上角锚定：LeftMargin=9 左缘距面板左缘 9px + TopMargin=4 上缘贴顶。
+        /// 【V1.58.20 内容居中】LeftMargin 由 3→9：编号左缘与标签列统一为 X=9，作为面板内容最左元素，
+        /// 与设置按钮右缘(213)关于面板中线对称，构成"左留白 9 = 右留白 9"的居中布局）</summary>
+        public ElementPoint TitlePosition { get; set; } = new ElementPoint { X = 9, Y = 4, LeftMargin = 9, TopMargin = 4 };
 
         /// <summary>静态标签"真空压力"位置（V1.58.16 右缘锚定压力框左缘：Width=56 固定文字宽，
-        /// RightToLeftAlignTo="PressureValue"，X 自动=57-56=1；V1.58.19 垂直居中于压力框
+        /// RightToLeftAlignTo="PressureValue"，X 自动=65-56=9（V1.58.20 压力框左缘居中后随之居中）；
+        /// V1.58.19 垂直居中于压力框
         /// VerticalCenterAlignTo="PressureValue"+VerticalCenterOffset=-1，保持原 Y=70 不变：67+4-1=70）</summary>
-        public ElementPoint LabelPressurePosition { get; set; } = new ElementPoint { X = 3, Y = 70, Width = 56, RightToLeftAlignTo = "PressureValue", VerticalCenterAlignTo = "PressureValue", VerticalCenterOffset = -1 };
+        public ElementPoint LabelPressurePosition { get; set; } = new ElementPoint { X = 9, Y = 70, Width = 56, RightToLeftAlignTo = "PressureValue", VerticalCenterAlignTo = "PressureValue", VerticalCenterOffset = -1 };
 
-        /// <summary>静态标签"SN:"位置（V1.58.16 左缘锚定真空压力标签；V1.58.19 垂直居中于 SN 框，保持原 Y=96 不变：93+4-1=96）</summary>
-        public ElementPoint LabelSnPosition { get; set; } = new ElementPoint { X = 3, Y = 96, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "SNValue", VerticalCenterOffset = -1 };
+        /// <summary>静态标签"SN:"位置（V1.58.16 左缘锚定真空压力标签→X=9；V1.58.19 垂直居中于 SN 框，保持原 Y=96 不变：93+4-1=96）</summary>
+        public ElementPoint LabelSnPosition { get; set; } = new ElementPoint { X = 9, Y = 96, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "SNValue", VerticalCenterOffset = -1 };
 
-        /// <summary>静态标签"配方:"位置（V1.58.16 左缘锚定真空压力标签；V1.58.19 垂直居中于配方框，保持原 Y=121 不变：118+4-1=121）</summary>
-        public ElementPoint LabelRecipePosition { get; set; } = new ElementPoint { X = 3, Y = 121, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "RecipeValue", VerticalCenterOffset = -1 };
+        /// <summary>静态标签"配方:"位置（V1.58.16 左缘锚定真空压力标签→X=9；V1.58.19 垂直居中于配方框，保持原 Y=121 不变：118+4-1=121）</summary>
+        public ElementPoint LabelRecipePosition { get; set; } = new ElementPoint { X = 9, Y = 121, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "RecipeValue", VerticalCenterOffset = -1 };
 
-        /// <summary>静态标签"延时开启"位置（V1.58.16 左缘锚定真空压力标签；V1.58.19 垂直居中于延时开启框，保持原 Y=150 不变：147+4-1=150）</summary>
-        public ElementPoint LabelDelayStartPosition { get; set; } = new ElementPoint { X = 3, Y = 150, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "DelayStartValue", VerticalCenterOffset = -1 };
+        /// <summary>静态标签"延时开启"位置（V1.58.16 左缘锚定真空压力标签→X=9；V1.58.19 垂直居中于延时开启框，保持原 Y=150 不变：147+4-1=150）</summary>
+        public ElementPoint LabelDelayStartPosition { get; set; } = new ElementPoint { X = 9, Y = 150, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "DelayStartValue", VerticalCenterOffset = -1 };
 
-        /// <summary>静态标签"延时到达"位置（V1.58.16 左缘锚定真空压力标签；V1.58.19 垂直居中于延时到达框，保持原 Y=175 不变：172+4-1=175）</summary>
-        public ElementPoint LabelDelayArrivePosition { get; set; } = new ElementPoint { X = 3, Y = 175, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "DelayArriveValue", VerticalCenterOffset = -1 };
+        /// <summary>静态标签"延时到达"位置（V1.58.16 左缘锚定真空压力标签→X=9；V1.58.19 垂直居中于延时到达框，保持原 Y=175 不变：172+4-1=175）</summary>
+        public ElementPoint LabelDelayArrivePosition { get; set; } = new ElementPoint { X = 9, Y = 175, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "DelayArriveValue", VerticalCenterOffset = -1 };
 
         // ===================== 文字内容 =====================
 
