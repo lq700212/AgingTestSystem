@@ -2452,11 +2452,10 @@ namespace AgingTestSystem.Views
         /// 写入日志到右侧 LOG 文本框
         /// 自动添加时间戳，最新日志显示在末尾并自动滚动
         ///
-        /// 【预留说明】
-        /// 当前日志仅在UI界面显示，未持久化到文件。
-        /// 实际项目中应：
-        /// 1. 同时写入日志文件（按日期分文件）
-        /// 2. 支持日志级别（INFO/WARN/ERROR）
+        /// 【V1.58.21 持久化】
+        /// 日志不只显示在 UI 文本框（内存）里，同时由 <see cref="AgingTestSystem.Services.AppLogFileWriter"/>
+        /// 追加写入本地文件 Logs\AppLog_yyyyMMdd.log（按日期分文件）。程序重启后日志不丢失，
+        /// 可离线追溯。写文件失败静默处理，不影响界面显示。
         /// </summary>
         /// <param name="message">日志消息</param>
         private void WriteLog(string message)
@@ -2474,8 +2473,9 @@ namespace AgingTestSystem.Views
             // 追加到日志文本框
             txtLog.AppendText(logLine);
 
-            // 【预留】持久化到日志文件
-            // TODO: System.IO.File.AppendAllText(logFilePath, logLine);
+            // 【V1.58.21 持久化】同一行日志同时写入本地文件（Logs\AppLog_yyyyMMdd.log），
+            // 与 UI 显示内容一致；内部有 lock 线程安全 + 写失败静默，不影响主流程
+            AgingTestSystem.Services.AppLogFileWriter.Write(logLine);
         }
 
         /// <summary>

@@ -3,6 +3,31 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.58.21 — 主窗体操作日志持久化：新增 AppLogFileWriter（2026-08-10）
+
+### 改动范围
+- 新增 `Services/AppLogFileWriter.cs`：静态类，把主窗体 UI 日志（MainForm.WriteLog 输出的所有消息：
+  设备启动失败/连接状态/扫码/温度告警/行全选/设置变更等）追加写入本地文件。
+  - 目录：程序运行目录\Logs\；文件名：`AppLog_yyyyMMdd.log`（每天一个文件，跨天自动切换）；
+  - 格式：与 UI 文本框逐行一致（`[时间戳] 消息`），UTF-8 编码；
+  - 线程安全：`lock` 串行化多线程写；缓存 StreamWriter 复用、每次写入后立即 `Flush` 落盘
+    （程序崩溃/断电不丢已写日志）；写失败静默不影响主流程。
+- `Views/MainForm.cs` `WriteLog`：追加调用 `AppLogFileWriter.Write(logLine)`，替换原 TODO 预留点位。
+- `AgingTestSystem.csproj`：新增 `<Compile Include="Services\AppLogFileWriter.cs" />`。
+
+### 为什么这么改
+- 此前 UI 日志只写 `txtLog` 文本框（纯内存），重启即丢失；设备启动失败、连接异常、扫码、告警等
+  操作记录无法追溯。
+- 测试事件日志（TestEventLogger → Logs\TestLog_*.csv）原本就持久化，操作日志补齐后 Logs 目录
+  成为完整的本地日志落点（结构化的测试事件 CSV + 自由文本的操作日志），与"历史记录查询窗体"
+  各司其职。
+
+### 验证
+- 构建通过（仅既存无关 warning CS0108）。
+- 冒烟测试：启动 exe → 生成 `Logs\AppLog_20260810.log`，内容含"气压表连接失败 / IO 连接失败"等
+  启动日志，UTF-8 带 BOM、中文读取正常。
+- 日志写失败静默（catch），不影响主流程。
+
 ## V1.58.20 — 工位面板内容居中 + 选中框与空闲块间距加大（2026-08-10）
 
 ### 改动范围

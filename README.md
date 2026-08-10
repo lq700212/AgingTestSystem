@@ -41,7 +41,8 @@ DeviceManager（服务层核心编排：采集/测试状态机/报警联动/送�
   ├─ IIoController     (MockIoController    / ModbusTcpIoController + IoMapBuilder)
   ├─ IFanController    (MockFanController   / FanControllerClient)
   ├─ ScannerService（扫码枪，独立）   UserManager（用户/权限，Users.json）
-  └─ TestEventLogger（测试事件落盘 Logs\TestLog_yyyyMMdd.csv）
+  ├─ TestEventLogger（测试事件落盘 Logs\TestLog_yyyyMMdd.csv，供历史记录窗体）
+  └─ AppLogFileWriter（主窗体 UI 操作日志落盘 Logs\AppLog_yyyyMMdd.log，与文本框逐行一致）
         ↓
 Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / StationInfo）
 ```
@@ -63,6 +64,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Services/FanControllerClient.cs` | 送风机 TCP：定值启停、读状态/温湿度，断线重连节流，IP 自动识别 + FanLastIp.cache 工控机记忆 |
 | `Services/ScannerService.cs` | 扫码枪：WMI 识别串口、串口读码、断线心跳重连 |
 | `Services/TestEventLogger.cs` | 测试事件 CSV 落盘（启动/停止/报警/复位/急停/真空建立） |
+| `Services/AppLogFileWriter.cs` | 主窗体 UI 操作日志落盘（Logs\AppLog_yyyyMMdd.log，按日期分文件，与文本框逐行一致，写失败静默） |
 | `Services/UserManager.cs` | 用户/登录/权限，Users.json 持久化 |
 | `Services/RecipeStorage.cs` | 配方列表持久化（Recipes.json，启动加载/操作即写盘；SaveWithDuplicateCheck 同名覆盖保存，V1.25/1.26） |
 | `Services/StationSettingsCache.cs` | 工位配置缓存（StationSettings.json，按工位缓存 SN/配方/延时/极限温度，设置窗口下次打开自动回填，V1.26） |
