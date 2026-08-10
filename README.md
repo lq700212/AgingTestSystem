@@ -69,7 +69,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Services/Mock*.cs` | Mock 实现（免接线演示） |
 | `Views/MainForm.cs` | 主窗体：面板区（9×8）、菜单下拉、状态栏（"在线"全部离线标红，V1.24）、权限控制、扫码事件、操作区按钮 |
 | `Views/WorkstationGridView.cs` | 工位网格（自绘大画布，V1.51）：1 个 UserControl 画全部面板 + 行全选列，滚动零撕裂；文字绝对坐标绘制无模糊；布局外部化（程序目录 PanelLayout.json 可改坐标/颜色/字号/文字，无需重编译）；坐标命中实现长按选中/设置按钮/选中框/行全选/悬停提示 |
-| `Models/PanelLayoutConfig.cs` | 工位面板布局配置模型（V1.51）：面板网格尺寸/面板内各元素坐标/字体/颜色（"R,G,B"）/按钮与提示文字；`LoadOrDefault` 文件缺失或损坏回退内置默认 |
+| `Models/PanelLayoutConfig.cs` | 工位面板布局配置模型（V1.51）：面板网格尺寸/面板内各元素坐标/字体/颜色（"R,G,B"）/按钮与提示文字；`LoadOrDefault` 文件缺失或损坏回退内置默认；V1.58.13~1.58.19 起全部元素改为"锚定"解析（右缘/上缘/下缘/对齐/垂直居中，改面板宽高自动联动），字段全表见类头注释 |
 | `Dialogs/CommunicationTestForm.cs` | 通讯测试窗体（IO 耦合器 DO 输出测试，负压阀/载台上电两页 9×8 灯按钮 + 一键遍历） |
 | `Dialogs/FanTestForm.cs` | 送风机测试窗体（定值启停 + 温湿度显示） |
 | `Dialogs/SettingsForm.cs` | 系统设置（管理员，按分类编辑 App.config 全部配置项，写回 exe.config 保存即生效，连接参数自动重连；仅设备数量/布局/模拟开关等结构型配置重启生效） |

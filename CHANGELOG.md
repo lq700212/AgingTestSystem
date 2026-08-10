@@ -3,6 +3,44 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.58.19 — 垂直锚定（自下而上链，只声明关系、布局零变化）：设置按钮下缘锚定面板 + 下排元素以基准间距叠加 + 延时两行居中（2026-08-10）
+
+### 改动范围
+- `Models/PanelLayoutConfig.cs`：
+  - `ElementRect` 新增 4 个垂直锚定字段（可空，兼容旧配置）：
+    - `BottomMargin`：下缘距面板下缘 → Y = 面板高 - BottomMargin - 高（设置按钮设 10，保持原 Y=145）。
+    - `BottomToTopAlignTo` + `BottomToTopGap`：下缘位于目标元素上边缘上方 Gap 处 → Y = 目标.Y - 自身高 - Gap（Gap=0 才紧贴；取当前实际空隙即可保持布局不变，构成自下而上垂直链）。
+    - `VerticalCenterAlignTo` + `CenterOffsetY`：垂直居中对齐目标，可加偏移（正下负上）用于对称分布。
+    - `RightToLeftGap`：右缘与目标左缘的间隙 px（配合双端锚定/单独 RightToLeftAlignTo，默认 0 紧贴）。
+  - `ElementPoint`（标签）新增 `VerticalCenterAlignTo` + `VerticalCenterOffset`：文字垂直居中对齐目标框，用新增 `LabelTextHeight`（默认 12，依赖 9pt 微软雅黑字体）算文字高。
+  - `ResolveRight` 支持 `BottomMargin`；`AlignSelf` 支持 `BottomToTopAlignTo`（含 Gap）/`VerticalCenterAlignTo`/`RightToLeftGap`；`ResolveLabel` 支持标签垂直居中。
+  - `ResolveElementAlign` 重排为"垂直链优先"：设置按钮 → 配方 → SN → 真空关/压力框 → 空闲/下电 → 延时两行。
+  - 类头锚定总览改写为"横纵双向链"，并强调**核心原则：锚定只改声明、不改位置**（间距/边距取当前实际空隙，解析结果与 V1.58.18 完全一致）。
+- 默认布局：**坐标全部与 V1.58.18 相同，未移动任何元素**，只补锚定声明：
+  - 设置按钮 (145,145)：BottomMargin=10（下缘 195 距面板底 10px）。
+  - 配方框 (57,118)：下缘以设置按钮上缘为基准、BottomToTopGap=6。
+  - SN 框 (57,93)：下缘以配方框上缘为基准、BottomToTopGap=4。
+  - 真空关/真空压力框 (145,67)/(57,67)：下缘以 SN 框上缘为基准、BottomToTopGap=5；**真空压力框补
+    RightToLeftGap=3 恢复 V1.58.9 的 3px 间隙**（V1.58.15 双端锚定把宽算成 88 紧贴真空关左缘，现改回 85、
+    右缘 142 与真空关左 145 留 3px）。
+  - 延时开启/到达值框 (57,147)/(57,172)：以设置按钮中心为基准，CenterOffsetY=-12/+13 对称分布（因整数除法截断 0.5px，两偏移相差 1 才与手工坐标完全一致）。
+  - 五标签 Y=70/96/121/150/175 不变：以各自框中心为基准、VerticalCenterOffset=-1。
+- `Views/WorkstationGridView.cs`：头部 ASCII 图与坐标标注更新为"V1.58.19 加锚定后坐标不变"，V1.58.19 说明段落改写。
+- `bin/Debug/PanelLayout.json`：同步全部新字段，坐标保持 V1.58.18 值。
+
+### 为什么这么改
+- 之前 Y 方向仍是一堆绝对坐标（V1.58.6~1.58.9 手工对齐），改面板高度要逐行重算。
+- 现在用"以某元素为基准 + 间距"声明垂直关系：设置按钮锚定面板下缘（BottomMargin），配方/SN/真空关/压力逐级锚定上一级上缘（Gap 保留原空隙），延时两行锚定按钮中心——**当前界面零变化**，但改 `PanelInnerHeight` 时整条纵链按各自间距自动联动（实测 205→215 全部 +10 下移，间距恒定）。
+- 延时两行从"手工 Y=147/172"改为"以设置按钮中心对称分布"，以后调按钮位置两行自动跟随居中。
+
+### 验证
+- 构建通过（仅既存无关 warning CS0108）。
+- harness 解析校验：全部矩形/标签坐标与 de19706（V1.58.18）基准**逐项相等**（Y=67/93/118/147/172/145、标签 70/96/121/150/175）；联动测试 PanelInnerHeight 205→215 纵链全链 +10 同步、间距不变。
+- 冒烟测试通过。
+
+### 现场升级提示
+- **现场若已有旧版 PanelLayout.json**：其中没有 BottomMargin/BottomToTopGap 等新字段（反序列化为 null）→ 垂直锚定不生效（但布局照旧，无副作用）。需同步本版本 json 或删除该文件让程序重新导出默认配置（见 V1.51 起 `LoadOrDefault` 回退逻辑）。
+
 ## V1.58.18 — 锚定机制文档补全（2026-08-10）
 
 ### 改动范围
