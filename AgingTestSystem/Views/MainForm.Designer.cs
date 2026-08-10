@@ -549,7 +549,7 @@
             this.groupBoxLog.Size = new System.Drawing.Size(320, 253);
             this.groupBoxLog.TabIndex = 3;
             this.groupBoxLog.TabStop = false;
-            this.groupBoxLog.Text = "LOG";
+            this.groupBoxLog.Text = "日志";
             // 
             // txtLog
             // 
