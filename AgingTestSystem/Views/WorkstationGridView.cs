@@ -158,6 +158,16 @@ namespace AgingTestSystem.Views
         /// <summary>上次悬停提示文本（避免 MouseMove 频繁重复 Show）</summary>
         private string _lastTooltipText;
 
+        // ============ 拖拽滚动（V1.57：按住左键拖动滑动列表） ============
+        /// <summary>拖拽起始点（鼠标屏幕坐标）；左键按下时记录</summary>
+        private Point _dragStartPoint;
+        /// <summary>拖拽起始时外层滚动容器的滚动位置（AutoScrollPosition，注意其 X/Y 为负值表示内容偏移）</summary>
+        private Point _dragStartScroll;
+        /// <summary>是否已进入"拖拽滚动"状态（移动超过阈值后置 true，置 true 后本次按键不再触发点击/长按）</summary>
+        private bool _isDragging;
+        /// <summary>拖拽滚动时使用的鼠标捕获标志：按住左键期间持续接收 MouseMove，防止拖出控件范围就停止滚动</summary>
+        private bool _captured;
+
         /// <summary>工位"设置"按钮点击事件（参数为设备编号，主窗体按选中数量分流窗口）</summary>
         public event EventHandler<int> OnSetClicked;
         /// <summary>需要写日志的消息（如行全选动作），由主窗体订阅写入 LOG</summary>
@@ -165,6 +175,14 @@ namespace AgingTestSystem.Views
 
         private const int LongPressMilliseconds = 800;
         private const int LongPressMoveThreshold = 8;
+        /// <summary>
+        /// 【V1.57】判定进入"拖拽滚动"的移动阈值（像素）。
+        /// 必须 ≥ <see cref="LongPressMoveThreshold"/>（8）：长按选中的判定阈值是 8px，
+        /// 若拖拽阈值更小，用户长按时轻微移动（如 6px，本应继续等待长按）就会被拖拽抢先
+        /// 停掉计时器，长按选中就失效了。设为 10 保证"移动 ≤8px 仍按长按处理"，只有明显
+        /// 拖动（&gt;10px）才进入拖拽滚动，两者互不干扰。
+        /// </summary>
+        private const int DragScrollThreshold = 10;
 
         /// <summary>
         /// 无参数构造函数（设计器/运行时通用）
@@ -356,8 +374,9 @@ namespace AgingTestSystem.Views
         {
             if (_items.TryGetValue(deviceId, out GridItem item) && item.IsSelected != selected)
             {
+                bool anyBefore = IsAnySelected;          // 修改前的全局选中状态
                 item.IsSelected = selected;
-                Invalidate(GetPanelBounds(deviceId));
+                InvalidateAfterSelectionChange(deviceId, anyBefore);
             }
         }
 
@@ -647,6 +666,20 @@ namespace AgingTestSystem.Views
             _pressStartPoint = Control.MousePosition;
             _longPressFired = false;
 
+            // 【V1.57 拖拽滚动】按下时记录拖拽起点与外层滚动容器的当前滚动位置。
+            // 仅当父容器可滚动（Panel.AutoScroll）时才开启拖拽滚动并捕获鼠标；
+            // 这样按住左键移动即可拖动整个列表（见 GridView_MouseMove），且不会因鼠标移出控件而中断。
+            // 注意：捕获鼠标不影响长按选中——长按靠的是计时器，捕获只是保证拖动中持续收到 MouseMove。
+            _dragStartPoint = Control.MousePosition;
+            _isDragging = false;
+            _captured = false;
+            if (Parent is ScrollableControl scrollable)
+            {
+                _dragStartScroll = scrollable.AutoScrollPosition;
+                _captured = true;
+                this.Capture = true;   // 鼠标捕获：拖动期间即使指针移出本控件也能持续收到 MouseMove
+            }
+
             if (TryHitPanel(e.Location, out int deviceId, out Point local))
             {
                 // 【V1.55】local 是物理像素坐标，布局矩形需缩放后比较
@@ -670,6 +703,20 @@ namespace AgingTestSystem.Views
         private void GridView_MouseUp(object sender, MouseEventArgs e)
         {
             if (e.Button != MouseButtons.Left) return;
+
+            // 【V1.57 拖拽滚动】抬起时释放鼠标捕获；若是拖拽滚动结束，则本次按键不算点击
+            if (_captured)
+            {
+                this.Capture = false;
+                _captured = false;
+            }
+            if (_isDragging)
+            {
+                _isDragging = false;
+                _longPressTimer.Stop();
+                Cursor = Cursors.Default;    // 恢复默认光标（拖动中为 SizeAll）
+                return;
+            }
 
             _longPressTimer.Stop();
             if (_longPressFired) return;
@@ -705,7 +752,35 @@ namespace AgingTestSystem.Views
         /// </summary>
         private void GridView_MouseMove(object sender, MouseEventArgs e)
         {
-            if (!_longPressFired && _longPressTimer.Enabled)
+            // 【V1.57 拖拽滚动】按住左键且已捕获鼠标时，把移动距离换算成外层滚动容器的滚动偏移
+            if (_captured && e.Button == MouseButtons.Left && Parent is ScrollableControl scrollable)
+            {
+                Point cur = Control.MousePosition;
+                int dx = cur.X - _dragStartPoint.X;
+                int dy = cur.Y - _dragStartPoint.Y;
+                // 移动超过阈值（≥10px）才认定为拖动。
+                // 阈值特意比长按取消阈值(8px)大：按住不动的长按选中不会被拖拽抢先取消，
+                // 只有明显拖动才进入滚动模式。进入后停掉长按计时器，避免长按选中在拖动中误触发。
+                if (!_isDragging && (Math.Abs(dx) > DragScrollThreshold || Math.Abs(dy) > DragScrollThreshold))
+                {
+                    _isDragging = true;
+                    _longPressTimer.Stop();      // 进入拖动则取消长按计时
+                    Cursor = Cursors.SizeAll;    // 拖动中给出"可移动"光标反馈
+                }
+                if (_isDragging)
+                {
+                    // AutoScrollPosition 语义（WinForms）：getter 返回负值（-100 表示已向右/下滚 100），
+                    // setter 接收正值（100 表示滚动量 100）。
+                    // 想让内容"跟随鼠标移动"：鼠标右/下拖 dx/dy → 内容右/下移 → 滚动量减小 dx/dy。
+                    // 故新滚动量 = 起点滚动量 - 位移，起点滚动量 = -_dragStartScroll.X（取正）。
+                    scrollable.AutoScrollPosition = new Point(-_dragStartScroll.X - dx, -_dragStartScroll.Y - dy);
+                }
+            }
+
+            // 【长按兼容】只在"未进入拖拽滚动"时保留原有的长按取消逻辑。
+            // 长按判定阈值 8px 小于拖拽阈值 10px，所以长按时轻微抖动（≤8px）不会触发拖拽，
+            // 计时器能正常走到 800ms 触发长按选中；超过 10px 才进拖拽并停计时器。
+            if (!_isDragging && !_longPressFired && _longPressTimer.Enabled)
             {
                 Point current = Control.MousePosition;
                 if (Math.Abs(current.X - _pressStartPoint.X) > LongPressMoveThreshold ||
@@ -714,6 +789,9 @@ namespace AgingTestSystem.Views
                     _longPressTimer.Stop();
                 }
             }
+
+            // 拖动滚动中不刷新悬停提示（指针相对网格位置一直在变，提示会闪烁）
+            if (_isDragging) return;
 
             string tip = GetTooltipText(e.Location);
             if (tip != _lastTooltipText)
@@ -763,8 +841,33 @@ namespace AgingTestSystem.Views
         {
             if (_items.TryGetValue(deviceId, out GridItem item))
             {
+                bool anyBefore = IsAnySelected;          // 修改前的全局选中状态
                 item.IsSelected = !item.IsSelected;
-                Invalidate(GetPanelBounds(deviceId));
+                InvalidateAfterSelectionChange(deviceId, anyBefore);
+            }
+        }
+
+        /// <summary>
+        /// 选中状态改变后的重绘调度——**选中框的显示与否取决于全局 IsAnySelected**：
+        /// - 任一选中 → 所有面板都画选中框（选中=绿✓，未选中=空心白框）；
+        /// - 一个没选 → 所有面板都不画选中框。
+        /// 所以"从无选中↔有选中"翻转时，**所有面板**的框都要变，必须全量 Invalidate()；
+        /// 若只是已选集合内部增删（一直有选中），其他面板框不变，仅需局部重绘当前面板。
+        /// 【Bug 修复】此前这里一律只 Invalidate 单面板：长按选中第一个时其他面板
+        /// 残留"无框"旧画面，取消到最后一个时其他面板残留"空心框"旧画面。
+        /// </summary>
+        /// <param name="deviceId">选中状态被修改的工位编号</param>
+        /// <param name="anyBefore">修改前的 IsAnySelected 值</param>
+        private void InvalidateAfterSelectionChange(int deviceId, bool anyBefore)
+        {
+            bool anyAfter = IsAnySelected;               // 修改后的全局选中状态
+            if (anyBefore != anyAfter)
+            {
+                Invalidate();                            // 全局翻转：所有面板的选中框一起显示/隐藏
+            }
+            else
+            {
+                Invalidate(GetPanelBounds(deviceId));    // 全局状态未变，只需刷新当前面板
             }
         }
 
