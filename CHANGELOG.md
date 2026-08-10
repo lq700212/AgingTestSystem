@@ -3,6 +3,23 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.57.2 — 拖拽滚动性能优化：画布缓存 + 滚动节流 + 画刷复用（2026-08-10）
+
+### 改动范围
+- `Views/WorkstationGridView.cs`，三个优化叠加，拖动帧耗时由 **24.55ms→5.02ms（约 5 倍）**：
+  1. **画布缓存（核心）**：新增 `_canvas` 离屏 Bitmap，整幅网格预先渲染进缓存，`OnPaint` 只做 `DrawImage` 可见区位图拷贝（GDI 硬件加速，实测 1000ms→1.86ms）。数据更新 `UpdateAll`/`UpdateSingle`、选中变化 `InvalidateAfterSelectionChange`/`ClearAllSelection`/`ToggleRow` 改为先把面板画进缓存再 Invalidate 对应区域。滚动时不再逐面板重绘十几处 `TextRenderer`。
+  2. **滚动节流**：鼠标回报率（常见 125~1000Hz）远高于屏幕刷新率（60Hz），此前每次 MouseMove 都直接 `AutoScrollPosition` setter（含布局+滚动条更新，约 2.9ms）。改为 MouseMove 只记录 `_dragTargetScroll`，由新增 16ms 的 `_dragScrollTimer` 统一应用（60FPS 合并）；MouseUp 时立即应用最终目标，保证松手停位准确。
+  3. **画刷/画笔复用**：边框 `_penBorder`、值框底 `_brushValueBox`、行选按钮 `_brushRowSelect`、设置按钮 `_brushSetButton`、选中框绿/白底 `_brushSelectChecked`/`_brushSelectUnchecked` 缓存为字段，替换原每面板 `new SolidBrush/Pen` 的数百次/帧分配，减轻 GC 压力。
+
+### 为什么这么改
+- 卡顿根因经测量确认：滚动容器在 `AutoScrollPosition` 变化时会让子控件重绘**整个可见区**（harness 实测 clip=100% 可见区，而非"新暴露条带"），每帧重画 12 个可见面板的十几处文本 → 单帧 24.55ms，远超 60FPS 的 16.7ms 预算。三层优化分别解决"画得太贵""画得太频繁""分配太多"。
+
+### 验证
+- 性能 harness（离屏渲染 + 真实滚动 100 帧）：滚动帧 24.55ms→5.02ms；OnPaint 1000ms→1.86ms；setter 2.88ms→0.62ms；完整拖拽帧 37.9ms→5.4ms。
+- 正确性 harness：无选中/选中1台/行全选/取消全部 四种状态在画布缓存下渲染像素全部正确（绿✓、空心白框、消失均验证）。
+- 端到端回归（SendInput 真实按键+移动）：右拖滚动量减小、反向拖增大、长按 800ms 选中，全部通过。
+- 冒烟测试进程存活。
+
 ## V1.57 — 主界面工位列表支持鼠标拖拽滚动（2026-08-10）
 
 ### 改动范围

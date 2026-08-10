@@ -19,6 +19,14 @@ namespace AgingTestSystem.Views
     /// - 72 个面板全部由本控件 OnPaint 按坐标绘制，且只重绘可见区域（配合滚动性能）；
     /// - 交互（长按选中 / 设置按钮 / 选中框 / 行全选 / 悬停提示）全部用坐标命中实现。
     ///
+    /// 【V1.57.2 性能：画布缓存 + 滚动节流】
+    /// 滚动容器在 AutoScrollPosition 变化时会让子控件重绘**整个可见区**（实测 clip=100%），
+    /// 若每次滚动都重画全部可见面板的文本，单帧约 24ms 无法到 60FPS。本版本改为：
+    /// - 整幅网格预先渲染进离屏 `_canvas`（Bitmap），OnPaint 只做 DrawImage 位图拷贝（~2ms）；
+    /// - 数据更新 / 选中变化时先把对应面板画进 `_canvas` 再 Invalidate 对应区域；
+    /// - 拖动滚动用 16ms 定时器合并高频 MouseMove（鼠标回报率 ≫ 屏幕刷新率）。
+    /// 详见类字段 `_canvas`、方法 `RenderToCanvas`/`RenderPanelToCanvas` 注释。
+    ///
     /// 【V1.51 修复：文字"糊成一坨"】
     /// 原实现 OnPaint 用 g.TranslateTransform 平移坐标系后再用 TextRenderer.DrawText 绘制。
     /// TextRenderer 走 GDI 绘制路径，与 Graphics 的坐标变换叠加时**位置/大小会错乱**，
@@ -145,6 +153,17 @@ namespace AgingTestSystem.Views
         /// <summary>所有工位的显示状态（key = 设备编号，从1开始）</summary>
         private readonly Dictionary<int, GridItem> _items = new Dictionary<int, GridItem>();
 
+        /// <summary>
+        /// 【V1.57.2】画布缓存（离屏位图）：整幅网格预先渲染到本 Bitmap，OnPaint 只做位图拷贝。
+        /// 【为什么】滚动容器在 AutoScrollPosition 变化时会让子控件重绘**整个可见区**
+        /// （实测 clip = 100% 可见区），若每次滚动都重画全部可见面板的十几处 TextRenderer，
+        /// 单帧约 24ms，无法达到 60FPS 刷新率 → 拖动卡顿。
+        /// 【方案】面板文本/按钮只在数据更新、选中变化时重绘到 _canvas；滚动时 OnPaint
+        /// 直接 DrawImage 拷贝可见区，GDI 走硬件加速约 1~2ms，拖动就顺了。
+        /// 画布尺寸 = 控件尺寸（物理像素），在 EnsureCanvas 里按需创建/重建（DPI 变化时）。
+        /// </summary>
+        private Bitmap _canvas;
+
         /// <summary>状态块悬停提示</summary>
         private readonly ToolTip _toolTip;
         /// <summary>长按选中计时器</summary>
@@ -158,6 +177,22 @@ namespace AgingTestSystem.Views
         /// <summary>上次悬停提示文本（避免 MouseMove 频繁重复 Show）</summary>
         private string _lastTooltipText;
 
+        // ============ 缓存画刷/画笔（V1.57.2：绘制热路径避免高频 new SolidBrush/Pen 导致 GC 压力） ============
+        // 面板数据驱动的颜色（状态块/背景）仍按需 new，但边框、值框底、行选按钮底、设置按钮底、
+        // 选中框底色等"每帧每面板都用的常量色"全部缓存为字段复用，一次分配、整生命周期复用。
+        /// <summary>边框画笔（黑），所有矩形描边共用</summary>
+        private readonly Pen _penBorder;
+        /// <summary>值框背景画刷（白），5 个值框共用</summary>
+        private readonly SolidBrush _brushValueBox;
+        /// <summary>行全选按钮背景画刷（浅灰）</summary>
+        private readonly SolidBrush _brushRowSelect;
+        /// <summary>设置按钮背景画刷（绿）</summary>
+        private readonly SolidBrush _brushSetButton;
+        /// <summary>选中指示框"已选中"底色画刷（绿）</summary>
+        private readonly SolidBrush _brushSelectChecked;
+        /// <summary>选中指示框"未选中"底色画刷（白，即 Brushes.White 同色，单独存便于统一替换）</summary>
+        private readonly SolidBrush _brushSelectUnchecked;
+
         // ============ 拖拽滚动（V1.57：按住左键拖动滑动列表） ============
         /// <summary>拖拽起始点（鼠标屏幕坐标）；左键按下时记录</summary>
         private Point _dragStartPoint;
@@ -167,6 +202,16 @@ namespace AgingTestSystem.Views
         private bool _isDragging;
         /// <summary>拖拽滚动时使用的鼠标捕获标志：按住左键期间持续接收 MouseMove，防止拖出控件范围就停止滚动</summary>
         private bool _captured;
+        /// <summary>
+        /// 【V1.57.2】拖拽滚动的"合并定时器"：把高频 MouseMove 换算出的目标滚动位置
+        /// 每 16ms 应用一次，而不是每次 MouseMove 都 set。鼠标回报率（常见 125Hz~1000Hz）
+        /// 远高于屏幕刷新率（60Hz），若每次移动都直接 set AutoScrollPosition，会触发
+        /// 大量布局 + 滚动条更新 + 重绘堆积，UI 线程被拖垮表现为拖动卡顿。
+        /// 只保留"最新目标位置"，帧率内合并，手感和直接滚动一致但开销大降。
+        /// </summary>
+        private readonly System.Windows.Forms.Timer _dragScrollTimer;
+        /// <summary>拖拽期间最新一次计算出的目标滚动位置（由 _dragScrollTimer 统一应用）</summary>
+        private Point _dragTargetScroll;
 
         /// <summary>工位"设置"按钮点击事件（参数为设备编号，主窗体按选中数量分流窗口）</summary>
         public event EventHandler<int> OnSetClicked;
@@ -217,10 +262,24 @@ namespace AgingTestSystem.Views
             _titleFont = new Font(_layout.FontFamily, _layout.TitleFontSize,
                 _layout.TitleFontBold ? FontStyle.Bold : FontStyle.Regular);
 
+            // 【V1.57.2】初始化缓存画刷/画笔（颜色在解析完配置后创建；这些颜色全程不变）
+            _penBorder = new Pen(_colorBorder);
+            _brushValueBox = new SolidBrush(_colorValueBox);
+            _brushRowSelect = new SolidBrush(_colorRowSelect);
+            _brushSetButton = new SolidBrush(_colorSetButton);
+            _brushSelectChecked = new SolidBrush(_colorWorkIdle);
+            _brushSelectUnchecked = new SolidBrush(Color.White);
+
             _toolTip = new ToolTip(components);
             _longPressTimer = new System.Windows.Forms.Timer(components);
             _longPressTimer.Interval = LongPressMilliseconds;
             _longPressTimer.Tick += LongPressTimer_Tick;
+
+            // 【V1.57.2】拖拽滚动合并定时器：16ms ≈ 60FPS，把高频 MouseMove 的滚动更新合并到刷新率。
+            // 应用一次后立即 Stop，等下一次 MouseMove 再启动，避免无谓空转。
+            _dragScrollTimer = new System.Windows.Forms.Timer(components);
+            _dragScrollTimer.Interval = 16;
+            _dragScrollTimer.Tick += DragScrollTimer_Tick;
 
             this.MouseDown += GridView_MouseDown;
             this.MouseUp += GridView_MouseUp;
@@ -328,6 +387,8 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 批量更新所有面板数据（1Hz 采集周期全量刷新入口）
+        /// 【V1.57.2 性能】数据全部应用到内存后统一重绘到画布缓存并整窗 Invalidate，
+        /// 由 OnPaint 从缓存拷贝，避免每帧重画文本。
         /// </summary>
         public void UpdateAll(BarometerData[] allData)
         {
@@ -341,16 +402,22 @@ namespace AgingTestSystem.Views
                     changed = true;
                 }
             }
-            if (changed) Invalidate();
+            if (changed)
+            {
+                RenderToCanvas();   // 全量刷新：把最新数据整幅画进缓存
+                Invalidate();
+            }
         }
 
         /// <summary>
         /// 更新单个面板数据（快速跟踪专用，只重绘该面板区域）
+        /// 【V1.57.2 性能】先把该面板重绘进画布缓存，再只 Invalidate 该区域。
         /// </summary>
         public void UpdateSingle(BarometerData data)
         {
             if (data == null || !_items.TryGetValue(data.DeviceId, out GridItem item)) return;
             ApplyData(item, data);
+            RenderPanelToCanvas(data.DeviceId);
             Invalidate(GetPanelBounds(data.DeviceId));
         }
 
@@ -378,9 +445,7 @@ namespace AgingTestSystem.Views
                 item.IsSelected = selected;
                 InvalidateAfterSelectionChange(deviceId, anyBefore);
             }
-        }
-
-        /// <summary>获取当前选中的设备编号数组</summary>
+        }        /// <summary>获取当前选中的设备编号数组</summary>
         public int[] GetSelectedDeviceIds()
         {
             var list = new List<int>();
@@ -448,49 +513,73 @@ namespace AgingTestSystem.Views
         #region 自绘渲染
 
         /// <summary>
-        /// 自绘整个工位网格（只重绘可见区域，配合滚动容器性能）。
+        /// 自绘整个工位网格（OnPaint 入口）。
+        /// 【V1.57.2 性能】改为"画布缓存 + 位图拷贝"：
+        /// 面板文本/按钮在数据或选中变化时经 <see cref="RenderToCanvas"/> 画进 _canvas，
+        /// 这里只把可见区从 _canvas 拷到屏幕（DrawImage，GDI 硬件加速，毫秒级），
+        /// 滚动时不再逐面板重画 TextRenderer，解决拖动卡顿。
         /// 全部使用绝对坐标绘制：每个面板元素的最终坐标 = 面板左上角 + 设计坐标，
         /// 不再使用 TranslateTransform（避免 TextRenderer 的 GDI 绘制与坐标变换错乱导致文字模糊）。
         /// </summary>
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
-            Graphics g = e.Graphics;
 
             if (_columns == 0) return;
 
-            // 【V1.55 高DPI适配】e.ClipRectangle 是物理像素坐标，而布局配置是 96DPI 逻辑像素，
-            // 所以可见列/行范围计算必须先乘缩放因子，否则 150% 缩放下只重绘左上角一小块。
-            int colW = Scaled(_layout.PanelColumnWidth);
-            int rowH = Scaled(_layout.PanelRowHeight);
+            // 确保画布已创建且尺寸匹配（首次绘制 / DPI 变化 / 尺寸变更时重建）
+            EnsureCanvas();
 
+            // 只拷贝可见区到屏幕：源矩形 = 目标矩形 = e.ClipRectangle（坐标都在本控件坐标系内）
             Rectangle clip = e.ClipRectangle;
-            int startCol = Math.Max(0, clip.Left / colW);
-            int endCol = Math.Min(_columns - 1, (clip.Right + colW - 1) / colW);
-            int startRow = Math.Max(0, clip.Top / rowH);
-            int endRow = Math.Min(_rows - 1, (clip.Bottom + rowH - 1) / rowH);
+            if (clip.Width <= 0 || clip.Height <= 0) return;
+            e.Graphics.DrawImage(_canvas, clip, clip, GraphicsUnit.Pixel);
+        }
 
-            bool anySelected = IsAnySelected;
+        /// <summary>
+        /// 【V1.57.2】确保画布存在且尺寸与控件一致；尺寸变化（DPI 变化/Configure 后）时重建并全量重绘。
+        /// 重建后调用 <see cref="RenderToCanvas"/> 把当前所有面板画进缓存。
+        /// </summary>
+        private void EnsureCanvas()
+        {
+            if (_canvas != null && _canvas.Width == Width && _canvas.Height == Height) return;
 
-            for (int row = startRow; row <= endRow; row++)
+            if (_canvas != null)
             {
-                for (int col = startCol; col <= endCol; col++)
-                {
-                    int deviceId = row * _columns + col + 1;
-                    if (!_items.TryGetValue(deviceId, out GridItem item)) continue;
-
-                    // 面板左上角绝对坐标（面板内容设计尺寸 + 上下左右各 2px 外边距，均按 DPI 放大）
-                    int panelLeft = Scaled(col * _layout.PanelColumnWidth + 2);
-                    int panelTop = Scaled(row * _layout.PanelRowHeight + 2);
-                    DrawPanel(g, item, anySelected, panelLeft, panelTop);
-                }
+                _canvas.Dispose();
+                _canvas = null;
             }
+            if (Width <= 0 || Height <= 0) return;
+            _canvas = new Bitmap(Width, Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            RenderToCanvas();
+        }
 
-            // 行全选按钮列
-            if (clip.Right > Scaled(_columns * _layout.PanelColumnWidth))
+        /// <summary>
+        /// 【V1.57.2】把整幅网格绘制进画布缓存 _canvas（面板 + 行全选按钮列）。
+        /// 供画布首次创建 / DPI 变化重建 / 全量数据刷新时调用。
+        /// </summary>
+        private void RenderToCanvas()
+        {
+            using (Graphics g = Graphics.FromImage(_canvas))
             {
-                for (int row = startRow; row <= endRow; row++)
+                // 背景铺底（防残留）：默认用面板空闲底色，未覆盖区域也是同色
+                g.Clear(_normalColor);
+
+                bool anySelected = IsAnySelected;
+                for (int row = 0; row < _rows; row++)
                 {
+                    for (int col = 0; col < _columns; col++)
+                    {
+                        int deviceId = row * _columns + col + 1;
+                        if (!_items.TryGetValue(deviceId, out GridItem item)) continue;
+
+                        // 面板左上角绝对坐标（面板内容设计尺寸 + 上下左右各 2px 外边距，均按 DPI 放大）
+                        int panelLeft = Scaled(col * _layout.PanelColumnWidth + 2);
+                        int panelTop = Scaled(row * _layout.PanelRowHeight + 2);
+                        DrawPanel(g, item, anySelected, panelLeft, panelTop);
+                    }
+
+                    // 行全选按钮列（每行右侧）
                     Rectangle btnRect = new Rectangle(
                         Scaled(_columns * _layout.PanelColumnWidth + 2),
                         Scaled(row * _layout.PanelRowHeight + 2),
@@ -498,6 +587,35 @@ namespace AgingTestSystem.Views
                         Scaled(_layout.PanelRowHeight - 4));
                     DrawRowSelectButton(g, btnRect, row);
                 }
+            }
+        }
+
+        /// <summary>
+        /// 【V1.57.2】把指定工位面板重绘到画布缓存（局部刷新：数据/选中变化时调用，
+        /// 只重画这一块，避免全量重绘）。之后调用方再 Invalidate 对应屏幕区域完成显示。
+        /// </summary>
+        /// <param name="deviceId">工位编号（1 起）</param>
+        private void RenderPanelToCanvas(int deviceId)
+        {
+            if (_canvas == null) return;
+            if (!_items.TryGetValue(deviceId, out GridItem item)) return;
+
+            int index = deviceId - 1;
+            int col = index % _columns;
+            int row = index / _columns;
+            bool anySelected = IsAnySelected;
+
+            using (Graphics g = Graphics.FromImage(_canvas))
+            {
+                // 先把该面板整块清成其背景色，再重画面板（覆盖旧内容）
+                Rectangle panelArea = GetPanelBounds(deviceId);
+                using (var bg = new SolidBrush(item.BackColor))
+                {
+                    g.FillRectangle(bg, panelArea);
+                }
+                int panelLeft = Scaled(col * _layout.PanelColumnWidth + 2);
+                int panelTop = Scaled(row * _layout.PanelRowHeight + 2);
+                DrawPanel(g, item, anySelected, panelLeft, panelTop);
             }
         }
 
@@ -541,14 +659,8 @@ namespace AgingTestSystem.Views
 
             // 设置按钮（绿底白字）
             Rectangle rcSet = Offset(Scaled(_layout.RcSetButton.ToRectangle()), panelLeft, panelTop);
-            using (var brush = new SolidBrush(_colorSetButton))
-            {
-                g.FillRectangle(brush, rcSet);
-            }
-            using (var pen = new Pen(_colorBorder))
-            {
-                g.DrawRectangle(pen, rcSet);
-            }
+            g.FillRectangle(_brushSetButton, rcSet);
+            g.DrawRectangle(_penBorder, rcSet);
             TextRenderer.DrawText(g, _layout.SetButtonText, _panelFont, rcSet, Color.White,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
 
@@ -558,24 +670,15 @@ namespace AgingTestSystem.Views
                 Rectangle rcSelect = Offset(Scaled(_layout.RcSelectBox.ToRectangle()), panelLeft, panelTop);
                 if (item.IsSelected)
                 {
-                    using (var brush = new SolidBrush(_colorWorkIdle))
-                    {
-                        g.FillRectangle(brush, rcSelect);
-                    }
-                    using (var pen = new Pen(_colorBorder))
-                    {
-                        g.DrawRectangle(pen, rcSelect);
-                    }
+                    g.FillRectangle(_brushSelectChecked, rcSelect);
+                    g.DrawRectangle(_penBorder, rcSelect);
                     TextRenderer.DrawText(g, _layout.SelectedMarkText, _panelFont, rcSelect, Color.White,
                         TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                 }
                 else
                 {
-                    g.FillRectangle(Brushes.White, rcSelect);
-                    using (var pen = new Pen(_colorBorder))
-                    {
-                        g.DrawRectangle(pen, rcSelect);
-                    }
+                    g.FillRectangle(_brushSelectUnchecked, rcSelect);
+                    g.DrawRectangle(_penBorder, rcSelect);
                 }
             }
         }
@@ -585,14 +688,8 @@ namespace AgingTestSystem.Views
         /// </summary>
         private void DrawRowSelectButton(Graphics g, Rectangle rc, int row)
         {
-            using (var brush = new SolidBrush(_colorRowSelect))
-            {
-                g.FillRectangle(brush, rc);
-            }
-            using (var pen = new Pen(_colorBorder))
-            {
-                g.DrawRectangle(pen, rc);
-            }
+            g.FillRectangle(_brushRowSelect, rc);
+            g.DrawRectangle(_penBorder, rc);
             TextRenderer.DrawText(g, IsRowAllSelected(row) ? _layout.RowSelectCancelText : _layout.RowSelectAllText,
                 _panelFont, rc, _colorText,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
@@ -620,14 +717,8 @@ namespace AgingTestSystem.Views
         /// </summary>
         private void DrawValueBox(Graphics g, Rectangle rc, string text)
         {
-            using (var brush = new SolidBrush(_colorValueBox))
-            {
-                g.FillRectangle(brush, rc);
-            }
-            using (var pen = new Pen(_colorBorder))
-            {
-                g.DrawRectangle(pen, rc);
-            }
+            g.FillRectangle(_brushValueBox, rc);
+            g.DrawRectangle(_penBorder, rc);
             // 文本绘制矩形 = 值框矩形左移内边距（宽度同步缩短，防止文字溢出到右边框）
             // 【V1.55】内边距按 DPI 放大，保证 150% 缩放下文字仍与值框左边框保持合理间距
             int pad = Scaled(_layout.ValueTextLeftPadding);
@@ -714,6 +805,13 @@ namespace AgingTestSystem.Views
             {
                 _isDragging = false;
                 _longPressTimer.Stop();
+                // 【V1.57.2】停止合并定时器，并立即把最新目标滚动位置应用一次，
+                // 否则最后一次 MouseMove 若还没到 16ms 定时点，松手时滚动会停在旧位置。
+                _dragScrollTimer.Stop();
+                if (Parent is ScrollableControl scrollable)
+                {
+                    scrollable.AutoScrollPosition = _dragTargetScroll;
+                }
                 Cursor = Cursors.Default;    // 恢复默认光标（拖动中为 SizeAll）
                 return;
             }
@@ -773,7 +871,14 @@ namespace AgingTestSystem.Views
                     // setter 接收正值（100 表示滚动量 100）。
                     // 想让内容"跟随鼠标移动"：鼠标右/下拖 dx/dy → 内容右/下移 → 滚动量减小 dx/dy。
                     // 故新滚动量 = 起点滚动量 - 位移，起点滚动量 = -_dragStartScroll.X（取正）。
-                    scrollable.AutoScrollPosition = new Point(-_dragStartScroll.X - dx, -_dragStartScroll.Y - dy);
+                    // 【V1.57.2 性能】不再直接 set，而是记录目标位置后由 _dragScrollTimer 每 16ms
+                    // 统一应用一次（合并高频 MouseMove，见字段注释）。dx/dy 是基于按下起点的绝对值，
+                    // 所以"只记录最新目标"不会丢位置、手感与逐帧 set 一致。
+                    _dragTargetScroll = new Point(-_dragStartScroll.X - dx, -_dragStartScroll.Y - dy);
+                    if (!_dragScrollTimer.Enabled)
+                    {
+                        _dragScrollTimer.Start();
+                    }
                 }
             }
 
@@ -836,6 +941,20 @@ namespace AgingTestSystem.Views
             }
         }
 
+        /// <summary>
+        /// 【V1.57.2】拖拽滚动合并定时器到点：把 MouseMove 期间记录的最新目标滚动位置应用一次。
+        /// 应用完立即 Stop，等下一次 MouseMove 再启动——拖拽期间约每秒 60 次 set，
+        /// 避免高回报率鼠标（125~1000Hz）每次都触发 AutoScrollPosition 的布局+滚动条更新。
+        /// </summary>
+        private void DragScrollTimer_Tick(object sender, EventArgs e)
+        {
+            _dragScrollTimer.Stop();
+            if (_isDragging && Parent is ScrollableControl scrollable)
+            {
+                scrollable.AutoScrollPosition = _dragTargetScroll;
+            }
+        }
+
         /// <summary>切换指定工位的选中状态并重绘</summary>
         private void ToggleSelect(int deviceId)
         {
@@ -851,10 +970,12 @@ namespace AgingTestSystem.Views
         /// 选中状态改变后的重绘调度——**选中框的显示与否取决于全局 IsAnySelected**：
         /// - 任一选中 → 所有面板都画选中框（选中=绿✓，未选中=空心白框）；
         /// - 一个没选 → 所有面板都不画选中框。
-        /// 所以"从无选中↔有选中"翻转时，**所有面板**的框都要变，必须全量 Invalidate()；
+        /// 所以"从无选中↔有选中"翻转时，**所有面板**的框都要变，必须整幅重绘到缓存 + 全量 Invalidate；
         /// 若只是已选集合内部增删（一直有选中），其他面板框不变，仅需局部重绘当前面板。
         /// 【Bug 修复】此前这里一律只 Invalidate 单面板：长按选中第一个时其他面板
         /// 残留"无框"旧画面，取消到最后一个时其他面板残留"空心框"旧画面。
+        /// 【V1.57.2】配合画布缓存：翻转时整幅 RenderToCanvas（所有面板框一起变），
+        /// 未翻转时只 RenderPanelToCanvas 当前面板，再对应 Invalidate。
         /// </summary>
         /// <param name="deviceId">选中状态被修改的工位编号</param>
         /// <param name="anyBefore">修改前的 IsAnySelected 值</param>
@@ -863,11 +984,13 @@ namespace AgingTestSystem.Views
             bool anyAfter = IsAnySelected;               // 修改后的全局选中状态
             if (anyBefore != anyAfter)
             {
-                Invalidate();                            // 全局翻转：所有面板的选中框一起显示/隐藏
+                RenderToCanvas();                        // 全局翻转：所有面板的选中框一起显示/隐藏
+                Invalidate();
             }
             else
             {
-                Invalidate(GetPanelBounds(deviceId));    // 全局状态未变，只需刷新当前面板
+                RenderPanelToCanvas(deviceId);           // 全局状态未变，只需刷新当前面板
+                Invalidate(GetPanelBounds(deviceId));
             }
         }
 
@@ -883,7 +1006,11 @@ namespace AgingTestSystem.Views
                     any = true;
                 }
             }
-            if (any) Invalidate();
+            if (any)
+            {
+                RenderToCanvas();                        // 所有选中框一起消失
+                Invalidate();
+            }
         }
 
         /// <summary>切换整行选中状态（全选 ↔ 取消全选）</summary>
@@ -901,6 +1028,7 @@ namespace AgingTestSystem.Views
                     item.IsSelected = newState;
                 }
             }
+            RenderToCanvas();   // 行选中状态变化影响该行面板 + 行全选按钮文字，整幅重绘到缓存
             Invalidate();
 
             OnLog?.Invoke(this, $"第 {row + 1} 行 {(newState ? "全选" : "取消全选")}（设备 {startDeviceId}-{endDeviceId}）");
