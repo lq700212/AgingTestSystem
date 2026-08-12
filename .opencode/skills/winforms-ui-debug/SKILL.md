@@ -182,8 +182,46 @@ Console.WriteLine("lastCol cell0=" + cr);                            // Right=13
 10. **善用"批量纵向扫描多行"一次性确认规则**：改完"按行分支画线"后，harness 里循环前 N 行（`for r in 0..13`）对固定 X 取色，对照行号集合打印 `行号 [GROUP|data] 色值`，能一眼确认"分组行=浅蓝、数据行=线色"全部命中，比单看两行更稳。
 11. **纯代码窗体的 AutoScale 不生效 = 99% 缺 `SuspendLayout()`**（V1.58.4 血泪）：只设 `AutoScaleMode.Font` + `AutoScaleDimensions` 不够，未挂起布局时逐次 `Controls.Add` 会把 AutoScaleDimensions 固化当前 DPI 值（144 DPI 下 6×12→9×18），缩放因子恒 1。验证时先看 `form.AutoScaleDimensions` 构造后是不是还是 6×12，被改成 9×18 就是缺 SuspendLayout。
 12. **测 AutoScale 缩放必须用 PerMonitorV2 harness**：只 `SetProcessDPIAware()` 是 System-aware，AutoScaleDimensions 自动按当前 DPI 初始化，永远测不出缩放（假结论）。csc 编译带 `/win32manifest:pmv2.manifest` + bin 里放同名 `.exe.config`（`DpiAwareness=PerMonitorV2` 开关）才走真路径；对照 Designer 窗体（SettingsForm）能缩放即证明环境正确。
+13. **禁窗口缩放：`Maximized` 是最大的坑，改用手动铺满 `WorkingArea`**（V1.11.0 CommandCenter 血泪）：想"默认全屏 + 禁止拖拽缩放 + 保留最小化/关闭按钮"时，**绝不能用 `WindowState.Maximized`**——Windows 会在最大化瞬间把 `FixedSingle` 边框强制切换成"可调整"样式，边缘拖拽缩放照常开放，`WndProc` 拦截 `WM_NCHITTEST`（HTLEFT..HTBOTTOMRIGHT 命中码 10~17 改 HTCLIENT）在最大化状态下也挡不住系统这一层。正解组合：`FormBorderStyle=FixedSingle`（Normal 下无拖拽句柄）+ `MaximizeBox=false` + `MinimizeBox=true` + `WindowState=Normal` + 在 `OnShown` 里手动 `Bounds = Screen.FromControl(this).WorkingArea` 铺满屏幕（等效全屏、保留任务栏）。按钮缩放、常规拖拽、最大化边缘拖拽三条通道全关，最小化/关闭按钮不受影响。
 
-## 五·五、高 DPI 适配专项（V1.55 沉淀）
+## 五·五、窗口全屏 / 禁缩放 / 边框行为专项（V1.11.0 CommandCenter 沉淀）
+
+"开机全屏、禁缩放、但保留最小化/关闭按钮"是工控界面的常见需求，也是 WinForms 最容易反复翻车的点。核心原则：**让"固定"成为真实状态，而不是看起来固定**。下表是各方案的实测结果（客户现场逐版验证过）：
+
+| 方案 | 结果 | 结论 |
+| --- | --- | --- |
+| `FormBorderStyle=None` + 铺满屏 | 无边框、无任何系统按钮 | 关不了软件，客户投诉 |
+| `FixedDialog` | 边框固定、**无最小化/最大化按钮** | 客户要最小化 |
+| `Sizable` + `MaximizeBox=false` | 按钮禁用，但**边框仍可拖拽缩放** | 拖拽漏网 |
+| `FixedSingle` + `WindowState=Maximized` | **Windows 把边框强制切成可调整样式，边缘拖拽照常开放** | 最隐蔽的坑 |
+| ✅ `FixedSingle` + `Normal` + 手动铺 `WorkingArea` + `MaximizeBox=false` + `MinimizeBox=true` | 全屏等效、无拖拽句柄、最小化/关闭都在 | 正解 |
+
+### 关键机制：为什么 `Maximized` 不能用
+`WindowState=Maximized` 时 Windows 会临时把 `FormBorderStyle` 当作可调整边框处理（为了支持最大化窗口边缘拖拽调整），**与你 Designer 里写的 `FixedSingle` 无关**。此时即使 `WndProc` 拦截 `WM_NCHITTEST` 把四边热区改 HTCLIENT 也挡不住——系统在最大化状态下直接走自己的缩放通道。
+
+### 正确组合（照抄即可）
+```csharp
+// Designer / InitializeComponent：
+this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle; // Normal 下无拖拽句柄
+this.MaximizeBox = false;   // 中间的"最大化/还原"按钮变灰
+this.MinimizeBox = true;    // 最小化按钮保留
+this.WindowState = System.Windows.Forms.FormWindowState.Normal; // 千万别用 Maximized！
+
+// OnShown：手动铺满工作区（等效全屏，保留任务栏）
+var work = Screen.FromControl(this).WorkingArea;
+Bounds = new Rectangle(work.Location, work.Size);
+```
+
+### 双保险（可选，防系统残留热区）
+`WndProc` 拦截 `WM_NCHITTEST`（0x0084），把命中码 10~17（HTLEFT..HTBOTTOMRIGHT 四边四角）一律改写为 1（HTCLIENT），Windows 不再进入缩放拖拽流程；最小化（8）/关闭（20）/标题栏拖动（2）不受影响。Normal + FixedSingle 下其实已够，这条是兜底。
+
+### 排查口诀
+- 用户说"拖拽还是能缩放" → 先查 `WindowState` 是不是 `Maximized`（十有八九是它）；
+- 用户说"最小化按钮没了" → 查 `FormBorderStyle` 是不是 `FixedDialog`/`None`；
+- 用户说"关不了软件" → 查是不是 `FormBorderStyle=None`；
+- 想全屏 → **别用 Maximized，用 OnShown 手动铺 Bounds**；否则 `FixedSingle` 白设。
+
+## 五·五·一、高 DPI 适配专项（V1.55 沉淀）
 
 用户报"高分辨率屏幕界面显示不正常"时，先分清两类控件，再决定适配方式：
 
