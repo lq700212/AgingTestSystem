@@ -3,6 +3,44 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.58.23 — 测试体系落地：新增项目专属测试验证技能 agingtest-regression（冒烟 + 246 条回归用例）（2026-08-25）
+
+### 改动范围
+- 新增 `.opencode/skills/agingtest-regression/` 项目专属最终测试验证技能：
+  - `scripts/build_and_test.ps1`：一键流水线"构建 → 真机冒烟 → 全量回归"，退出码区分阶段
+    （1=构建失败 / 2=冒烟失败 / 3=回归失败）；
+  - `scripts/smoke_test.ps1`：真机冒烟——启动 bin\Debug 的 exe，轮询存活 18 秒
+    （设备连接超时导致真实启动需 10~15s）判定未崩溃，输出 CPU/内存并正常关闭；
+  - `scripts/run_unit_tests.ps1`：把构建产物拷到 `%TEMP%\opencode\agingtest-run` 隔离
+    run 目录（清掉运行时 json），csc 编译 harness 后运行，退出码透传；
+  - `tests/TestRunner.cs`：自研 Check/CheckThrows/Module 断言框架 + **246 条断言**，
+    覆盖 11 个模块：PasswordHasher（PBKDF2 格式/盐随机/损坏串静默）、UserManager
+    （登录边界/账号管理保底/改密链/权限矩阵/记住登录/损坏回退重建/缺角色补齐/双管理员防呆）、
+    SettingsForm 配置归一化（StopBits/Parity 反射测私有方法，含中文与非法值兜底）、
+    IoOutputChannelRemap（脏输入逐项跳过汇总）、ParseFanIpCandidates、RecipeStorage 往返容错、
+    TestEventLogger（CsvEscape/表头/字段格式）、AppLogFileWriter（UTF-8/8 线程并发一条不少）、
+    PanelLayoutConfig（默认基准坐标/ResolveAnchors 幂等零漂移/宽高锚定联动推导/SaveDefault 重载零差异）、
+    HomeLayoutConfig、模型 JSON 往返与 Clone 深拷贝；
+  - `SKILL.md`：用法、覆盖范围表、加用例步骤与 10 条踩坑清单。
+- 明确覆盖边界（SKILL.md 写明）：真串口/真设备通讯与 UI 弹窗分支不在自动化范围，
+  像素级渲染走 winforms-ui-debug 技能。
+
+### 为什么这么改
+- 此前项目无任何可重复执行的自动化测试，验证只靠"构建通过 + 手工点界面"，回归成本高、
+  无法保证"绝对稳定"的交付要求；
+- 把冒烟与用例沉淀成脚本+技能后，每次改动一键验证全绿才交付，且新用例有强制沉淀位置，
+  测试资产可持续积累而不是散落在临时目录里。
+
+### 验证过程中发现的"bug"均定性为用例自身设计错误并已修正（产品代码零改动）
+- UserManager 用例身份串扰（Login 成功顶掉 CurrentUser 身份 / 实例内存快照不同步需 new 新实例）；
+- CsvEscape 期望字符串少写一个翻倍引号；CSV 可选字段全空行尾应为 ",,"；
+- AppLog 文件读取须 FileShare.ReadWrite（产品 StreamWriter 常驻句柄是设计行为）；
+- 右对齐锚定期望值算错（正确公式 X = 目标右缘 − 自身宽）。以上全部沉淀进 SKILL.md 踩坑清单。
+
+### 配套约定（写入 AGENTS.md）
+- 改完代码必须跑 build_and_test.ps1 全绿才能交付；修 bug 必先加复现用例（红→修→绿）；
+  新用例/冒烟一律回流 agingtest-regression 技能目录，禁止散落别处。
+
 ## V1.58.22 — 用户密码哈希存储：新增 PasswordHasher（PBKDF2），Users.json 不再明文（2026-08-10）
 
 ### 改动范围
