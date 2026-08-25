@@ -61,6 +61,7 @@
 | `AgingTestSystem/Services/RecipeAutoCompleteProvider.cs` | 配方名称自动检索 |
 | `AgingTestSystem/Dialogs/SettingsForm.cs` | 系统设置（配置项编辑、校验、保存） |
 | `AgingTestSystem/Controls/DataGridViewNumericUpDownCell.cs` | 数字/下拉单元格控件 |
+| `.opencode/skills/agingtest-regression/` | 项目最终测试验证技能：冒烟 + 全量回归用例（tests/TestRunner.cs 为用例源码，新用例一律沉淀于此） |
 | `CHANGELOG.md` | 版本改动记录（最新在前，V1.xx 小节） |
 
 ## 构建与验证命令
@@ -71,10 +72,17 @@
 ```
 
 - 构建成功标准：输出 `AgingTestSystem -> ...\bin\Debug\AgingTestSystem.exe` 且无 error。
-- 有 GUI 改动时可冒烟测试：`Start-Process` 启动 exe，等几秒确认进程存活再 `Stop-Process`。
-- 无单元测试框架；以构建通过 + 冒烟测试作为验证手段。
+- **最终测试验证手段（V1.58.23 起）**：一键跑 `powershell -ExecutionPolicy Bypass -File .opencode\skills\agingtest-regression\scripts\build_and_test.ps1`，自动完成"构建 → 真机冒烟（exe 启动存活）→ 全量回归用例（246+ 断言，覆盖 PasswordHasher/UserManager/配置归一化/IO 映射/配方存储/双日志器/面板布局锚定联动等核心逻辑类）"。也可单独跑同目录 `smoke_test.ps1`（只冒烟）/ `run_unit_tests.ps1`（只回归）。退出码 0 = 全绿。
 - **界面像素级 bug（竖线/横线/颜色/叠色/裁剪/滚动条）**：调用技能 `winforms-ui-debug`——编译独立 harness 直接 new 目标窗体（指哪打哪，绕过登录/主流程），用反射探私有字段 + PrintWindow 截图 + 像素扫描定位根因并验证修复。含可复用的 csc 编译命令、坐标映射、色值字典与踩坑清单。
 - **调试完自动沉淀技能**：每次用 `winforms-ui-debug` 排查成功（尤其是"一次性改对"的高光案例）后，**主动把可复用的新套路/新踩坑/新型探针代码回写到该 SKILL.md**（新增/补充小节、追加踩坑条目），不用等用户提醒。价值标准：换个人靠这份 skill 能更快解决同类问题。
+
+## 回归测试与用例沉淀铁律（V1.58.23 起，勿等用户提醒）
+
+项目专属测试验证技能为 `.opencode/skills/agingtest-regression/`（SKILL.md 含用法、覆盖范围表、加用例步骤与踩坑清单；用例源码在 `tests/TestRunner.cs`，脚本在 `scripts/`）。以下三条为强制约定：
+
+1. **改完代码必须验证**：功能/修复完成后至少跑一次 `build_and_test.ps1` 全绿才能交付；只动了逻辑类可只跑 `run_unit_tests.ps1`。
+2. **修 bug 必补用例**：每修复一个 bug，先在 `TestRunner.cs` 对应模块加一条能复现该 bug 的 `Check` 用例（红→修产品代码→绿），防止回归；新增功能同理补正向+边界用例。
+3. **新用例/新冒烟必须回流 skill**：凡是本次工作中新写的测试用例、冒烟步骤、验证脚本，一律直接写进 `agingtest-regression` 的 tests/scripts 目录并在 SKILL.md 补记覆盖点；**禁止散落在临时目录或只留在对话里**。新踩的坑追加进 SKILL.md 踩坑清单。全部完成后重跑全绿才算收尾。
 
 ## 文档同步（每次任务完成必做，逐条核对）
 
