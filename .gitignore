@@ -43,3 +43,6 @@ Users.json
 
 # 记住密码数据（含 base64 密码，勾选"记住密码"时自动生成）
 RememberedLogin.json
+
+# 在测任务快照（断电恢复用，V1.59 起程序运行时自动生成/删除）
+TestSession.json

@@ -313,7 +313,24 @@ namespace AgingTestSystem.Dialogs
 
             // ---- 2) 应用配置到当前工位（写入工位静态信息，采集叠加后工位面板更新） ----
             _deviceManager.SetStationSerialNumber(_deviceId, txtSN.Text);
-            _deviceManager.SetStationRecipeName(_deviceId, txtRecipe.Text);
+
+            // 【V1.59】按配方名检索本地配方列表，命中则把配方的负压值一并下发——
+            // 启动测试时该值将作为此工位的真空到位判定/报警阈值（配方优先、全局兜底）。
+            // 检索不命中（手输名字且列表里没有）传 null = 沿用该工位已有负压值。
+            decimal? recipePressure = null;
+            string recipeNameInput = txtRecipe.Text.Trim();
+            if (recipeNameInput.Length > 0 && _recipes != null)
+            {
+                foreach (RecipeConfig r in _recipes)
+                {
+                    if (string.Equals(r.Name, recipeNameInput, StringComparison.OrdinalIgnoreCase))
+                    {
+                        recipePressure = r.NegativePressure;
+                        break;
+                    }
+                }
+            }
+            _deviceManager.SetStationRecipe(_deviceId, txtRecipe.Text, recipePressure);
             _deviceManager.SetStationDelayTimes(_deviceId, delayStart, delayArrive);
 
             // ---- 3) 缓存配置（下次打开该工位设置窗口自动回填） ----

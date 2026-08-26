@@ -45,6 +45,15 @@ namespace AgingTestSystem.Models
         public TimeSpan StartTime { get; set; }
 
         /// <summary>
+        /// 最近一次老化测试的结果（V1.59 新增）
+        /// "PASS" = 本次老化全程无报警、到时正常完成；"FAIL" = 测试中途发生报警被联动切断；
+        /// 空字符串 = 尚未测过或已人工复位（复位时清空）。
+        /// 【为什么放在数据模型上】工位面板渲染与历史追溯都直接读采集缓存，
+        /// 跟着 BarometerData 走可以让"完成待取料/合格标记"像压力值一样自动广播到所有界面。
+        /// </summary>
+        public string LastTestResult { get; set; } = "";
+
+        /// <summary>
         /// 采集时间戳
         /// </summary>
         public DateTime CollectTime { get; set; }
@@ -79,6 +88,7 @@ namespace AgingTestSystem.Models
                 SerialNumber = this.SerialNumber,
                 RecipeName = this.RecipeName,
                 Status = this.Status,
+                LastTestResult = this.LastTestResult,
                 DelayTime = this.DelayTime,
                 StartTime = this.StartTime,
                 CollectTime = this.CollectTime,
@@ -105,8 +115,41 @@ namespace AgingTestSystem.Models
         Testing,
 
         /// <summary>
+        /// 已完成·待取料（V1.59 新增）
+        /// 老化计时到时、自动下电关阀后的状态：产品已老化完毕但仍吸附在载台上，
+        /// 等操作员取件。面板用独立颜色标注，人工复位或重新扫码绑定后回到 Idle。
+        /// 【为什么不直接回 Idle】操作员需要一眼区分"这个工位还没投料"和
+        /// "这个工位测完了该取件了"——72 个工位全靠颜色管理，混用一个状态会漏取料。
+        /// </summary>
+        Completed,
+
+        /// <summary>
         /// 故障状态
         /// </summary>
         Fault
+    }
+
+    /// <summary>
+    /// 老化测试子阶段枚举（V1.59 新增，DeviceManager 内部状态机使用）
+    ///
+    /// 【三阶段时序】（行业通识：未吸附固定不通电，老化讲究连续性）
+    ///   启动(只开阀) ──► Vacuuming 抽真空 ──► 真空到位 且 延时开启到 ──► 上电
+    ///                 （到位前超时 = 真空建立失败报警，永不带电）         │
+    ///                                                                  ▼
+    ///                              到时自动下电关阀 ◄── Aging 老化计时（配方启动时间）
+    ///                                    │
+    ///                                    ▼
+    ///                            Completed 已完成·待取料(PASS)
+    /// </summary>
+    public enum AgingPhase
+    {
+        /// <summary>未在测试</summary>
+        None = 0,
+
+        /// <summary>抽真空阶段：阀已开、载台未上电，等"压力到位 + 延时开启到"</summary>
+        Vacuuming = 1,
+
+        /// <summary>老化计时阶段：已上电，倒计时到时后自动完成</summary>
+        Aging = 2
     }
 }

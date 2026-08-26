@@ -12,6 +12,18 @@ namespace AgingTestSystem.Services
     /// 负责管理所有气压表、IO 设备、冷却送风机的连接、数据采集和业务状态更新。
     /// 是整个系统的核心服务类。
     ///
+    /// 【V1.59 业务串联完善：三阶段状态机 + 结果判定 + 断电恢复】
+    /// 1) 时序安全改造：启动只开真空阀，载台上电由采集循环在「真空到位 + 延时开启到」
+    ///    时补发——落实"未吸附固定不通电"（旧版开阀+上电同时下发，与安全意图矛盾）；
+    /// 2) 配方参数接入编排：老化时长 = 工位配方"启动时间(StartTime)"（回退全局
+    ///    MaxTestDurationSeconds）；上电前置等待 = 配方"延时开启(DelayTime)"；
+    ///    到位/报警阈值 = 配方负压值（回退全局 AlarmPressureThresholdKPa）。
+    ///    参数在启动瞬间定格，中途改配置不影响进行中的测试；
+    /// 3) 完成语义：到时自动下电关阀 → Completed·待取料(PASS)；报警按责任分类
+    ///    （压力类=产品 FAIL / 通讯失联=设备异常）；手动停止=中止回空闲；
+    /// 4) 断电恢复：在测任务快照持久化（TestSession.json），重启后询问
+    ///    恢复（整台重测，参数用快照定格值）/ 放弃（安全关闭阀与电源）。
+    ///
     /// 【V1.10 新增业务串联】
     /// 在原有"采集 + 报警联动"基础上，把老化测试业务流程串起来：
     /// 1) 冷却送风机接入（接口化：真实 / Mock），独立定时器轮询，不阻塞 72 台气压表采集
@@ -230,6 +242,36 @@ namespace AgingTestSystem.Services
         /// </summary>
         private readonly DateTime[] _vacuumConfirmTimes;
 
+        // =====================================================================
+        // 【V1.59 新增】三阶段老化状态机 + 任务定格参数 + 断电恢复持久化
+        // 时序：启动(只开阀) → Vacuuming(等真空到位+延时开启) → 上电 → Aging(配方时长)
+        //       → 到时自动完成(PASS·待取料)。报警按责任分产品 FAIL / 设备异常。
+        // =====================================================================
+
+        /// <summary>
+        /// 每台当前所处的老化子阶段（None/Vacuuming/Aging）
+        /// 【为什么需要子阶段】原来"测试中"一个 bool 无法表达"阀开了但还没上电"，
+        /// 而安全规则恰恰要求这个区分：Vacuuming 阶段载台必须断电，
+        /// 真空建立失败就永远不该带电。
+        /// </summary>
+        private readonly AgingPhase[] _testPhases;
+
+        /// <summary>
+        /// 每台本次测试的开阀时刻（延时开启与真空确认超时的计时起点 t0）
+        /// </summary>
+        private readonly DateTime[] _valveOpenTimes;
+
+        /// <summary>
+        /// 每台本次任务的"定格参数"——启动测试瞬间从工位配方/全局配置抄写一份：
+        /// 老化时长（秒，0=不限）、延时开启（秒）、报警阈值（kPa）。
+        /// 【为什么要定格】测试跑几小时的中途操作员可能改配置/换配方，
+        /// 进行中的任务必须用启动那一刻的参数跑完，否则同一批产品工艺不一致，
+        /// 质量数据没法追溯。
+        /// </summary>
+        private readonly int[] _sessionDurationSecs;
+        private readonly int[] _sessionDelaySecs;
+        private readonly decimal[] _sessionThresholdKPa;
+
         /// <summary>
         /// 每台连续读取失败次数
         /// 用于通讯故障报警（连续失败 CommunicationLossAlarmCount 次 → 报警）
@@ -355,24 +397,69 @@ namespace AgingTestSystem.Services
         public bool IsIoConnected => _ioController.IsConnected;
 
         /// <summary>
-        /// 初始化设备管理器
+        /// 初始化设备管理器（生产入口：按 UseMockCommunication 自动选择 Mock/真实实现）
         /// </summary>
-        public DeviceManager(DeviceConfig config)
+        public DeviceManager(DeviceConfig config) : this(config, null, null, null)
+        {
+        }
+
+        /// <summary>
+        /// 初始化设备管理器（【V1.59】依赖注入构造——回归集成测试专用）
+        ///
+        /// 【为什么开放注入】三阶段老化状态机的行为验证需要"可控的压力序列 +
+        /// 可记录的输出调用"（Fake 设备），而本类原来在构造函数里硬编码 new
+        /// Mock/Real 实现，外部无法替身。开放此重载后：
+        /// - 生产路径走无参设备版本（行为完全不变）；
+        /// - 测试 harness 传入 Fake 实现即可端到端驱动状态机
+        ///   （启动→抽真空→上电→计时→完成/报警/恢复）。
+        /// 任一参数传 null 时按原逻辑自动创建（config 决定 Mock 或真实实现）。
+        /// </summary>
+        public DeviceManager(DeviceConfig config,
+            IBarometerReader barometerReaderOverride,
+            IIoController ioControllerOverride,
+            IFanController fanControllerOverride)
         {
             _config = config;
 
-            // 初始化硬件接口实现（真实 / Mock 二选一，由 App.config 的 UseMockCommunication 决定）
-            if (_config.UseMockCommunication)
+            // 初始化硬件接口实现（真实 / Mock 二选一，由 App.config 的 UseMockCommunication 决定；
+            // 测试可通过 override 参数注入 Fake 实现）
+            if (barometerReaderOverride != null)
+            {
+                _barometerReader = barometerReaderOverride;
+            }
+            else if (_config.UseMockCommunication)
             {
                 _barometerReader = new MockBarometerReader();
+            }
+            else
+            {
+                _barometerReader = new ModbusRtuBarometerReader();
+            }
+
+            if (ioControllerOverride != null)
+            {
+                _ioController = ioControllerOverride;
+            }
+            else if (_config.UseMockCommunication)
+            {
                 _ioController = new MockIoController();
+            }
+            else
+            {
+                _ioController = new ModbusTcpIoController();
+            }
+
+            if (fanControllerOverride != null)
+            {
+                _fanController = fanControllerOverride;
+            }
+            else if (_config.UseMockCommunication)
+            {
                 // 送风机 Mock：只有启用送风机时才创建
                 _fanController = _config.FanEnabled ? new MockFanController() : null;
             }
             else
             {
-                _barometerReader = new ModbusRtuBarometerReader();
-                _ioController = new ModbusTcpIoController();
                 // 送风机真实实现：只有启用送风机时才创建
                 _fanController = _config.FanEnabled ? new FanControllerClient() : null;
             }
@@ -385,6 +472,13 @@ namespace AgingTestSystem.Services
             _vacuumConfirmTimes = new DateTime[_config.TotalBarometers];
             _readFailCounts = new int[_config.TotalBarometers];
             _lastGoodTimes = new DateTime[_config.TotalBarometers];
+
+            // 【V1.59】三阶段状态机数组（None=全部未在测试；定格参数先清零）
+            _testPhases = new AgingPhase[_config.TotalBarometers];
+            _valveOpenTimes = new DateTime[_config.TotalBarometers];
+            _sessionDurationSecs = new int[_config.TotalBarometers];
+            _sessionDelaySecs = new int[_config.TotalBarometers];
+            _sessionThresholdKPa = new decimal[_config.TotalBarometers];
 
             // 订阅错误事件（使用命名方法，便于 Dispose 时取消订阅）
             _barometerReader.OnError += BarometerReader_OnError;
@@ -845,6 +939,7 @@ namespace AgingTestSystem.Services
         {
             if (deviceId < 1 || deviceId > _config.TotalBarometers) return;
             string sn = serialNumber?.Trim() ?? "";
+            bool rebindOnCompleted = false;
             lock (_stationInfoLock)
             {
                 if (!_stationInfo.TryGetValue(deviceId, out StationInfo info))
@@ -853,6 +948,23 @@ namespace AgingTestSystem.Services
                     _stationInfo[deviceId] = info;
                 }
                 info.SerialNumber = sn;
+            }
+
+            // 【V1.59】重新扫码绑定 = 新产品上料：若该台还处于"已完成·待取料"，
+            // 自动复位回空闲，操作员不用再手动点复位（流水式作业少一步操作）。
+            // 报警(Fault)态不自动清——漏气原因没确认前上新产品有风险，仍需人工复位。
+            lock (_cacheLock)
+            {
+                if (_barometerDataCache.TryGetValue(deviceId, out BarometerData cached)
+                    && cached != null && cached.Status == DeviceStatus.Completed)
+                {
+                    rebindOnCompleted = true;
+                }
+            }
+            if (rebindOnCompleted)
+            {
+                ResetDevices(new[] { deviceId });
+                TestEventLogger.Write(_currentLotNumber, deviceId, "复位", "重新扫码绑定，完成态自动复位");
             }
         }
 
@@ -864,6 +976,22 @@ namespace AgingTestSystem.Services
         /// <param name="recipeName">配方名称（空白视为清空）</param>
         public void SetStationRecipeName(int deviceId, string recipeName)
         {
+            SetStationRecipe(deviceId, recipeName, null);
+        }
+
+        /// <summary>
+        /// 设置指定工位的配方名称 + 负压值设定（【V1.59 新增】）
+        ///
+        /// 【为什么要把负压值一起存】配方的 NegativePressure 是该产品的真空工艺要求，
+        /// 启动测试时要用它做"到位判定/报警阈值"。原来只存配方名字符串，
+        /// 编排层拿不到数值，导致配方参数与实际判定脱节。
+        /// negativePressure 传 null = 不修改已有值（兼容只改名不改工艺的调用）。
+        /// </summary>
+        /// <param name="deviceId">工位编号（1 ~ TotalBarometers）</param>
+        /// <param name="recipeName">配方名称（空白视为清空）</param>
+        /// <param name="negativePressure">配方负压值（kPa）；null = 保持不变</param>
+        public void SetStationRecipe(int deviceId, string recipeName, decimal? negativePressure)
+        {
             if (deviceId < 1 || deviceId > _config.TotalBarometers) return;
             string name = recipeName?.Trim() ?? "";
             lock (_stationInfoLock)
@@ -874,6 +1002,15 @@ namespace AgingTestSystem.Services
                     _stationInfo[deviceId] = info;
                 }
                 info.RecipeName = name;
+                if (negativePressure.HasValue)
+                {
+                    info.RecipeNegativePressure = negativePressure.Value;
+                }
+                // 清空配方名时把负压值一并清掉，避免残留旧工艺
+                if (string.IsNullOrEmpty(name))
+                {
+                    info.RecipeNegativePressure = null;
+                }
             }
         }
 
@@ -907,6 +1044,22 @@ namespace AgingTestSystem.Services
         public void SetStationSerialNumbers(IReadOnlyDictionary<int, string> serialNumbers)
         {
             if (serialNumbers == null || serialNumbers.Count == 0) return;
+
+            // 先记录哪些台处于"已完成·待取料"（重新扫码 = 新产品上料，自动复位）
+            var completedIds = new List<int>();
+            lock (_cacheLock)
+            {
+                foreach (int deviceId in serialNumbers.Keys)
+                {
+                    if (deviceId < 1 || deviceId > _config.TotalBarometers) continue;
+                    if (_barometerDataCache.TryGetValue(deviceId, out BarometerData cached)
+                        && cached != null && cached.Status == DeviceStatus.Completed)
+                    {
+                        completedIds.Add(deviceId);
+                    }
+                }
+            }
+
             lock (_stationInfoLock)
             {
                 foreach (var kv in serialNumbers)
@@ -920,6 +1073,14 @@ namespace AgingTestSystem.Services
                     }
                     info.SerialNumber = kv.Value?.Trim() ?? "";
                 }
+            }
+
+            // 【V1.59】对"重绑的已完成台"逐台复位（与单台绑定行为一致）
+            if (completedIds.Count > 0)
+            {
+                ResetDevices(completedIds.ToArray());
+                TestEventLogger.Write(_currentLotNumber, 0, "复位",
+                    $"批量扫码重绑，{completedIds.Count} 个完成态工位自动复位");
             }
         }
 
@@ -1445,55 +1606,27 @@ namespace AgingTestSystem.Services
         // =====================================================================
 
         /// <summary>
-        /// 启动老化测试（批量）
-        /// 【动作】对选中的每台：开真空阀 + 载台上电 + 进入"测试中"状态 + 记录日志。
-        /// 真空建立确认：开阀后进入 <see cref="DeviceConfig.VacuumConfirmTimeoutMs"/> 宽限窗口，
-        /// 期间压力进入正常区间才算确认成功；超时未建立则报警（见 CollectData 判定）。
+        /// 启动老化测试（批量）【V1.59 时序安全改造】
         ///
-        /// 【送风机】首台启动时自动定值启动（见 UpdateFanLifecycle）。
+        /// 【与旧版的区别】旧版"开阀 + 载台上电"同时下发——真空还没建立产品就带电了，
+        /// 与配置注释里"避免产品在未吸附固定的情况下通电老化"的安全意图矛盾。
+        /// 新版启动时【只开真空阀】，载台上电由采集循环在
+        /// 「真空压力到位 且 延时开启时间到」时补发（见 ProcessTestingProgress）；
+        /// 真空建立失败（宽限窗口内压力始终不到位）则报警切断，全程不带电。
         ///
-        /// 【线程安全】UI 线程调用；内部用 _stateLock 写测试状态。
+        /// 【参数定格】启动瞬间从工位配方抄写本次任务的时长/延时/报警阈值，
+        /// 中途改配方不影响已在跑的测试（同批产品工艺一致性）。
         /// </summary>
-        /// <param name="deviceIds">要启动的设备编号数组</param>
         public void StartTesting(int[] deviceIds)
         {
             if (deviceIds == null || deviceIds.Length == 0) return;
 
-            // 收集要写的输出点（每台 2 个：真空阀 ON + 载台上电 ON），一次批量下发
-            var outputIds = new List<int>();
-            var states = new List<bool>();
-
             foreach (int deviceId in deviceIds)
             {
-                if (deviceId < 1 || deviceId > _config.TotalBarometers) continue;
-
-                // 真空电磁阀 ON（内部编号 = TotalInputs + deviceId）
-                outputIds.Add(_config.TotalInputs + deviceId);
-                states.Add(true);
-
-                // 载台上电 ON（内部编号 = TotalInputs + TotalBarometers + deviceId）
-                outputIds.Add(_config.TotalInputs + _config.TotalBarometers + deviceId);
-                states.Add(true);
-
-                // 更新测试状态（在锁内）
-                lock (_stateLock)
-                {
-                    _testingStates[deviceId - 1] = true;                 // 进入测试中
-                    _vacuumConfirmTimes[deviceId - 1] = DateTime.Now;    // 开始真空确认宽限
-                    _testStartTimes[deviceId - 1] = DateTime.MinValue;   // 真空确认后才开始计时
-                    _testDurations[deviceId - 1] = _config.MaxTestDurationSeconds; // 本次时长
-                    _lastAlarmStates[deviceId - 1] = false;              // 清报警边沿，允许重新报警
-                    _readFailCounts[deviceId - 1] = 0;                   // 清通讯失败计数
-                }
-
-                TestEventLogger.Write(_currentLotNumber, deviceId, "启动",
-                    "启动老化测试（开真空 + 载台上电）");
+                StartSingleTestCore(deviceId, null);
             }
 
-            // 批量写输出
-            _ioController.WriteOutputs(outputIds.ToArray(), states.ToArray());
-
-            // 【V1.30】启动测试后对目标工位快速跟踪，实时反映真空建立过程
+            // 批量写输出后对目标工位快速跟踪，实时反映真空建立过程
             StartQuickTracking(deviceIds);
 
             // 送风机生命周期联动（首台启动时启动送风机）
@@ -1501,8 +1634,85 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 停止老化测试（批量）
+        /// 单台启动测试的核心动作（StartTesting 循环体 / 断电恢复共用）
+        ///
+        /// 【动作】开真空阀（载台保持断电）→ 进入 Vacuuming 阶段 → 定格任务参数 → 快照落盘。
+        /// 【overrideDurationSecs】断电恢复时传快照里定格的时长（此时工位配方可能已被改动，
+        /// 以快照为准保证"重测参数 = 中断前参数"）；正常启动传 null（现场定格）。
+        /// </summary>
+        /// <param name="deviceId">工位编号</param>
+        /// <param name="overrideParams">恢复用的定格参数；null = 正常启动按当前配置定格</param>
+        private void StartSingleTestCore(int deviceId, TestSessionStation overrideParams)
+        {
+            if (deviceId < 1 || deviceId > _config.TotalBarometers) return;
+
+            // ---- 1) 读取工位配方并定格本次任务参数 ----
+            string sn = "", recipeName = "";
+            TimeSpan delayTime = TimeSpan.Zero, startTime = TimeSpan.Zero;
+            decimal? recipePressure = null;
+            lock (_stationInfoLock)
+            {
+                if (_stationInfo.TryGetValue(deviceId, out StationInfo info) && info != null)
+                {
+                    sn = info.SerialNumber ?? "";
+                    recipeName = info.RecipeName ?? "";
+                    if (info.DelayTime.HasValue) delayTime = info.DelayTime.Value;
+                    if (info.StartTime.HasValue) startTime = info.StartTime.Value;
+                    recipePressure = info.RecipeNegativePressure;
+                }
+            }
+
+            // 老化时长：配方的启动时间(StartTime) > 0 用配方值，否则回退全局 MaxTestDurationSeconds
+            int durationSecs = (int)startTime.TotalSeconds;
+            if (durationSecs <= 0)
+            {
+                durationSecs = _config.MaxTestDurationSeconds;
+            }
+            // 报警/到位阈值：配方负压值优先，未配置回退全局 AlarmPressureThresholdKPa
+            decimal thresholdKPa = recipePressure ?? _config.AlarmPressureThresholdKPa;
+
+            // 断电恢复：以快照参数为准（中断前的工艺不能被中途改动污染）
+            if (overrideParams != null)
+            {
+                durationSecs = overrideParams.DurationSeconds;
+                thresholdKPa = overrideParams.AlarmThresholdKPa;
+                sn = overrideParams.SerialNumber ?? sn;
+                recipeName = overrideParams.RecipeName ?? recipeName;
+                delayTime = TimeSpan.FromSeconds(overrideParams.DelaySeconds);
+            }
+
+            // ---- 2) 开阀（只开阀！上电由采集循环在真空到位+延时到后补发） ----
+            _ioController.WriteOutput(_config.TotalInputs + deviceId, true);
+
+            // ---- 3) 状态进入 Vacuuming，定格参数 ----
+            lock (_stateLock)
+            {
+                DateTime now = DateTime.Now;
+                _testingStates[deviceId - 1] = true;                 // 进入测试中
+                _testPhases[deviceId - 1] = AgingPhase.Vacuuming;    // 子阶段：抽真空（载台断电）
+                _valveOpenTimes[deviceId - 1] = now;                 // 延时/确认超时的计时起点
+                _vacuumConfirmTimes[deviceId - 1] = now;             // 真空确认宽限开始
+                _testStartTimes[deviceId - 1] = DateTime.MinValue;   // 上电后才计时
+                _testDurations[deviceId - 1] = durationSecs;
+                _sessionDurationSecs[deviceId - 1] = durationSecs;
+                _sessionDelaySecs[deviceId - 1] = (int)Math.Round(delayTime.TotalSeconds);
+                _sessionThresholdKPa[deviceId - 1] = thresholdKPa;
+                _lastAlarmStates[deviceId - 1] = false;              // 清报警边沿，允许重新报警
+                _readFailCounts[deviceId - 1] = 0;                   // 清通讯失败计数
+            }
+
+            TestEventLogger.Write(_currentLotNumber, deviceId, "启动",
+                $"启动老化测试（开真空，待真空建立+延时开启到后自动上电）SN:{sn} 配方:{recipeName}");
+
+            // ---- 4) 任务快照落盘（断电/崩溃后可恢复重测）----
+            SaveSessionSnapshot();
+        }
+
+        /// <summary>
+        /// 停止老化测试（批量，手动停止 = 中止）
         /// 【动作】对选中的每台：关真空阀 + 断载台电 + 退出"测试中"状态 + 记录日志。
+        /// 【结果语义 V1.59】手动中途停止记"中止"（不判 PASS 也不判 FAIL），
+        /// 工位回空闲；与"到时自动完成(·待取料)"区分开。
         /// 【送风机】不在这里直接停送风机！最后一台停止时由 UpdateFanLifecycle 统一停止
         /// （避免停掉还在老化的其它台的环境温控）。
         /// </summary>
@@ -1525,12 +1735,16 @@ namespace AgingTestSystem.Services
                 lock (_stateLock)
                 {
                     _testingStates[deviceId - 1] = false;
+                    _testPhases[deviceId - 1] = AgingPhase.None;
                     _vacuumConfirmTimes[deviceId - 1] = DateTime.MinValue;
                     _testStartTimes[deviceId - 1] = DateTime.MinValue;
+                    _valveOpenTimes[deviceId - 1] = DateTime.MinValue;
                     _testDurations[deviceId - 1] = 0;
+                    _sessionDurationSecs[deviceId - 1] = 0;
+                    _sessionDelaySecs[deviceId - 1] = 0;
                 }
 
-                TestEventLogger.Write(_currentLotNumber, deviceId, "停止", "手动停止");
+                TestEventLogger.Write(_currentLotNumber, deviceId, "中止", "手动停止（未到时中止，不计判定结果）");
             }
 
             _ioController.WriteOutputs(outputIds.ToArray(), states.ToArray());
@@ -1540,12 +1754,23 @@ namespace AgingTestSystem.Services
 
             // 送风机生命周期联动（如果是最后一台，这里会停止送风机）
             UpdateFanLifecycle();
+
+            // 在测任务清单变化 → 快照落盘（全部停完时 SaveSessionSnapshot 会自动清文件）
+            SaveSessionSnapshot();
         }
 
         /// <summary>
         /// 人工复位（报警/故障台复位回到空闲）
         /// 【动作】清除该台的报警边沿 / 测试状态 / 通讯失败计数，
         /// 并确保输出处于安全关闭状态（阀、载台电都 OFF），可重新启动测试。
+        /// 【设计说明】报警后不自动恢复（真空失效原因未确认前自动重启有风险），
+        /// 必须由操作员人工确认复位（设计评审结论）。
+        /// </summary>
+        /// <summary>
+        /// 人工复位（报警/故障/已完成·待取料台复位回到空闲）
+        /// 【动作】清除该台的报警边沿 / 测试状态 / 通讯失败计数，
+        /// 并确保输出处于安全关闭状态（阀、载台电都 OFF），可重新启动测试。
+        /// 【V1.59】Completed（已完成·待取料）也由本方法复位——语义即"确认取件完毕"。
         /// 【设计说明】报警后不自动恢复（真空失效原因未确认前自动重启有风险），
         /// 必须由操作员人工确认复位（设计评审结论）。
         /// </summary>
@@ -1560,9 +1785,13 @@ namespace AgingTestSystem.Services
                 lock (_stateLock)
                 {
                     _testingStates[deviceId - 1] = false;
+                    _testPhases[deviceId - 1] = AgingPhase.None;
                     _vacuumConfirmTimes[deviceId - 1] = DateTime.MinValue;
                     _testStartTimes[deviceId - 1] = DateTime.MinValue;
+                    _valveOpenTimes[deviceId - 1] = DateTime.MinValue;
                     _testDurations[deviceId - 1] = 0;
+                    _sessionDurationSecs[deviceId - 1] = 0;
+                    _sessionDelaySecs[deviceId - 1] = 0;
                     _readFailCounts[deviceId - 1] = 0;
                     _lastAlarmStates[deviceId - 1] = false;
                 }
@@ -1571,10 +1800,10 @@ namespace AgingTestSystem.Services
                 _ioController.WriteOutput(_config.TotalInputs + deviceId, false);
                 _ioController.WriteOutput(_config.TotalInputs + _config.TotalBarometers + deviceId, false);
 
-                TestEventLogger.Write(_currentLotNumber, deviceId, "复位", "人工复位（报警解除）");
+                TestEventLogger.Write(_currentLotNumber, deviceId, "复位", "人工复位（报警解除/取件确认）");
             }
 
-            // 把缓存里这些台的状态改为空闲
+            // 把缓存里这些台的状态改为空闲，并清掉上次测试结果标记
             lock (_cacheLock)
             {
                 foreach (int deviceId in deviceIds)
@@ -1582,9 +1811,13 @@ namespace AgingTestSystem.Services
                     if (_barometerDataCache.TryGetValue(deviceId, out BarometerData cached) && cached != null)
                     {
                         cached.Status = DeviceStatus.Idle;
+                        cached.LastTestResult = "";
                     }
                 }
             }
+
+            // 在测任务清单变化 → 快照落盘
+            SaveSessionSnapshot();
         }
 
         /// <summary>
@@ -1612,9 +1845,13 @@ namespace AgingTestSystem.Services
                 for (int i = 0; i < _config.TotalBarometers; i++)
                 {
                     _testingStates[i] = false;
+                    _testPhases[i] = AgingPhase.None;
                     _vacuumConfirmTimes[i] = DateTime.MinValue;
                     _testStartTimes[i] = DateTime.MinValue;
+                    _valveOpenTimes[i] = DateTime.MinValue;
                     _testDurations[i] = 0;
+                    _sessionDurationSecs[i] = 0;
+                    _sessionDelaySecs[i] = 0;
                     _lastAlarmStates[i] = false;
                 }
             }
@@ -1625,6 +1862,9 @@ namespace AgingTestSystem.Services
                 _fanRunning = false;
                 _fanController.Stop();
             }
+
+            // 急停 = 放弃全部在测任务：删除快照，下次启动不再询问恢复
+            TestSessionStore.Clear();
 
             TestEventLogger.Write(_currentLotNumber, 0, "急停", "全部停止（关闭所有阀与载台电）");
         }
@@ -1682,6 +1922,146 @@ namespace AgingTestSystem.Services
         /// 超过该时间没有成功读到数据，视为该台离线
         /// </summary>
         private const int OnlineFreshnessSeconds = 10;
+
+        // =====================================================================
+        // 【V1.59 新增】断电恢复：快照落盘 / 恢复重测 / 放弃恢复
+        // =====================================================================
+
+        /// <summary>
+        /// 把"当前所有在测任务"快照到 TestSession.json（内部各状态变化点调用）
+        ///
+        /// 【实现说明】在测清单为空时等价于 Clear（删除文件），调用方无需区分。
+        /// 写文件失败静默（存储类异常不能拖垮采集/编排主链路）。
+        /// </summary>
+        private void SaveSessionSnapshot()
+        {
+            try
+            {
+                var stations = new List<TestSessionStation>();
+                lock (_stateLock)
+                {
+                    for (int i = 0; i < _config.TotalBarometers; i++)
+                    {
+                        if (!_testingStates[i]) continue;
+
+                        int deviceId = i + 1;
+                        string sn = "", recipeName = "";
+                        lock (_stationInfoLock)
+                        {
+                            if (_stationInfo.TryGetValue(deviceId, out StationInfo info) && info != null)
+                            {
+                                sn = info.SerialNumber ?? "";
+                                recipeName = info.RecipeName ?? "";
+                            }
+                        }
+
+                        stations.Add(new TestSessionStation
+                        {
+                            DeviceId = deviceId,
+                            SerialNumber = sn,
+                            RecipeName = recipeName,
+                            DurationSeconds = _sessionDurationSecs[i],
+                            DelaySeconds = _sessionDelaySecs[i],
+                            AlarmThresholdKPa = _sessionThresholdKPa[i]
+                        });
+                    }
+                }
+
+                if (stations.Count == 0)
+                {
+                    // 没有在测任务了：清掉快照，避免下次启动误询问恢复
+                    TestSessionStore.Clear();
+                    return;
+                }
+
+                TestSessionStore.Save(new TestSession
+                {
+                    LotNumber = _currentLotNumber ?? "",
+                    Stations = stations
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[任务快照] 生成快照失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 读取待恢复的在测任务快照（MainForm 启动时调用，用于弹窗询问）
+        /// </summary>
+        /// <returns>待恢复的快照；无待恢复任务返回 null</returns>
+        public TestSession LoadPendingSession()
+        {
+            return TestSessionStore.Load();
+        }
+
+        /// <summary>
+        /// 断电恢复：把快照里的在测工位【整台重新投入测试】（用户选定的策略）
+        ///
+        /// 【为什么整台重测而不是续跑】断电期间载台已断电、产品状态未知，
+        /// 老化数据不连续，续跑没有质量意义（行业通识 + 设计评审结论）。
+        /// 参数用快照里定格的值（中断前的工艺），批号一并写回保证追溯连贯。
+        /// </summary>
+        /// <param name="session">LoadPendingSession 读到的快照</param>
+        public void RecoverSession(TestSession session)
+        {
+            if (session?.Stations == null || session.Stations.Count == 0) return;
+
+            // 批号写回：恢复的重测记录仍挂在原批次下
+            if (!string.IsNullOrEmpty(session.LotNumber))
+            {
+                _currentLotNumber = session.LotNumber;
+            }
+
+            foreach (var station in session.Stations)
+            {
+                if (station == null) continue;
+                // 用快照参数重新走完整启动流程（开阀→抽真空→延时→上电→满时长老化）
+                StartSingleTestCore(station.DeviceId, station);
+            }
+            StartQuickTracking(session.Stations.ConvertAll(s => s.DeviceId).ToArray());
+            UpdateFanLifecycle();
+
+            TestEventLogger.Write(_currentLotNumber, 0, "断电恢复",
+                $"检测到上次未完成任务，{session.Stations.Count} 台已按原参数整台重测");
+        }
+
+        /// <summary>
+        /// 放弃断电恢复（操作员选择"否"时调用）：
+        /// 对快照涉及的所有工位执行安全关闭（关阀+断电——耦合器 DO 保持态，
+        /// 上次退出时阀/电可能还开着，不能放着不管），然后删除快照。
+        /// </summary>
+        /// <param name="session">LoadPendingSession 读到的快照</param>
+        public void DiscardSession(TestSession session)
+        {
+            if (session?.Stations == null || session.Stations.Count == 0)
+            {
+                TestSessionStore.Clear();
+                return;
+            }
+
+            var outputIds = new List<int>();
+            var states = new List<bool>();
+            foreach (var station in session.Stations)
+            {
+                if (station == null || station.DeviceId < 1 || station.DeviceId > _config.TotalBarometers)
+                {
+                    continue;
+                }
+                outputIds.Add(_config.TotalInputs + station.DeviceId);                          // 阀 OFF
+                states.Add(false);
+                outputIds.Add(_config.TotalInputs + _config.TotalBarometers + station.DeviceId); // 电 OFF
+                states.Add(false);
+            }
+            if (outputIds.Count > 0)
+            {
+                _ioController.WriteOutputs(outputIds.ToArray(), states.ToArray());
+            }
+
+            TestSessionStore.Clear();
+            TestEventLogger.Write(_currentLotNumber, 0, "放弃恢复",
+                $"放弃 {session.Stations.Count} 台未完成任务并已安全关闭其阀与电源");
+        }
 
         // =====================================================================
         // 数据采集（主循环）
@@ -1776,7 +2156,8 @@ namespace AgingTestSystem.Services
                             {
                                 // 测试中的台失联：关阀 + 断电 + 标故障
                                 //（失压未知，安全起见断电；面板显示报警色）
-                                HandleAlarm(deviceId, "通讯故障（连续读取失败）");
+                                // 【V1.59】设备责任：不判产品 FAIL，结果记"设备异常"
+                                HandleAlarm(deviceId, "通讯故障（连续读取失败）", productRelated: false);
                                 lock (_cacheLock)
                                 {
                                     if (_barometerDataCache.TryGetValue(deviceId, out BarometerData cached) && cached != null)
@@ -1847,6 +2228,24 @@ namespace AgingTestSystem.Services
                     // 原因：未测试的台（阀关着）压力是常压（接近 0kPa），
                     // 按"压力 > 阈值"判定必然越限，但这是正常状态，不是报警。
                     // 报警联动（关阀+断电）只对测试中的台有意义。
+                    // 【V1.59】提前读取上一轮缓存中需要延续的标记（在状态分支之前）：
+                    // - Completed（已完成·待取料）/ Fault（报警）：保留到人工复位/重新扫码；
+                    // - LastTestResult（PASS/FAIL/设备异常）：保留到复位。
+                    // 每个采集周期的 data 都是读取器新建的对象，不主动延续的话
+                    // 这些标记会在下一轮被批量更新缓存时冲掉，追溯链就断了。
+                    bool prevCompleted = false;
+                    bool prevFaulted = false;
+                    string prevResult = null;
+                    lock (_cacheLock)
+                    {
+                        if (_barometerDataCache.TryGetValue(deviceId, out BarometerData prev) && prev != null)
+                        {
+                            prevCompleted = (prev.Status == DeviceStatus.Completed);
+                            prevFaulted = (prev.Status == DeviceStatus.Fault);
+                            prevResult = prev.LastTestResult;
+                        }
+                    }
+
                     bool isAlarm = false;
                     if (isTesting)
                     {
@@ -1857,9 +2256,12 @@ namespace AgingTestSystem.Services
                             if (isAlarm && !_lastAlarmStates[deviceId - 1])
                             {
                                 // 进入报警边沿：执行一次联动输出
+                                // 【V1.59】压力类报警（越限/真空建立失败）= 产品责任 FAIL
+                                // （HandleAlarm 内部会退出测试态并把结果写入缓存；
+                                //   这里同步给本轮广播数据，面板当轮就能显示 FAIL）
                                 _lastAlarmStates[deviceId - 1] = true;
-                                _testingStates[deviceId - 1] = false;
-                                HandleAlarm(deviceId, GetAlarmReason(data));
+                                HandleAlarm(deviceId, GetAlarmReason(data), productRelated: true);
+                                prevResult = "FAIL";
                             }
                             _lastAlarmStates[deviceId - 1] = isAlarm;
                         }
@@ -1868,6 +2270,10 @@ namespace AgingTestSystem.Services
                     if (isAlarm)
                     {
                         data.Status = DeviceStatus.Fault;
+                        if (!string.IsNullOrEmpty(prevResult))
+                        {
+                            data.LastTestResult = prevResult;
+                        }
                     }
                     else if (isTesting)
                     {
@@ -1875,9 +2281,19 @@ namespace AgingTestSystem.Services
                     }
                     else
                     {
-                        // 非测试的台：覆盖读取器对常压（接近 0kPa）的"压力越限"误判，
-                        // 恢复为空闲（读取器仅做基础报警提示，真正判定以本处业务逻辑为准）
-                        data.Status = DeviceStatus.Idle;
+                        // 非测试的台：延续完成态/故障态标记；其余情况覆盖读取器对常压
+                        // （接近 0kPa）的"压力越限"误判，恢复为空闲。
+                        // 【V1.59】Fault 也延续（prev.Status==Fault 只有报警/失联写过）：
+                        // 否则报警台退出测试后下一轮就被冲成 Idle，面板上故障
+                        // "闪一帧"即逝，操作员根本看不到（V1.10 以来的既有瑕疵）。
+                        // Fault/Completed/结果标记都持续到人工复位或重新扫码才清除。
+                        data.Status = prevCompleted ? DeviceStatus.Completed
+                                    : prevFaulted ? DeviceStatus.Fault
+                                    : DeviceStatus.Idle;
+                        if (!string.IsNullOrEmpty(prevResult))
+                        {
+                            data.LastTestResult = prevResult;
+                        }
                     }
 
                     // ===== 5) 真空建立确认 + 老化计时 =====
@@ -1933,92 +2349,157 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 处理测试中的进度（真空确认 + 老化计时）
-        /// 仅在"测试中且未报警"时调用
+        /// 处理测试中的进度（【V1.59】三阶段状态机：抽真空 → 上电老化计时 → 到时完成）
+        /// 仅在"测试中且未报警"时由采集循环调用。
+        ///
+        /// 【阶段推进逻辑】（判定函数在 <see cref="AgingSequencer"/>，本方法只负责执行）
+        /// - Vacuuming：等「压力到位」且「距开阀 ≥ 延时开启」（两者自然取较晚）；
+        ///   压力首次到位时记"真空建立"事件；到位前超时由 IsAlarm 判真空建立失败报警；
+        ///   条件满足 → 载台上电 → Aging，老化计时起点 = 此刻。
+        /// - Aging：到配方定格时长 → 自动完成（下电+关阀+PASS·待取料）。
         /// </summary>
         private void ProcessTestingProgress(int deviceId, BarometerData data)
         {
-            bool inRange = !PressureOutOfRange(data.VacuumPressure);
+            int idx = deviceId - 1;
+
+            // 该台本次任务的定格阈值（启动测试时已从配方/全局配置抄写）
+            decimal threshold;
+            lock (_stateLock)
+            {
+                threshold = _sessionThresholdKPa[idx];
+            }
+            bool inRange = !PressureOutOfRange(data.VacuumPressure, threshold);
+
+            bool powerOnNow = false;   // 锁内决策、锁外执行 IO
+            bool completeNow = false;
 
             lock (_stateLock)
             {
-                // ---- 真空建立确认 ----
-                // _vacuumConfirmTimes != MinValue 表示仍在"确认宽限窗口"内
-                if (_vacuumConfirmTimes[deviceId - 1] != DateTime.MinValue)
+                switch (_testPhases[idx])
                 {
-                    if (inRange)
+                    case AgingPhase.Vacuuming:
                     {
-                        // 压力进入正常区间 → 真空建立成功，确认完成
-                        _vacuumConfirmTimes[deviceId - 1] = DateTime.MinValue;
-                        // 从此刻开始老化计时
-                        _testStartTimes[deviceId - 1] = DateTime.Now;
+                        // ---- 真空到位确认（只记一次"真空建立"事件）----
+                        if (_vacuumConfirmTimes[idx] != DateTime.MinValue && inRange)
+                        {
+                            _vacuumConfirmTimes[idx] = DateTime.MinValue;
+                            TestEventLogger.Write(_currentLotNumber, deviceId, "真空建立",
+                                $"真空已到位: {data.VacuumPressure} kPa（阈值 {threshold} kPa），等待上电");
+                        }
 
-                        TestEventLogger.Write(_currentLotNumber, deviceId, "真空建立",
-                            $"真空已建立: {data.VacuumPressure} kPa");
+                        // ---- 到位 且 延时开启已到 → 上电进入老化计时 ----
+                        if (_vacuumConfirmTimes[idx] == DateTime.MinValue &&
+                            AgingSequencer.ShouldPowerOn(inRange, DateTime.Now - _valveOpenTimes[idx],
+                                _sessionDelaySecs[idx]))
+                        {
+                            _testPhases[idx] = AgingPhase.Aging;
+                            _testStartTimes[idx] = DateTime.Now;   // 老化计时起点 = 上电时刻
+                            powerOnNow = true;
+                        }
+                        break;
                     }
-                    return; // 还在确认窗口内，不检查计时
-                }
 
-                // ---- 老化计时 ----
-                int duration = _testDurations[deviceId - 1];
-                if (duration <= 0) return;   // 0 = 不限时长
-                DateTime start = _testStartTimes[deviceId - 1];
-                if (start == DateTime.MinValue) return;
-
-                if ((DateTime.Now - start).TotalSeconds >= duration)
-                {
-                    // 老化时长到 → 自动停止该台
-                    // 注意：不能在锁内调用 StopDevice（StopDevice 会再取锁），先标记再解锁
-                    _testingStates[deviceId - 1] = false;
-                    StopDeviceInternal(deviceId, "老化时长到");
+                    case AgingPhase.Aging:
+                    {
+                        // ---- 老化计时到点 → 自动完成 ----
+                        if (_testStartTimes[idx] != DateTime.MinValue &&
+                            AgingSequencer.ShouldComplete(DateTime.Now - _testStartTimes[idx],
+                                _sessionDurationSecs[idx]))
+                        {
+                            _testingStates[idx] = false;
+                            completeNow = true;
+                        }
+                        break;
+                    }
                 }
+            }
+
+            // ---- 锁外执行副作用（IO / 日志 / 快照），不持锁做网络通讯 ----
+            if (powerOnNow)
+            {
+                // 载台上电（内部编号 = TotalInputs + TotalBarometers + deviceId）
+                _ioController.WriteOutput(_config.TotalInputs + _config.TotalBarometers + deviceId, true);
+                string durationText = (_sessionDurationSecs[idx] <= 0) ? "不限" : (_sessionDurationSecs[idx] + "秒");
+                TestEventLogger.Write(_currentLotNumber, deviceId, "上电",
+                    $"真空确认+延时开启完成，载台上电开始老化（时长 {durationText}）");
+            }
+
+            if (completeNow)
+            {
+                CompleteDeviceInternal(deviceId, "老化时长到");
+
+                // 【V1.59 关键】同步修正本轮广播数据：状态分支在本轮早于完成动作执行，
+                // data.Status 还是 Testing；若不改回来，本轮末尾"批量更新缓存"会用
+                // Testing 覆盖 CompleteDeviceInternal 刚写入缓存的 Completed/PASS，
+                // 导致"已完成·待取料"只存活不到一个采集周期就被冲掉（面板闪一下即逝）。
+                data.Status = DeviceStatus.Completed;
+                data.LastTestResult = "PASS";
             }
         }
 
         /// <summary>
-        /// 停止单台（内部方法，供老化到时自动停止调用）
+        /// 完成单台老化（内部方法，供老化到时自动完成调用）【V1.59 新增语义】
+        /// 【动作】断载台电 + 关真空阀 → 状态置"已完成·待取料(Completed)" +
+        /// 结果标 PASS（全程无报警才会走到这里）→ 记日志 → 快照落盘。
+        /// 【为什么不回空闲】操作员需要一眼区分"没投料"和"测完该取件"，
+        /// 取件后通过人工复位或重新扫码绑定回到空闲。
         /// 【注意】本方法会访问 _ioController（通讯）和写日志，
         /// 必须在 _stateLock 锁外调用（避免持锁做网络 IO）。
         /// </summary>
         /// <param name="deviceId">设备编号</param>
-        /// <param name="reason">停止原因</param>
-        private void StopDeviceInternal(int deviceId, string reason)
+        /// <param name="reason">完成原因描述</param>
+        private void CompleteDeviceInternal(int deviceId, string reason)
         {
-            // 关阀 + 断电
+            // 断电 + 关阀
             _ioController.WriteOutput(_config.TotalInputs + deviceId, false);
             _ioController.WriteOutput(_config.TotalInputs + _config.TotalBarometers + deviceId, false);
 
-            // 复位该台状态（在锁内）
+            // 清理该台状态机
             lock (_stateLock)
             {
                 _testingStates[deviceId - 1] = false;
+                _testPhases[deviceId - 1] = AgingPhase.None;
                 _vacuumConfirmTimes[deviceId - 1] = DateTime.MinValue;
                 _testStartTimes[deviceId - 1] = DateTime.MinValue;
+                _valveOpenTimes[deviceId - 1] = DateTime.MinValue;
                 _testDurations[deviceId - 1] = 0;
+                _sessionDurationSecs[deviceId - 1] = 0;
+                _sessionDelaySecs[deviceId - 1] = 0;
             }
 
-            // 记录日志
-            TestEventLogger.Write(_currentLotNumber, deviceId, "完成", reason);
+            // 记录完成事件（PASS：能走到这里说明全程未触发报警联动）
+            TestEventLogger.Write(_currentLotNumber, deviceId, "完成",
+                $"{reason}·待取料(PASS)");
 
-            // 缓存里该台置为空闲（不覆盖 Fault）
+            // 缓存置为"已完成·待取料"+ 结果 PASS（不覆盖 Fault——报警台的结果是 FAIL）
             lock (_cacheLock)
             {
-                if (_barometerDataCache.TryGetValue(deviceId, out BarometerData cached) && cached != null && cached.Status != DeviceStatus.Fault)
+                if (_barometerDataCache.TryGetValue(deviceId, out BarometerData cached) && cached != null
+                    && cached.Status != DeviceStatus.Fault)
                 {
-                    cached.Status = DeviceStatus.Idle;
+                    cached.Status = DeviceStatus.Completed;
+                    cached.LastTestResult = "PASS";
                 }
             }
+
+            // 在测任务清单变化 → 快照落盘
+            SaveSessionSnapshot();
         }
 
         /// <summary>
-        /// 报警联动（关阀 + 断电 + 记日志）
+        /// 报警联动（关阀 + 断电 + 记日志 + 结果标记）
         /// 【设计说明】
         /// - 只在进入报警的边沿触发一次（调用方保证）
         /// - 报警后不自动恢复，需要人工复位（ResetDevices）后再重新测试
+        /// 【V1.59 责任分类】productRelated 决定结果口径：
+        /// - true  = 产品相关（压力越限/真空建立失败/DI 触点）→ LastTestResult="FAIL"；
+        /// - false = 设备异常（气压表通讯失联）→ LastTestResult="设备异常"，不判产品不合格，
+        ///   避免设备问题拉低产品直通率、冤枉良品。
         /// </summary>
         /// <param name="deviceId">设备编号</param>
         /// <param name="reason">报警原因描述</param>
-        private void HandleAlarm(int deviceId, string reason)
+        /// <param name="productRelated">是否产品相关的报警（决定 FAIL 口径）</param>
+        private void HandleAlarm(int deviceId, string reason, bool productRelated)
         {
             int valveOutputId = _config.TotalInputs + deviceId;
             int carrierOutputId = _config.TotalInputs + _config.TotalBarometers + deviceId;
@@ -2029,9 +2510,36 @@ namespace AgingTestSystem.Services
             _ioController.WriteOutput(valveOutputId, false);
             _ioController.WriteOutput(carrierOutputId, false);
 
-            // 记录报警事件（供追溯）
-            TestEventLogger.Write(_currentLotNumber, deviceId, "报警", reason,
+            // 清理该台状态机（退出测试）
+            lock (_stateLock)
+            {
+                _testingStates[deviceId - 1] = false;
+                _testPhases[deviceId - 1] = AgingPhase.None;
+                _vacuumConfirmTimes[deviceId - 1] = DateTime.MinValue;
+                _testStartTimes[deviceId - 1] = DateTime.MinValue;
+                _valveOpenTimes[deviceId - 1] = DateTime.MinValue;
+                _sessionDurationSecs[deviceId - 1] = 0;
+                _sessionDelaySecs[deviceId - 1] = 0;
+            }
+
+            // 结果标记：产品责任=FAIL，设备责任="设备异常"
+            string result = productRelated ? "FAIL" : "设备异常";
+
+            // 记录报警事件（供追溯；压力值用于漏气分析）
+            TestEventLogger.Write(_currentLotNumber, deviceId, $"报警({result})", reason,
                 pressureKPa: GetDeviceLastPressure(deviceId));
+
+            // 缓存里标结果（Status 由调用方置 Fault）
+            lock (_cacheLock)
+            {
+                if (_barometerDataCache.TryGetValue(deviceId, out BarometerData cached) && cached != null)
+                {
+                    cached.LastTestResult = result;
+                }
+            }
+
+            // 在测任务清单变化 → 快照落盘
+            SaveSessionSnapshot();
         }
 
         /// <summary>
@@ -2056,23 +2564,26 @@ namespace AgingTestSystem.Services
         /// - AlarmWhenPressureHigherThanThreshold=true（默认）：压力 > 阈值 → 报警
         ///   真空压力为负，数值越大（越接近 0）真空越差，触发失压报警
         /// - false：压力 &lt; 阈值 → 报警（扩展用）
+        /// 【V1.59】阈值由调用方传入：测试中的台用"定格的本次任务阈值"
+        /// （配方负压值优先、全局兜底），使不同产品可按各自工艺要求判定。
         /// </summary>
-        private bool PressureOutOfRange(decimal pressureKPa)
+        private bool PressureOutOfRange(decimal pressureKPa, decimal thresholdKPa)
         {
             if (_config.AlarmWhenPressureHigherThanThreshold)
             {
-                return pressureKPa > _config.AlarmPressureThresholdKPa;
+                return pressureKPa > thresholdKPa;
             }
-            return pressureKPa < _config.AlarmPressureThresholdKPa;
+            return pressureKPa < thresholdKPa;
         }
 
         /// <summary>
-        /// 综合报警判定（【V1.10 增强】）
+        /// 综合报警判定（【V1.10 增强】【V1.59 责任分类】）
         ///
-        /// 报警来源：
-        /// 1) 压力越限（失压 / 超抽）
-        /// 2) 真空建立超时：测试中且在确认宽限窗口内超时，压力仍未进入正常区间
-        /// 3) （可选，配置 UseDiAlarmContact）气压表硬件报警触点（DI）触发
+        /// 报警来源与责任归属（决定 LastTestResult 的 FAIL 口径）：
+        /// 1) 压力越限（失压 / 超抽）——【产品相关】漏气/没放好 → FAIL
+        /// 2) 真空建立超时：抽真空阶段宽限窗口内压力始终未到位——【产品相关】→ FAIL
+        /// 3) （可选，配置 UseDiAlarmContact）气压表硬件报警触点——【产品相关】→ FAIL
+        /// （通讯失联报警在 CollectData 的 data==null 分支处理，属【设备异常】不判产品 FAIL）
         ///
         /// 【真空确认宽限说明】
         /// 刚开阀时压力还接近常压，处于"越限"状态是正常的（真空需要时间建立）。
@@ -2084,27 +2595,29 @@ namespace AgingTestSystem.Services
 
             int idx = data.DeviceId - 1;
 
-            // 读取测试状态
+            // 读取测试状态与该台的定格阈值
             bool isTesting = false;
             bool inConfirmWindow = false;
-            bool confirmExpired = false;
+            DateTime valveOpenTime = DateTime.MinValue;
+            decimal threshold;
             lock (_stateLock)
             {
                 isTesting = _testingStates[idx];
+                threshold = _sessionThresholdKPa[idx];
+                // 未在测试的台没有定格任务，用全局阈值兜底
+                if (!isTesting && _testPhases[idx] == AgingPhase.None)
+                {
+                    threshold = _config.AlarmPressureThresholdKPa;
+                }
                 if (isTesting)
                 {
-                    DateTime confirmStart = _vacuumConfirmTimes[idx];
-                    inConfirmWindow = (confirmStart != DateTime.MinValue);
-                    if (inConfirmWindow &&
-                        (DateTime.Now - confirmStart).TotalMilliseconds >= _config.VacuumConfirmTimeoutMs)
-                    {
-                        confirmExpired = true; // 确认窗口超时
-                    }
+                    inConfirmWindow = (_vacuumConfirmTimes[idx] != DateTime.MinValue);
+                    valveOpenTime = _valveOpenTimes[idx];
                 }
             }
 
-            // 压力越限判断
-            bool pressureAlarm = PressureOutOfRange(data.VacuumPressure);
+            // 压力越限判断（按该台的有效阈值）
+            bool pressureAlarm = PressureOutOfRange(data.VacuumPressure, threshold);
 
             // ===== 真空确认宽限窗口 =====
             // 刚开阀时压力还接近常压（越限是正常的，真空需要时间建立），
@@ -2112,11 +2625,16 @@ namespace AgingTestSystem.Services
             // 只有在"窗口超时 + 压力仍未进入正常区间"时才判定真空建立失败报警。
             if (isTesting && inConfirmWindow)
             {
-                if (confirmExpired && pressureAlarm)
+                // 【注意传参语义】pressureAlarm=true 表示"越限"="尚未到位"，
+                // 而 IsVacuumBuildFailed 的首参要的是"是否已到位"，必须取反传入。
+                // （V1.59 集成测试抓出的真实 bug：原传反导致真空建立超时永不报警，
+                //   产品会一直停在抽真空阶段且载台永不上电、也不提示操作员。）
+                if (AgingSequencer.IsVacuumBuildFailed(!pressureAlarm,
+                    DateTime.Now - valveOpenTime, _config.VacuumConfirmTimeoutMs))
                 {
                     return true; // 确认窗口超时且真空始终未建立 → 报警
                 }
-                return false;    // 窗口内：暂不报警（压力进入正常区间后由 ProcessTestingProgress 确认）
+                return false;    // 窗口内：暂不报警（压力到位后由 ProcessTestingProgress 推进）
             }
 
             // 1) 压力越限（已确认真空的测试中，或非测试状态的设备）
@@ -2135,11 +2653,22 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 生成报警原因描述（用于日志 / 显示）
+        /// 【V1.59】阈值取该台的定格值（配方优先），与实际判定一致便于现场对数
         /// </summary>
         private string GetAlarmReason(BarometerData data)
         {
             if (data == null) return "通讯故障";
-            return $"真空压力越限: {data.VacuumPressure} kPa（阈值 {_config.AlarmPressureThresholdKPa} kPa）";
+            decimal threshold = _config.AlarmPressureThresholdKPa;
+            int idx = data.DeviceId - 1;
+            lock (_stateLock)
+            {
+                // 测试中的台用定格任务阈值；否则用全局兜底
+                if (idx >= 0 && idx < _sessionThresholdKPa.Length && _testingStates[idx])
+                {
+                    threshold = _sessionThresholdKPa[idx];
+                }
+            }
+            return $"真空压力越限: {data.VacuumPressure} kPa（阈值 {threshold} kPa）";
         }
 
         /// <summary>

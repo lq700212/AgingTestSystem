@@ -41,7 +41,7 @@ agingtest-regression/
     └── TestRunner.cs         ← 全部测试用例源码（加用例就改这里）
 ```
 
-## 三、测试覆盖范围（11 个模块，246+ 断言）
+## 三、测试覆盖范围（15 个模块，315+ 断言）
 
 | 模块 | 覆盖点 |
 | --- | --- |
@@ -56,6 +56,10 @@ agingtest-regression/
 | PanelLayoutConfig | 默认布局基准坐标、ResolveAnchors 幂等零漂移、高度+10 纵链全链跟随、宽度+10 右锚定组随动、颜色解析钳位/回退、SaveDefault→重载零差异 |
 | HomeLayoutConfig | 默认值、Save→Load 往返 |
 | ModelRoundtrip | RecipeConfig/UserAccount JSON 往返（含特殊字符）、StationInfo/FanData Clone 深拷贝互不影响 |
+| AgingSequencer | ShouldPowerOn(压力×延时双条件)、ShouldComplete(0=不限时长)、IsVacuumBuildFailed(到位即不失败) 边界族 |
+| TestSessionStore | 快照往返全字段、损坏 json 静默 null、Clear 幂等、空清单视为无任务 |
+| AgingBusinessModel | DeviceStatus.Completed 枚举与 BarometerData 往返、LastTestResult 默认值/Clone、AgingPhase 三值、StationInfo.RecipeNegativePressure |
+| **DeviceManagerIntegration** | **端到端状态机**（Fake 气压表+Fake IO 经注入构造驱动真实 DeviceManager，30ms 采集秒级跑完生命周期）：正常全流程(启动只开阀→到位+延时上电→配方时长完成→Completed·PASS→阀电全关)、真空建立失败(超时报警+全程不带电+FAIL)、通讯失联(设备异常≠FAIL)、手动中止(回空闲不计结果)、断电恢复(快照落盘→重启询问→整台重测/放弃关阀)、扫码重绑清完成态、配方阈值优先于全局 |
 
 **不在覆盖范围**（明确边界）：真串口/真设备通讯（ModbusRtuBarometerReader /
 ScannerService / FanControllerClient / ModbusTcpIoController，靠现场联调）、
@@ -108,7 +112,22 @@ UI 弹窗分支（如配方同名覆盖确认框，靠界面手工测试）、�
    pressure/temperature 缺省时两个空列连着，别把 EndsWith(",") 和 !EndsWith(",,")
    组合当成"留空"判据。
 9. **PowerShell 5.1 对无 BOM 的 ps1 按 ANSI 解析**，中文字符串/注释会乱码甚至语法错。
-   本 skill 的 ps1 一律纯 ASCII 英文内容；中文输出统一由被调用的 C# 程序打印
-   （脚本里设 `[Console]::OutputEncoding = UTF8`）。
+    本 skill 的 ps1 一律纯 ASCII 英文内容；中文输出统一由被调用的 C# 程序打印
+    （脚本里设 `[Console]::OutputEncoding = UTF8`）。
 10. **管道捕获中文显示残缺不影响判定**：通过 bash/管道转发时控制台编码仍可能花屏，
     但 PASS/FAIL/ALL PASS/退出码始终可靠，以它们为准。
+11. **集成测试必须给 Fake 气压表设初始读数**：DeviceManager 有"连续 N 次读失败→失联报警"
+    防呆（30ms 采集间隔下 ~90ms 即触发），Fake 台返回 null 会抢先报警关阀，
+    盖过要测的场景。BuildTestManager 里先给全部台 SetPressure(0)（常压）。
+12. **状态机"完成/报警轮"的广播数据会被旧分支覆盖**（V1.59 实测抓出的产品 bug 类别）：
+    CollectData 里 data.Status 在状态分支时赋值，而完成/报警动作发生在其后的
+    ProcessTestingProgress/HandleAlarm——本轮末尾批量写缓存会用旧值冲掉刚写入的
+    Completed/Fault 标记，面板"闪一帧即逝"。修法是动作执行后同步修正本轮 data。
+    **教训：同一轮内"先定状态、后改状态"的流水线，动作后必须回写广播对象。**
+13. **布尔传参语义反转只有集成测试能抓到**：IsVacuumBuildFailed(是否到位) 被传入
+    PressureOutOfRange(是否越限)——两者互为反义，单测用正确语义的字面量全绿，
+    端到端一跑"真空建立超时永不报警"。**教训：谓词函数做参数传递时在调用点写
+    `!pressureAlarm` 并加注释说明取反原因；新状态机必须有端到端用例兜底。**
+14. **测试场景顺序不能让"Dispose 了的对象"继续被后续场景使用**：断电恢复场景会
+    Dispose 主 DeviceManager，必须放在所有依赖它的场景之后，否则后面"启动不上电"
+    这类灵异失败其实是采集定时器已被停掉。

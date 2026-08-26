@@ -857,7 +857,54 @@ namespace AgingTestSystem.Views
                     UpdateConnectionStatus();
                     RefreshScannerStatus();
                 });
+
+                // 【V1.59】断电恢复：启动完成后检查有没有上次未完成的老化任务，
+                // 有则切回 UI 线程弹窗询问"整台重测 / 放弃"。
+                RunOnUi(() =>
+                {
+                    if (IsDisposed || Disposing) return;
+                    CheckPendingSessionOnStartup();
+                });
             });
+        }
+
+        /// <summary>
+        /// 断电恢复检查（【V1.59 新增】，UI 线程调用）
+        ///
+        /// 【场景】异常断电/程序崩溃时，在测工位的阀与电源在耦合器上还保持最后状态，
+        /// 任务参数快照存在 TestSession.json。重启后在这里发现快照并询问操作员：
+        /// - 选"是"：对每台按中断前的定格参数【整台重测】（重新开阀→抽真空→延时→
+        ///   上电→满时长老化）。老化讲究连续性，断电期间产品状态未知，不续跑剩余时长；
+        /// - 选"否"：安全关闭这些工位的阀与电源并删除快照（不能放着不管——
+        ///   耦合器 DO 不会随程序退出自动复位）。
+        /// </summary>
+        private void CheckPendingSessionOnStartup()
+        {
+            TestSession session = _deviceManager.LoadPendingSession();
+            if (session?.Stations == null || session.Stations.Count == 0) return;
+
+            var idList = string.Join("、", session.Stations.ConvertAll(s => s.DeviceId));
+            DialogResult r = MessageBox.Show(
+                $"检测到上次退出时有 {session.Stations.Count} 台工位的老化测试未完成：\n\n" +
+                $"批号：{(string.IsNullOrEmpty(session.LotNumber) ? "（无批号）" : session.LotNumber)}\n" +
+                $"工位：{idList}\n\n" +
+                "【是】恢复测试 —— 这些台将按原参数整台重新老化（推荐，老化要求连续性）\n" +
+                "【否】放弃任务 —— 关闭这些工位的真空阀与载台电",
+                "断电恢复",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button1);
+
+            if (r == DialogResult.Yes)
+            {
+                _deviceManager.RecoverSession(session);
+                WriteLog($"[断电恢复] {session.Stations.Count} 台已重新投入测试（整台重测）");
+            }
+            else
+            {
+                _deviceManager.DiscardSession(session);
+                WriteLog($"[断电恢复] 已放弃 {session.Stations.Count} 台未完成任务，阀与电源已关闭");
+            }
         }
 
         /// <summary>切换到 UI 线程写日志（后台线程调用时使用，避免跨线程访问控件）</summary>
@@ -2242,9 +2289,10 @@ namespace AgingTestSystem.Views
                 $"确认启动 {ids.Length} 台老化测试？\n\n" +
                 "将执行：\n" +
                 "1. 开启真空电磁阀（建立负压固定产品）\n" +
-                "2. 载台上电（给产品供电）\n" +
-                "3. 送风机定值启动（保持环境温控）\n\n" +
-                "注：开阀后若真空长时间未建立会自动报警断电。",
+                "2. 真空到位且延时开启到后，自动载台上电（未吸附固定不通电）\n" +
+                "3. 按配方启动时间老化计时，到时自动下电关阀并标\"已完成\"\n" +
+                "4. 送风机定值启动（保持环境温控）\n\n" +
+                "注：开阀后若真空长时间未建立会自动报警断电（该台全程不会带电）。",
                 "启动运行",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question);
@@ -2294,9 +2342,11 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 报警复位按钮点击（【V1.10 新增】）
-        /// 对选中的报警/故障面板执行人工复位：清除故障标记，回到空闲，可重新启动。
-        /// 【设计说明】报警后不自动恢复，必须人工确认（防止真空失效原因未确认就重启）。
+        /// 报警复位按钮点击（【V1.10 新增】【V1.59 兼容完成态】）
+        /// 对选中的报警/故障/已完成·待取料面板执行人工复位：清除故障标记，
+        /// 回到空闲，可重新启动。
+        /// 【设计说明】报警后不自动恢复，必须人工确认（防止真空失效原因未确认就重启）；
+        /// "已完成·待取料"由本按钮确认取件，或重新扫码绑定时自动复位。
         /// </summary>
         private void btnResetAlarm_Click(object sender, EventArgs e)
         {
@@ -2304,15 +2354,15 @@ namespace AgingTestSystem.Views
             if (ids == null) return;
 
             DialogResult r = MessageBox.Show(
-                $"确认复位 {ids.Length} 台的报警状态？\n\n" +
-                "将清除故障标记，设备回到空闲状态，可重新启动老化测试。",
-                "报警复位",
+                $"确认复位 {ids.Length} 台？\n\n" +
+                "将清除故障标记或确认取件完毕，设备回到空闲状态，可重新启动老化测试。",
+                "复位",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question);
             if (r != DialogResult.Yes) return;
 
             _deviceManager.ResetDevices(ids);
-            WriteLog($"报警复位（{ids.Length} 台）");
+            WriteLog($"复位（{ids.Length} 台：报警/完成态已清除）");
         }
 
         /// <summary>

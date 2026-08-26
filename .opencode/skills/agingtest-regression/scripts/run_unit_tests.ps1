@@ -21,14 +21,17 @@ param(
 $ErrorActionPreference = "Stop"
 
 $bin    = Join-Path $RepoRoot "AgingTestSystem\bin\Debug"
-$srcCs  = Join-Path $PSScriptRoot "..\tests\TestRunner.cs"
+$srcCs  = @(
+    (Join-Path $PSScriptRoot "..\tests\TestRunner.cs"),
+    (Join-Path $PSScriptRoot "..\tests\DeviceManagerIntegrationTests.cs")
+)
 $runDir = Join-Path $env:TEMP "opencode\agingtest-run"
 
 if (-not (Test-Path (Join-Path $bin "AgingTestSystem.exe"))) {
     Write-Host "[SETUP-FAIL] Build first: MSBuild.exe AgingTestSystem/AgingTestSystem.csproj" -ForegroundColor Red
     exit 2
 }
-$srcRes = Resolve-Path $srcCs
+$srcRes = $srcCs | ForEach-Object { Resolve-Path $_ }
 
 # --- 1. prepare isolated run dir -------------------------------------------
 if (Test-Path $runDir) { Remove-Item -LiteralPath $runDir -Recurse -Force }
@@ -55,11 +58,15 @@ if (-not $csc) {
 
 # --- 3. compile harness -----------------------------------------------------
 $outExe = Join-Path $runDir "TestRunner.exe"
-& $csc /nologo /t:exe "/out:$outExe" "$srcRes" `
-    /r:System.dll /r:System.Core.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll `
-    "/r:$runDir\Newtonsoft.Json.dll" `
-    "/r:$runDir\AgingTestSystem.exe" `
-    /codepage:65001
+$cscArgs = @(
+    '/nologo', '/t:exe', "/out:$outExe"
+) + @($srcRes) + @(
+    '/r:System.dll', '/r:System.Core.dll', '/r:System.Drawing.dll', '/r:System.Windows.Forms.dll',
+    "/r:$runDir\Newtonsoft.Json.dll",
+    "/r:$runDir\AgingTestSystem.exe",
+    '/codepage:65001'
+)
+& $csc @cscArgs
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[COMPILE-FAIL] csc exit=$LASTEXITCODE" -ForegroundColor Red
     exit 2

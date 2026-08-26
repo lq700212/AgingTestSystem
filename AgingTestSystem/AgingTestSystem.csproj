@@ -107,10 +107,13 @@
     <Compile Include="Services\SerialPortHelper.cs" />
     <Compile Include="Services\AppLogFileWriter.cs" />
     <Compile Include="Services\TestEventLogger.cs" />
+    <Compile Include="Services\TestSessionStore.cs" />
+    <Compile Include="Services\AgingSequencer.cs" />
     <Compile Include="Services\DeviceManager.cs" />
     <Compile Include="Services\UserManager.cs" />
     <Compile Include="Services\PasswordHasher.cs" />
     <Compile Include="Services\RecipeStorage.cs" />
+    <Compile Include="Models\TestSession.cs" />
     <Compile Include="Controls\DataGridViewNumericUpDownCell.cs" />
     <Compile Include="Controls\IpListEditorPopup.cs">
       <SubType>Form</SubType>

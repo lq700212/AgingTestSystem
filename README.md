@@ -89,16 +89,19 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 ## 4. 核心业务流
 
-### 4.1 老化测试单台流程
+### 4.1 老化测试单台流程（V1.59 三阶段状态机）
 ```
-[准备] 录入批号 → 绑定工位↔SN → 设配方
-[启动] 开真空阀 + 载台上电 + 送风机定值启动 → 真空确认(VacuumConfirmTimeoutMs 默认15s 内压力进入正常区间，
-        超时→真空建立失败报警：关阀+断电+标故障)
-[老化] 真空确认后计时 → 达 MaxTestDurationSeconds 自动停止该台
-[监控] 压力越限 / 通讯失联(连续失败≥CommunicationLossAlarmCount) / DI触点(可选) → 报警联动
-[停止] 关阀+断电（末台时送风机自动停止）
-[复位] 人工报警复位后回空闲，可重测
-[急停] 全部停止：全关阀+全断电+停送风机（带防误触确认）
+[准备] 录入批号 → 绑定工位↔SN → 设配方（延时开启/启动时间/负压值随配方生效）
+[启动] 只开真空阀 + 送风机定值启动；任务参数(时长/延时/阈值)此刻定格
+[抽真空] 等「真空到位」且「距开阀≥配方延时开启」两者满足（判定阈值=配方负压值优先，全局-95kPa兜底；
+         VacuumConfirmTimeoutMs 默认15s 内始终不到位→真空建立失败报警：关阀断电标故障，全程不带电）
+[上电] 条件满足自动载台上电 → 进入老化计时
+[老化] 计时时长=配方"启动时间"(>0)，否则回退 MaxTestDurationSeconds(0=不限时长手动停)
+[完成] 到时自动下电+关阀 → 状态"已完成·待取料"(面板蓝) → 日志记 PASS → 人工复位/重新扫码回空闲
+[监控] 压力越限(产品FAIL) / 真空建立失败(产品FAIL) / 通讯失联(设备异常) / DI触点(可选,产品FAIL) → 报警联动
+[停止] 手动停止=中止(回空闲,不计判定)；末台时送风机自动停止
+[急停] 全部停止：全关阀+全断电+停送风机+清任务快照（带防误触确认）
+[断电恢复] 异常退出后再启动：检测到 TestSession.json 快照 → 弹窗选"按原参数整台重测"或"放弃并安全关闭阀与电源"
 ```
 
 ### 4.2 报警来源（DeviceManager.IsAlarm）
@@ -188,6 +191,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 | 版本 | 要点 |
 | :--- | :--- |
+| V1.59 | 业务串联完善：启动只开阀、真空到位+配方延时开启到才自动上电（未吸附固定不通电）；老化时长/延时/报警阈值接入配方参数（负压值优先参与判定，参数启动定格）；到时自动完成标"已完成·待取料"蓝面板+日志 PASS；报警责任分类（压力类=产品FAIL/通讯失联=设备异常）；扫码重绑自动清完成态；在测任务快照 TestSession.json 断电恢复（重启询问整台重测或放弃并安全关阀断电）；新增 AgingSequencer 决策器与 35 条回归用例（281 全绿） |
 | V1.30 | IO 触发后气压表压力值快速刷新：写输出成功（开/关阀、上/断电、启动/停止测试）对目标工位启动独立 250ms 高频补读，压力变化 ≤0.5 秒可见，跟踪 12s 后自动退出恢复正常轮询，不影响 72 台全量采集性能 |
 | V1.29 | 移除时间字段 [JsonProperty] 兼容（JSON 键名直接用 DelayTime/StartTime，旧 Recipes.json/StationSettings.json 需删除重建）+ 工位面板配色微调：boxPower 下电 / boxVacuumOpen 真空关由红底白字改浅灰(LightGray)底黑字（与行全选按钮同色），红仅保留给工作状态"故障" |
 | V1.28 | 时间输入样式统一：配方管理/批量设置/工位设置三窗口延时与启动时间均改三个 NumericUpDown + 冒号分隔（时:分:秒，时0-99/分0-59/秒0-59），命名统一 nudDelay*/nudStart*，字段映射对齐（延时→延时开启 DelayTime、启动→延时到达 StartTime；字段名由 DelayStartTime/DelayArriveTime 统一）；批量设置配方窗口删除"延时时间2"，且原被丢弃的"启动时间"修复为写入配方；工位设置窗口 txtDelay/txtStart 改 NumericUpDown 并调整读取（GetTimeSpan）/回填（SetTimeInputs 钳制）/提示（GetTimeText）逻辑 |
