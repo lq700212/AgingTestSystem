@@ -39,6 +39,16 @@ namespace AgingTestSystem.Models
         public string RecipeName { get; set; }
 
         /// <summary>
+        /// 配方的负压值设定（kPa，V1.59 新增；null = 未绑定配方或配方未设定）
+        /// 【用途】作为该工位的"真空到位判定"与"报警阈值"：
+        /// 不同产品的吸附要求不同（有的 -60kPa 就算吸附牢固，有的要 -95kPa），
+        /// 绑定了配方且设定了负压值的工位按配方值判定，未配置的回退全局
+        /// AlarmPressureThresholdKPa。启动测试时定格进本次任务，
+        /// 中途改配方不影响已在跑的测试。
+        /// </summary>
+        public decimal? RecipeNegativePressure { get; set; }
+
+        /// <summary>
         /// 延时开启时间（时:分:秒，工位设置窗口录入）
         /// 为空表示尚未配置
         /// </summary>
@@ -61,6 +71,7 @@ namespace AgingTestSystem.Models
                 DeviceId = this.DeviceId,
                 SerialNumber = this.SerialNumber,
                 RecipeName = this.RecipeName,
+                RecipeNegativePressure = this.RecipeNegativePressure,
                 DelayTime = this.DelayTime,
                 StartTime = this.StartTime
             };

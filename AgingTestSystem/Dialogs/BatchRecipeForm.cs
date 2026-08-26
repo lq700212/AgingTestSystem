@@ -240,7 +240,8 @@ namespace AgingTestSystem.Dialogs
                 if (_deviceManager == null) break;
 
                 // 写入工位静态信息（采集线程叠加后，工位面板同步显示配方名称 / 延时开启 / 延时到达）
-                _deviceManager.SetStationRecipeName(deviceId, recipe.Name);
+                // 【V1.59】配方的负压值一并下发：启动测试时作为该工位的真空到位/报警阈值
+                _deviceManager.SetStationRecipe(deviceId, recipe.Name, recipe.NegativePressure);
                 _deviceManager.SetStationDelayTimes(deviceId, recipe.DelayTime, recipe.StartTime);
                 appliedCount++;
             }

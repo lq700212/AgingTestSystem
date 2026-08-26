@@ -47,7 +47,11 @@ using AgingTestSystem.Services;
 
 namespace AgingTestSystem.Tests
 {
-    internal static class TestRunner
+    /// <summary>
+    /// 回归 harness 入口（partial：设备编排端到端集成测试见
+    /// DeviceManagerIntegrationTests.cs，共享本文件的 Check/Module/EnterCleanDir 断言设施）
+    /// </summary>
+    internal static partial class TestRunner
     {
         // ────────────── 断言统计 ──────────────
         private static int _pass;
@@ -148,6 +152,10 @@ namespace AgingTestSystem.Tests
             Module("PanelLayoutConfig", PanelLayoutTests);
             Module("HomeLayoutConfig", HomeLayoutTests);
             Module("ModelRoundtrip", ModelRoundtripTests);
+            Module("AgingSequencer", AgingSequencerTests);
+            Module("TestSessionStore", TestSessionStoreTests);
+            Module("AgingBusinessModel", AgingBusinessModelTests);
+            Module("DeviceManagerIntegration", DeviceManagerIntegrationTests);
 
             // 统一清理临时目录（尽力而为，删不掉不影响结果）
             foreach (string dir in _tempDirs)
@@ -917,6 +925,162 @@ namespace AgingTestSystem.Tests
             Check("FanData.Clone 深拷贝互不影响",
                 f.Temperature == 33.5f && f.Humidity == 55.5f && f.IsOnline &&
                 fc.Humidity == 55.5f && !fc.IsOnline);
+        }
+
+        // =====================================================================
+        // 12. AgingSequencer —— 老化三阶段状态机纯函数决策（V1.59 新增）
+        //     时序：启动只开阀 → Vacuuming(真空到位+延时开启) → 上电 → Aging(配方时长)
+        //           → 到时完成(PASS·待取料)。决策逻辑抽成静态函数保证可测。
+        // =====================================================================
+        private static void AgingSequencerTests()
+        {
+            // ── ShouldPowerOn：上电前置条件 = 压力到位 且 延时开启已到（两者缺一不可）──
+            Check("压力未到位永不上电(即使延时已过)",
+                !AgingSequencer.ShouldPowerOn(false, TimeSpan.FromMinutes(10), 0));
+            Check("压力到位+零延时立即上电",
+                AgingSequencer.ShouldPowerOn(true, TimeSpan.Zero, 0));
+            Check("压力到位但延时未到不上电",
+                !AgingSequencer.ShouldPowerOn(true, TimeSpan.FromSeconds(29), 30));
+            Check("压力到位且延时刚好到点上电",
+                AgingSequencer.ShouldPowerOn(true, TimeSpan.FromSeconds(30), 30));
+            Check("压力到位且延时早已过也上电(取较晚满足者)",
+                AgingSequencer.ShouldPowerOn(true, TimeSpan.FromHours(1), 30));
+
+            // ── ShouldComplete：老化到时判定；0/负时长 = 不限时长 ──
+            Check("不限时长(0)永不自动完成",
+                !AgingSequencer.ShouldComplete(TimeSpan.FromHours(100), 0));
+            Check("负时长同样视为不限",
+                !AgingSequencer.ShouldComplete(TimeSpan.FromHours(100), -1));
+            Check("计时未到不完成",
+                !AgingSequencer.ShouldComplete(TimeSpan.FromSeconds(3599), 3600));
+            Check("计时刚好到点完成",
+                AgingSequencer.ShouldComplete(TimeSpan.FromSeconds(3600), 3600));
+            Check("超过时长完成",
+                AgingSequencer.ShouldComplete(TimeSpan.FromSeconds(3601), 3600));
+
+            // ── IsVacuumBuildFailed：宽限窗口内未到位不算失败；到位后永不算失败 ──
+            Check("真空已到位永远不算建立失败",
+                !AgingSequencer.IsVacuumBuildFailed(true, TimeSpan.FromMinutes(10), 15000));
+            Check("未到位但在宽限窗口内不算失败",
+                !AgingSequencer.IsVacuumBuildFailed(false, TimeSpan.FromSeconds(14), 15000));
+            Check("未到位且刚好超时判失败",
+                AgingSequencer.IsVacuumBuildFailed(false, TimeSpan.FromMilliseconds(15000), 15000));
+            Check("未到位且远超窗口判失败",
+                AgingSequencer.IsVacuumBuildFailed(false, TimeSpan.FromSeconds(60), 15000));
+        }
+
+        // =====================================================================
+        // 13. TestSessionStore —— 在测任务快照持久化（断电恢复，V1.59 新增）
+        //     生命周期：有在测任务才存；急停/放弃恢复/全部结束删除；损坏按无任务处理。
+        // =====================================================================
+        private static void TestSessionStoreTests()
+        {
+            EnterCleanDir(); // 快照写在运行目录(TestSession.json 相对路径)，必须隔离
+
+            // 无文件 → 无任务
+            Check("无快照文件时 Load=null", TestSessionStore.Load() == null);
+
+            // Save→Load 往返全字段
+            var session = new TestSession
+            {
+                LotNumber = "LOT2026断电恢复\"",
+                Stations = new List<TestSessionStation>
+                {
+                    new TestSessionStation
+                    {
+                        DeviceId = 3,
+                        SerialNumber = "SN-A001",
+                        RecipeName = "配方X,-95kPa",
+                        DurationSeconds = 7200,
+                        DelaySeconds = 90,
+                        AlarmThresholdKPa = -88.5m
+                    },
+                    new TestSessionStation { DeviceId = 44 }
+                }
+            };
+            Check("Save 成功", TestSessionStore.Save(session));
+            Check("快照文件确实生成", File.Exists("TestSession.json"));
+
+            var loaded = TestSessionStore.Load();
+            Check("Load 读回非空", loaded != null);
+            if (loaded != null)
+            {
+                Check("批号往返一致(含特殊字符)", loaded.LotNumber == session.LotNumber);
+                Check("工位数量往返一致", loaded.Stations.Count == 2);
+                if (loaded.Stations.Count == 2)
+                {
+                    var a = loaded.Stations[0];
+                    Check("工位参数往返一致(Id/SN/配方)",
+                        a.DeviceId == 3 && a.SerialNumber == "SN-A001" && a.RecipeName == "配方X,-95kPa");
+                    Check("定格参数往返一致(时长/延时/阈值)",
+                        a.DurationSeconds == 7200 && a.DelaySeconds == 90 && a.AlarmThresholdKPa == -88.5m);
+                    Check("最小字段工位反序列化不抛(DeviceId=44)", loaded.Stations[1].DeviceId == 44);
+                }
+                Check("SavedAt 自动写入", loaded.SavedAt != default(DateTime));
+            }
+
+            // Clear 后无任务；对不存在文件 Clear 也不抛
+            TestSessionStore.Clear();
+            Check("Clear 后 Load=null", TestSessionStore.Load() == null);
+            bool clearAgainSafe = true;
+            try { TestSessionStore.Clear(); } catch { clearAgainSafe = false; }
+            Check("重复 Clear 幂等不抛", clearAgainSafe);
+
+            // 损坏 json → 静默按无任务处理（绝不能拖垮启动流程）
+            File.WriteAllText("TestSession.json", "{ 这不是合法 json !!!");
+            Check("损坏快照静默返回 null", TestSessionStore.Load() == null);
+
+            // 空在测清单的快照视为无任务
+            TestSessionStore.Save(new TestSession());
+            Check("空清单快照 Load=null", TestSessionStore.Load() == null);
+
+            TestSessionStore.Clear();
+        }
+
+        // =====================================================================
+        // 14. 业务串联模型扩展 —— Completed 状态 / LastTestResult / 配方负压值（V1.59）
+        // =====================================================================
+        private static void AgingBusinessModelTests()
+        {
+            // DeviceStatus.Completed 枚举与序列化：面板渲染和广播数据都走这个状态
+            Check("DeviceStatus 存在 Completed 枚举值",
+                Enum.IsDefined(typeof(DeviceStatus), "Completed"));
+            var data = new BarometerData
+            {
+                DeviceId = 7,
+                VacuumPressure = -92.5m,
+                Status = DeviceStatus.Completed,
+                LastTestResult = "PASS"
+            };
+            var d2 = Newtonsoft.Json.JsonConvert.DeserializeObject<BarometerData>(
+                Newtonsoft.Json.JsonConvert.SerializeObject(data));
+            Check("BarometerData 往返保留 Completed+PASS",
+                d2.Status == DeviceStatus.Completed && d2.LastTestResult == "PASS");
+            Check("BarometerData.Clone 复制 LastTestResult",
+                data.Clone().LastTestResult == "PASS");
+            Check("LastTestResult 默认为空串(未测过)", new BarometerData().LastTestResult == "");
+
+            // AgingPhase 三阶段枚举齐全（None/Vacuuming/Aging）
+            Check("AgingPhase 含 None/Vacuuming/Aging 三值",
+                Enum.IsDefined(typeof(AgingPhase), "None") &&
+                Enum.IsDefined(typeof(AgingPhase), "Vacuuming") &&
+                Enum.IsDefined(typeof(AgingPhase), "Aging"));
+
+            // StationInfo.RecipeNegativePressure：配方负压值参与到位/报警判定
+            var info = new StationInfo
+            {
+                DeviceId = 2,
+                RecipeName = "R",
+                RecipeNegativePressure = -60m,
+                DelayTime = TimeSpan.FromSeconds(30),
+                StartTime = TimeSpan.FromHours(4)
+            };
+            var ic = info.Clone();
+            ic.RecipeNegativePressure = 0m;
+            Check("StationInfo.Clone 复制负压值且深拷贝互不影响",
+                info.RecipeNegativePressure == -60m && ic.DelayTime == TimeSpan.FromSeconds(30));
+            Check("RecipeNegativePressure 可为 null(未配置=全局兜底)",
+                new StationInfo().RecipeNegativePressure == null);
         }
 
     }

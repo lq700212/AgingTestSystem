@@ -58,6 +58,9 @@
 | `AgingTestSystem/Services/ScannerService.cs` | 扫码枪识别/读取 |
 | `AgingTestSystem/Services/UserManager.cs` | 用户/权限（Users.json） |
 | `AgingTestSystem/Services/PasswordHasher.cs` | 密码哈希（PBKDF2-SHA256，Users.json 落盘前转换；改密码/登录/迁移入口全在 UserManager） |
+| `AgingTestSystem/Services/DeviceManager.cs` | 业务编排核心（采集/报警联动/**三阶段老化状态机 V1.59**：Vacuuming 抽真空→Aging 计时→Completed 待取料） |
+| `AgingTestSystem/Services/AgingSequencer.cs` | 老化时序纯函数决策器（ShouldPowerOn/ShouldComplete/IsVacuumBuildFailed）；**改编排时序逻辑先改这里并同步用例**，保持 DeviceManager 只做执行 |
+| `AgingTestSystem/Services/TestSessionStore.cs` | 在测任务快照持久化（TestSession.json，断电恢复用，gitignore） |
 | `AgingTestSystem/Services/RecipeAutoCompleteProvider.cs` | 配方名称自动检索 |
 | `AgingTestSystem/Dialogs/SettingsForm.cs` | 系统设置（配置项编辑、校验、保存） |
 | `AgingTestSystem/Controls/DataGridViewNumericUpDownCell.cs` | 数字/下拉单元格控件 |
@@ -77,6 +80,11 @@
 - **调试完自动沉淀技能**：每次用 `winforms-ui-debug` 排查成功（尤其是"一次性改对"的高光案例）后，**主动把可复用的新套路/新踩坑/新型探针代码回写到该 SKILL.md**（新增/补充小节、追加踩坑条目），不用等用户提醒。价值标准：换个人靠这份 skill 能更快解决同类问题。
 
 ## 回归测试与用例沉淀铁律（V1.58.23 起，勿等用户提醒）
+
+**V1.59 补充（业务编排可测性约定）**：老化时序的"判定类"逻辑（该不该上电/该不该完成/真空建立是否超时）
+一律写成 `AgingSequencer` 纯函数并同步边界用例；DeviceManager 只做"调用决策 + IO + 日志"。
+**采集缓存跨周期标记必须主动延续**（Completed/LastTestResult 每轮会被新数据覆盖，CollectData
+else 分支已做叠加——改采集/状态显示时勿破坏此机制）。断电恢复策略=整台重测（评审结论），快照参数定格于启动时刻。
 
 项目专属测试验证技能为 `.opencode/skills/agingtest-regression/`（SKILL.md 含用法、覆盖范围表、加用例步骤与踩坑清单；用例源码在 `tests/TestRunner.cs`，脚本在 `scripts/`）。以下三条为强制约定：
 

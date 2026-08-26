@@ -287,6 +287,17 @@ namespace AgingTestSystem.Models
         /// <summary>工作状态-空闲（绿）</summary>
         public string ColorWorkIdle { get; set; } = "50,205,50";
 
+        /// <summary>
+        /// 工作状态-已完成·待取料（皇家蓝，V1.59 新增）
+        /// 【为什么用蓝色】空闲已是绿色、测试金黄、故障红、选中橙，
+        /// 完成态要"一眼能从 72 个面板里挑出来"且不与现有语义混淆，
+        /// 蓝色系在工厂现场习惯里也常表示"流程走完等确认"。
+        /// </summary>
+        public string ColorWorkCompleted { get; set; } = "65,105,225";
+
+        /// <summary>面板背景-已完成·待取料（淡钢蓝，V1.59 新增）</summary>
+        public string ColorCompletedBackground { get; set; } = "176,196,222";
+
         /// <summary>"设置"按钮背景色（绿）</summary>
         public string ColorSetButton { get; set; } = "50,205,50";
 

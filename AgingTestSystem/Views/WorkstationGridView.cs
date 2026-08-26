@@ -97,6 +97,7 @@ namespace AgingTestSystem.Views
     /// │ ┌──────────┐  ┌──────────┐     │ 选中指示框  ││ ← 右上角 23×23
     /// │ │ 上电/下电 │  │ 空闲/选中 │     │ (绿底白✓)  ││    有选中才显示
     /// │ └──────────┘  │ 繁忙/故障 │     └────────────┘│
+    /// │               │ 已完成    │                   │ ← 【V1.59】蓝=待取料
     /// │               └──────────┘                   │
     /// │ 真空压力 ┌──────────────────┐   ┌──────────┐  │
     /// │          │  78 kPa          │   │ 真空开/关  │  │
@@ -164,9 +165,11 @@ namespace AgingTestSystem.Views
     /// - 值框文字左内边距：ValueTextLeftPadding=6px（V1.52，文字不贴值框左边框，值框坐标不变）
     /// - 状态块配色见下方"状态块配色"；颜色值均可由 PanelLayout.json 覆盖
     ///
-    /// 【状态块配色（V1.28 约定）】
+    /// 【状态块配色（V1.28 约定，V1.59 补完成态）】
     /// - 上电/下电：绿=LimeGreen=上电，浅灰=LightGray=下电
-    /// - 工作状态：空闲=绿 / 选中(已上电待测试)=橙 / 繁忙(测试中)=黄 / 故障=红
+    /// - 工作状态：空闲=绿 / 选中(已上电待测试)=橙 / 繁忙(测试中)=黄 / 故障=红 /
+    ///   已完成·待取料=皇家蓝（V1.59：老化到时自动完成后显示，取件复位后回空闲）
+    /// - 面板背景：空闲=白 / 繁忙=浅黄 / 故障=浅粉 / 已完成=淡钢蓝（V1.59）
     /// - 真空开/关：真空开=绿底，真空关=浅灰底
     ///
     /// 【数据流】
@@ -197,6 +200,8 @@ namespace AgingTestSystem.Views
         private readonly Color _colorWorkBusy;     // 工作状态-繁忙（黄）
         private readonly Color _colorWorkSelected; // 工作状态-选中/已上电待测试（橙）
         private readonly Color _colorWorkIdle;     // 工作状态-空闲（绿）
+        private readonly Color _colorWorkCompleted; // 【V1.59】工作状态-已完成·待取料（皇家蓝）
+        private readonly Color _completedColor;     // 【V1.59】面板背景-已完成·待取料（淡钢蓝）
         private readonly Color _colorSetButton;    // 设置按钮背景（绿）
         private readonly Color _colorRowSelect;    // 行全选按钮背景（浅灰）
         private readonly Color _colorValueBox;     // 值框背景（白）
@@ -310,6 +315,9 @@ namespace AgingTestSystem.Views
             _colorWorkBusy = Parse(_layout.ColorWorkBusy, Color.Gold);
             _colorWorkSelected = Parse(_layout.ColorWorkSelected, Color.Orange);
             _colorWorkIdle = Parse(_layout.ColorWorkIdle, Color.LimeGreen);
+            // 【V1.59】已完成·待取料状态色（皇家蓝/淡钢蓝，可在 PanelLayout.json 覆盖）
+            _colorWorkCompleted = Parse(_layout.ColorWorkCompleted, Color.RoyalBlue);
+            _completedColor = Parse(_layout.ColorCompletedBackground, Color.LightSteelBlue);
             _colorSetButton = Parse(_layout.ColorSetButton, Color.LimeGreen);
             _colorRowSelect = Parse(_layout.ColorRowSelectButton, Color.LightGray);
             _colorValueBox = Parse(_layout.ColorValueBox, Color.White);
@@ -539,13 +547,17 @@ namespace AgingTestSystem.Views
             item.PowerColor = carrierPower ? _colorPowerOn : _colorPowerOff;
             item.PowerForeColor = carrierPower ? Color.White : Color.Black;
 
-            // 工作状态（故障=红 / 繁忙=黄 / 已上电待测试=橙"选中" / 空闲=绿）
+            // 工作状态（故障=红 / 繁忙=黄 / 已上电待测试=橙"选中" / 空闲=绿 / 已完成=蓝【V1.59】）
             switch (data.Status)
             {
                 case DeviceStatus.Fault:
                     item.WorkText = "故障"; item.WorkColor = _colorWorkFault; item.WorkForeColor = Color.White; break;
                 case DeviceStatus.Testing:
                     item.WorkText = "繁忙"; item.WorkColor = _colorWorkBusy; item.WorkForeColor = Color.White; break;
+                case DeviceStatus.Completed:
+                    // 【V1.59】老化到时自动完成：待取料提示（结果 PASS/FAIL 看面板压力框旁的
+                    // 结果标记由主窗体日志追溯，这里状态块只表达"该取件了"这一件事）
+                    item.WorkText = "已完成"; item.WorkColor = _colorWorkCompleted; item.WorkForeColor = Color.White; break;
                 default:
                     if (carrierPower)
                     {
@@ -558,9 +570,10 @@ namespace AgingTestSystem.Views
                     break;
             }
 
-            // 面板背景色（空闲白/测试浅黄/故障浅粉）
+            // 面板背景色（空闲白/测试浅黄/故障浅粉/完成淡钢蓝【V1.59】）
             item.BackColor = data.Status == DeviceStatus.Fault ? _faultColor
                            : data.Status == DeviceStatus.Testing ? _testingColor
+                           : data.Status == DeviceStatus.Completed ? _completedColor
                            : _normalColor;
         }
 
