@@ -7,7 +7,7 @@ description: AgingTestSystem 项目专属的最终测试验证技能：一键完
 
 本项目（WinForms/.NET Framework 4.x）**没有单元测试框架**，本 skill 用
 "csc 编译独立 harness + 自研 Check 断言"的方式实现可离线自动化的全量回归，
-是项目的**最终测试验证手段**。UI 像素级问题另见 `winforms-ui-debug` 技能（两者分工：
+是项目的**最终测试验证手段**。UI 像素级问题另见全局技能 `winforms-ui-debug`（两者分工：
 本管逻辑正确性，那管视觉正确性）。
 
 > 开工前先读 `AGENTS.md`（UTF-8 编码、改后必构建、文档同步等红线全部适用）。
@@ -63,7 +63,7 @@ agingtest-regression/
 
 **不在覆盖范围**（明确边界）：真串口/真设备通讯（ModbusRtuBarometerReader /
 ScannerService / FanControllerClient / ModbusTcpIoController，靠现场联调）、
-UI 弹窗分支（如配方同名覆盖确认框，靠界面手工测试）、像素级渲染（走 winforms-ui-debug）。
+UI 弹窗分支（如配方同名覆盖确认框，靠界面手工测试）、像素级渲染（走全局技能 winforms-ui-debug）。
 
 ## 四、怎么加测试用例（铁律：改代码必同步补用例）
 
