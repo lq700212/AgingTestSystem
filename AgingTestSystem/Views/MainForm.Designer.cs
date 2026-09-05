@@ -77,9 +77,6 @@
             this.btnStopAll = new System.Windows.Forms.Button();
             this.btnInputLot = new System.Windows.Forms.Button();
             this.btnBatchRecipe = new System.Windows.Forms.Button();
-            this.btnVacuum = new System.Windows.Forms.Button();
-            this.btnFanStop = new System.Windows.Forms.Button();
-            this.btnTemperatureControl = new System.Windows.Forms.Button();
             this.groupBoxLog = new System.Windows.Forms.GroupBox();
             this.txtLog = new System.Windows.Forms.TextBox();
             this.statusStripMain = new System.Windows.Forms.StatusStrip();
@@ -424,9 +421,6 @@
             this.groupBoxOperation.Controls.Add(this.btnStopAll);
             this.groupBoxOperation.Controls.Add(this.btnInputLot);
             this.groupBoxOperation.Controls.Add(this.btnBatchRecipe);
-            this.groupBoxOperation.Controls.Add(this.btnVacuum);
-            this.groupBoxOperation.Controls.Add(this.btnFanStop);
-            this.groupBoxOperation.Controls.Add(this.btnTemperatureControl);
             this.groupBoxOperation.Dock = System.Windows.Forms.DockStyle.Fill;
             this.groupBoxOperation.Location = new System.Drawing.Point(3, 243);
             this.groupBoxOperation.Name = "groupBoxOperation";
@@ -434,114 +428,79 @@
             this.groupBoxOperation.TabIndex = 2;
             this.groupBoxOperation.TabStop = false;
             this.groupBoxOperation.Text = "操作";
-            // 
-            // btnStartRun
-            // 
-            this.btnStartRun.BackColor = System.Drawing.Color.DodgerBlue;
-            this.btnStartRun.ForeColor = System.Drawing.Color.White;
-            this.btnStartRun.Location = new System.Drawing.Point(15, 105);
-            this.btnStartRun.Name = "btnStartRun";
-            this.btnStartRun.Size = new System.Drawing.Size(300, 28);
-            this.btnStartRun.TabIndex = 4;
-            this.btnStartRun.Text = "启动运行（选中台）";
-            this.btnStartRun.UseVisualStyleBackColor = false;
-            this.btnStartRun.Click += new System.EventHandler(this.btnStartRun_Click);
-            // 
-            // btnStopRun
-            // 
-            this.btnStopRun.BackColor = System.Drawing.SystemColors.Control;
-            this.btnStopRun.Location = new System.Drawing.Point(15, 134);
-            this.btnStopRun.Name = "btnStopRun";
-            this.btnStopRun.Size = new System.Drawing.Size(300, 28);
-            this.btnStopRun.TabIndex = 6;
-            this.btnStopRun.Text = "停止运行（选中台）";
-            this.btnStopRun.UseVisualStyleBackColor = false;
-            this.btnStopRun.Click += new System.EventHandler(this.btnStopRun_Click);
-            // 
-            // btnResetAlarm
-            // 
-            this.btnResetAlarm.BackColor = System.Drawing.SystemColors.Control;
-            this.btnResetAlarm.Location = new System.Drawing.Point(15, 163);
-            this.btnResetAlarm.Name = "btnResetAlarm";
-            this.btnResetAlarm.Size = new System.Drawing.Size(300, 28);
-            this.btnResetAlarm.TabIndex = 7;
-            this.btnResetAlarm.Text = "报警复位（选中台）";
-            this.btnResetAlarm.UseVisualStyleBackColor = false;
-            this.btnResetAlarm.Click += new System.EventHandler(this.btnResetAlarm_Click);
-            // 
-            // btnStopAll
-            // 
-            this.btnStopAll.BackColor = System.Drawing.Color.Crimson;
-            this.btnStopAll.ForeColor = System.Drawing.Color.White;
-            this.btnStopAll.Location = new System.Drawing.Point(15, 192);
-            this.btnStopAll.Name = "btnStopAll";
-            this.btnStopAll.Size = new System.Drawing.Size(300, 28);
-            this.btnStopAll.TabIndex = 8;
-            this.btnStopAll.Text = "全部停止（急停）";
-            this.btnStopAll.UseVisualStyleBackColor = false;
-            this.btnStopAll.Click += new System.EventHandler(this.btnStopAll_Click);
-            // 
-            // btnInputLot
-            // 
-            this.btnInputLot.BackColor = System.Drawing.Color.LimeGreen;
-            this.btnInputLot.ForeColor = System.Drawing.Color.White;
-            this.btnInputLot.Location = new System.Drawing.Point(15, 250);
-            this.btnInputLot.Name = "btnInputLot";
-            this.btnInputLot.Size = new System.Drawing.Size(300, 28);
-            this.btnInputLot.TabIndex = 3;
-            this.btnInputLot.Text = "录入批号";
-            this.btnInputLot.UseVisualStyleBackColor = false;
-            this.btnInputLot.Click += new System.EventHandler(this.btnInputLot_Click);
-            // 
-            // btnBatchRecipe
-            // 
+            //
+            // btnBatchRecipe（V1.59.1 重排：按业务流程顺序 选配方→录批号→启动→停止→复位→急停，自上而下）
+            //
             this.btnBatchRecipe.BackColor = System.Drawing.Color.LimeGreen;
             this.btnBatchRecipe.ForeColor = System.Drawing.Color.White;
-            this.btnBatchRecipe.Location = new System.Drawing.Point(15, 221);
+            this.btnBatchRecipe.Location = new System.Drawing.Point(15, 18);
             this.btnBatchRecipe.Name = "btnBatchRecipe";
             this.btnBatchRecipe.Size = new System.Drawing.Size(300, 28);
-            this.btnBatchRecipe.TabIndex = 2;
+            this.btnBatchRecipe.TabIndex = 0;
             this.btnBatchRecipe.Text = "批量设置配方";
             this.btnBatchRecipe.UseVisualStyleBackColor = false;
             this.btnBatchRecipe.Click += new System.EventHandler(this.btnBatchRecipe_Click);
-            // 
-            // btnVacuum
-            // 
-            this.btnVacuum.BackColor = System.Drawing.SystemColors.Control;
-            this.btnVacuum.Location = new System.Drawing.Point(15, 76);
-            this.btnVacuum.Name = "btnVacuum";
-            this.btnVacuum.Size = new System.Drawing.Size(300, 28);
-            this.btnVacuum.TabIndex = 1;
-            this.btnVacuum.Text = "开启真空（选中台）";
-            this.btnVacuum.UseVisualStyleBackColor = false;
-            this.btnVacuum.Click += new System.EventHandler(this.btnVacuum_Click);
-            // 
-            // btnFanStop
-            // 
-            this.btnFanStop.BackColor = System.Drawing.Color.LimeGreen;
-            this.btnFanStop.ForeColor = System.Drawing.Color.White;
-            this.btnFanStop.Location = new System.Drawing.Point(15, 47);
-            this.btnFanStop.Name = "btnFanStop";
-            this.btnFanStop.Size = new System.Drawing.Size(300, 28);
-            this.btnFanStop.TabIndex = 5;
-            this.btnFanStop.Text = "送风机定值停止";
-            this.btnFanStop.UseVisualStyleBackColor = false;
-            this.btnFanStop.Click += new System.EventHandler(this.btnFanStop_Click);
-            // 
-            // btnTemperatureControl
-            // 
-            this.btnTemperatureControl.BackColor = System.Drawing.Color.LimeGreen;
-            this.btnTemperatureControl.ForeColor = System.Drawing.Color.White;
-            this.btnTemperatureControl.Location = new System.Drawing.Point(15, 18);
-            this.btnTemperatureControl.Name = "btnTemperatureControl";
-            this.btnTemperatureControl.Size = new System.Drawing.Size(300, 28);
-            this.btnTemperatureControl.TabIndex = 0;
-            this.btnTemperatureControl.Text = "送风机定值启动";
-            this.btnTemperatureControl.UseVisualStyleBackColor = false;
-            this.btnTemperatureControl.Click += new System.EventHandler(this.btnTemperatureControl_Click);
-            // 
+            //
+            // btnInputLot
+            //
+            this.btnInputLot.BackColor = System.Drawing.Color.LimeGreen;
+            this.btnInputLot.ForeColor = System.Drawing.Color.White;
+            this.btnInputLot.Location = new System.Drawing.Point(15, 47);
+            this.btnInputLot.Name = "btnInputLot";
+            this.btnInputLot.Size = new System.Drawing.Size(300, 28);
+            this.btnInputLot.TabIndex = 1;
+            this.btnInputLot.Text = "录入批号";
+            this.btnInputLot.UseVisualStyleBackColor = false;
+            this.btnInputLot.Click += new System.EventHandler(this.btnInputLot_Click);
+            //
+            // btnStartRun
+            //
+            this.btnStartRun.BackColor = System.Drawing.Color.DodgerBlue;
+            this.btnStartRun.ForeColor = System.Drawing.Color.White;
+            this.btnStartRun.Location = new System.Drawing.Point(15, 76);
+            this.btnStartRun.Name = "btnStartRun";
+            this.btnStartRun.Size = new System.Drawing.Size(300, 28);
+            this.btnStartRun.TabIndex = 2;
+            this.btnStartRun.Text = "启动运行（选中台）";
+            this.btnStartRun.UseVisualStyleBackColor = false;
+            this.btnStartRun.Click += new System.EventHandler(this.btnStartRun_Click);
+            //
+            // btnStopRun
+            //
+            this.btnStopRun.BackColor = System.Drawing.SystemColors.Control;
+            this.btnStopRun.Location = new System.Drawing.Point(15, 105);
+            this.btnStopRun.Name = "btnStopRun";
+            this.btnStopRun.Size = new System.Drawing.Size(300, 28);
+            this.btnStopRun.TabIndex = 3;
+            this.btnStopRun.Text = "停止运行（选中台）";
+            this.btnStopRun.UseVisualStyleBackColor = false;
+            this.btnStopRun.Click += new System.EventHandler(this.btnStopRun_Click);
+            //
+            // btnResetAlarm
+            //
+            this.btnResetAlarm.BackColor = System.Drawing.SystemColors.Control;
+            this.btnResetAlarm.Location = new System.Drawing.Point(15, 134);
+            this.btnResetAlarm.Name = "btnResetAlarm";
+            this.btnResetAlarm.Size = new System.Drawing.Size(300, 28);
+            this.btnResetAlarm.TabIndex = 4;
+            this.btnResetAlarm.Text = "报警复位（选中台）";
+            this.btnResetAlarm.UseVisualStyleBackColor = false;
+            this.btnResetAlarm.Click += new System.EventHandler(this.btnResetAlarm_Click);
+            //
+            // btnStopAll
+            //
+            this.btnStopAll.BackColor = System.Drawing.Color.Crimson;
+            this.btnStopAll.ForeColor = System.Drawing.Color.White;
+            this.btnStopAll.Location = new System.Drawing.Point(15, 163);
+            this.btnStopAll.Name = "btnStopAll";
+            this.btnStopAll.Size = new System.Drawing.Size(300, 28);
+            this.btnStopAll.TabIndex = 5;
+            this.btnStopAll.Text = "全部停止（急停）";
+            this.btnStopAll.UseVisualStyleBackColor = false;
+            this.btnStopAll.Click += new System.EventHandler(this.btnStopAll_Click);
+            //
             // groupBoxLog
-            // 
+            //
             this.groupBoxLog.Controls.Add(this.txtLog);
             this.groupBoxLog.Dock = System.Windows.Forms.DockStyle.Fill;
             this.groupBoxLog.Location = new System.Drawing.Point(3, 543);
@@ -710,7 +669,7 @@
         private System.Windows.Forms.Label lblSetTempLabel;
         /// <summary>设置温度值显示（V1.16.3：TextBox → Label）</summary>
         private System.Windows.Forms.Label lblSetTemp;
-        /// <summary>操作分组（5个操作按钮）</summary>
+        /// <summary>操作分组（V1.59.1 精简为 6 个按钮：批量设置配方/录入批号/启动运行/停止运行/报警复位/全部停止）</summary>
         private System.Windows.Forms.GroupBox groupBoxOperation;
         /// <summary>启动运行按钮</summary>
         private System.Windows.Forms.Button btnStartRun;
@@ -724,12 +683,6 @@
         private System.Windows.Forms.Button btnInputLot;
         /// <summary>批量设置配方按钮</summary>
         private System.Windows.Forms.Button btnBatchRecipe;
-        /// <summary>开启真空按钮</summary>
-        private System.Windows.Forms.Button btnVacuum;
-        /// <summary>送风机定值停止按钮（V1.10）</summary>
-        private System.Windows.Forms.Button btnFanStop;
-        /// <summary>送风机定值启动按钮（由原"温控操作"按钮改造，V1.10）</summary>
-        private System.Windows.Forms.Button btnTemperatureControl;
         /// <summary>LOG日志分组</summary>
         private System.Windows.Forms.GroupBox groupBoxLog;
         /// <summary>日志输出文本框</summary>
