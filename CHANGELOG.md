@@ -3,6 +3,18 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.59.2 — 项目内 winforms-ui-debug skill 并入全局版本（2026-09-05）
+
+### 改动范围
+- 删除 `.opencode/skills/winforms-ui-debug/`（内容已合并进全局技能 `winforms-ui-debug`，
+  含本项目方法论底稿与血泪 1〜12）；
+  `AGENTS.md` 与 `agingtest-regression/SKILL.md` 中的 skill 引用改指全局版本。
+- **为什么这么改**：四项目（AgingTestSystem/CommandCenter/HuaJiVision/Kaleidoscope）
+  的 UI 调试 skill 合并为同一个全局版本，防分叉；本项目构建命令与对照窗体已收录进
+  全局 skill 附录 A 项目档案。
+- 验证：全局 skill 复用，无代码改动。
+- 附带机制：AGENTS 加"改构建输出同步改全局 skill 附录 A"一行（连同 skill 内§十二/AGENTS 保鲜约定，三处互为备份，防表漂移）。
+
 ## V1.59.1 — 主界面操作区精简：删除 3 个冗余按钮（2026-09-05）
 
 ### 改动范围
