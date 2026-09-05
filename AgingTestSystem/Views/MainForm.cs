@@ -47,12 +47,13 @@ namespace AgingTestSystem.Views
     /// │   (9列 × 8行布局)           │ 上部温度: [D4702]       │
     /// │   (V1.50 单窗口滚动容器)    │ 下部温度: [D4704]       │
     /// │                              │                         │
-    /// │                              │ 操作                    │
-    /// │                              │ [温控操作(D4203)]      │
-    /// │                              │ [开启真空(VAC_1)]      │
+    /// │                              │ 操作（V1.59.1 精简版）  │
     /// │                              │ [批量设置配方]          │
     /// │                              │ [录入批号]             │
-    /// │                              │ [启动运行(D4202)]      │
+    /// │                              │ [启动运行（选中台）]    │
+    /// │                              │ [停止运行（选中台）]    │
+    /// │                              │ [报警复位（选中台）]    │
+    /// │                              │ [全部停止（急停）]      │
     /// ├──────────────────────────────┴──────────────────────────┤
     /// │ 状态栏：设备数量: 72 | 采集间隔: 1s | 当前时间          │
     /// └─────────────────────────────────────────────────────────┘
@@ -2113,84 +2114,6 @@ namespace AgingTestSystem.Views
         #region 右侧操作按钮事件处理
 
         /// <summary>
-        /// 送风机定值启动按钮点击（【V1.10】由原"温控操作"按钮改造）
-        /// 让送风机按控制屏设定温度运行（厂商自动控温）
-        /// </summary>
-        private async void btnTemperatureControl_Click(object sender, EventArgs e)
-        {
-            // 【V1.16.2】送风机未连时先异步按需重连（弹"连接中"），连不上弹窗提示
-            if (_deviceManager.IsFanEnabled && !_deviceManager.IsFanConnected)
-            {
-                if (!await EnsureFanReadyAsync())
-                {
-                    MessageBox.Show("送风机未连接，请先连接（定值启动失败）", "提示",
-                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
-                }
-            }
-
-            // 已连上，命令直接下发（StartFan 内部已连接则不再重复连接）
-            bool ok = _deviceManager.StartFan();
-            if (!ok)
-            {
-                MessageBox.Show("送风机未连接，请先连接（定值启动失败）", "提示",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-            WriteLog("送风机定值启动命令已发送");
-        }
-
-        /// <summary>
-        /// 送风机定值停止按钮点击（【V1.10 新增】）
-        /// 【注意】如果有任何一台正在测试，采集循环会自动重新启动送风机
-        /// （送风机是环境设备，测试期间必须保持运行）。
-        /// </summary>
-        private async void btnFanStop_Click(object sender, EventArgs e)
-        {
-            // 【V1.16.2】送风机未连时先异步按需重连（弹"连接中"），连不上弹窗提示
-            if (_deviceManager.IsFanEnabled && !_deviceManager.IsFanConnected)
-            {
-                if (!await EnsureFanReadyAsync())
-                {
-                    MessageBox.Show("送风机未连接，请先连接（定值停止失败）", "提示",
-                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
-                }
-            }
-
-            // 已连上，命令直接下发（StopFan 内部已连接则不再重复连接）
-            bool ok = _deviceManager.StopFan();
-            if (!ok)
-            {
-                MessageBox.Show("送风机未连接，请先连接（定值停止失败）", "提示",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-            WriteLog("送风机定值停止命令已发送");
-        }
-
-        /// <summary>
-        /// 开启真空按钮点击（【V1.10】接真实业务）
-        /// 对选中的面板打开真空电磁阀（只做单动作，供预检/手动使用；
-        /// "启动运行"是开真空 + 载台上电的组合快捷入口）
-        /// </summary>
-        private async void btnVacuum_Click(object sender, EventArgs e)
-        {
-            int[] ids = GetSelectedDeviceIds();
-            if (ids == null) return;
-
-            // 【V1.16.2】开真空阀需要耦合器：先异步连接（弹"连接中"），连不上弹窗提示
-            if (!await EnsureIoReadyAsync()) return;
-
-            foreach (int deviceId in ids)
-            {
-                // 真空电磁阀内部编号 = TotalInputs + deviceId
-                _deviceManager.SetOutput(_config.TotalInputs + deviceId, true);
-            }
-            WriteLog($"开启真空（{ids.Length} 台）");
-        }
-
-        /// <summary>
         /// 批量设置配方按钮点击
         /// 弹出批量设置配方窗口，允许用户配置配方参数并加入队列
         /// </summary>
@@ -2277,7 +2200,8 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 启动运行按钮点击（【V1.10】接真实业务）
-        /// 对选中的面板执行：开真空阀 + 载台上电 + 进入测试中 + 送风机定值启动（首台）
+        /// 对选中的面板执行（V1.59 三阶段状态机）：开真空阀 → 真空到位+延时到自动载台上电
+        /// → 按配方启动时间老化计时（到时自动下电关阀标完成）；送风机由生命周期自动定值启动（首台）
         /// 【V1.16.2】异步：连接耦合器/送风机时弹"连接中"，不卡界面
         /// </summary>
         private async void btnStartRun_Click(object sender, EventArgs e)
