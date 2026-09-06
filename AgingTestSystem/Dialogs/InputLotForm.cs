@@ -156,6 +156,8 @@ namespace AgingTestSystem.Dialogs
             // 【V1.19.11】把设备管理器传进去：绑定保存时把"工位 → SN"写入工位静态信息，工位面板 SN 同步显示
             using (var bindingForm = new IdBindingForm(lotNumber, _scanner, _deviceManager))
             {
+                // 【V1.60】子窗体打开前按当前主题着色
+                AgingTestSystem.Services.ThemeManager.ApplyTo(bindingForm);
                 // 订阅ID绑定完成事件
                 bindingForm.OnBindingCompleted += (sender2, data) =>
                 {

@@ -521,6 +521,8 @@ namespace AgingTestSystem.Dialogs
                 dlg.AcceptButton = btnOK;
                 dlg.CancelButton = btnCancel;
 
+                // 【V1.60】小窗打开前按当前主题着色（绿/灰按钮是语义色，原样保留）
+                AgingTestSystem.Services.ThemeManager.ApplyTo(dlg);
                 if (dlg.ShowDialog(this) != DialogResult.OK)
                 {
                     return (null, null);
