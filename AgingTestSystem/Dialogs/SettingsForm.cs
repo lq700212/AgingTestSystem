@@ -957,8 +957,9 @@ namespace AgingTestSystem.Dialogs
             var layout = GetEffectiveHomeLayout();
             using (var editor = new HomeLayoutEditorForm(layout))
             {
-                // 【V1.60】子窗体打开前按当前主题着色（布局预览画布故意留白纸效果，见 ThemeManager 跳过名单）
-                AgingTestSystem.Services.ThemeManager.ApplyTo(editor);
+                // 【V1.60.4】走窗体自己的 ApplyTheme：整窗着色 + 预览画布深色换纯黑底
+                // （布局预览画布底由窗体显式指定，见 HomeLayoutEditorForm.ApplyTheme）
+                editor.ApplyTheme();
                 if (editor.ShowDialog(this) == DialogResult.OK)
                 {
                     // 保存成功：刷新本行显示当前尺寸摘要，并标记"已改主页布局"

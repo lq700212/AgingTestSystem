@@ -418,7 +418,8 @@ namespace AgingTestSystem.Services
         /// 递归入口：先给自己着色，再钻进子控件 + 工具条目。
         /// 【跳过名单】（自绘/自己管颜色，硬改反而坏事，见类头"配色约定"）：
         /// WorkstationGridView（调自己的 SetDarkMode）、CircleButton（圆形灯自绘）、
-        /// HomeLayoutPreviewControl（布局预览画布故意留白纸效果）、UIScrollBar（SunnyUI 滚动条自绘）。
+        /// HomeLayoutPreviewControl（布局预览画布：底色由 HomeLayoutEditorForm.ApplyTheme
+        /// 显式指定，深色纯黑，这里跳过避免通用映射给成深灰）、UIScrollBar（SunnyUI 滚动条自绘）。
         /// </summary>
         private static void ApplyRecursive(Control c, bool toDark)
         {

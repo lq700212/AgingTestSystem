@@ -174,6 +174,7 @@ namespace AgingTestSystem.Views
             ThemeManager.LoadFromConfig();
             ThemeManager.ApplyTo(this);
             UpdateThemeButtonText();
+            ApplyOperationButtonsTheme();
 
             // 【V1.49】主窗体开启双缓冲，与工位面板/网格双缓冲配合，消除滚动撕裂
             this.DoubleBuffered = true;
@@ -1701,6 +1702,7 @@ namespace AgingTestSystem.Views
             AppThemeMode mode = ThemeManager.Toggle();
             ThemeManager.ApplyToAllOpenForms();
             UpdateThemeButtonText();
+            ApplyOperationButtonsTheme();
             WriteLog(mode == AppThemeMode.Dark ? "已切换为深色模式" : "已切换为浅色模式");
         }
 
@@ -1713,6 +1715,44 @@ namespace AgingTestSystem.Views
             if (btnTheme != null)
             {
                 btnTheme.Text = ThemeManager.IsDark ? "浅色模式" : "深色模式";
+            }
+        }
+
+        /// <summary>
+        /// 停止/复位两按钮的主题配色（【V1.60.1】纯函数，方便回归直接断言）。
+        /// 这两个按钮浅色下是系统默认灰底黑字；深色下按需求走深灰底白字
+        /// （DimGray + White，跟登录窗/改密窗"取消"按钮同款，全软件统一）。
+        /// 其它语义按钮（绿/蓝/红）两边都不动，不走这里。
+        /// </summary>
+        /// <param name="dark">true=深色配色，false=浅色配色</param>
+        /// <param name="back">按钮底色</param>
+        /// <param name="fore">按钮文字色</param>
+        public static void GetOperationButtonThemeColors(bool dark, out Color back, out Color fore)
+        {
+            back = dark ? Color.DimGray : SystemColors.Control;
+            fore = dark ? Color.White : SystemColors.ControlText;
+        }
+
+        /// <summary>
+        /// 把主题配色应用到"停止运行/报警复位"两按钮（【V1.60.1】）。
+        /// 为什么只有它俩特殊：ThemeManager 对按钮一律不动（语义色保护），
+        /// 但它俩浅色是"无语义的默认灰"，深色下黑字偏弱，才单独提出来处理。
+        /// 启动与每次主题切换后调用（切换入口只有 btnTheme_Click 一处，不会漏）。
+        /// </summary>
+        private void ApplyOperationButtonsTheme()
+        {
+            Color back;
+            Color fore;
+            GetOperationButtonThemeColors(ThemeManager.IsDark, out back, out fore);
+            if (btnStopRun != null)
+            {
+                btnStopRun.BackColor = back;
+                btnStopRun.ForeColor = fore;
+            }
+            if (btnResetAlarm != null)
+            {
+                btnResetAlarm.BackColor = back;
+                btnResetAlarm.ForeColor = fore;
             }
         }
 
@@ -1916,7 +1956,8 @@ namespace AgingTestSystem.Views
         {
             using (var form = new CommonParameterForm(_deviceManager))
             {
-                ThemeManager.ApplyTo(form);
+                // 【V1.60.4】走窗体自己的 ApplyTheme：整窗着色 + 保存按钮深色换灰底白字
+                form.ApplyTheme();
                 if (form.ShowDialog(this) == DialogResult.OK)
                 {
                     WriteLog("所有气压表负压阈值设置完成");
@@ -2026,7 +2067,8 @@ namespace AgingTestSystem.Views
 
             using (var form = new HomeLayoutEditorForm(layout))
             {
-                ThemeManager.ApplyTo(form);
+                // 【V1.60.4】走窗体自己的 ApplyTheme：整窗着色 + 预览画布深色换纯黑底
+                form.ApplyTheme();
                 if (form.ShowDialog(this) == DialogResult.OK)
                 {
                     // 保存成功：重新应用布局，让调整立即生效
@@ -2126,8 +2168,23 @@ namespace AgingTestSystem.Views
         ///  软件全称 → 版本号 → 用途简介 → 运行环境 → 功能特性（按业务分类）→ 版权声明）
         /// 【发版提醒】版本号 V1.58.4 与主窗体标题 lblTitle / 窗体标题一致后，这里也要同步手改，
         ///  否则版本说明会与实际版本脱节（曾长期停留在 V1.16 的教训）。
+        /// 【V1.60.4】MessageBox 换成普通窗体：系统弹窗跟不了深色主题，自定义窗才能 ApplyTo。
         /// </summary>
         private void MenuHelpVersionInfo_Click(object sender, EventArgs e)
+        {
+            using (Form dlg = BuildVersionInfoDialog())
+            {
+                ThemeManager.ApplyTo(dlg);
+                dlg.ShowDialog(this);
+            }
+        }
+
+        /// <summary>
+        /// 构建版本说明对话框（【V1.60.4 新增】，纯界面搭建，方便探针反射直调验证）。
+        /// 布局：只读多行文本框（Dock=Fill，主题文本框着色）+ 底部"确定"按钮（FixedDialog 固定坐标）。
+        /// "确定"是关闭语义，深色下走 DimGray 底白字（跟各窗"关闭"同款）；浅色保持原生默认样式。
+        /// </summary>
+        private Form BuildVersionInfoDialog()
         {
             // 用 string.Join("\n", ...) 组织多行文本：比字符串逐行 + 拼接更易读、易增删，避免拼错换行。
             string[] lines =
@@ -2157,11 +2214,45 @@ namespace AgingTestSystem.Views
                 "",
                 "版权所有 © 2024-2026。保留所有权利。",
             };
-            MessageBox.Show(
-                string.Join("\n", lines),
-                "版本说明",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+
+            var dlg = new Form
+            {
+                Text = "版本说明",
+                StartPosition = FormStartPosition.CenterParent,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MaximizeBox = false,
+                MinimizeBox = false,
+                ShowInTaskbar = false,
+                ClientSize = new Size(560, 430)
+            };
+            var txt = new TextBox
+            {
+                Multiline = true,
+                ReadOnly = true,
+                ScrollBars = ScrollBars.Vertical,
+                Location = new Point(12, 12),
+                Size = new Size(536, 364),
+                Font = new Font("微软雅黑", 9F),
+                TabStop = false, // 只读展示框不抢焦点：打开时焦点落在"确定"上，避免全文蓝底选中
+                Text = string.Join(Environment.NewLine, lines)
+            };
+            var btnOk = new Button
+            {
+                Text = "确定",
+                DialogResult = DialogResult.OK,
+                Location = new Point(232, 386),
+                Size = new Size(96, 32)
+            };
+            if (ThemeManager.IsDark)
+            {
+                btnOk.BackColor = Color.DimGray;
+                btnOk.ForeColor = Color.White;
+                btnOk.UseVisualStyleBackColor = false;
+            }
+            dlg.Controls.Add(txt);
+            dlg.Controls.Add(btnOk);
+            dlg.AcceptButton = btnOk;
+            return dlg;
         }
 
         #endregion
