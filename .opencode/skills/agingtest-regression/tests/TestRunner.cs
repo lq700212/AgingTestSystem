@@ -43,8 +43,10 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using AgingTestSystem.Dialogs;
 using AgingTestSystem.Models;
 using AgingTestSystem.Services;
+using AgingTestSystem.Views;
 
 namespace AgingTestSystem.Tests
 {
@@ -1190,6 +1192,47 @@ namespace AgingTestSystem.Tests
             ThemeManager.SetMode(AppThemeMode.Light, false); // 收尾复位，免得影响其它模块
             grid.Dispose();
             pnl.Dispose();
+
+            // —— V1.60.1：停止/复位两按钮主题配色（纯函数，不 new 主窗体就能断） ——
+            Color back;
+            Color fore;
+            MainForm.GetOperationButtonThemeColors(true, out back, out fore);
+            Check("深色停止/复位按钮深灰底白字",
+                back.ToArgb() == Color.DimGray.ToArgb() && fore.ToArgb() == Color.White.ToArgb(),
+                "实际=" + back + "/" + fore);
+            MainForm.GetOperationButtonThemeColors(false, out back, out fore);
+            Check("浅色停止/复位按钮恢复系统默认灰底黑字",
+                back.ToArgb() == SystemColors.Control.ToArgb()
+                && fore.ToArgb() == SystemColors.ControlText.ToArgb(),
+                "实际=" + back + "/" + fore);
+
+            // —— V1.60.3：工位下电/真空关块主题配色（纯函数，不 new 网格就能断） ——
+            Color offBack;
+            Color offFore;
+            WorkstationGridView.GetOffBlockThemeColors(true, Color.LightGray, out offBack, out offFore);
+            Check("深色下电/真空关块深灰底白字(参考停止按钮)",
+                offBack.ToArgb() == Color.DimGray.ToArgb() && offFore.ToArgb() == Color.White.ToArgb(),
+                "实际=" + offBack + "/" + offFore);
+            WorkstationGridView.GetOffBlockThemeColors(false, Color.LightGray, out offBack, out offFore);
+            Check("浅色下电/真空关块跟配置灰底黑字",
+                offBack.ToArgb() == Color.LightGray.ToArgb() && offFore.ToArgb() == Color.Black.ToArgb(),
+                "实际=" + offBack + "/" + offFore);
+
+            // —— V1.60.4：公共参数保存按钮 + 布局预览画布底（纯函数，不 new 窗体就能断） ——
+            Color saveBack;
+            Color saveFore;
+            CommonParameterForm.GetSaveButtonThemeColors(true, out saveBack, out saveFore);
+            Check("深色公共参数保存按钮灰底白字",
+                saveBack.ToArgb() == Color.DimGray.ToArgb() && saveFore.ToArgb() == Color.White.ToArgb(),
+                "实际=" + saveBack + "/" + saveFore);
+            CommonParameterForm.GetSaveButtonThemeColors(false, out saveBack, out saveFore);
+            Check("浅色公共参数保存按钮保持原生(Empty=不动)",
+                saveBack == Color.Empty && saveFore == Color.Empty,
+                "实际=" + saveBack + "/" + saveFore);
+            Check("深色布局预览画布纯黑",
+                HomeLayoutEditorForm.GetPreviewBackColor(true).ToArgb() == Color.Black.ToArgb());
+            Check("浅色布局预览画布白纸",
+                HomeLayoutEditorForm.GetPreviewBackColor(false).ToArgb() == Color.White.ToArgb());
         }
 
     }

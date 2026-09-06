@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using AgingTestSystem.Services;
@@ -62,6 +63,39 @@ namespace AgingTestSystem.Dialogs
 
             // 界面控件居中显示（标签+输入框一组居中，按钮居中）
             CenterControls();
+        }
+
+        /// <summary>
+        /// 保存按钮主题配色（【V1.60.4】纯函数，方便回归直接断言）。
+        /// 深色：DimGray 底 + 白字（跟停止/复位按钮与各窗"取消"同款）；
+        /// 浅色：返回 Empty/Empty 表示"保持原生默认样式不动"（本按钮浅色就是系统默认灰，
+        /// 原生渲染跟主题最协调，不要手设 Control 写死）。
+        /// </summary>
+        /// <param name="dark">true=深色配色，false=浅色（不动）</param>
+        /// <param name="back">按钮底色（浅色返回 Empty）</param>
+        /// <param name="fore">按钮文字色（浅色返回 Empty）</param>
+        public static void GetSaveButtonThemeColors(bool dark, out Color back, out Color fore)
+        {
+            back = dark ? Color.DimGray : Color.Empty;
+            fore = dark ? Color.White : Color.Empty;
+        }
+
+        /// <summary>
+        /// 打开后调一次：整窗按当前主题着色 + 保存按钮深色下换 DimGray 白字。
+        /// （窗体每次 new 的新实例，浅色下按钮本来就是原生默认，无需恢复。）
+        /// </summary>
+        public void ApplyTheme()
+        {
+            ThemeManager.ApplyTo(this);
+            if (ThemeManager.IsDark)
+            {
+                Color back;
+                Color fore;
+                GetSaveButtonThemeColors(true, out back, out fore);
+                btnSave.BackColor = back;
+                btnSave.ForeColor = fore;
+                btnSave.UseVisualStyleBackColor = false; // 关掉原生渲染，自定义底色才生效
+            }
         }
 
         /// <summary>

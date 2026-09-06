@@ -424,7 +424,10 @@ namespace AgingTestSystem.Views
         /// 载入深色主题色（固定深灰系，与 ThemeManager.DarkXxx 同系）：
         /// 面板底走深（空闲深灰/测试暗金/故障暗红/完成深蓝），值框/文字/边框/行选按钮同步走深，
         /// 语义状态块（上电绿/故障红/繁忙黄/选中橙/完成蓝、设置按钮绿）原样不动——
-        /// 白字压在绿/红/蓝块上、黑字压在浅灰块上，深浅两边都清晰。
+        /// 白字压在绿/红/蓝块上，深浅两边都清晰。
+        /// 【V1.60.3】下电/真空关不走浅灰了：浅灰底(211)在深面板上太跳，参考主窗体停止/
+        /// 复位按钮改 DimGray 底 + 白字（GetOffBlockThemeColors）；浅色仍用配置灰底黑字。
+        /// 注意：状态块那圈 1px 边框是全面板共用的 _colorBorder，深色下统一变灰，这是正常的。
         /// </summary>
         private void ApplyDarkColors()
         {
@@ -439,8 +442,42 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
+        /// 下电/真空关块的主题配色（【V1.60.3】纯函数，方便回归直接断言）。
+        /// 浅色：配置原灰底（默认 LightGray）+ 黑字；深色：浅灰在深底上太跳，
+        /// 参考主窗体停止/复位按钮走 DimGray 底 + 白字（跟各窗"取消"按钮同款）。
+        /// 开/上电块（绿底白字）两边都不动，不走这里。
+        /// </summary>
+        /// <param name="dark">true=深色配色，false=浅色配色</param>
+        /// <param name="lightBack">浅色底（配置值，PanelLayout.json 可覆盖）</param>
+        /// <param name="back">块底色</param>
+        /// <param name="fore">块文字色</param>
+        public static void GetOffBlockThemeColors(bool dark, Color lightBack, out Color back, out Color fore)
+        {
+            back = dark ? Color.DimGray : lightBack;
+            fore = dark ? Color.White : Color.Black;
+        }
+
+        /// <summary>下电/真空关块底色（浅色跟配置，深色 DimGray）</summary>
+        private static Color GetOffBlockBack(bool dark, Color lightBack)
+        {
+            Color back;
+            Color fore;
+            GetOffBlockThemeColors(dark, lightBack, out back, out fore);
+            return back;
+        }
+
+        /// <summary>下电/真空关块文字色（浅色黑字，深色白字）</summary>
+        private static Color GetOffBlockFore(bool dark)
+        {
+            Color back;
+            Color fore;
+            GetOffBlockThemeColors(dark, Color.LightGray, out back, out fore);
+            return fore;
+        }
+
+        /// <summary>
         /// 深色开关（给新手：主窗体主题按钮 → ThemeManager → 反射调到这里）。
-        /// 相同值重复调直接返回；切换后重建缓存画刷、刷新全部面板底色、重绘。
+        /// 相同值重复调直接返回；切换后重建缓存画刷、刷新全部面板底色与下电/真空关块色、重绘。
         /// 注意：本控件 BackColor（面板间缝隙底）也同步走深/浅，缝隙才不会"白一道黑一道"。
         /// </summary>
         /// <param name="dark">true=深色，false=浅色</param>
@@ -452,6 +489,7 @@ namespace AgingTestSystem.Views
             else ApplyLightColors();
             RebuildThemeBrushes();
             RefreshItemBackgrounds();
+            RefreshOffBlockColors();
             this.BackColor = dark ? Color.FromArgb(30, 30, 30) : SystemColors.Control;
             Invalidate();
         }
@@ -486,7 +524,30 @@ namespace AgingTestSystem.Views
             }
         }
 
-        /// <summary>状态→面板底色（UpdateSingleItem 与 RefreshItemBackgrounds 共用，保证两处永远一致）</summary>
+        /// <summary>
+        /// 按当前主题重算全部面板的下电/真空关块色（切主题时调，免得等下一轮 1s 采集才变；
+        /// 平时每轮采集由 ApplyData 逐台刷新）。GridItem 记了 CarrierPower/VacuumOpen，
+        /// 开块（绿）本来两边就不动，这里只重算关块。
+        /// </summary>
+        private void RefreshOffBlockColors()
+        {
+            foreach (var kv in _items)
+            {
+                GridItem item = kv.Value;
+                if (item == null) continue;
+                if (!item.CarrierPower)
+                {
+                    item.PowerColor = GetOffBlockBack(_darkMode, _colorPowerOff);
+                    item.PowerForeColor = GetOffBlockFore(_darkMode);
+                }
+                if (!item.VacuumOpen)
+                {
+                    item.VacuumColor = GetOffBlockBack(_darkMode, _colorVacuumOff);
+                    item.VacuumForeColor = GetOffBlockFore(_darkMode);
+                }
+            }
+        }
+        /// <summary>状态→面板底色（ApplyData 与 RefreshItemBackgrounds 共用，保证两处永远一致）</summary>
         private Color GetStatusBackColor(DeviceStatus status)
         {
             if (status == DeviceStatus.Fault) return _faultColor;
@@ -519,6 +580,8 @@ namespace AgingTestSystem.Views
             }
             // 【V1.60】新面板默认底按当前主题走（否则深色下首屏 1 秒内面板是白的，等首轮采集才变深）
             RefreshItemBackgrounds();
+            // 【V1.60.3】下电/真空关块色同样按当前主题初始化（深色首屏直接 DimGray，不闪一下浅灰）
+            RefreshOffBlockColors();
             // 【V1.55 高DPI适配】画布总尺寸 = 逻辑像素尺寸 × DPI缩放因子。
             // 若不放大，150% 缩放下格子保持 96DPI 大小、文字却自动变大 → 溢出重叠。
             this.Size = new Size(Scaled(_columns * _layout.PanelColumnWidth + _layout.RowSelectButtonColumnWidth),
@@ -633,15 +696,17 @@ namespace AgingTestSystem.Views
             bool vacuumOpen = data.OutputStatus != null && data.OutputStatus.Length >= 1 && data.OutputStatus[0];
             bool carrierPower = data.OutputStatus != null && data.OutputStatus.Length >= 2 && data.OutputStatus[1];
 
-            // 真空开/关（V1.28：真空关由红改浅灰）
+            // 真空开/关（V1.28：真空关由红改浅灰；V1.60.3：深色下走 DimGray 底白字，见 GetOffBlockThemeColors）
+            item.VacuumOpen = vacuumOpen;
             item.VacuumText = vacuumOpen ? "真空开" : "真空关";
-            item.VacuumColor = vacuumOpen ? _colorVacuumOn : _colorVacuumOff;
-            item.VacuumForeColor = vacuumOpen ? Color.White : Color.Black;
+            item.VacuumColor = vacuumOpen ? _colorVacuumOn : GetOffBlockBack(_darkMode, _colorVacuumOff);
+            item.VacuumForeColor = vacuumOpen ? Color.White : GetOffBlockFore(_darkMode);
 
-            // 上电/下电（V1.28：下电由红改浅灰）
+            // 上电/下电（V1.28：下电由红改浅灰；V1.60.3：深色下走 DimGray 底白字，见 GetOffBlockThemeColors）
+            item.CarrierPower = carrierPower;
             item.PowerText = carrierPower ? "上电" : "下电";
-            item.PowerColor = carrierPower ? _colorPowerOn : _colorPowerOff;
-            item.PowerForeColor = carrierPower ? Color.White : Color.Black;
+            item.PowerColor = carrierPower ? _colorPowerOn : GetOffBlockBack(_darkMode, _colorPowerOff);
+            item.PowerForeColor = carrierPower ? Color.White : GetOffBlockFore(_darkMode);
 
             // 工作状态（故障=红 / 繁忙=黄 / 已上电待测试=橙"选中" / 空闲=绿 / 已完成=蓝【V1.59】）
             switch (data.Status)
@@ -1236,6 +1301,12 @@ namespace AgingTestSystem.Views
             /// 只好把状态也记下来（就是 DeviceStatus 空闲/测试/故障/完成那几个值）。
             /// </summary>
             public DeviceStatus Status;
+            /// <summary>
+            /// 载台是否上电 / 真空阀是否打开（【V1.60.3 新增】：切主题重算下电/真空关块色用；
+            /// 平时由 ApplyData 随采集刷新。只记开关不记颜色，颜色永远由当前主题现算）。
+            /// </summary>
+            public bool CarrierPower;
+            public bool VacuumOpen;
             public string PressureText = "---";
             public string SnText = "";
             public string RecipeText = "";

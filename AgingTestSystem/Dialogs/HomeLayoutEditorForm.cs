@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 using AgingTestSystem.Models;
+using AgingTestSystem.Services;
 using AgingTestSystem.Views;
 
 namespace AgingTestSystem.Dialogs
@@ -196,6 +197,32 @@ namespace AgingTestSystem.Dialogs
             // 【V1.58.4 高 DPI】所有控件添加完毕后再恢复布局，此时才真正执行
             // PerformAutoScale（以 AutoScaleDimensions=6×12 为基准按实际 DPI 放大）。
             ResumeLayout(false);
+        }
+
+        /// <summary>
+        /// 预览画布主题底色（【V1.60.4】纯函数，方便回归直接断言）。
+        /// 深色用户指定纯黑（各区域色块自带浅底+块内文字，不依赖画布底，黑底安全）；
+        /// 浅色保持白纸效果。
+        /// </summary>
+        /// <param name="dark">true=深色，false=浅色</param>
+        public static Color GetPreviewBackColor(bool dark)
+        {
+            return dark ? Color.Black : Color.White;
+        }
+
+        /// <summary>
+        /// 打开后调一次：整窗按当前主题着色 + 预览画布按主题换底并重绘。
+        /// （ThemeManager 跳过自绘预览控件，画布底由这里显式指定；窗体每次 new 的新实例，
+        /// 浅色下本来就是白底，无需恢复。）
+        /// </summary>
+        public void ApplyTheme()
+        {
+            ThemeManager.ApplyTo(this);
+            if (_preview != null)
+            {
+                _preview.BackColor = GetPreviewBackColor(ThemeManager.IsDark);
+                _preview.Invalidate();
+            }
         }
 
         /// <summary>
