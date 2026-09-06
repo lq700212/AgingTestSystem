@@ -957,6 +957,8 @@ namespace AgingTestSystem.Dialogs
             var layout = GetEffectiveHomeLayout();
             using (var editor = new HomeLayoutEditorForm(layout))
             {
+                // 【V1.60】子窗体打开前按当前主题着色（布局预览画布故意留白纸效果，见 ThemeManager 跳过名单）
+                AgingTestSystem.Services.ThemeManager.ApplyTo(editor);
                 if (editor.ShowDialog(this) == DialogResult.OK)
                 {
                     // 保存成功：刷新本行显示当前尺寸摘要，并标记"已改主页布局"
@@ -1118,6 +1120,8 @@ namespace AgingTestSystem.Dialogs
                 }
             };
 
+            // 【V1.60】IP 列表弹窗打开前按当前主题着色
+            AgingTestSystem.Services.ThemeManager.ApplyTo(popup);
             popup.Show(this);
             popup.Activate();
         }
@@ -1153,6 +1157,8 @@ namespace AgingTestSystem.Dialogs
                 }
             };
 
+            // 【V1.60】IO 映射弹窗打开前按当前主题着色
+            AgingTestSystem.Services.ThemeManager.ApplyTo(popup);
             popup.Show(this);
             popup.Activate();
         }

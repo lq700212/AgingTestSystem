@@ -42,6 +42,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 using AgingTestSystem.Models;
 using AgingTestSystem.Services;
 
@@ -155,6 +156,7 @@ namespace AgingTestSystem.Tests
             Module("AgingSequencer", AgingSequencerTests);
             Module("TestSessionStore", TestSessionStoreTests);
             Module("AgingBusinessModel", AgingBusinessModelTests);
+            Module("ThemeManager", ThemeManagerTests);
             Module("DeviceManagerIntegration", DeviceManagerIntegrationTests);
 
             // 统一清理临时目录（尽力而为，删不掉不影响结果）
@@ -1081,6 +1083,113 @@ namespace AgingTestSystem.Tests
                 info.RecipeNegativePressure == -60m && ic.DelayTime == TimeSpan.FromSeconds(30));
             Check("RecipeNegativePressure 可为 null(未配置=全局兜底)",
                 new StationInfo().RecipeNegativePressure == null);
+        }
+
+        // =====================================================================
+        // 15. 深色/浅色主题 —— 解析/映射表往返/内存切换/整树着色冒烟（V1.60）
+        //
+        // 【测什么】
+        // ThemeManager 是纯静态主题服务：Parse 读配置、MapXxx 查双向映射表、
+        // SetMode 切内存主题、ApplyTo 递归着色。文件读写（SaveToConfig）不测——
+        // 它动的是测试进程自己的 exe.config，断言文件内容又脆又没价值；
+        // 保存逻辑由冒烟测试（真机启动→按钮切换→重启看主题保持）人工覆盖。
+        // =====================================================================
+        private static void ThemeManagerTests()
+        {
+            // —— Parse：Dark 大小写/空格兼容，其余一切兜底浅色（手写错配置也不炸） ——
+            Check("Parse Dark", ThemeManager.Parse("Dark") == AppThemeMode.Dark);
+            Check("Parse 小写dark", ThemeManager.Parse("dark") == AppThemeMode.Dark);
+            Check("Parse 带空格大写DARK", ThemeManager.Parse("  DARK  ") == AppThemeMode.Dark);
+            Check("Parse Light", ThemeManager.Parse("Light") == AppThemeMode.Light);
+            Check("Parse 空串兜底浅色", ThemeManager.Parse("") == AppThemeMode.Light);
+            Check("Parse null兜底浅色", ThemeManager.Parse(null) == AppThemeMode.Light);
+            Check("Parse 乱写兜底浅色", ThemeManager.Parse("深色") == AppThemeMode.Light);
+
+            // —— 映射表：代表色映射 + 往返精确还原 + 语义色原样保留 ——
+            Check("容器底 Control→深",
+                ThemeManager.MapContainerBack(SystemColors.Control, true).ToArgb()
+                == ThemeManager.DarkSurfaceBack.ToArgb());
+            Check("容器底 深→Control精确还原",
+                ThemeManager.MapContainerBack(ThemeManager.DarkSurfaceBack, false).ToArgb()
+                == SystemColors.Control.ToArgb());
+            Check("容器底 White往返精确",
+                ThemeManager.MapContainerBack(
+                    ThemeManager.MapContainerBack(Color.White, true), false).ToArgb()
+                == Color.White.ToArgb());
+            Check("文字黑→浅字",
+                ThemeManager.MapForeColor(Color.Black, true).ToArgb()
+                == ThemeManager.DarkText.ToArgb());
+            Check("文字红深色不动(语义色保留)",
+                ThemeManager.MapForeColor(Color.Red, true).ToArgb() == Color.Red.ToArgb());
+            Check("文字绿浅色不动(语义色保留)",
+                ThemeManager.MapForeColor(Color.Green, false).ToArgb() == Color.Green.ToArgb());
+            Check("单元格分组蓝往返精确",
+                ThemeManager.MapGridCellFore(
+                    ThemeManager.MapGridCellFore(Color.FromArgb(48, 119, 238), true), false).ToArgb()
+                == Color.FromArgb(48, 119, 238).ToArgb());
+            Check("输入底 LightGray→深灰(保留只读暗示)",
+                ThemeManager.MapInputBack(Color.LightGray, true).ToArgb()
+                == Color.FromArgb(70, 70, 70).ToArgb());
+
+            // —— 内存切换（save=false，不写配置文件） ——
+            ThemeManager.SetMode(AppThemeMode.Light, false);
+            Check("初始浅色", !ThemeManager.IsDark && ThemeManager.Current == AppThemeMode.Light);
+            ThemeManager.SetMode(AppThemeMode.Dark, false);
+            Check("切深色", ThemeManager.IsDark && ThemeManager.Current == AppThemeMode.Dark);
+            ThemeManager.SetMode(AppThemeMode.Light, false);
+            Check("切回浅色", !ThemeManager.IsDark);
+
+            // —— 整树着色冒烟（STA harness，可直接 new 控件；只断言颜色，不弹窗） ——
+            var pnl = new Panel();
+            var lbl = new Label();   // 默认：Empty 字 + Transparent 底
+            var txt = new TextBox(); // 默认：白底黑字
+            var btn = new Button();  // 默认灰按钮（着色跳过，底不动）
+            var btnOk = new Button { BackColor = Color.LimeGreen, ForeColor = Color.White }; // 语义按钮
+            var grid = new DataGridView();
+            pnl.Controls.Add(lbl);
+            pnl.Controls.Add(txt);
+            pnl.Controls.Add(btn);
+            pnl.Controls.Add(btnOk);
+            pnl.Controls.Add(grid);
+            Color pnlBack0 = pnl.BackColor;
+            Color gridBack0 = grid.BackgroundColor;
+
+            ThemeManager.SetMode(AppThemeMode.Dark, false);
+            ThemeManager.ApplyTo(pnl);
+            Check("深色面板底变深", pnl.BackColor.ToArgb() == ThemeManager.DarkSurfaceBack.ToArgb(),
+                "实际=" + pnl.BackColor);
+            Check("深色标签字变浅", lbl.ForeColor.ToArgb() == ThemeManager.DarkText.ToArgb(),
+                "实际=" + lbl.ForeColor);
+            Check("深色输入框底变深", txt.BackColor.ToArgb() == ThemeManager.DarkInputBack.ToArgb(),
+                "实际=" + txt.BackColor);
+            // 注意：Button/Label 的 getter 在本地 Empty 时会返回父容器颜色（WinForms 环境属性继承），
+            // 所以"没碰过"的正确断言是"跟父容器一致"，而不是 Empty/Control 这种具体值。
+            Check("默认按钮底色从未被改动(Transparent继承=跟随面板走)",
+                btn.BackColor.ToArgb() == pnl.BackColor.ToArgb(),
+                "按钮=" + btn.BackColor + " 面板=" + pnl.BackColor);
+            Check("语义绿按钮两色不动",
+                btnOk.BackColor.ToArgb() == Color.LimeGreen.ToArgb()
+                && btnOk.ForeColor.ToArgb() == Color.White.ToArgb());
+            Check("深色表格底变深", grid.BackgroundColor.ToArgb() == ThemeManager.DarkSurfaceBack.ToArgb(),
+                "实际=" + grid.BackgroundColor);
+            Check("深色表头不跟系统主题(EnableHeadersVisualStyles=false)",
+                grid.EnableHeadersVisualStyles == false);
+
+            ThemeManager.SetMode(AppThemeMode.Light, false);
+            ThemeManager.ApplyTo(pnl);
+            Check("浅色面板底精确还原", pnl.BackColor.ToArgb() == pnlBack0.ToArgb(),
+                "实际=" + pnl.BackColor);
+            Check("浅色标签字跟随父容器(无残留深色值)", lbl.ForeColor.ToArgb() == pnl.ForeColor.ToArgb(),
+                "标签=" + lbl.ForeColor + " 面板=" + pnl.ForeColor);
+            Check("浅色输入框底还原白", txt.BackColor.ToArgb() == Color.White.ToArgb(),
+                "实际=" + txt.BackColor);
+            Check("浅色表格底精确还原", grid.BackgroundColor.ToArgb() == gridBack0.ToArgb(),
+                "实际=" + grid.BackgroundColor);
+            Check("浅色表头恢复系统主题", grid.EnableHeadersVisualStyles == true);
+
+            ThemeManager.SetMode(AppThemeMode.Light, false); // 收尾复位，免得影响其它模块
+            grid.Dispose();
+            pnl.Dispose();
         }
 
     }

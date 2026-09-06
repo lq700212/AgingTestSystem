@@ -35,7 +35,7 @@ namespace AgingTestSystem.Views
     /// ┌─────────────────────────────────────────────────────────┐
     /// │ 老化测试系统V1.00  │ 当前操作权限: 操作员 │ PLC连接状态: 已连接 │
     /// ├─────────────────────────────────────────────────────────┤
-        /// │ [用户权限] [参数设置] [日志记录] [关于] │
+        /// │ [用户权限] [参数设置] [日志记录] [关于] [深色模式] │（V1.60：关于右侧加主题切换按钮）
     /// ├──────────────────────────────┬──────────────────────────┤
     /// │                              │ 运行状态                 │
     /// │                              │ ┌────────────────────┐   │
@@ -166,6 +166,14 @@ namespace AgingTestSystem.Views
             // 1. 先初始化界面控件（Designer.cs 中的 InitializeComponent）
             //    必须最先调用，否则其他代码访问控件会报空引用
             InitializeComponent();
+
+            // 【V1.60 深色/浅色主题】读出上次保存的主题并给主窗体着色（按钮等语义色原样保留，
+            // 详见 ThemeManager 类头"配色约定"）。
+            // 工位大画布在 MainForm_Load → CreateWorkstationPanels 里同步主题；
+            // 各子窗体在每次打开前 ApplyTo（见各 ShowDialog/Show 调用处），切换时 ApplyToAllOpenForms 全刷。
+            ThemeManager.LoadFromConfig();
+            ThemeManager.ApplyTo(this);
+            UpdateThemeButtonText();
 
             // 【V1.49】主窗体开启双缓冲，与工位面板/网格双缓冲配合，消除滚动撕裂
             this.DoubleBuffered = true;
@@ -440,6 +448,8 @@ namespace AgingTestSystem.Views
             };
 
             // ===== 7. 显示弹出窗体（非模态，不阻塞主窗体） =====
+            // 【V1.60】弹出窗体跟随当前主题（菜单项按钮继承主按钮绿配色不动，只换窗体底）
+            ThemeManager.ApplyTo(popup);
             popup.Show(this);
         }
 
@@ -961,6 +971,10 @@ namespace AgingTestSystem.Views
             _gridView = new WorkstationGridView();
             _gridView.Configure(_config.PanelColumns, _config.PanelRows, _config.TotalBarometers);
 
+            // 【V1.60】自绘画布跟随全局主题（浅色=PanelLayout.json 原色，深色=深灰系；
+            // 上电绿/故障红等语义状态色两边都不动，见 WorkstationGridView.SetDarkMode 注释）
+            _gridView.SetDarkMode(ThemeManager.IsDark);
+
             // 订阅"设置"按钮点击事件（V1.18：打开工位设置窗口；V1.24：按选中数量分流）
             _gridView.OnSetClicked += Panel_OnSetClicked;
 
@@ -1446,6 +1460,8 @@ namespace AgingTestSystem.Views
             int selectedDeviceId = selectedIds.Length == 1 ? selectedIds[0] : deviceId;
             using (var form = new StationSettingsForm(_deviceManager, _config, _recipes, selectedDeviceId))
             {
+                // 【V1.60】子窗体打开前按当前主题着色（以下各 ShowDialog/Show 处同，不再重复解释）
+                ThemeManager.ApplyTo(form);
                 form.ShowDialog(this);
             }
         }
@@ -1484,6 +1500,8 @@ namespace AgingTestSystem.Views
 
             // 禁用主窗体，防止连接期间重复点击（连接只影响自身，后台采集照常进行）
             this.Enabled = false;
+            // 【V1.60】提示窗跟随当前主题
+            ThemeManager.ApplyTo(_connectingForm);
             _connectingForm.Show(this);
         }
 
@@ -1669,6 +1687,35 @@ namespace AgingTestSystem.Views
             ShowDropdownPopup(btnAbout, items.ToArray());
         }
 
+        /// <summary>
+        /// 深色/浅色主题切换按钮点击（【V1.60 新增】，按钮在"关于"右侧）。
+        ///
+        /// 【流程】ThemeManager.Toggle（内存切换 + 写 App.config 下次启动接着用）
+        /// → ApplyToAllOpenForms（主窗体 + 所有已打开的子窗体/自绘画布当场换肤）
+        /// → 按钮文字同步 → 写 LOG。
+        /// 注意：各子窗体打开前本来就 ApplyTo 过（见各 ShowDialog/Show 处），
+        /// 这里全刷一次是为了"非模态窗（通讯测试/送风机测试）开着时切换也能即时跟上"。
+        /// </summary>
+        private void btnTheme_Click(object sender, EventArgs e)
+        {
+            AppThemeMode mode = ThemeManager.Toggle();
+            ThemeManager.ApplyToAllOpenForms();
+            UpdateThemeButtonText();
+            WriteLog(mode == AppThemeMode.Dark ? "已切换为深色模式" : "已切换为浅色模式");
+        }
+
+        /// <summary>
+        /// 同步主题按钮文字：文字永远表示"下一次点击会去哪"——
+        /// 当前浅色显示"深色模式"，当前深色显示"浅色模式"。启动与每次切换后调用。
+        /// </summary>
+        private void UpdateThemeButtonText()
+        {
+            if (btnTheme != null)
+            {
+                btnTheme.Text = ThemeManager.IsDark ? "浅色模式" : "深色模式";
+            }
+        }
+
         #endregion
 
         #region 下拉菜单项点击事件处理
@@ -1710,6 +1757,7 @@ namespace AgingTestSystem.Views
         {
             using (var form = new UserManagementForm(_userManager))
             {
+                ThemeManager.ApplyTo(form);
                 form.ShowDialog(this);
             }
         }
@@ -1722,6 +1770,7 @@ namespace AgingTestSystem.Views
         {
             using (var form = new ChangePasswordForm(_userManager))
             {
+                ThemeManager.ApplyTo(form);
                 if (form.ShowDialog(this) == DialogResult.OK)
                 {
                     // 密码修改成功，若已记住该角色登录信息则已被自动清除，写日志提示
@@ -1750,6 +1799,7 @@ namespace AgingTestSystem.Views
         {
             using (var loginForm = new LoginForm(_userManager, targetRole))
             {
+                ThemeManager.ApplyTo(loginForm);
                 DialogResult result = loginForm.ShowDialog(this);
 
                 if (result == DialogResult.OK)
@@ -1866,6 +1916,7 @@ namespace AgingTestSystem.Views
         {
             using (var form = new CommonParameterForm(_deviceManager))
             {
+                ThemeManager.ApplyTo(form);
                 if (form.ShowDialog(this) == DialogResult.OK)
                 {
                     WriteLog("所有气压表负压阈值设置完成");
@@ -1880,6 +1931,7 @@ namespace AgingTestSystem.Views
         {
             using (var form = new RecipeManagerForm(_recipes))
             {
+                ThemeManager.ApplyTo(form);
                 form.ShowDialog(this);
             }
         }
@@ -1909,6 +1961,7 @@ namespace AgingTestSystem.Views
         {
             using (var form = new HistoryRecordForm())
             {
+                ThemeManager.ApplyTo(form);
                 form.ShowDialog(this);
             }
         }
@@ -1934,6 +1987,7 @@ namespace AgingTestSystem.Views
 
             using (var form = new SettingsForm(_config))
             {
+                ThemeManager.ApplyTo(form);
                 if (form.ShowDialog(this) == DialogResult.OK &&
                     form.SavedKeys != null && form.SavedKeys.Count > 0)
                 {
@@ -1972,6 +2026,7 @@ namespace AgingTestSystem.Views
 
             using (var form = new HomeLayoutEditorForm(layout))
             {
+                ThemeManager.ApplyTo(form);
                 if (form.ShowDialog(this) == DialogResult.OK)
                 {
                     // 保存成功：重新应用布局，让调整立即生效
@@ -2047,6 +2102,7 @@ namespace AgingTestSystem.Views
         {
             var form = new Dialogs.CommunicationTestForm(_deviceManager);
             form.FormClosed += (s, args) => form.Dispose();
+            ThemeManager.ApplyTo(form);
             form.Show(this);
         }
 
@@ -2059,6 +2115,7 @@ namespace AgingTestSystem.Views
         {
             var form = new Dialogs.FanTestForm(_deviceManager);
             form.FormClosed += (s, args) => form.Dispose();
+            ThemeManager.ApplyTo(form);
             form.Show(this);
         }
 
@@ -2141,6 +2198,7 @@ namespace AgingTestSystem.Views
             using (var form = new BatchRecipeForm(_deviceManager, _recipes, selectedIds))
             {
                 // 显示窗口（模态对话框，阻塞主窗口直到关闭）
+                ThemeManager.ApplyTo(form);
                 form.ShowDialog(this);
             }
         }
@@ -2178,6 +2236,7 @@ namespace AgingTestSystem.Views
                 };
 
                 // 显示窗口（模态对话框，阻塞主窗口直到关闭）
+                ThemeManager.ApplyTo(form);
                 DialogResult result = form.ShowDialog(this);
 
                 // 用户关闭窗口后，处理录入结果

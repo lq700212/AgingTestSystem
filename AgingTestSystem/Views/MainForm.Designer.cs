@@ -59,6 +59,7 @@
             this.btnParameter = new System.Windows.Forms.Button();
             this.btnLog = new System.Windows.Forms.Button();
             this.btnAbout = new System.Windows.Forms.Button();
+            this.btnTheme = new System.Windows.Forms.Button();
             this.splitContainerMain = new System.Windows.Forms.SplitContainer();
             this.tableLayoutPanelRight = new System.Windows.Forms.TableLayoutPanel();
             this.groupBoxStatus = new System.Windows.Forms.GroupBox();
@@ -223,15 +224,17 @@
             // 
             // tableLayoutPanelMenu
             // 
-            this.tableLayoutPanelMenu.ColumnCount = 4;
-            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
-            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
-            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
-            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
+            this.tableLayoutPanelMenu.ColumnCount = 5;
+            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
+            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
+            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
+            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
+            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
             this.tableLayoutPanelMenu.Controls.Add(this.btnUserPermission, 0, 0);
             this.tableLayoutPanelMenu.Controls.Add(this.btnParameter, 1, 0);
             this.tableLayoutPanelMenu.Controls.Add(this.btnLog, 2, 0);
             this.tableLayoutPanelMenu.Controls.Add(this.btnAbout, 3, 0);
+            this.tableLayoutPanelMenu.Controls.Add(this.btnTheme, 4, 0);
             this.tableLayoutPanelMenu.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tableLayoutPanelMenu.Location = new System.Drawing.Point(3, 33);
             this.tableLayoutPanelMenu.Name = "tableLayoutPanelMenu";
@@ -256,7 +259,7 @@
             // 
             this.btnParameter.BackColor = System.Drawing.Color.LimeGreen;
             this.btnParameter.ForeColor = System.Drawing.Color.White;
-            this.btnParameter.Location = new System.Drawing.Point(351, 3);
+            this.btnParameter.Location = new System.Drawing.Point(282, 3);
             this.btnParameter.Name = "btnParameter";
             this.btnParameter.Size = new System.Drawing.Size(226, 28);
             this.btnParameter.TabIndex = 1;
@@ -268,7 +271,7 @@
             // 
             this.btnLog.BackColor = System.Drawing.Color.LimeGreen;
             this.btnLog.ForeColor = System.Drawing.Color.White;
-            this.btnLog.Location = new System.Drawing.Point(699, 3);
+            this.btnLog.Location = new System.Drawing.Point(561, 3);
             this.btnLog.Name = "btnLog";
             this.btnLog.Size = new System.Drawing.Size(226, 28);
             this.btnLog.TabIndex = 2;
@@ -281,13 +284,28 @@
             //
             this.btnAbout.BackColor = System.Drawing.Color.LimeGreen;
             this.btnAbout.ForeColor = System.Drawing.Color.White;
-            this.btnAbout.Location = new System.Drawing.Point(1047, 3);
+            this.btnAbout.Location = new System.Drawing.Point(840, 3);
             this.btnAbout.Name = "btnAbout";
             this.btnAbout.Size = new System.Drawing.Size(228, 28);
             this.btnAbout.TabIndex = 4;
             this.btnAbout.Text = "关于";
             this.btnAbout.UseVisualStyleBackColor = false;
             this.btnAbout.Click += new System.EventHandler(this.btnAbout_Click);
+            // 
+            // btnTheme - "深色模式"按钮（V1.60 新增，位于"关于"右侧第 5 列）
+            // 点击在深色/浅色之间切换（ThemeManager.Toggle），按钮文字同步为下一次点击的目标：
+            // 当前浅色显示"深色模式"，当前深色显示"浅色模式"。配色与其余菜单按钮一致（绿底白字，
+            // 主题切换时原样保留，见 ThemeManager"按钮不动"约定）。
+            //
+            this.btnTheme.BackColor = System.Drawing.Color.LimeGreen;
+            this.btnTheme.ForeColor = System.Drawing.Color.White;
+            this.btnTheme.Location = new System.Drawing.Point(1119, 3);
+            this.btnTheme.Name = "btnTheme";
+            this.btnTheme.Size = new System.Drawing.Size(226, 28);
+            this.btnTheme.TabIndex = 5;
+            this.btnTheme.Text = "深色模式";
+            this.btnTheme.UseVisualStyleBackColor = false;
+            this.btnTheme.Click += new System.EventHandler(this.btnTheme_Click);
             // 
             // splitContainerMain
             // 
@@ -651,6 +669,8 @@
         private System.Windows.Forms.Button btnLog;
         /// <summary>关于按钮（下拉：设置 / 版本说明，V1.19.12 更名：btnHelp → btnAbout）</summary>
         private System.Windows.Forms.Button btnAbout;
+        /// <summary>深色/浅色主题切换按钮（V1.60 新增，位于"关于"右侧；点击切换全局主题）</summary>
+        private System.Windows.Forms.Button btnTheme;
         /// <summary>中间分割容器（左:气压表 右:操作面板）</summary>
         private System.Windows.Forms.SplitContainer splitContainerMain;
         /// <summary>右侧布局容器</summary>

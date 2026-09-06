@@ -604,6 +604,8 @@ namespace AgingTestSystem.Dialogs
             if (_remapNoticeForm == null || _remapNoticeForm.IsDisposed)
             {
                 _remapNoticeForm = new RemapNoticeForm();
+                // 【V1.60】提示窗打开前按当前主题着色
+                AgingTestSystem.Services.ThemeManager.ApplyTo(_remapNoticeForm);
                 _remapNoticeForm.Show(this);
             }
             _remapNoticeForm.SetMessage(msg);

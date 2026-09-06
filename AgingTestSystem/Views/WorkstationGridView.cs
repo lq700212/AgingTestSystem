@@ -188,25 +188,31 @@ namespace AgingTestSystem.Views
         /// <summary>设备编号标题字体（微软雅黑 9 Bold）</summary>
         private readonly Font _titleFont;
 
-        // ===== 配置解析出的颜色（初始化时解析一次，避免绘制时反复解析字符串） =====
-        private readonly Color _normalColor;   // 面板背景-空闲（白）
-        private readonly Color _testingColor;  // 面板背景-测试中（浅黄）
-        private readonly Color _faultColor;    // 面板背景-故障（浅粉）
-        private readonly Color _colorPowerOn;  // 上电块背景（绿）
-        private readonly Color _colorPowerOff; // 下电块背景（浅灰）
-        private readonly Color _colorVacuumOn; // 真空开块背景（绿）
-        private readonly Color _colorVacuumOff;// 真空关块背景（浅灰）
-        private readonly Color _colorWorkFault;    // 工作状态-故障（红）
-        private readonly Color _colorWorkBusy;     // 工作状态-繁忙（黄）
-        private readonly Color _colorWorkSelected; // 工作状态-选中/已上电待测试（橙）
-        private readonly Color _colorWorkIdle;     // 工作状态-空闲（绿）
-        private readonly Color _colorWorkCompleted; // 【V1.59】工作状态-已完成·待取料（皇家蓝）
-        private readonly Color _completedColor;     // 【V1.59】面板背景-已完成·待取料（淡钢蓝）
-        private readonly Color _colorSetButton;    // 设置按钮背景（绿）
-        private readonly Color _colorRowSelect;    // 行全选按钮背景（浅灰）
-        private readonly Color _colorValueBox;     // 值框背景（白）
-        private readonly Color _colorText;         // 正文文字（黑）
-        private readonly Color _colorBorder;       // 边框（黑）
+        // ===== 配置解析出的颜色（浅色值来自 PanelLayoutConfig，可被 PanelLayout.json 覆盖） =====
+        // 【V1.60 深色模式】以下"跟随主题切换"的颜色去掉 readonly，SetDarkMode 里整体换肤；
+        // 语义状态色（上电绿/故障红/繁忙黄/选中橙/完成蓝…）保持 readonly，深浅两边都不动——
+        // 绿底白字/灰底黑字在深底上照样清晰，动了反而丢业务含义。
+        private Color _normalColor;   // 面板背景-空闲（浅色白 / 深色深灰）
+        private Color _testingColor;  // 面板背景-测试中（浅色浅黄 / 深色暗金）
+        private Color _faultColor;    // 面板背景-故障（浅色浅粉 / 深色暗红）
+        private readonly Color _colorPowerOn;  // 上电块背景（绿，不跟主题）
+        private readonly Color _colorPowerOff; // 下电块背景（浅灰，不跟主题）
+        private readonly Color _colorVacuumOn; // 真空开块背景（绿，不跟主题）
+        private readonly Color _colorVacuumOff;// 真空关块背景（浅灰，不跟主题）
+        private readonly Color _colorWorkFault;    // 工作状态-故障（红，不跟主题）
+        private readonly Color _colorWorkBusy;     // 工作状态-繁忙（黄，不跟主题）
+        private readonly Color _colorWorkSelected; // 工作状态-选中/已上电待测试（橙，不跟主题）
+        private readonly Color _colorWorkIdle;     // 工作状态-空闲（绿，不跟主题）
+        private readonly Color _colorWorkCompleted; // 【V1.59】工作状态-已完成·待取料（皇家蓝，不跟主题）
+        private Color _completedColor;     // 【V1.59】面板背景-已完成·待取料（浅色淡钢蓝 / 深色深蓝）
+        private readonly Color _colorSetButton;    // 设置按钮背景（绿，不跟主题）
+        private Color _colorRowSelect;    // 行全选按钮背景（浅色浅灰 / 深色中灰）
+        private Color _colorValueBox;     // 值框背景（浅色白 / 深色深灰）
+        private Color _colorText;         // 正文文字（浅色黑 / 深色浅灰白）
+        private Color _colorBorder;       // 边框（浅色黑 / 深色中灰）
+
+        /// <summary>当前是否为深色模式（默认浅色；主窗体按 ThemeManager.IsDark 调用 SetDarkMode 同步）</summary>
+        private bool _darkMode;
 
         /// <summary>面板列数</summary>
         private int _columns;
@@ -244,18 +250,19 @@ namespace AgingTestSystem.Views
         // ============ 缓存画刷/画笔（V1.57.2：绘制热路径避免高频 new SolidBrush/Pen 导致 GC 压力） ============
         // 面板数据驱动的颜色（状态块/背景）仍按需 new，但边框、值框底、行选按钮底、设置按钮底、
         // 选中框底色等"每帧每面板都用的常量色"全部缓存为字段复用，一次分配、整生命周期复用。
-        /// <summary>边框画笔（黑），所有矩形描边共用</summary>
-        private readonly Pen _penBorder;
-        /// <summary>值框背景画刷（白），5 个值框共用</summary>
-        private readonly SolidBrush _brushValueBox;
-        /// <summary>行全选按钮背景画刷（浅灰）</summary>
-        private readonly SolidBrush _brushRowSelect;
+        // 【V1.60】其中跟随主题的 4 个（边框/值框/行选/未选中框）去掉 readonly，SetDarkMode 里重建。
+        /// <summary>边框画笔，所有矩形描边共用（跟随主题重建）</summary>
+        private Pen _penBorder;
+        /// <summary>值框背景画刷，5 个值框共用（跟随主题重建）</summary>
+        private SolidBrush _brushValueBox;
+        /// <summary>行全选按钮背景画刷（跟随主题重建）</summary>
+        private SolidBrush _brushRowSelect;
         /// <summary>设置按钮背景画刷（绿）</summary>
         private readonly SolidBrush _brushSetButton;
         /// <summary>选中指示框"已选中"底色画刷（绿）</summary>
         private readonly SolidBrush _brushSelectChecked;
-        /// <summary>选中指示框"未选中"底色画刷（白，即 Brushes.White 同色，单独存便于统一替换）</summary>
-        private readonly SolidBrush _brushSelectUnchecked;
+        /// <summary>选中指示框"未选中"底色画刷（跟随主题重建：浅色白 / 深色深灰）</summary>
+        private SolidBrush _brushSelectUnchecked;
 
         // ============ 拖拽滚动（V1.57：按住左键拖动滑动列表） ============
         /// <summary>拖拽起始点（鼠标屏幕坐标）；左键按下时记录</summary>
@@ -301,12 +308,10 @@ namespace AgingTestSystem.Views
             InitializeComponent();
             this.DoubleBuffered = true;
 
-            // 加载布局配置并解析出所有颜色，只做一次，绘制时直接取用
+            // 加载布局配置；颜色分两批：语义状态色直接解析（终身不变），
+            // 主题色走 ApplyLightColors（SetDarkMode 切深色/切回浅色都调它，保证浅色精确还原配置值）
             _layout = PanelLayoutConfig.LoadOrDefault();
 
-            _normalColor = Parse(_layout.ColorNormalBackground, Color.White);
-            _testingColor = Parse(_layout.ColorTestingBackground, Color.LightYellow);
-            _faultColor = Parse(_layout.ColorFaultBackground, Color.LightPink);
             _colorPowerOn = Parse(_layout.ColorPowerOn, Color.LimeGreen);
             _colorPowerOff = Parse(_layout.ColorPowerOff, Color.LightGray);
             _colorVacuumOn = Parse(_layout.ColorVacuumOn, Color.LimeGreen);
@@ -317,25 +322,19 @@ namespace AgingTestSystem.Views
             _colorWorkIdle = Parse(_layout.ColorWorkIdle, Color.LimeGreen);
             // 【V1.59】已完成·待取料状态色（皇家蓝/淡钢蓝，可在 PanelLayout.json 覆盖）
             _colorWorkCompleted = Parse(_layout.ColorWorkCompleted, Color.RoyalBlue);
-            _completedColor = Parse(_layout.ColorCompletedBackground, Color.LightSteelBlue);
             _colorSetButton = Parse(_layout.ColorSetButton, Color.LimeGreen);
-            _colorRowSelect = Parse(_layout.ColorRowSelectButton, Color.LightGray);
-            _colorValueBox = Parse(_layout.ColorValueBox, Color.White);
-            _colorText = Parse(_layout.ColorText, Color.Black);
-            _colorBorder = Parse(_layout.ColorBorder, Color.Black);
+            ApplyLightColors();
 
             // 显式创建字体（不依赖 this.Font / 主窗体 AutoScale，保证文字尺寸与固定矩形一致）
             _panelFont = new Font(_layout.FontFamily, _layout.FontSize, FontStyle.Regular);
             _titleFont = new Font(_layout.FontFamily, _layout.TitleFontSize,
                 _layout.TitleFontBold ? FontStyle.Bold : FontStyle.Regular);
 
-            // 【V1.57.2】初始化缓存画刷/画笔（颜色在解析完配置后创建；这些颜色全程不变）
-            _penBorder = new Pen(_colorBorder);
-            _brushValueBox = new SolidBrush(_colorValueBox);
-            _brushRowSelect = new SolidBrush(_colorRowSelect);
+            // 【V1.57.2】初始化缓存画刷/画笔：语义色两个一次建好，主题色四个走 RebuildThemeBrushes
+            // （SetDarkMode 里复用它重建，保证颜色与字段永远一致）。
             _brushSetButton = new SolidBrush(_colorSetButton);
             _brushSelectChecked = new SolidBrush(_colorWorkIdle);
-            _brushSelectUnchecked = new SolidBrush(Color.White);
+            RebuildThemeBrushes();
 
             _toolTip = new ToolTip(components);
             _longPressTimer = new System.Windows.Forms.Timer(components);
@@ -403,6 +402,101 @@ namespace AgingTestSystem.Views
             return PanelLayoutConfig.ParseColor(rgb, fallback);
         }
 
+        #region 深色模式（V1.60 新增）
+
+        /// <summary>
+        /// 载入浅色主题色（就是 PanelLayout.json 里配的那套；json 没配就用内置默认）。
+        /// 构造函数调一次；SetDarkMode(false) 切回浅色时再调一次，保证浅色永远精确还原配置值。
+        /// </summary>
+        private void ApplyLightColors()
+        {
+            _normalColor = Parse(_layout.ColorNormalBackground, Color.White);
+            _testingColor = Parse(_layout.ColorTestingBackground, Color.LightYellow);
+            _faultColor = Parse(_layout.ColorFaultBackground, Color.LightPink);
+            _completedColor = Parse(_layout.ColorCompletedBackground, Color.LightSteelBlue);
+            _colorRowSelect = Parse(_layout.ColorRowSelectButton, Color.LightGray);
+            _colorValueBox = Parse(_layout.ColorValueBox, Color.White);
+            _colorText = Parse(_layout.ColorText, Color.Black);
+            _colorBorder = Parse(_layout.ColorBorder, Color.Black);
+        }
+
+        /// <summary>
+        /// 载入深色主题色（固定深灰系，与 ThemeManager.DarkXxx 同系）：
+        /// 面板底走深（空闲深灰/测试暗金/故障暗红/完成深蓝），值框/文字/边框/行选按钮同步走深，
+        /// 语义状态块（上电绿/故障红/繁忙黄/选中橙/完成蓝、设置按钮绿）原样不动——
+        /// 白字压在绿/红/蓝块上、黑字压在浅灰块上，深浅两边都清晰。
+        /// </summary>
+        private void ApplyDarkColors()
+        {
+            _normalColor = Color.FromArgb(45, 45, 48);
+            _testingColor = Color.FromArgb(96, 80, 18);
+            _faultColor = Color.FromArgb(96, 30, 35);
+            _completedColor = Color.FromArgb(38, 68, 110);
+            _colorRowSelect = Color.FromArgb(62, 62, 66);
+            _colorValueBox = Color.FromArgb(37, 37, 38);
+            _colorText = Color.FromArgb(220, 220, 220);
+            _colorBorder = Color.FromArgb(120, 120, 120);
+        }
+
+        /// <summary>
+        /// 深色开关（给新手：主窗体主题按钮 → ThemeManager → 反射调到这里）。
+        /// 相同值重复调直接返回；切换后重建缓存画刷、刷新全部面板底色、重绘。
+        /// 注意：本控件 BackColor（面板间缝隙底）也同步走深/浅，缝隙才不会"白一道黑一道"。
+        /// </summary>
+        /// <param name="dark">true=深色，false=浅色</param>
+        public void SetDarkMode(bool dark)
+        {
+            if (_darkMode == dark) return;
+            _darkMode = dark;
+            if (dark) ApplyDarkColors();
+            else ApplyLightColors();
+            RebuildThemeBrushes();
+            RefreshItemBackgrounds();
+            this.BackColor = dark ? Color.FromArgb(30, 30, 30) : SystemColors.Control;
+            Invalidate();
+        }
+
+        /// <summary>
+        /// 重建跟随主题的 4 个缓存画刷/画笔（先释放旧的，避免 GDI 句柄越切越多）。
+        /// 语义色那两个（_brushSetButton/_brushSelectChecked）终身不变，不管。
+        /// </summary>
+        private void RebuildThemeBrushes()
+        {
+            if (_penBorder != null) { _penBorder.Dispose(); _penBorder = null; }
+            if (_brushValueBox != null) { _brushValueBox.Dispose(); _brushValueBox = null; }
+            if (_brushRowSelect != null) { _brushRowSelect.Dispose(); _brushRowSelect = null; }
+            if (_brushSelectUnchecked != null) { _brushSelectUnchecked.Dispose(); _brushSelectUnchecked = null; }
+            _penBorder = new Pen(_colorBorder);
+            _brushValueBox = new SolidBrush(_colorValueBox);
+            _brushRowSelect = new SolidBrush(_colorRowSelect);
+            _brushSelectUnchecked = new SolidBrush(_darkMode ? Color.FromArgb(37, 37, 38) : Color.White);
+        }
+
+        /// <summary>
+        /// 按当前主题重算全部面板的背景色（切主题时调；平时每轮采集由 UpdateSingleItem 逐台刷新）。
+        /// GridItem 只记了颜色没记状态，所以这里额外记了 Status（见 GridItem.Status 字段注释）。
+        /// </summary>
+        private void RefreshItemBackgrounds()
+        {
+            foreach (var kv in _items)
+            {
+                GridItem item = kv.Value;
+                if (item == null) continue;
+                item.BackColor = GetStatusBackColor(item.Status);
+            }
+        }
+
+        /// <summary>状态→面板底色（UpdateSingleItem 与 RefreshItemBackgrounds 共用，保证两处永远一致）</summary>
+        private Color GetStatusBackColor(DeviceStatus status)
+        {
+            if (status == DeviceStatus.Fault) return _faultColor;
+            if (status == DeviceStatus.Testing) return _testingColor;
+            if (status == DeviceStatus.Completed) return _completedColor;
+            return _normalColor;
+        }
+
+        #endregion
+
         /// <summary>
         /// 按配置创建工位网格并设置画布总尺寸（外层 Panel.AutoScroll 据此出现滚动条）
         /// </summary>
@@ -423,6 +517,8 @@ namespace AgingTestSystem.Views
             {
                 _items[i + 1] = new GridItem { DeviceId = i + 1 };
             }
+            // 【V1.60】新面板默认底按当前主题走（否则深色下首屏 1 秒内面板是白的，等首轮采集才变深）
+            RefreshItemBackgrounds();
             // 【V1.55 高DPI适配】画布总尺寸 = 逻辑像素尺寸 × DPI缩放因子。
             // 若不放大，150% 缩放下格子保持 96DPI 大小、文字却自动变大 → 溢出重叠。
             this.Size = new Size(Scaled(_columns * _layout.PanelColumnWidth + _layout.RowSelectButtonColumnWidth),
@@ -570,11 +666,11 @@ namespace AgingTestSystem.Views
                     break;
             }
 
-            // 面板背景色（空闲白/测试浅黄/故障浅粉/完成淡钢蓝【V1.59】）
-            item.BackColor = data.Status == DeviceStatus.Fault ? _faultColor
-                           : data.Status == DeviceStatus.Testing ? _testingColor
-                           : data.Status == DeviceStatus.Completed ? _completedColor
-                           : _normalColor;
+            // 面板背景色（空闲白/测试浅黄/故障浅粉/完成淡钢蓝【V1.59】；深色下走深色档【V1.60】）
+            // 【V1.60】状态同步记到 item.Status：切主题时 RefreshItemBackgrounds 靠它重算底色；
+            // 底色取值走 GetStatusBackColor，两处共用，改配色只改一处。
+            item.Status = data.Status;
+            item.BackColor = GetStatusBackColor(data.Status);
         }
 
         #endregion
@@ -1134,6 +1230,12 @@ namespace AgingTestSystem.Views
         private class GridItem
         {
             public int DeviceId;
+            /// <summary>
+            /// 工位当前业务状态（【V1.60 新增】：切主题重算底色用；平时由 UpdateSingleItem 随采集刷新）。
+            /// 为什么要记它：GridItem 原来只记颜色不记状态，切主题时想重算底色就找不到依据，
+            /// 只好把状态也记下来（就是 DeviceStatus 空闲/测试/故障/完成那几个值）。
+            /// </summary>
+            public DeviceStatus Status;
             public string PressureText = "---";
             public string SnText = "";
             public string RecipeText = "";
