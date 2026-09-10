@@ -420,7 +420,10 @@ namespace AgingTestSystem.Dialogs
         /// <param name="time">要回填的时间（如工位静态信息的延时开启 / 延时到达）</param>
         private static void SetTimeInputs(NumericUpDown hours, NumericUpDown minutes, NumericUpDown seconds, TimeSpan time)
         {
-            hours.Value = Clamp(hours, time.Hours);
+            // 【V1.62】时必须用 TotalHours：time.Hours 是"小时分量"（0~23），
+            // 25 小时会回填成 1（与 RecipeManagerForm 的 TotalHours 写法不一致，
+            // 现对齐）。分/秒本就是分量（0~59），保持不动。
+            hours.Value = Clamp(hours, (int)time.TotalHours);
             minutes.Value = Clamp(minutes, time.Minutes);
             seconds.Value = Clamp(seconds, time.Seconds);
         }
@@ -443,7 +446,9 @@ namespace AgingTestSystem.Dialogs
         /// <returns>格式化的时间文本（如 01:10:20）</returns>
         private static string GetTimeText(TimeSpan time)
         {
-            return string.Format(@"{0:00}:{1:00}:{2:00}", time.Hours, time.Minutes, time.Seconds);
+            // 【V1.62】与 SetTimeInputs 对齐用 TotalHours：25 小时显示 "25:00:00"
+            // 而不是截断的 "01:00:00"（成功提示文案与回填值一致，不再各说各话）。
+            return string.Format(@"{0:00}:{1:00}:{2:00}", (int)time.TotalHours, time.Minutes, time.Seconds);
         }
 
         /// <summary>

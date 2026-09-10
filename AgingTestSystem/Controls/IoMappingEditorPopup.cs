@@ -8,13 +8,15 @@ namespace AgingTestSystem.Controls
     /// <summary>
     /// IO 备用通道映射编辑弹出框（供系统设置窗口 IoBackupChannelMappings 配置项使用）：
     /// 以"一行一条映射"的表格展示，每行四列输入 + 中间箭头：
-    ///   原寄存器 0x2000 | 原通道 0x00 → 新寄存器 0x2009 | 新通道 0x10
-    /// 寄存器地址（0x0000~0xFFFF）与通道号（0x00~0x1F）均为十六进制，可微调。
+    ///   原寄存器 0x2000 | 原通道 0x00 → 新寄存器 0x2009 | 新通道 0x00
+    /// 寄存器地址（0x0000~0xFFFF）与通道号（0x00~0x0F）均为十六进制，可微调。
     /// 支持直接修改、添加新行、选中删除。
     ///
-    /// 【与配置格式的对应】配置里存的即是"寄存器@通道"（如 0x2000@0x00->0x2009@0x10），
+    /// 【与配置格式的对应】配置里存的即是"寄存器@通道"（如 0x2000@0x00->0x2009@0x00），
     /// 与界面显示完全一致（所见即所得），无需换算；十六进制通道由 IoOutputChannelRemap
-    /// 在解析时统一转成十进制位号（0~31）供位运算使用。
+    /// 在解析时统一转成十进制位号（0~15）供位运算使用。
+    /// 【V1.62】通道上限由 0x1F 收紧到 0x0F：一个寄存器只有 16 个 bit，0x10+ 在执行侧
+    /// 静默失效（见 IoOutputChannelRemap 类注释），输入框最大值同步收紧，非法值进不来。
     /// </summary>
     public class IoMappingEditorPopup : Form
     {
@@ -33,7 +35,7 @@ namespace AgingTestSystem.Controls
         /// <summary>
         /// 构造弹出框
         /// </summary>
-        /// <param name="currentValue">当前配置值（如 "0x2000@0x00->0x2009@0x10;0x2008@0x00->0x2009@0x11"）</param>
+        /// <param name="currentValue">当前配置值（如 "0x2000@0x00->0x2009@0x00;0x2008@0x00->0x2009@0x01"）</param>
         public IoMappingEditorPopup(string currentValue)
         {
             FormBorderStyle = FormBorderStyle.None;
@@ -95,13 +97,13 @@ namespace AgingTestSystem.Controls
                 HexDigits = 4,
                 ShowPrefix = true
             };
-            // 原/新通道：十六进制微调框（0x00~0x1F，兼容 32 点/模块），与寄存器一样带 0x 前缀
-            _dgv.Columns["colSrcCh"].CellTemplate = new DataGridViewHexNumericUpDownCell { Maximum = 0x1F, ShowPrefix = true };
-            _dgv.Columns["colDstCh"].CellTemplate = new DataGridViewHexNumericUpDownCell { Maximum = 0x1F, ShowPrefix = true };
+            // 原/新通道：十六进制微调框（0x00~0x0F，一个寄存器 16 个 bit），与寄存器一样带 0x 前缀
+            _dgv.Columns["colSrcCh"].CellTemplate = new DataGridViewHexNumericUpDownCell { Maximum = 0x0F, ShowPrefix = true };
+            _dgv.Columns["colDstCh"].CellTemplate = new DataGridViewHexNumericUpDownCell { Maximum = 0x0F, ShowPrefix = true };
 
             // 列宽分配：【V1.54b】整体放大——寄存器列 148→172、通道列 92→104、箭头列 56→60，
             // 总宽 172+104+60+172+104=612，表格宽 616（多 4px 余量保证不裁切）。
-            // 放大原因：十六进制微调框右侧有上下调按钮，最右侧一列"新通道"内容（0x00~0x1F）
+            // 放大原因：十六进制微调框右侧有上下调按钮，最右侧一列"新通道"内容（0x00~0x0F）
             // 在原列宽下被部分遮挡、调节按钮也按不到。
             _dgv.Columns["colSrcReg"].Width = 172;
             _dgv.Columns["colSrcReg"].AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
@@ -140,7 +142,7 @@ namespace AgingTestSystem.Controls
             // 操作提示
             var lblHint = new Label
             {
-                Text = "寄存器（0x0000~0xFFFF）与通道（0x00~0x1F）均为十六进制；保存后配置与界面显示一致，无需换算",
+                Text = "寄存器（0x0000~0xFFFF）与通道（0x00~0x0F）均为十六进制；保存后配置与界面显示一致，无需换算",
                 Location = new Point(12, 176),
                 Size = new Size(616, 18),
                 TextAlign = ContentAlignment.MiddleLeft,

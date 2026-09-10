@@ -87,6 +87,9 @@ namespace AgingTestSystem.Services
         public bool ReconnectNow()
         {
             if (_isConnected) return true;
+            // 【V1.62】从未 Connect（_config 为 null）时不许"空连上"：
+            // 否则 ActiveIp 为 null 却 IsConnected 为 true，掩盖"未连接启动"的真问题。
+            if (_config == null) return false;
             Connect(_config);
             return _isConnected;
         }
@@ -133,18 +136,30 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 定值启动（模拟）：直接把运行标志置为 true
+        /// 【V1.62】未连接时返回 false 且不改状态（与 ReadStatus 未连接返 null 对齐；
+        /// 之前恒返 true，会掩盖"未连接启动"的真问题）。
         /// </summary>
         public bool StartFixedValue()
         {
+            if (!_isConnected)
+            {
+                OnError?.Invoke(this, "设备未连接");
+                return false;
+            }
             _running = true;
             return true;
         }
 
         /// <summary>
-        /// 定值停止（模拟）：直接把运行标志置为 false
+        /// 定值停止（模拟）：直接把运行标志置为 false（未连接时同上返回 false）
         /// </summary>
         public bool Stop()
         {
+            if (!_isConnected)
+            {
+                OnError?.Invoke(this, "设备未连接");
+                return false;
+            }
             _running = false;
             return true;
         }

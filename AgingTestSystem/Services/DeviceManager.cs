@@ -267,6 +267,9 @@ namespace AgingTestSystem.Services
         /// 【为什么要定格】测试跑几小时的中途操作员可能改配置/换配方，
         /// 进行中的任务必须用启动那一刻的参数跑完，否则同一批产品工艺不一致，
         /// 质量数据没法追溯。
+        /// 【V1.62 约定】无任务时三者恒为"清零态"（时长/延时=0、阈值=全局值）：
+        /// 所有清理点（停止/复位/急停/完成/报警）清时长延时的同时必须把阈值同步回全局，
+        /// 否则残留的旧阈值会让后人误以为"退出测试还有定格生效"。
         /// </summary>
         private readonly int[] _sessionDurationSecs;
         private readonly int[] _sessionDelaySecs;
@@ -1742,6 +1745,7 @@ namespace AgingTestSystem.Services
                     _testDurations[deviceId - 1] = 0;
                     _sessionDurationSecs[deviceId - 1] = 0;
                     _sessionDelaySecs[deviceId - 1] = 0;
+                    _sessionThresholdKPa[deviceId - 1] = _config.AlarmPressureThresholdKPa;
                 }
 
                 TestEventLogger.Write(_currentLotNumber, deviceId, "中止", "手动停止（未到时中止，不计判定结果）");
@@ -1792,6 +1796,7 @@ namespace AgingTestSystem.Services
                     _testDurations[deviceId - 1] = 0;
                     _sessionDurationSecs[deviceId - 1] = 0;
                     _sessionDelaySecs[deviceId - 1] = 0;
+                    _sessionThresholdKPa[deviceId - 1] = _config.AlarmPressureThresholdKPa;
                     _readFailCounts[deviceId - 1] = 0;
                     _lastAlarmStates[deviceId - 1] = false;
                 }
@@ -1852,6 +1857,7 @@ namespace AgingTestSystem.Services
                     _testDurations[i] = 0;
                     _sessionDurationSecs[i] = 0;
                     _sessionDelaySecs[i] = 0;
+                    _sessionThresholdKPa[i] = _config.AlarmPressureThresholdKPa;
                     _lastAlarmStates[i] = false;
                 }
             }
@@ -2019,7 +2025,15 @@ namespace AgingTestSystem.Services
                 // 用快照参数重新走完整启动流程（开阀→抽真空→延时→上电→满时长老化）
                 StartSingleTestCore(station.DeviceId, station);
             }
-            StartQuickTracking(session.Stations.ConvertAll(s => s.DeviceId).ToArray());
+            // 【V1.62】脏快照里可能混着 null 台（上轮循环已跳过 null）：
+            // ConvertAll 直接取 s.DeviceId 会空引用，这里只收有效台的编号
+            // （StartQuickTracking 本身也会忽略非法编号，双保险）。
+            var validIds = new List<int>();
+            foreach (var station in session.Stations)
+            {
+                if (station != null) validIds.Add(station.DeviceId);
+            }
+            StartQuickTracking(validIds.ToArray());
             UpdateFanLifecycle();
 
             TestEventLogger.Write(_currentLotNumber, 0, "断电恢复",
@@ -2126,10 +2140,25 @@ namespace AgingTestSystem.Services
 
                 DateTime now = DateTime.Now;
 
-                for (int i = 0; i < allData.Length; i++)
+                // 【V1.62 防火墙】只处理前 TotalBarometers 个位置：
+                // 内置读取器返回数组长度恒等于总数；若某个读取器实现返回更长的数组，
+                // 超出的位置会先把 _readFailCounts[i] 等状态数组索引越界（越界检查在后）。
+                int laneCount = Math.Min(allData.Length, _config.TotalBarometers);
+                for (int i = 0; i < laneCount; i++)
                 {
                     int deviceId = i + 1;
                     BarometerData data = allData[i];
+
+                    // 【V1.62 防火墙】上报 id 必须与轮询位置一致（内置实现恒一致）。
+                    // 不一致说明读取器实现有 bug：IsAlarm 用上报 id 查状态数组、
+                    // 缓存却按位置 id 读写，会状态分裂甚至越界。本轮跳过该台
+                    // （缓存保留上轮值），不计通讯失败（不是通讯问题）。
+                    if (data != null && data.DeviceId != deviceId)
+                    {
+                        System.Diagnostics.Debug.WriteLine(
+                            $"[采集] 台{deviceId}上报 DeviceId={data.DeviceId} 与轮询位置不一致，已忽略本轮数据");
+                        continue;
+                    }
 
                     // ===== 1) 通讯状态判断（新增：传感器失联报警） =====
                     if (data == null)
@@ -2311,7 +2340,10 @@ namespace AgingTestSystem.Services
                 {
                     foreach (var data in allData)
                     {
-                        if (data != null)
+                        // 【V1.62 防火墙】只收合法编号的数据进缓存（与逐台循环的 id 一致性
+                        // 检查呼应）：上报 id 非法的脏数据不许污染缓存，避免按位置读缓存
+                        // 的面板/快照拿到错台数据。
+                        if (data != null && data.DeviceId >= 1 && data.DeviceId <= _config.TotalBarometers)
                         {
                             _barometerDataCache[data.DeviceId] = data;
                         }
@@ -2465,6 +2497,7 @@ namespace AgingTestSystem.Services
                 _testDurations[deviceId - 1] = 0;
                 _sessionDurationSecs[deviceId - 1] = 0;
                 _sessionDelaySecs[deviceId - 1] = 0;
+                _sessionThresholdKPa[deviceId - 1] = _config.AlarmPressureThresholdKPa;
             }
 
             // 记录完成事件（PASS：能走到这里说明全程未触发报警联动）
@@ -2520,6 +2553,7 @@ namespace AgingTestSystem.Services
                 _valveOpenTimes[deviceId - 1] = DateTime.MinValue;
                 _sessionDurationSecs[deviceId - 1] = 0;
                 _sessionDelaySecs[deviceId - 1] = 0;
+                _sessionThresholdKPa[deviceId - 1] = _config.AlarmPressureThresholdKPa;
             }
 
             // 结果标记：产品责任=FAIL，设备责任="设备异常"
@@ -2569,11 +2603,10 @@ namespace AgingTestSystem.Services
         /// </summary>
         private bool PressureOutOfRange(decimal pressureKPa, decimal thresholdKPa)
         {
-            if (_config.AlarmWhenPressureHigherThanThreshold)
-            {
-                return pressureKPa > thresholdKPa;
-            }
-            return pressureKPa < thresholdKPa;
+            // 【V1.62】判定口径收拢进 AgingSequencer.IsPressureOutOfRange，
+            // 本方法只剩"取配置方向后转调"（行为与原来逐字一致）。
+            return AgingSequencer.IsPressureOutOfRange(
+                pressureKPa, thresholdKPa, _config.AlarmWhenPressureHigherThanThreshold);
         }
 
         /// <summary>
@@ -2637,7 +2670,8 @@ namespace AgingTestSystem.Services
                 return false;    // 窗口内：暂不报警（压力到位后由 ProcessTestingProgress 推进）
             }
 
-            // 1) 压力越限（已确认真空的测试中，或非测试状态的设备）
+            // 1) 压力越限（本函数只被采集循环对"测试中"的台调用，
+            //    未测试的台走不到这里——见 CollectData 的 isTesting 门控）。
             if (pressureAlarm) return true;
 
             // 2) DI 报警触点（可选，需现场确认触点电平后开启）

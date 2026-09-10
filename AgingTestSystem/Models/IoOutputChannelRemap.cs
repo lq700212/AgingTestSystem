@@ -18,30 +18,34 @@ namespace AgingTestSystem.Models
     /// 【配置格式】（App.config → IoBackupChannelMappings）
     ///   源寄存器@源通道->目标寄存器@目标通道，多组用分号(;)分隔
     ///   - 寄存器：十六进制（带 0x 前缀），如 0x2000
-    ///   - 通道：0x 十六进制（0x00 = 第 1 路，bit0；0x1F = 第 32 路，bit31），
-    ///     与界面 / 配置文件显示完全一致；内部解析成 0~31 的十进制位号做位运算。
-    ///   示例（0x2000 的 0x00 通道烧毁 → 备用到 0x2009 的 0x10 通道）：
-    ///     0x2000@0x00->0x2009@0x10;0x2008@0x00->0x2009@0x11
+    ///   - 通道：0x 十六进制（0x00 = 第 1 路，bit0；0x0F = 第 16 路，bit15），
+    ///     与界面 / 配置文件显示完全一致；内部解析成 0~15 的十进制位号做位运算。
+    ///     【V1.62 修正】一个寄存器只有 16 个 bit，通道只能是 0x00~0x0F。
+    ///     旧文档写的 0x00~0x1F 是错的：0x10 及以上既匹配不上任何源通道
+    ///     （执行侧 bit 恒为 0~15），做目标时掩码还会归零导致读写恒错，
+    ///     且全程静默无报错。解析层现直接拒绝 0x10+，非法项进 error 明示。
+    ///   示例（0x2000 的 0x00 通道烧毁 → 备用到 0x2009 的 0x00 通道）：
+    ///     0x2000@0x00->0x2009@0x00;0x2008@0x00->0x2009@0x01
     /// </summary>
     public class IoOutputChannelRemap
     {
         /// <summary>源寄存器地址（绝对地址，如 0x2000）</summary>
         public ushort SourceRegister { get; set; }
 
-        /// <summary>源通道号（0~31，0 = 第 1 路）</summary>
+        /// <summary>源通道号（0~15，0 = 第 1 路，即寄存器内 bit 位）</summary>
         public int SourceChannel { get; set; }
 
         /// <summary>目标寄存器地址（绝对地址，如 0x2009）</summary>
         public ushort TargetRegister { get; set; }
 
-        /// <summary>目标通道号（0~31，0 = 第 1 路）</summary>
+        /// <summary>目标通道号（0~15，0 = 第 1 路，即寄存器内 bit 位）</summary>
         public int TargetChannel { get; set; }
 
         /// <summary>
         /// 解析配置字符串为映射列表。
         /// 逐项解析，格式非法的项跳过并汇总到 <paramref name="error"/>（不影响其它合法项）。
         /// </summary>
-        /// <param name="raw">配置字符串，如 "0x2000@0x00->0x2009@0x10;0x2008@0x00->0x2009@0x11"</param>
+        /// <param name="raw">配置字符串，如 "0x2000@0x00->0x2009@0x00;0x2008@0x00->0x2009@0x01"</param>
         /// <param name="error">非空时说明哪些项被跳过及原因</param>
         /// <returns>解析出的合法映射列表（可能为空）</returns>
         public static List<IoOutputChannelRemap> ParseAll(string raw, out string error)
@@ -103,12 +107,12 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 解析 "寄存器@通道" 形式的一端（如 "0x2000@0x0A"）。
-        /// 寄存器与通道均为十六进制（带 0x 前缀），内部统一换算成 0~31 的十进制位号
+        /// 寄存器与通道均为十六进制（带 0x 前缀），内部统一换算成 0~15 的十进制位号
         /// （0 = 第 1 路，bit0）供位运算使用。
         /// </summary>
         /// <param name="s">原始字符串</param>
         /// <param name="reg">解析出的寄存器地址</param>
-        /// <param name="channel">解析出的通道号（0~31）</param>
+        /// <param name="channel">解析出的通道号（0~15）</param>
         /// <param name="error">解析失败时的原因说明</param>
         /// <returns>成功返回 true</returns>
         private static bool TryParseEndpoint(string s, out ushort reg, out int channel, out string error)
@@ -140,17 +144,20 @@ namespace AgingTestSystem.Models
 
             string chStr = parts[1].Trim();
             // 通道号：统一十六进制（带 0x 前缀，与寄存器一致），如 @0x0A（= 第 11 路）
+            // 【V1.62】只允许 0x00~0x0F：一个寄存器 16 个 bit，0x10+ 在执行侧
+            // 既匹配不上源（bit 恒 0~15），做目标又会把位掩码算成 0 导致读写恒错，
+            // 与其静默失效，不如解析时直接拒绝并进 error 明示。
             if (!chStr.StartsWith("0x", StringComparison.OrdinalIgnoreCase) &&
                 !chStr.StartsWith("0X", StringComparison.OrdinalIgnoreCase))
             {
-                error = $"通道 '{parts[1]}' 应为 0x00~0x1F 的十六进制（带 0x 前缀，0x00 = 第 1 路）";
+                error = $"通道 '{parts[1]}' 应为 0x00~0x0F 的十六进制（带 0x 前缀，0x00 = 第 1 路）";
                 return false;
             }
 
             if (!int.TryParse(chStr.Substring(2), NumberStyles.HexNumber, null, out channel) ||
-                channel < 0 || channel > 31)
+                channel < 0 || channel > 15)
             {
-                error = $"通道 '{parts[1]}' 应为 0x00~0x1F（0x00 = 第 1 路）";
+                error = $"通道 '{parts[1]}' 应为 0x00~0x0F（0x00 = 第 1 路）";
                 return false;
             }
             return true;

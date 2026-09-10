@@ -89,12 +89,14 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// CSV 字段转义
-        /// 字段里如果含逗号 / 双引号 / 换行，需要用双引号包裹、双引号翻倍
+        /// 字段里如果含逗号 / 双引号 / 换行 / 回车，需要用双引号包裹、双引号翻倍
+        /// 【V1.62】补上回车 \r：串口/扫码字符串常带 \r\n，不包裹会导致 CSV 断行错位
+        /// （历史记录窗按行解析，错位后整行被丢弃，追溯链断裂）。
         /// </summary>
         private static string CsvEscape(string value)
         {
             if (value == null) return "";
-            if (value.Contains(",") || value.Contains("\"") || value.Contains("\n"))
+            if (value.Contains(",") || value.Contains("\"") || value.Contains("\n") || value.Contains("\r"))
             {
                 return "\"" + value.Replace("\"", "\"\"") + "\"";
             }

@@ -387,6 +387,35 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
+        /// 6 个原始寄存器 → 送风机数据（纯函数，【V1.62 新增】回归可直接断言）。
+        ///
+        /// 【寄存器映射】（实测定论，一次读 0x0000~0x0005）：
+        /// values[0]=0x0000 组合状态（未使用，忽略）；[1]=0x0001 控制/状态；
+        /// [2]=0x0002 当前温度 /100=°C；[3]=0x0003 当前湿度 /100=%RH；
+        /// [4]=0x0004 温度设定值 /100；[5]=0x0005 湿度设定值 /100。
+        /// 数量不足 6 个（设备返回异常）返回 null，由调用方按离线处理。
+        /// 注意：状态枚举值不做合法性校验（与旧行为一致，非法值透传，显示层兜底）。
+        /// </summary>
+        /// <param name="values">一次读回的 6 个寄存器值</param>
+        /// <returns>解析出的送风机数据；数量不足返回 null</returns>
+        public static FanData ParseFanRegisters(ushort[] values)
+        {
+            // 防御性检查：寄存器数量不足说明设备返回异常
+            if (values == null || values.Length < 6) return null;
+
+            return new FanData
+            {
+                RunState = (FanRunState)values[1],
+                Temperature = values[2] / 100.0f,
+                Humidity = values[3] / 100.0f,
+                TempSetpoint = values[4] / 100.0f,
+                HumSetpoint = values[5] / 100.0f,
+                IsOnline = true,
+                CollectTime = DateTime.Now
+            };
+        }
+
+        /// <summary>
         /// 读取送风机当前状态（状态 + 温度 + 湿度 + 设定值）
         /// 一次批量读取 6 个寄存器（0x0000 ~ 0x0005），减少通讯次数
         /// </summary>
@@ -412,26 +441,9 @@ namespace AgingTestSystem.Services
                     values = _master.ReadHoldingRegisters(_config.FanUnitId, 0x0000, 6);
                 }
 
-                // 防御性检查：寄存器数量不足说明设备返回异常
-                if (values == null || values.Length < 6) return null;
-
-                // 按实测映射解析（索引对应关系见类注释）：
-                // values[0] -> 0x0000（组合状态，未使用，忽略）
-                // values[1] -> 0x0001（控制/状态）
-                // values[2] -> 0x0002（当前温度，/100 = °C）
-                // values[3] -> 0x0003（当前湿度，/100 = %RH）
-                // values[4] -> 0x0004（温度设定值，/100 = °C）
-                // values[5] -> 0x0005（湿度设定值，/100 = %RH）
-                return new FanData
-                {
-                    RunState = (FanRunState)values[1],
-                    Temperature = values[2] / 100.0f,
-                    Humidity = values[3] / 100.0f,
-                    TempSetpoint = values[4] / 100.0f,
-                    HumSetpoint = values[5] / 100.0f,
-                    IsOnline = true,
-                    CollectTime = DateTime.Now
-                };
+                // 【V1.62】解析收拢进 ParseFanRegisters 纯函数（行为逐字一致，
+                // 映射说明见该函数注释）。
+                return ParseFanRegisters(values);
             }
             catch (Exception ex)
             {

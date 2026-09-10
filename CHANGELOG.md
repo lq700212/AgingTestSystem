@@ -3,6 +3,45 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.62 — 全仓测试补齐 + 修 8 个实锤 bug（2026-09-10）
+
+### 改动范围
+- **修高危：备用通道号越界静默失效**——文档写通道 0x00~0x1F、示例用 0x10/0x11，
+  但执行侧 bit 恒 0~15：0x10+ 配了永远匹配不上（源）或掩码归零读写恒错（目标），
+  且全程无报错。`IoOutputChannelRemap` 解析收紧到 0x00~0x0F 并明示 error；
+  `ModbusTcpIoController.MapOutputChannel` 加非法目标兜底（保持原通道读写一致）；
+  编辑弹窗微调框最大值同步 0x0F；README/通讯接入/App.config/设置窗文案与示例全改。
+- **修采集防火墙两处**：读取器返回超长数组会先索引越界（越界检查在后）；
+  上报 DeviceId 与轮询位置不一致会导致 IsAlarm 查错台状态、缓存按错键落盘。
+  现循环取 `Min(长度,总数)` + id 不一致本轮跳过 + 缓存只收合法编号。
+- **修快照恢复 null 台空引用**：`RecoverSession` 的 ConvertAll 未过滤 null（循环体有判空，
+  ConvertAll 没有），脏快照直接 NRE。改为只收有效台编号。
+- **修 CSV 回车断行**：`CsvEscape` 补 `\r` 包裹（串口/扫码字符串常带 `\r\n`）。
+- **修配方 Id 撞号**：新增用 `Count+1`，删中间配方后会重号；改 `Max(Id)+1`。
+- **修 Mock 三处与真实现分叉**：`MockFanController` 未连接启停恒 true（现返 false 不改状态）、
+  从未 Connect 就重连成功（现 _config null 返 false）；`MockIoController.Connect(null)` 空引用（现拒绝）。
+- **修工位时间 24h 截断**：`StationSettingsForm.SetTimeInputs/GetTimeText` 用 `Hours` 分量，
+  25 小时回填/显示成 1；改 `TotalHours` 与 `RecipeManagerForm` 对齐。
+- **修串口识别大小写**：CH340 描述匹配改为忽略大小写，并抽 `IsCh340Device` 纯函数。
+- **判定与换算收拢为纯函数**（家规落地）：`AgingSequencer.IsPressureOutOfRange`（两处私有判定转调）、
+  `ModbusRtuBarometerReader.ConvertRawToPressureKPa/ConvertThresholdToRegister`、
+  `FanControllerClient.ParseFanRegisters`（三处转调，行为逐字一致）。
+- **卫生**：5 个状态清理点同步把阈值定格清回全局；IsAlarm 误导注释修正。
+- **测试**：回归 355→759 断言（+12 模块：IoMapBuilder/MockDevices/StationCache/ModelDefaults/
+  SettingsValidate/ScannerParse/ModbusConvert/FanParse/StationTime/HistoryCsv/UiPureHelpers/
+  DeviceManagerExtended，含集成 E1~E30 扩展场景）；harness 编译加 SunnyUI 引用；
+  skill 覆盖表与踩坑清单同步（+3 条）。
+
+### 为什么这么改
+- 用户要求全面审查、绝对稳定：四个审计方向过完，纯逻辑能测的全测，不能测的（真串口/
+  真设备/UI 弹窗/10s 时间窗过期分支）明确列边界。修的全是"静默错"类别——不抛异常但
+  行为错（通道配了不生效、CSV 错位丢行、Id 撞号），单靠现场联调很难发现。
+
+### 验证
+- `build_and_test.ps1` 全绿（构建 + 冒烟 18s + 759 断言）；中途 4 个新用例失败定位到
+  3 处用例写法问题 + 1 处场景串扰（E30 留下的配方污染 E23），修用例后全绿，
+  产品代码零回退。
+
 ## V1.61 — 负压阈值默认改 -5kPa（2026-09-10）
 
 ### 改动范围

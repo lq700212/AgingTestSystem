@@ -294,8 +294,14 @@ namespace AgingTestSystem.Services
 
             foreach (var remap in _config.IoBackupChannelMappings)
             {
+                if (remap == null) continue;
                 if (remap.SourceRegister == regAddress && remap.SourceChannel == bit)
                 {
+                    // 【V1.62 防御】目标通道必须是寄存器内合法 bit（0~15）。
+                    // 解析层已拒绝 0x10+，这里兜底手写/旧配置残留的非法目标：
+                    // 直接放弃本次映射（保持原通道读写，读回与写入一致），
+                    // 绝不能把 bit 改成 16+（位掩码归零会导致读写恒错且静默）。
+                    if (remap.TargetChannel < 0 || remap.TargetChannel > 15) return;
                     regAddress = remap.TargetRegister;
                     bit = remap.TargetChannel;
                     return; // 一个源通道只会被映射一次

@@ -23,6 +23,24 @@ namespace AgingTestSystem.Services
     public static class SerialPortHelper
     {
         /// <summary>
+        /// 判断一对（设备描述，硬件ID）是否为 CH340 串口（纯函数，回归可直接断言）。
+        ///
+        /// 【匹配规则】描述含 CH340（大小写不敏感）且硬件 ID 同时含 VID_1A86/PID_7523。
+        /// 【V1.62】描述匹配由大小写敏感的 Contains 改为忽略大小写：
+        /// 个别机器的设备描述是小写 ch340，旧写法会识别不到串口。
+        /// </summary>
+        /// <param name="caption">WMI Win32_PnPEntity.Caption（如 "USB-SERIAL CH340 (COM3)"）</param>
+        /// <param name="pnpId">WMI PNPDeviceID（含 VID/PID 的硬件 ID）</param>
+        /// <returns>true=判定为 CH340 串口</returns>
+        public static bool IsCh340Device(string caption, string pnpId)
+        {
+            if (string.IsNullOrEmpty(caption) || string.IsNullOrEmpty(pnpId)) return false;
+            return caption.IndexOf("CH340", System.StringComparison.OrdinalIgnoreCase) >= 0
+                && pnpId.IndexOf("VID_1A86", System.StringComparison.OrdinalIgnoreCase) >= 0
+                && pnpId.IndexOf("PID_7523", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        /// <summary>
         /// 获取第一个匹配的 CH340 串口名称（例如 "COM3"）
         /// 找不到返回 null（表示气压表适配器没插 / 驱动没装）
         /// </summary>
@@ -56,10 +74,8 @@ namespace AgingTestSystem.Services
 
                         // 双重校验：设备描述含 CH340 + 硬件 ID 是 CH340 的 VID/PID
                         //（防止其它 USB 转串口芯片如 FTDI/CP2102 被误认）
-                        if (string.IsNullOrEmpty(caption) || !caption.Contains("CH340")) continue;
-                        if (string.IsNullOrEmpty(pnpId) ||
-                            !pnpId.Contains("VID_1A86") ||  // CH340 厂商ID（WCH/沁恒）
-                            !pnpId.Contains("PID_7523"))    // CH340 产品ID
+                        // 判定逻辑收拢进 IsCh340Device（纯函数可单测），此处只调用。
+                        if (!IsCh340Device(caption, pnpId))
                         {
                             continue;
                         }

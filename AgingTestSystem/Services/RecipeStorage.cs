@@ -127,7 +127,14 @@ namespace AgingTestSystem.Services
             else
             {
                 // 新增：分配一个不冲突的编号后加入列表
-                recipe.Id = recipes.Count + 1;
+                // 【V1.62】用 Max(Id)+1 而不是 Count+1：删除中间配方后 Count 会"塌"，
+                // 如剩 {Id=2} 时 Count+1 又得 2 造成撞号；Max+1 永不回退。
+                int nextId = 1;
+                foreach (RecipeConfig r in recipes)
+                {
+                    if (r != null && r.Id >= nextId) nextId = r.Id + 1;
+                }
+                recipe.Id = nextId;
                 recipes.Add(recipe);
             }
 

@@ -64,6 +64,9 @@ $cscArgs = @(
     '/r:System.dll', '/r:System.Core.dll', '/r:System.Drawing.dll', '/r:System.Windows.Forms.dll',
     "/r:$runDir\Newtonsoft.Json.dll",
     "/r:$runDir\AgingTestSystem.exe",
+    # V1.62: UiPureHelpers/HistoryCsv/StationCache 等用例直接 new SunnyUI 派生窗体
+    # (HistoryRecordForm/RecipeManagerForm/SettingsForm)，编译期必须能解析 UIForm 基类
+    "/r:$runDir\SunnyUI.dll",
     '/codepage:65001'
 )
 & $csc @cscArgs

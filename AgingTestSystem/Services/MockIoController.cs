@@ -61,6 +61,13 @@ namespace AgingTestSystem.Services
 
         public bool Connect(DeviceConfig config)
         {
+            // 【V1.62】空配置直接拒绝：否则下行 config.TotalInputs 即空引用，
+            // 且 _isConnected 会被置 true 造成"连上了假象"。
+            if (config == null)
+            {
+                OnError?.Invoke(this, "配置不能为空");
+                return false;
+            }
             _config = config;
 
             // 初始化输入状态数组（默认72个输入）

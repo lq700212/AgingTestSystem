@@ -374,8 +374,9 @@ namespace AgingTestSystem.Services
                 //    - 实际压力 = 有符号原始值 / 10^小数位，再乘以可选缩放系数 BarometerPressureScale
                 short rawSigned = (short)registers[0];
                 int decimalPos = _config.BarometerDefaultDecimalPlaces;
-                decimal pressureKPa = rawSigned / (decimal)Math.Pow(10, decimalPos);
-                pressureKPa *= _config.BarometerPressureScale;
+                // 【V1.62】换算收拢进 ConvertRawToPressureKPa 纯函数（行为逐字一致）。
+                decimal pressureKPa = ConvertRawToPressureKPa(
+                    rawSigned, decimalPos, _config.BarometerPressureScale);
 
                 var data = new BarometerData
                 {
@@ -479,6 +480,40 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
+        /// 寄存器原始值 → 压力 kPa（纯函数，【V1.62 新增】回归可直接断言）。
+        ///
+        /// 【换算口径】(short)强转按有符号解释（0xFFFE→-2，支持负压）→ 除 10^小数位 →
+        /// 再乘缩放系数。与 Demo 实测一致；小数位固定用配置（不读设备 0x0002）。
+        /// 【血泪】V1.16.1 曾因小数位取错把压力显示错 10 倍，本函数把换算锁成用例，
+        /// 以后谁动换算必须先过用例。
+        /// </summary>
+        /// <param name="rawSigned">寄存器原始值（已按有符号 short 解释）</param>
+        /// <param name="decimalPlaces">小数位数（配置 BarometerDefaultDecimalPlaces）</param>
+        /// <param name="scale">压力缩放系数（配置 BarometerPressureScale）</param>
+        /// <returns>压力值（kPa）</returns>
+        public static decimal ConvertRawToPressureKPa(short rawSigned, int decimalPlaces, decimal scale)
+        {
+            decimal pressureKPa = rawSigned / (decimal)Math.Pow(10, decimalPlaces);
+            return pressureKPa * scale;
+        }
+
+        /// <summary>
+        /// 阈值浮点 → 寄存器整数值（纯函数，【V1.62 新增】回归可直接断言）。
+        ///
+        /// 【换算口径】round(阈值 × 10^小数位)，与 Demo 一致；负值调用方按补码写入
+        /// （设备按有符号 short 解释）。short 越界检查留在使用方（SetThreshold），
+        /// 本函数只做数学换算不做决策。
+        /// </summary>
+        /// <param name="thresholdValue">设备单位阈值（如 -5.0）</param>
+        /// <param name="decimalPlaces">小数位数（配置 BarometerDefaultDecimalPlaces）</param>
+        /// <returns>寄存器整数值（调用方转 ushort 写设备前需判 short 范围）</returns>
+        public static long ConvertThresholdToRegister(decimal thresholdValue, int decimalPlaces)
+        {
+            int multiplier = (int)Math.Pow(10, decimalPlaces);
+            return (long)Math.Round(thresholdValue * multiplier);
+        }
+
+        /// <summary>
         /// 写入单台气压表的设备阈值（Holding Register 0x0010，功能码 0x06）
         ///
         /// 【与 Demo 保持一致】ModbusRtuBarometerTest 的 SetThreshold 逻辑：
@@ -521,10 +556,9 @@ namespace AgingTestSystem.Services
                     // 会算出错误寄存器值（-5 → 仪表显示 -0.5）。与 Demo 硬编码 1 位小数保持一致。
                     int decimalPos = _config.BarometerDefaultDecimalPlaces;
 
-                    // 阈值 → 寄存器值：round(阈值 × 10^小数位)
+                    // 阈值 → 寄存器值：round(阈值 × 10^小数位，纯函数 ConvertThresholdToRegister）
                     // 有符号 short 范围为 -32768~32767；越界说明单位/位数配错，提醒后返回 false
-                    int multiplier = (int)Math.Pow(10, decimalPos);
-                    long scaled = (long)Math.Round(thresholdValue * multiplier);
+                    long scaled = ConvertThresholdToRegister(thresholdValue, decimalPos);
                     if (scaled < short.MinValue || scaled > short.MaxValue)
                     {
                         OnError?.Invoke(this, $"设备{deviceId}阈值 {thresholdValue}×10^{decimalPos}={scaled} 超出寄存器范围，请确认单位/小数位");
@@ -599,12 +633,10 @@ namespace AgingTestSystem.Services
 
         private bool IsAlarm(decimal pressureKPa)
         {
-            if (_config.AlarmWhenPressureHigherThanThreshold)
-            {
-                return pressureKPa > _config.AlarmPressureThresholdKPa;
-            }
-
-            return pressureKPa < _config.AlarmPressureThresholdKPa;
+            // 【V1.62】判定口径收拢进 AgingSequencer.IsPressureOutOfRange，
+            // 本方法只剩"取配置阈值与方向后转调"（行为与原来逐字一致）。
+            return AgingSequencer.IsPressureOutOfRange(
+                pressureKPa, _config.AlarmPressureThresholdKPa, _config.AlarmWhenPressureHigherThanThreshold);
         }
 
         private Parity ParseParity(string parity)

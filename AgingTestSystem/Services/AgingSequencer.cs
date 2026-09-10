@@ -23,6 +23,32 @@ namespace AgingTestSystem.Services
     public static class AgingSequencer
     {
         /// <summary>
+        /// 压力是否越限（【V1.62 新增】纯函数，回归可直接断言）。
+        ///
+        /// 【判定规则】（单位 kPa，与气压表读数一致）
+        /// - alarmWhenHigher=true（默认）：压力 > 阈值 → 越限（真空变差：负数变"大"）；
+        /// - false：压力 &lt; 阈值 → 越限（扩展方向）。
+        /// - 压力恰等于阈值 → 不越限（边界语义，两边一致）。
+        ///
+        /// 【为什么收拢到这里】原来 DeviceManager.PressureOutOfRange 与
+        /// ModbusRtuBarometerReader.IsAlarm 各写了一份相同的 if/else，
+        /// 两处一旦改了一处没改另一处就是灾难。现在两处都转调本函数，
+        /// 判定口径只有一份（本项目"判定类逻辑写纯函数"的家规，见 AGENTS.md）。
+        /// </summary>
+        /// <param name="pressureKPa">当前真空压力（kPa）</param>
+        /// <param name="thresholdKPa">有效阈值（kPa，配方优先、全局兜底由调用方定）</param>
+        /// <param name="alarmWhenHigher">报警方向（对应配置 AlarmWhenPressureHigherThanThreshold）</param>
+        /// <returns>true=越限（应报警），false=正常</returns>
+        public static bool IsPressureOutOfRange(decimal pressureKPa, decimal thresholdKPa, bool alarmWhenHigher)
+        {
+            if (alarmWhenHigher)
+            {
+                return pressureKPa > thresholdKPa;
+            }
+            return pressureKPa < thresholdKPa;
+        }
+
+        /// <summary>
         /// 抽真空阶段判定：当前是否满足"上电进入老化计时"的条件
         /// </summary>
         /// <param name="pressureInRange">真空压力是否已到位（≤ 该台有效阈值）</param>
