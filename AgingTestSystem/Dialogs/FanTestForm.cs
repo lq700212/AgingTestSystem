@@ -246,13 +246,18 @@ namespace AgingTestSystem.Dialogs
             lblHumSet.Text = $"{d.HumSetpoint:F2} %RH";
         }
 
-        /// <summary>运行状态枚举 → 中文显示文本</summary>
+        /// <summary>
+        /// 运行状态枚举 → 中文显示文本
+        /// 【V1.63】与主窗体口径对齐：ProgramRunning 显示"程式运行中"
+        /// （原来本窗叫"程式启动"，两窗对不上）；未知态保持 "--" 不动
+        /// （主窗把未知显示成"已连接"偏 misleading，测试窗诚实一点）。
+        /// </summary>
         private static string GetStateText(FanRunState state)
         {
             switch (state)
             {
                 case FanRunState.ProgramStopped: return "程式停止";
-                case FanRunState.ProgramRunning: return "程式启动";
+                case FanRunState.ProgramRunning: return "程式运行中";
                 case FanRunState.FixedValueStopped: return "定值停止";
                 case FanRunState.FixedValueRunning: return "定值启动";
                 default: return "--";

@@ -1952,7 +1952,7 @@ namespace AgingTestSystem.Tests
             }
             finally { rmForm.Dispose(); }
 
-            // —— 工位窗温度解析（实例方法读文本框，构造传 null 设备管理器可测） ——
+            // —— 工位窗温度读取（V1.63 文本框改数字框：恒合法+范围断言） ——
             StationSettingsForm stForm = null;
             try { stForm = new StationSettingsForm(null, new DeviceConfig(), new List<RecipeConfig>(), 1); }
             catch { }
@@ -1961,21 +1961,33 @@ namespace AgingTestSystem.Tests
             {
                 try
                 {
-                    var txtTemp = typeof(StationSettingsForm).GetField("txtTemp",
-                        BindingFlags.NonPublic | BindingFlags.Instance).GetValue(stForm) as TextBox;
+                    var nudTemp = typeof(StationSettingsForm).GetField("nudTemp",
+                        BindingFlags.NonPublic | BindingFlags.Instance).GetValue(stForm) as NumericUpDown;
                     var parseTemp = typeof(StationSettingsForm).GetMethod("ParseTemperature",
                         BindingFlags.NonPublic | BindingFlags.Instance);
-                    Check("反射拿到温度框与解析", txtTemp != null && parseTemp != null);
-                    if (txtTemp != null && parseTemp != null)
+                    Check("反射拿到温度框与解析", nudTemp != null && parseTemp != null);
+                    if (nudTemp != null && parseTemp != null)
                     {
-                        Func<string, decimal> pt = v =>
+                        Check("数字框口径1位小数/0~300",
+                            nudTemp.DecimalPlaces == 1 && nudTemp.Minimum == 0m && nudTemp.Maximum == 300m);
+                        nudTemp.Value = 37.5m;
+                        Check("温度37.5直读",
+                            (decimal)parseTemp.Invoke(stForm, null) == 37.5m);
+                        nudTemp.Value = 0m;
+                        Check("温度0直读", (decimal)parseTemp.Invoke(stForm, null) == 0m);
+                        // 非法输入进不来（数字框天然保证）：回填钳制走同一套 Min/Max，
+                        // 用配方回填路径验证超界钳制
+                        var onSel = typeof(StationSettingsForm).GetMethod("OnRecipeSelected",
+                            BindingFlags.NonPublic | BindingFlags.Instance);
+                        onSel.Invoke(stForm, new object[]
                         {
-                            txtTemp.Text = v;
-                            return (decimal)parseTemp.Invoke(stForm, null);
-                        };
-                        Check("温度37.5", pt("37.5") == 37.5m);
-                        Check("非法温度→0", pt("abc") == 0m);
-                        Check("空温度→0", pt("") == 0m);
+                            new RecipeConfig
+                            {
+                                Name = "T", DelayTime = TimeSpan.Zero, StartTime = TimeSpan.Zero,
+                                LimitTemperature = 9999m
+                            }
+                        });
+                        Check("配方回填超界钳300", nudTemp.Value == 300m);
                     }
                 }
                 finally { stForm.Dispose(); }
@@ -2052,8 +2064,8 @@ namespace AgingTestSystem.Tests
             var gst = typeof(FanTestForm).GetMethod("GetStateText",
                 BindingFlags.NonPublic | BindingFlags.Static);
             Func<FanRunState, string> stx = v => (string)gst.Invoke(null, new object[] { v });
-            Check("四态中文", stx(FanRunState.ProgramStopped) == "程式停止"
-                && stx(FanRunState.ProgramRunning) == "程式启动"
+            Check("四态中文(V1.63与主窗对齐)", stx(FanRunState.ProgramStopped) == "程式停止"
+                && stx(FanRunState.ProgramRunning) == "程式运行中"
                 && stx(FanRunState.FixedValueStopped) == "定值停止"
                 && stx(FanRunState.FixedValueRunning) == "定值启动");
             Check("未知态→--", stx(FanRunState.Unknown) == "--"
@@ -2074,6 +2086,23 @@ namespace AgingTestSystem.Tests
                 && !SerialPortHelper.IsCh340Device("USB-SERIAL CH340 (COM3)", null)
                 && !SerialPortHelper.IsCh340Device("", ""));
             Check("系统串口列表非null", SerialPortHelper.GetAllPortNames() != null);
+
+            // —— 串口参数钳制（V1.63：主窗加载时调，防手改配置配出"连不上"误导） ——
+            Check("数据位5~8放行",
+                SerialPortHelper.ClampDataBits(5) == 5 && SerialPortHelper.ClampDataBits(8) == 8);
+            Check("数据位9/4/0/负数回退8",
+                SerialPortHelper.ClampDataBits(9) == 8 && SerialPortHelper.ClampDataBits(4) == 8
+                && SerialPortHelper.ClampDataBits(0) == 8 && SerialPortHelper.ClampDataBits(-1) == 8);
+            Check("波特率正数放行",
+                SerialPortHelper.ClampBaudRate(19200, 19200) == 19200
+                && SerialPortHelper.ClampBaudRate(999999, 19200) == 999999);
+            Check("波特率0/负数回退",
+                SerialPortHelper.ClampBaudRate(0, 19200) == 19200
+                && SerialPortHelper.ClampBaudRate(-1, 115200) == 115200);
+            Check("超时正数放行", SerialPortHelper.ClampTimeoutMs(1000, 1000) == 1000);
+            Check("超时0/负数回退",
+                SerialPortHelper.ClampTimeoutMs(0, 1000) == 1000
+                && SerialPortHelper.ClampTimeoutMs(-5, 3000) == 3000);
         }
 
         // =====================================================================

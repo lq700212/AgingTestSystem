@@ -101,6 +101,50 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
+        /// 钳制数据位到串口合法范围（纯函数，回归可直接断言）。
+        ///
+        /// 【为什么需要】System.IO.Ports.SerialPort 的 DataBits 只认 5~8，
+        /// 配成 9/4/0 会在 Connect 打开串口时抛异常，被上层的 try/catch 吃掉后
+        /// 表现成"连不上"，操作员会按串口故障去查线，排查方向全错。
+        /// 设置窗下拉造不出非法值，但管理员手改 exe.config 能绕过一切校验，
+        /// 所以主窗体加载配置时调本函数钳制 + 记警告日志（见 MainForm.LoadConfig）。
+        /// </summary>
+        /// <param name="value">配置里的原始值</param>
+        /// <returns>5~8 原样返回，否则回退 8</returns>
+        public static int ClampDataBits(int value)
+        {
+            if (value < 5 || value > 8) return 8;
+            return value;
+        }
+
+        /// <summary>
+        /// 钳制波特率为正数（纯函数，回归可直接断言）。
+        /// 0/负数会让 SerialPort 赋值时直接抛异常（同样被吃成"连不上"），回退调用方给的默认值。
+        /// 上限不卡：非常见档位也可能是真设备，留给驱动在 Open 时报错（错误信息明确）。
+        /// </summary>
+        /// <param name="value">配置里的原始值</param>
+        /// <param name="fallback">非法时的回退值（调用方传对应配置项的默认值）</param>
+        /// <returns>大于 0 原样返回，否则回退</returns>
+        public static int ClampBaudRate(int value, int fallback)
+        {
+            if (value <= 0) return fallback;
+            return value;
+        }
+
+        /// <summary>
+        /// 钳制串口超时为正数（纯函数，回归可直接断言）。
+        /// 0/负数超时语义不明（各驱动行为不一），统一回退默认值并记警告。
+        /// </summary>
+        /// <param name="value">配置里的原始值（毫秒）</param>
+        /// <param name="fallback">非法时的回退值（调用方传对应配置项的默认值）</param>
+        /// <returns>大于 0 原样返回，否则回退</returns>
+        public static int ClampTimeoutMs(int value, int fallback)
+        {
+            if (value <= 0) return fallback;
+            return value;
+        }
+
+        /// <summary>
         /// 获取当前系统所有已存在的串口名称（如 COM1、COM3 ...）
         /// 用于"判断配置里的固定端口是否存在"和"CH340 识别失败时的兜底"。
         /// </summary>

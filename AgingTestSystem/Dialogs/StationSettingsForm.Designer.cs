@@ -70,7 +70,7 @@ namespace AgingTestSystem.Dialogs
             this.lblStartColon2 = new System.Windows.Forms.Label();
             this.nudStartSeconds = new System.Windows.Forms.NumericUpDown();
             this.lblTemp = new System.Windows.Forms.Label();
-            this.txtTemp = new System.Windows.Forms.TextBox();
+            this.nudTemp = new System.Windows.Forms.NumericUpDown();
             this.btnBreakVacuum = new System.Windows.Forms.Button();
             this.btnPowerOff = new System.Windows.Forms.Button();
             this.btnSave = new System.Windows.Forms.Button();
@@ -82,6 +82,7 @@ namespace AgingTestSystem.Dialogs
             ((System.ComponentModel.ISupportInitialize)(this.nudStartHours)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudStartMinutes)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudStartSeconds)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudTemp)).BeginInit();
             this.SuspendLayout();
             //
             // lblState - "状态"设置项名称（左对齐，V1.18 只显示"状态"两字）
@@ -275,12 +276,22 @@ namespace AgingTestSystem.Dialogs
             this.lblTemp.TabIndex = 10;
             this.lblTemp.Text = "极限温度:";
             //
-            // txtTemp - 极限温度输入框
+            // nudTemp - 极限温度输入框（【V1.63】TextBox 改 NumericUpDown：
+            // 与配方管理窗 nudLimitTemp 对齐：1 位小数/步进 0.5/范围 0~300，
+            // 非法输入根本进不来，V1.62 的"非法存 0"问题从输入端消除）
             //
-            this.txtTemp.Location = new System.Drawing.Point(150, 215);
-            this.txtTemp.Name = "txtTemp";
-            this.txtTemp.Size = new System.Drawing.Size(180, 21);
-            this.txtTemp.TabIndex = 11;
+            this.nudTemp.DecimalPlaces = 1;
+            this.nudTemp.Increment = 0.5M;
+            this.nudTemp.Location = new System.Drawing.Point(150, 215);
+            this.nudTemp.Maximum = new decimal(new int[] {
+            300,
+            0,
+            0,
+            0});
+            this.nudTemp.Name = "nudTemp";
+            this.nudTemp.Size = new System.Drawing.Size(180, 21);
+            this.nudTemp.TabIndex = 11;
+            this.nudTemp.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             //
             // btnBreakVacuum - 破空按钮（功能待确认）
             //
@@ -352,7 +363,7 @@ namespace AgingTestSystem.Dialogs
             this.Controls.Add(this.btnSave);
             this.Controls.Add(this.btnPowerOff);
             this.Controls.Add(this.btnBreakVacuum);
-            this.Controls.Add(this.txtTemp);
+            this.Controls.Add(this.nudTemp);
             this.Controls.Add(this.lblTemp);
             this.Controls.Add(this.nudStartSeconds);
             this.Controls.Add(this.lblStartColon2);
@@ -385,6 +396,7 @@ namespace AgingTestSystem.Dialogs
             ((System.ComponentModel.ISupportInitialize)(this.nudStartHours)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudStartMinutes)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudStartSeconds)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudTemp)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
         }
@@ -430,8 +442,8 @@ namespace AgingTestSystem.Dialogs
         private System.Windows.Forms.NumericUpDown nudStartSeconds;
         /// <summary>"极限温度"设置项名称标签</summary>
         private System.Windows.Forms.Label lblTemp;
-        /// <summary>极限温度输入框</summary>
-        private System.Windows.Forms.TextBox txtTemp;
+        /// <summary>极限温度输入（NumericUpDown，V1.63 由 TextBox 改，与配方管理窗对齐）</summary>
+        private System.Windows.Forms.NumericUpDown nudTemp;
         /// <summary>破空按钮（功能待确认）</summary>
         private System.Windows.Forms.Button btnBreakVacuum;
         /// <summary>下电按钮（功能待确认）</summary>
