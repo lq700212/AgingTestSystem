@@ -539,6 +539,10 @@ namespace AgingTestSystem.Tests
             Check("null→空列表", DeviceConfig.ParseFanIpCandidates(null).Count == 0);
             Check("空串→空列表", DeviceConfig.ParseFanIpCandidates("").Count == 0);
             Check("纯标点空白→空列表", DeviceConfig.ParseFanIpCandidates("  , ， ").Count == 0);
+
+            // V1.61：负压阈值默认 -5kPa（公共参数窗 nudThreshold 默认值与之对齐）
+            Check("报警压力阈值默认 -5kPa", new DeviceConfig().AlarmPressureThresholdKPa == -5m);
+            Check("报警方向默认高于阈值报警", new DeviceConfig().AlarmWhenPressureHigherThanThreshold == true);
         }
 
         // =====================================================================
@@ -994,7 +998,7 @@ namespace AgingTestSystem.Tests
                     {
                         DeviceId = 3,
                         SerialNumber = "SN-A001",
-                        RecipeName = "配方X,-95kPa",
+                        RecipeName = "配方X,-5kPa",
                         DurationSeconds = 7200,
                         DelaySeconds = 90,
                         AlarmThresholdKPa = -88.5m
@@ -1015,7 +1019,7 @@ namespace AgingTestSystem.Tests
                 {
                     var a = loaded.Stations[0];
                     Check("工位参数往返一致(Id/SN/配方)",
-                        a.DeviceId == 3 && a.SerialNumber == "SN-A001" && a.RecipeName == "配方X,-95kPa");
+                        a.DeviceId == 3 && a.SerialNumber == "SN-A001" && a.RecipeName == "配方X,-5kPa");
                     Check("定格参数往返一致(时长/延时/阈值)",
                         a.DurationSeconds == 7200 && a.DelaySeconds == 90 && a.AlarmThresholdKPa == -88.5m);
                     Check("最小字段工位反序列化不抛(DeviceId=44)", loaded.Stations[1].DeviceId == 44);

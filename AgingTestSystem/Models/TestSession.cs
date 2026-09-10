@@ -66,7 +66,7 @@ namespace AgingTestSystem.Models
         public int DelaySeconds { get; set; }
 
         /// <summary>
-        /// 本次的真空到位判定/报警阈值（kPa，负值如 -95）。
+        /// 本次的真空到位判定/报警阈值（kPa，负值如 -5）。
         /// 配方负压值优先，未配置回退全局 AlarmPressureThresholdKPa。
         /// </summary>
         public decimal AlarmThresholdKPa { get; set; }

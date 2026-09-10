@@ -279,7 +279,7 @@ namespace AgingTestSystem.Dialogs
             { "BarometerPressureScale", "压力缩放系数（读数 × 该值）" },
 
             // ===== 报警参数 =====
-            { "AlarmPressureThresholdKPa", "报警压力阈值（kPa，如 -95）" },
+            { "AlarmPressureThresholdKPa", "报警压力阈值（kPa，如 -5）" },
             { "AlarmWhenPressureHigherThanThreshold", "报警方向（true=压力高于阈值时报警）" },
 
             // ===== 冷却送风机 =====

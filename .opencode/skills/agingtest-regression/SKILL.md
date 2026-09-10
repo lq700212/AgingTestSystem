@@ -41,7 +41,7 @@ agingtest-regression/
     └── TestRunner.cs         ← 全部测试用例源码（加用例就改这里）
 ```
 
-## 三、测试覆盖范围（16 个模块，353+ 断言）
+## 三、测试覆盖范围（16 个模块，355+ 断言）
 
 | 模块 | 覆盖点 |
 | --- | --- |
@@ -49,7 +49,7 @@ agingtest-regression/
 | UserManager | 默认账号、登录边界（空值/Trim/大小写/角色错配）、AddAccount 唯一性与保底、RemoveAccount 保护、改密链路、HasPermission 权限矩阵、记住登录往返、Users.json 损坏回退重建、缺角色自动补齐、手改双管理员防呆 |
 | SettingsForm.Normalize | StopBits(1/15/2) 与 Parity(None/Odd/Even/Mark/Space) 归一映射（反射调私有静态方法），含中文/缩写/非法值兜底 |
 | IoOutputChannelRemap | 多组解析、中英文分号、0X 大小写、脏项跳过汇总 error、源=目标、通道越界、缺前缀 |
-| DeviceConfig.ParseFanIpCandidates | 中英文分隔符、非法过滤、去重保序、IPv6、空输入族 |
+| DeviceConfig.ParseFanIpCandidates | 中英文分隔符、非法过滤、去重保序、IPv6、空输入族、报警压力阈值默认 -5kPa(V1.61) |
 | RecipeStorage | Load/Save 往返全字段、损坏 json 返 null、空数组、SaveWithDuplicateCheck 新增分支 |
 | TestEventLogger | CsvEscape 转义（逗号/引号翻倍/换行）、表头、落盘字段格式 |
 | AppLogFileWriter | UTF-8 追加、空串忽略、8 线程×5 行并发一条不少（lock 生效） |

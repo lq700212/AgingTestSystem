@@ -369,7 +369,7 @@ namespace AgingTestSystem.Services
                 //    - 【V1.16.1 修复】小数位固定用配置默认值（BarometerDefaultDecimalPlaces=1），
                 //      不再读设备 0x0002 —— 现场实测该寄存器不可靠（72 台中 46 台返回 0，
                 //      但仪表实际按 1 位小数显示），按 0 位小数换算会把压力显示错 10 倍
-                //      （如仪表显示 -95.0 = 寄存器 -950，程序会显示 -950）。
+                //      （如仪表显示 -5.0 = 寄存器 -50，程序会显示 -50）。
                 //      与阈值写入（SetThreshold）保持同一套固定小数位，和仪表显示完全一致。
                 //    - 实际压力 = 有符号原始值 / 10^小数位，再乘以可选缩放系数 BarometerPressureScale
                 short rawSigned = (short)registers[0];
@@ -488,15 +488,15 @@ namespace AgingTestSystem.Services
         ///
         /// 【V1.16.1 修复：为什么小数位固定、不再读设备 0x0002】
         /// 现场实测：0x0002 寄存器不可靠（很多台返回 0，但仪表实际按 1 位小数显示）。
-        /// 原来按设备返回值换算，对返回 0 的台把 -95 写成寄存器 -95（应为 -950），
-        /// 仪表显示就成了 -9.5（差 10 倍）。Demo 注释也注明"0x0002 可能无效"，
+        /// 原来按设备返回值换算，对返回 0 的台把 -5 写成寄存器 -5（应为 -50），
+        /// 仪表显示就成了 -0.5（差 10 倍）。Demo 注释也注明"0x0002 可能无效"，
         /// 所以 Demo 写阈值一直硬编码 1 位小数 —— 这里改为与 Demo 一致。
         ///
         /// 【单位提醒】thresholdValue 是"设备单位"（与压力读数同单位同小数位），
         /// 不是软件报警阈值 AlarmPressureThresholdKPa（kPa）。写前务必确认设备单位。
         /// </summary>
         /// <param name="deviceId">气压表编号（1~TotalBarometers）</param>
-        /// <param name="thresholdValue">设备单位阈值（如 -95.0）</param>
+        /// <param name="thresholdValue">设备单位阈值（如 -5.0）</param>
         /// <returns>是否写入成功；设备不响应 / 超时返回 false（不抛异常）</returns>
         public bool SetThreshold(int deviceId, decimal thresholdValue)
         {
@@ -518,7 +518,7 @@ namespace AgingTestSystem.Services
                 {
                     // 【V1.16.1 修复】小数位固定用配置默认值（BarometerDefaultDecimalPlaces=1），
                     // 不再读设备 0x0002 —— 该寄存器现场实测不可靠（很多台返回 0，仪表实际是 1 位小数），
-                    // 会算出错误寄存器值（-95 → 仪表显示 -9.5）。与 Demo 硬编码 1 位小数保持一致。
+                    // 会算出错误寄存器值（-5 → 仪表显示 -0.5）。与 Demo 硬编码 1 位小数保持一致。
                     int decimalPos = _config.BarometerDefaultDecimalPlaces;
 
                     // 阈值 → 寄存器值：round(阈值 × 10^小数位)

@@ -94,7 +94,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 ```
 [准备] 录入批号 → 绑定工位↔SN → 设配方（延时开启/启动时间/负压值随配方生效）
 [启动] 只开真空阀 + 送风机定值启动；任务参数(时长/延时/阈值)此刻定格
-[抽真空] 等「真空到位」且「距开阀≥配方延时开启」两者满足（判定阈值=配方负压值优先，全局-95kPa兜底；
+[抽真空] 等「真空到位」且「距开阀≥配方延时开启」两者满足（判定阈值=配方负压值优先，全局-5kPa兜底；
          VacuumConfirmTimeoutMs 默认15s 内始终不到位→真空建立失败报警：关阀断电标故障，全程不带电）
 [上电] 条件满足自动载台上电 → 进入老化计时
 [老化] 计时时长=配方"启动时间"(>0)，否则回退 MaxTestDurationSeconds(0=不限时长手动停)
@@ -106,7 +106,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 ```
 
 ### 4.2 报警来源（DeviceManager.IsAlarm）
-1. **压力越限**：真空压力 > `AlarmPressureThresholdKPa`（默认 -95kPa，即真空变差）
+1. **压力越限**：真空压力 > `AlarmPressureThresholdKPa`（默认 -5kPa，即真空变差）
 2. **真空建立超时**：开阀后 15s 压力未进正常区间
 3. **通讯失联**：某台连续读取失败 ≥ `CommunicationLossAlarmCount` 次
 4. **DI 报警触点**（可选）：`UseDiAlarmContact=true` 时启用，默认关
@@ -151,7 +151,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `BarometerPressureRegisterAddress` | 0x0001 | 压力寄存器（0x0002 为小数位，实测不可靠不再使用） |
 | `BarometerDefaultDecimalPlaces` | 1 | 小数位（压力读取与阈值写入统一用，换气压表改这里） |
 | `BarometerPressureScale` | 1 | 压力额外缩放 |
-| `AlarmPressureThresholdKPa` / `AlarmWhenPressureHigherThanThreshold` | -95 / true | 软件报警阈值(不是设备阈值) |
+| `AlarmPressureThresholdKPa` / `AlarmWhenPressureHigherThanThreshold` | -5 / true | 软件报警阈值(不是设备阈值) |
 | `PlcAddress` / `PlcPort` | 192.168.1.20 / 502 | IO 耦合器 |
 | `FanEnabled` / `FanIpAddress` / `FanPort` | true / 192.168.1.220 / 50000 | 送风机（可选设备，连不上不影响启动） |
 | `FanAutoDetectEnabled` / `FanIpCandidates` | true / .220,.221,.222 | 送风机 IP 自动识别 |

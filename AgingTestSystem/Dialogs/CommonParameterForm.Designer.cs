@@ -5,7 +5,7 @@ namespace AgingTestSystem.Dialogs
     ///
     /// 【界面布局】（所有控件居中显示）
     /// ┌───────────────────────────────┐
-    /// │  负压值设定(kPa)：[  -95.0  ]  │ ← Label + 数值框（支持正负数，水平居中成一组）
+    /// │  负压值设定(kPa)：[  -5.0  ]  │ ← Label + 数值框（支持正负数，水平居中成一组）
     /// │         [  保存设置   ]         │ ← 保存按钮（水平居中）
     /// └───────────────────────────────┘
     /// 说明：控件在 InitializeComponent 里按固定位置摆放，
@@ -53,7 +53,7 @@ namespace AgingTestSystem.Dialogs
             this.nudThreshold.Name = "nudThreshold";
             this.nudThreshold.Size = new System.Drawing.Size(91, 21);
             this.nudThreshold.TabIndex = 3;
-            this.nudThreshold.Value = -95m;
+            this.nudThreshold.Value = -5m;
             // 
             // btnSave
             // 
