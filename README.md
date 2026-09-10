@@ -237,8 +237,8 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 ## 10. 待完善项
 
-- ID 绑定数据持久化、批号关联生产记录
-- 工位设置窗口"破空"按钮业务待确认（下电/保存/加入对列已实现，V1.26）
+- 批号持久化 + 批号关联生产记录（工位级 SN/配方/延时已有 `StationSettingsCache` 缓存，`InputLotForm` 批号仅事件传递未落盘）
+- 工位设置窗口"破空"按钮业务待确认（下电/保存/加入对列已实现，V1.26；破空是否恢复为"装夹预吸附"入口待 G2 现场确认，见预研 Plan §3 G2）
 
 > 已完成的历史待办：用户密码明文→PBKDF2 哈希（V1.58.22，见 `Services/PasswordHasher.cs`）；
 > 界面 LOG 文本框→落盘 AppLog_yyyyMMdd.log（V1.58.21，见 `Services/AppLogFileWriter.cs`）。
