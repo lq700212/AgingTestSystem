@@ -516,12 +516,28 @@ namespace AgingTestSystem.Views
 
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["BaudRate"], out int baudRate))
             {
-                config.BaudRate = baudRate;
+                // 【V1.63】手改配置可能写出 0/负数（设置窗下拉造不出来，但记事本手改能绕过校验）：
+                // SerialPort 赋值时直接抛异常，被 Connect 的 try/catch 吃成"连不上"，排查方向误导。
+                // 这里钳制 + 记警告，非法值启动日志里一眼可见（与下方 TotalInputs 纠错同模式）。
+                int clampedBaud = SerialPortHelper.ClampBaudRate(baudRate, config.BaudRate);
+                if (clampedBaud != baudRate)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"配置警告: BaudRate({baudRate}) 非法，已回退 {clampedBaud}");
+                }
+                config.BaudRate = clampedBaud;
             }
 
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["DataBits"], out int dataBits))
             {
-                config.DataBits = dataBits;
+                // 【V1.63】DataBits 只认 5~8（同上，非法配了就是"连不上"误导）。
+                int clampedBits = SerialPortHelper.ClampDataBits(dataBits);
+                if (clampedBits != dataBits)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"配置警告: DataBits({dataBits}) 非法，已回退 {clampedBits}");
+                }
+                config.DataBits = clampedBits;
             }
 
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["StopBits"], out int stopBits))
@@ -542,12 +558,25 @@ namespace AgingTestSystem.Views
 
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["SerialReadTimeoutMs"], out int serialReadTimeoutMs))
             {
-                config.SerialReadTimeoutMs = serialReadTimeoutMs;
+                // 【V1.63】超时必须为正数（同上，非法配了也是"连不上"误导）。
+                int clampedReadTimeout = SerialPortHelper.ClampTimeoutMs(serialReadTimeoutMs, config.SerialReadTimeoutMs);
+                if (clampedReadTimeout != serialReadTimeoutMs)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"配置警告: SerialReadTimeoutMs({serialReadTimeoutMs}) 非法，已回退 {clampedReadTimeout}");
+                }
+                config.SerialReadTimeoutMs = clampedReadTimeout;
             }
 
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["SerialWriteTimeoutMs"], out int serialWriteTimeoutMs))
             {
-                config.SerialWriteTimeoutMs = serialWriteTimeoutMs;
+                int clampedWriteTimeout = SerialPortHelper.ClampTimeoutMs(serialWriteTimeoutMs, config.SerialWriteTimeoutMs);
+                if (clampedWriteTimeout != serialWriteTimeoutMs)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"配置警告: SerialWriteTimeoutMs({serialWriteTimeoutMs}) 非法，已回退 {clampedWriteTimeout}");
+                }
+                config.SerialWriteTimeoutMs = clampedWriteTimeout;
             }
 
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["TcpSendTimeoutMs"], out int tcpSendTimeoutMs))
@@ -713,12 +742,25 @@ namespace AgingTestSystem.Views
 
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["ScannerBaudRate"], out int scannerBaudRate))
             {
-                config.ScannerBaudRate = scannerBaudRate;
+                // 【V1.63】扫码枪串口同气压表串口：非法值钳制 + 记警告（回退 115200）。
+                int clampedScannerBaud = SerialPortHelper.ClampBaudRate(scannerBaudRate, config.ScannerBaudRate);
+                if (clampedScannerBaud != scannerBaudRate)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"配置警告: ScannerBaudRate({scannerBaudRate}) 非法，已回退 {clampedScannerBaud}");
+                }
+                config.ScannerBaudRate = clampedScannerBaud;
             }
 
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["ScannerDataBits"], out int scannerDataBits))
             {
-                config.ScannerDataBits = scannerDataBits;
+                int clampedScannerBits = SerialPortHelper.ClampDataBits(scannerDataBits);
+                if (clampedScannerBits != scannerDataBits)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"配置警告: ScannerDataBits({scannerDataBits}) 非法，已回退 {clampedScannerBits}");
+                }
+                config.ScannerDataBits = clampedScannerBits;
             }
 
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["ScannerStopBits"], out int scannerStopBits))

@@ -124,8 +124,9 @@ namespace AgingTestSystem.Dialogs
             nudStartSeconds.Value = Math.Max(nudStartSeconds.Minimum,
                 Math.Min(nudStartSeconds.Maximum, (decimal)recipe.StartTime.Seconds));
 
-            // 回填极限温度
-            txtTemp.Text = recipe.LimitTemperature.ToString("0.#");
+            // 回填极限温度（超出 NumericUpDown 范围时钳制到边界，与配方管理窗一致）
+            nudTemp.Value = Math.Max(nudTemp.Minimum,
+                Math.Min(nudTemp.Maximum, recipe.LimitTemperature));
         }
 
         /// <summary>
@@ -156,7 +157,8 @@ namespace AgingTestSystem.Dialogs
                 txtRecipe.Text = cached.RecipeName;
                 SetTimeInputs(nudDelayHours, nudDelayMinutes, nudDelaySeconds, cached.DelayTime);
                 SetTimeInputs(nudStartHours, nudStartMinutes, nudStartSeconds, cached.StartTime);
-                txtTemp.Text = cached.LimitTemperature.ToString("0.#");
+                nudTemp.Value = Math.Max(nudTemp.Minimum,
+                    Math.Min(nudTemp.Maximum, cached.LimitTemperature));
                 return;
             }
 
@@ -357,7 +359,7 @@ namespace AgingTestSystem.Dialogs
                 $"配方: {(string.IsNullOrWhiteSpace(txtRecipe.Text) ? "（空）" : txtRecipe.Text.Trim())}\r\n" +
                 $"延时开启: {GetTimeText(delayStart)}\r\n" +
                 $"延时到达: {GetTimeText(delayArrive)}\r\n" +
-                $"极限温度: {(string.IsNullOrWhiteSpace(txtTemp.Text) ? "（空）" : txtTemp.Text.Trim())}°C",
+                $"极限温度: {nudTemp.Value:0.#}°C",
                 $"{actionName}成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
             return true;
@@ -385,16 +387,15 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 解析极限温度输入（非法 / 为空返回 0）
+        /// 读取极限温度输入（【V1.63】txtTemp 文本框改为 nudTemp 数字框后恒合法：
+        /// 控件已限 0~300/1 位小数，非法输入根本进不来，V1.62 的"非法存 0"问题
+        /// 从输入端消除。本方法保留一层薄封装，使 CommitConfig/SaveCurrentRecipe
+        /// 两处调用点不用动）。
         /// </summary>
         /// <returns>极限温度数值（摄氏度）</returns>
         private decimal ParseTemperature()
         {
-            if (decimal.TryParse(txtTemp.Text.Trim(), out decimal temp))
-            {
-                return temp;
-            }
-            return 0m;
+            return nudTemp.Value;
         }
 
         /// <summary>
