@@ -144,7 +144,7 @@ namespace AgingTestSystem.Controls
 
     /// <summary>
     /// 十六进制数字型单元格：进入编辑状态时弹出 NumericUpDown（Hexadecimal=true）微调框，
-    /// 用于 IO 备用通道映射弹窗中"通道号（0x00~0xFF）"的输入。
+    /// 用于 IO 备用通道映射弹窗中"通道号（0x00~0x0F）"的输入。
     /// 非编辑状态显示为两位大写十六进制文本。
     /// </summary>
     public class DataGridViewHexNumericUpDownCell : DataGridViewTextBoxCell

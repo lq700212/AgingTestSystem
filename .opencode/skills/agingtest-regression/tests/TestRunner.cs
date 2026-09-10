@@ -43,6 +43,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using AgingTestSystem.Controls;
 using AgingTestSystem.Dialogs;
 using AgingTestSystem.Models;
 using AgingTestSystem.Services;
@@ -159,7 +160,19 @@ namespace AgingTestSystem.Tests
             Module("TestSessionStore", TestSessionStoreTests);
             Module("AgingBusinessModel", AgingBusinessModelTests);
             Module("ThemeManager", ThemeManagerTests);
+            Module("IoMapBuilder", IoMapBuilderTests);
+            Module("MockDevices", MockDeviceTests);
+            Module("StationCache", StationCacheTests);
+            Module("ModelDefaults", ModelDefaultsTests);
+            Module("SettingsValidate", SettingsValidateTests);
+            Module("ScannerParse", ScannerParseTests);
+            Module("ModbusConvert", ModbusConvertTests);
+            Module("FanParse", FanParseTests);
+            Module("StationTime", StationTimeTests);
+            Module("HistoryCsv", HistoryCsvTests);
+            Module("UiPureHelpers", UiPureHelperTests);
             Module("DeviceManagerIntegration", DeviceManagerIntegrationTests);
+            Module("DeviceManagerExtended", DeviceManagerExtendedTests);
 
             // 统一清理临时目录（尽力而为，删不掉不影响结果）
             foreach (string dir in _tempDirs)
@@ -451,12 +464,14 @@ namespace AgingTestSystem.Tests
 
         // =====================================================================
         // 4. IoOutputChannelRemap.ParseAll —— IO 备用通道映射解析
+        // 【V1.62】通道合法范围收紧为 0x00~0x0F（一个寄存器 16 个 bit；
+        // 0x10+ 在执行侧静默失效，现解析直接拒绝，见 IoOutputChannelRemap 注释）。
         // =====================================================================
         private static void IoRemapTests()
         {
             string err;
 
-            var list = IoOutputChannelRemap.ParseAll("0x2000@0x00->0x2009@0x10;0x2008@0x01->0x2009@0x11", out err);
+            var list = IoOutputChannelRemap.ParseAll("0x2000@0x00->0x2009@0x00;0x2008@0x01->0x2009@0x01", out err);
             Check("两组合法映射解析数量正确", list.Count == 2);
             Check("全合法时 error 为 null", err == null);
             if (list.Count == 2)
@@ -464,30 +479,50 @@ namespace AgingTestSystem.Tests
                 Check("第1组源寄存器=0x2000", list[0].SourceRegister == 0x2000);
                 Check("第1组源通道 0x00→位号0", list[0].SourceChannel == 0);
                 Check("第1组目标寄存器=0x2009", list[0].TargetRegister == 0x2009);
-                Check("第1组目标通道 0x10→位号16", list[0].TargetChannel == 16);
+                Check("第1组目标通道 0x00→位号0", list[0].TargetChannel == 0);
                 Check("第2组源通道 0x01→位号1", list[1].SourceChannel == 1);
-                Check("第2组目标通道 0x11→位号17", list[1].TargetChannel == 17);
+                Check("第2组目标通道 0x01→位号1", list[1].TargetChannel == 1);
             }
 
-            list = IoOutputChannelRemap.ParseAll("0x2000@0x00->0x2009@0x10；0x2008@0x02->0x2009@0x12", out err);
+            list = IoOutputChannelRemap.ParseAll("0x2000@0x0F->0x2009@0x0F", out err);
+            Check("边界 0x0F 合法", list.Count == 1 && err == null);
+
+            list = IoOutputChannelRemap.ParseAll("0x2000@0x00->0x2009@0x00；0x2008@0x02->0x2009@0x02", out err);
             Check("中文分号分隔兼容", list.Count == 2 && err == null);
 
-            list = IoOutputChannelRemap.ParseAll("0X2000@0X00->0X2009@0x10", out err);
+            list = IoOutputChannelRemap.ParseAll("0x2000@0x00→0x2009@0x00", out err);
+            Check("中文箭头分隔兼容", list.Count == 1 && err == null);
+
+            list = IoOutputChannelRemap.ParseAll("0X2000@0X00->0X2009@0x00", out err);
             Check("大写 0X 前缀兼容", list.Count == 1 && err == null);
 
             list = IoOutputChannelRemap.ParseAll("2000@0x00->2009@0x01", out err);
             Check("寄存器不带 0x 前缀仍兼容解析", list.Count == 1 && list[0].SourceRegister == 0x2000);
 
+            list = IoOutputChannelRemap.ParseAll(" 0x2000 @ 0x00 -> 0x2009 @ 0x01 ", out err);
+            Check("端点两侧空格容错", list.Count == 1 && err == null);
+
             // 脏输入：逐项跳过并汇总 error，不影响其它合法项
-            list = IoOutputChannelRemap.ParseAll("0x2000@0x00->0x2009@0x10;bad-item;0x2008@0x01->0x2009@0x11", out err);
+            list = IoOutputChannelRemap.ParseAll("0x2000@0x00->0x2009@0x00;bad-item;0x2008@0x01->0x2009@0x01", out err);
             Check("中间坏项被跳过其余保留", list.Count == 2);
             Check("坏项内容汇总进 error", err != null && err.Contains("bad-item"));
+
+            list = IoOutputChannelRemap.ParseAll("bad1;bad2", out err);
+            Check("多错 error 用中文分号拼接", list.Count == 0 && err != null && err.Contains("；"));
 
             list = IoOutputChannelRemap.ParseAll("0x2000@0x00->0x2000@0x00", out err);
             Check("源与目标相同被忽略并报 error", list.Count == 0 && err != null);
 
+            // V1.62 收紧：0x10+ 一律拒绝（源/目标任一端越界整项丢弃并明示）
+            list = IoOutputChannelRemap.ParseAll("0x2000@0x10->0x2009@0x00", out err);
+            Check("源通道 0x10 越界报错", list.Count == 0 && err != null && err.Contains("0x10"));
+            list = IoOutputChannelRemap.ParseAll("0x2000@0x00->0x2009@0x10", out err);
+            Check("目标通道 0x10 越界报错", list.Count == 0 && err != null && err.Contains("0x10"));
+            list = IoOutputChannelRemap.ParseAll("0x2000@0x1F->0x2009@0x00", out err);
+            Check("源通道 0x1F 越界报错", list.Count == 0 && err != null && err.Contains("0x1F"));
+
             list = IoOutputChannelRemap.ParseAll("0x2000@0x20->0x2009@0x00", out err);
-            Check("通道越界(0x20>0x1F)报错", list.Count == 0 && err != null && err.Contains("0x20"));
+            Check("通道越界(0x20>0x0F)报错", list.Count == 0 && err != null && err.Contains("0x20"));
 
             list = IoOutputChannelRemap.ParseAll("0x2000@5->0x2009@0x01", out err);
             Check("通道缺 0x 前缀报错", list.Count == 0 && err != null);
@@ -508,6 +543,198 @@ namespace AgingTestSystem.Tests
             Check("null→空列表 error=null", list.Count == 0 && err == null);
             list = IoOutputChannelRemap.ParseAll(" ; ； ", out err);
             Check("纯分隔符→空列表 error=null", list.Count == 0 && err == null);
+        }
+
+        // =====================================================================
+        // 4b. IoMapBuilder —— 八进制 IO 映射（V1.62 新增，之前零覆盖）
+        // =====================================================================
+        private static void IoMapBuilderTests()
+        {
+            var cfg = new DeviceConfig { TotalBarometers = 72, TotalInputs = 80, TotalOutputs = 160 };
+            var map = IoMapBuilder.Build(cfg);
+            Check("默认配置总数=80输入+160输出", map.Count == 240);
+
+            // 八进制编址：n=1→X000，n=8→X007，n=9→X010，n=72→X107
+            Check("输入1→X000", map[0].PhysicalAddress == "X000" && map[0].DeviceName == "真空负压表-1");
+            Check("输入8→X007", map[7].PhysicalAddress == "X007");
+            Check("输入9→X010(八进制进位)", map[8].PhysicalAddress == "X010");
+            Check("输入72→X107", map[71].PhysicalAddress == "X107");
+            // 预留输入 73~80 → X110~X117，Function=Unknown
+            Check("预留输入73→X110", map[72].PhysicalAddress == "X110" && map[72].Function == IoFunction.Unknown);
+            Check("预留输入80→X117", map[79].PhysicalAddress == "X117");
+
+            // 真空电磁阀：内部编号=80+n，Y+octal(n-1)
+            Check("电磁阀1编号81→Y000", map[80].IoId == 81 && map[80].PhysicalAddress == "Y000"
+                && map[80].Function == IoFunction.VacuumValve && map[80].Electrical == ElectricalType.PNP);
+            Check("电磁阀72→Y107", map[151].PhysicalAddress == "Y107");
+            // 载台上电：内部编号=80+72+n，Y+octal(72+n-1)：n=1→Y110，n=72→Y217
+            Check("上电1编号153→Y110", map[152].IoId == 153 && map[152].PhysicalAddress == "Y110"
+                && map[152].Function == IoFunction.CarrierPower);
+            Check("上电72→Y217", map[223].PhysicalAddress == "Y217");
+            // 预留输出 145~160 → Y220~Y237
+            Check("预留输出145→Y220", map[224].PhysicalAddress == "Y220" && map[224].Function == IoFunction.Unknown);
+            Check("预留输出160→Y237", map[239].IoId == 240 && map[239].PhysicalAddress == "Y237");
+
+            // 非法配置四抛
+            CheckThrows<ArgumentNullException>("配置null抛", () => IoMapBuilder.Build((DeviceConfig)null));
+            CheckThrows<ArgumentOutOfRangeException>("总数0抛", () => IoMapBuilder.Build(
+                new DeviceConfig { TotalBarometers = 0, TotalInputs = 80, TotalOutputs = 160 }));
+            CheckThrows<ArgumentOutOfRangeException>("输入少于气压表数抛", () => IoMapBuilder.Build(
+                new DeviceConfig { TotalBarometers = 72, TotalInputs = 70, TotalOutputs = 160 }));
+            CheckThrows<ArgumentOutOfRangeException>("输出少于2倍抛", () => IoMapBuilder.Build(
+                new DeviceConfig { TotalBarometers = 72, TotalInputs = 80, TotalOutputs = 140 }));
+
+            // 兼容重载：无预留时总数=3倍数
+            Check("Build(72)总数216无预留", IoMapBuilder.Build(72).Count == 216);
+
+            // GetDeviceMapping 编号公式
+            var m = IoMapBuilder.GetDeviceMapping(1, 72, 80);
+            Check("映射输入IoId=设备号", m.VacuumPressureInput.IoId == 1 && m.VacuumPressureInput.PhysicalAddress == "X000");
+            Check("映射阀IoId=80+号", m.VacuumValveOutput.IoId == 81 && m.VacuumValveOutput.PhysicalAddress == "Y000");
+            Check("映射上电IoId=80+72+号", m.CarrierPowerOutput.IoId == 153 && m.CarrierPowerOutput.PhysicalAddress == "Y110");
+            var m72 = IoMapBuilder.GetDeviceMapping(72, 72, 80);
+            Check("映射72上电→Y217", m72.CarrierPowerOutput.PhysicalAddress == "Y217");
+            CheckThrows<ArgumentOutOfRangeException>("编号0抛", () => IoMapBuilder.GetDeviceMapping(0, 72, 80));
+            CheckThrows<ArgumentOutOfRangeException>("编号超总数抛", () => IoMapBuilder.GetDeviceMapping(73, 72, 80));
+            CheckThrows<ArgumentOutOfRangeException>("总数0抛", () => IoMapBuilder.GetDeviceMapping(1, 0, 80));
+        }
+
+        // =====================================================================
+        // 4c. Mock 三件套自身行为（V1.62 新增：集成地基，Mock 错则集成误报）
+        // =====================================================================
+        private static void MockDeviceTests()
+        {
+            var cfg = new DeviceConfig { TotalBarometers = 4, TotalInputs = 80, TotalOutputs = 160 };
+
+            // ---- MockIoController ----
+            var io = new MockIoController();
+            Check("未连接读输入=false", io.ReadInput(1) == false);
+            Check("未连接批量输入=空数组", io.ReadAllInputs().Length == 0);
+            Check("未连接读输出=false", io.ReadOutput(81) == false);
+            Check("未连接批量输出=空数组", io.ReadAllOutputs().Length == 0);
+            io.WriteOutput(81, true); // 未连接静默不抛
+            Check("Connect(null)拒绝", io.Connect(null) == false && io.IsConnected == false);
+            Check("Connect成功", io.Connect(cfg) == true && io.IsConnected == true);
+            io.WriteOutput(81, true);
+            Check("输出81写读往返", io.ReadOutput(81) == true);
+            io.WriteOutput(81, false);
+            Check("输出81关读回false", io.ReadOutput(81) == false);
+            Check("输出越界读false", io.ReadOutput(80) == false && io.ReadOutput(241) == false);
+            io.WriteOutput(80, true); // 越界静默不抛
+            io.WriteOutputs(null, null); // 空参静默不抛
+            io.WriteOutputs(new[] { 81 }, new[] { true, false }); // 长不等静默不抛
+            Check("批量写读一致", io.ReadOutput(81) == false); // 上一句因长度不等未执行
+            io.WriteOutputs(new[] { 81, 82 }, new[] { true, true });
+            var all = io.ReadAllOutputs();
+            Check("批量输出长度160", all.Length == 160 && all[0] == true && all[1] == true);
+            all[0] = false;
+            Check("批量读返回副本不污染内部", io.ReadOutput(81) == true);
+            Check("输入越界读false", io.ReadInput(0) == false && io.ReadInput(81) == false);
+
+            // ---- MockBarometerReader ----
+            var baro = new MockBarometerReader();
+            Check("未连接读单台=null", baro.ReadData(1) == null);
+            Check("未连接批量=空数组", baro.ReadAllData().Length == 0);
+            Check("未连接写阈值=false", baro.SetThreshold(1, -5m) == false);
+            Check("未连接批量写=空字典", baro.SetAllThresholds(-5m).Count == 0);
+            baro.Connect(cfg);
+            Check("越界0读null", baro.ReadData(0) == null);
+            Check("越界5读null", baro.ReadData(5) == null);
+            var d = baro.ReadData(1);
+            Check("正常读SN/状态/IO列", d != null && d.DeviceId == 1 && d.SerialNumber == "SN0001"
+                && d.Status == DeviceStatus.Idle && d.InputStatus.Length == 1 && d.OutputStatus.Length == 2);
+            var batch = baro.ReadAllData();
+            Check("批量长度=总数", batch.Length == 4);
+            Check("写单台阈值=true", baro.SetThreshold(1, -5m) == true);
+            Check("写越界阈值=false", baro.SetThreshold(5, -5m) == false);
+            var allTh = baro.SetAllThresholds(-5m);
+            Check("批量写4台全true", allTh.Count == 4 && allTh.Values.All(v => v));
+            // V1.62 两档区间：千次采样断言范围（良好-6~-10/较差0~-4），只锁范围不锁比例防抖动
+            bool rangeOk = true, seenGood = false, seenBad = false;
+            for (int i = 0; i < 1000; i++)
+            {
+                decimal p = baro.ReadData(1).VacuumPressure;
+                if (p < -10 || p > 0) { rangeOk = false; break; }
+                if (p <= -6) seenGood = true; else seenBad = true;
+            }
+            Check("千次采样压力恒∈[-10,0]", rangeOk);
+            Check("千次采样两档都出现过", seenGood && seenBad);
+            baro.Disconnect();
+            var gone = baro.ReadAllData();
+            Check("断开后批量长度不变但全null", gone.Length == 4 && gone.All(x => x == null));
+
+            // ---- MockFanController ----
+            var fan = new MockFanController();
+            Check("未连接读状态=null", fan.ReadStatus() == null);
+            Check("未连接ActiveIp=null", fan.ActiveIp == null);
+            Check("未连接启动=false且不改状态", fan.StartFixedValue() == false);
+            Check("未连接停止=false", fan.Stop() == false);
+            Check("从未Connect时重连=false", fan.ReconnectNow() == false && fan.IsConnected == false);
+            fan.Connect(cfg);
+            Check("ActiveIp取配置主IP", fan.ActiveIp == "192.168.1.220");
+            Check("启动后运行态", fan.StartFixedValue() == true && fan.ReadStatus().RunState == FanRunState.FixedValueRunning);
+            Check("停止后停止态", fan.Stop() == true && fan.ReadStatus().RunState == FanRunState.FixedValueStopped);
+            var f1 = fan.ReadStatus();
+            var f2 = fan.ReadStatus();
+            Check("在线标志+温度漂移有界", f1.IsOnline && f2.IsOnline && Math.Abs((double)(f2.Temperature - f1.Temperature)) < 2.0);
+            fan.Disconnect();
+            Check("断开后重连=true", fan.ReconnectNow() == true && fan.IsConnected == true);
+            fan.Dispose();
+            Check("释放后断开", fan.IsConnected == false);
+        }
+
+        // =====================================================================
+        // 4d. StationSettingsCache（V1.62 新增：反射重置静态缓存+隔离目录）
+        // =====================================================================
+        private static void StationCacheTests()
+        {
+            EnterCleanDir();
+            ResetStationCache(); // 强制从当前隔离目录重载（进程内静态缓存跨模块常驻）
+
+            Check("无缓存读null", StationSettingsCache.Get(1) == null);
+            StationSettingsCache.Save(null); // 静默不抛
+
+            var e = new StationCacheEntry
+            {
+                DeviceId = 1, SerialNumber = "SN-A001", RecipeName = "配方X",
+                DelayTime = TimeSpan.FromSeconds(30), StartTime = new TimeSpan(2, 0, 0),
+                LimitTemperature = 75.5m
+            };
+            StationSettingsCache.Save(e);
+            var back = StationSettingsCache.Get(1);
+            Check("往返全字段", back != null && back.SerialNumber == "SN-A001" && back.RecipeName == "配方X"
+                && back.DelayTime == TimeSpan.FromSeconds(30) && back.StartTime == new TimeSpan(2, 0, 0)
+                && back.LimitTemperature == 75.5m);
+            back.SerialNumber = "HACKED";
+            Check("返回副本不污染内部", StationSettingsCache.Get(1).SerialNumber == "SN-A001");
+            e.SerialNumber = "HACKED2";
+            Check("改传入对象不影响已存", StationSettingsCache.Get(1).SerialNumber == "SN-A001");
+
+            // 覆盖语义 + 落盘重载
+            StationSettingsCache.Save(new StationCacheEntry { DeviceId = 1, SerialNumber = "SN-B002" });
+            Check("同号覆盖", StationSettingsCache.Get(1).SerialNumber == "SN-B002");
+            ResetStationCache(); // 模拟重启：从 StationSettings.json 重载
+            Check("重启后落盘可读", StationSettingsCache.Get(1) != null && StationSettingsCache.Get(1).SerialNumber == "SN-B002");
+
+            // 脏文件三态
+            File.WriteAllText("StationSettings.json", "{broken json");
+            ResetStationCache();
+            Check("损坏文件读null不抛", StationSettingsCache.Get(1) == null);
+            File.WriteAllText("StationSettings.json", "[]");
+            ResetStationCache();
+            Check("空数组读null", StationSettingsCache.Get(1) == null);
+            File.WriteAllText("StationSettings.json", "[{\"DeviceId\":0},{\"DeviceId\":-3},null]");
+            ResetStationCache();
+            Check("非法编号条目被过滤", StationSettingsCache.Get(0) == null);
+            File.Delete("StationSettings.json");
+            ResetStationCache();
+        }
+
+        /// <summary>反射把 StationSettingsCache 静态 _cache 置 null，强制下次 Get/Save 从当前目录重载文件</summary>
+        private static void ResetStationCache()
+        {
+            var f = typeof(StationSettingsCache).GetField("_cache", BindingFlags.NonPublic | BindingFlags.Static);
+            f.SetValue(null, null);
         }
 
         // =====================================================================
@@ -597,12 +824,22 @@ namespace AgingTestSystem.Tests
             var empty = RecipeStorage.Load();
             Check("空数组 json Load 返回空列表(非 null)", empty != null && empty.Count == 0);
 
+            File.WriteAllText("Recipes.json", "null");
+            var nulllit = RecipeStorage.Load();
+            Check("json字面量null Load 返回空列表(非 null)", nulllit != null && nulllit.Count == 0);
+
             // SaveWithDuplicateCheck 新增分支（同名覆盖分支弹 UI 对话框，归界面手工测试覆盖）
             var shared = new List<RecipeConfig>();
             var r = new RecipeConfig { Name = "新建配方", NegativePressure = -70m };
             Check("SaveWithDuplicateCheck 新增返回 true", RecipeStorage.SaveWithDuplicateCheck(shared, r));
             Check("新增后 Id 自动分配为 1", shared.Count == 1 && shared[0].Id == 1);
             Check("新增后立即落盘", File.Exists("Recipes.json"));
+            var r2 = new RecipeConfig { Name = "第二个配方" };
+            Check("第二条新增 Id=2", RecipeStorage.SaveWithDuplicateCheck(shared, r2) && shared[1].Id == 2);
+            // V1.62：删中间配方后新增不许撞号（Max+1，不是 Count+1）
+            shared.RemoveAt(0);
+            var r3 = new RecipeConfig { Name = "第三个配方" };
+            Check("删Id=1后新增Id=3不撞号", RecipeStorage.SaveWithDuplicateCheck(shared, r3) && shared[1].Id == 3);
             Check("参数 recipe=null 返回 false", !RecipeStorage.SaveWithDuplicateCheck(shared, null));
             Check("参数 list=null 返回 false", !RecipeStorage.SaveWithDuplicateCheck(null, r));
         }
@@ -653,6 +890,40 @@ namespace AgingTestSystem.Tests
             Check("温度列一位小数 66.6 结尾", lines[1].EndsWith("66.6"));
             // 压力/温度都为空时，详情后的两个空字段让行尾必然是 ",,"（CSV 列留空）
             Check("可选压力/温度缺省时留空(行尾,,)", lines[2].EndsWith(",急停,手动触发,,"));
+
+            // V1.62：回车转义 + 字段格式边角
+            if (mi != null)
+            {
+                Func<string, string> esc2 = v => (string)mi.Invoke(null, new object[] { v });
+                Check("含回车被双引号包裹", esc2("a\rb") == "\"a\rb\"");
+                Check("含回车换行被包裹", esc2("a\r\nb") == "\"a\r\nb\"");
+            }
+            TestEventLogger.Write(null, -1, null, null, 12m, 33.56f);
+            string[] lines2 = ReadAllLinesShared(file);
+            string last = lines2[lines2.Length - 1];
+            Check("全null字段仍7列不抛", last.Split(',').Length >= 7 && last.Contains(",-1,"));
+            Check("温度一位小数格式化33.6", last.EndsWith("33.6"));
+            Check("压力整数12原样写", last.Contains(",12,"));
+            TestEventLogger.Write("LOTX", 1, "启动", "ok", null, null);
+
+            // 并发写零丢失（对标 AppLog 并发用例）
+            int beforeCount = ReadAllLinesShared(file).Length;
+            var tasks = new List<Task>();
+            for (int t = 0; t < 20; t++)
+            {
+                int id = t;
+                tasks.Add(Task.Run(() =>
+                {
+                    for (int k = 0; k < 5; k++) TestEventLogger.Write("CC", id, "并发", "x", null, null);
+                }));
+            }
+            Task.WaitAll(tasks.ToArray());
+            Check("20线程x5行并发零丢失", ReadAllLinesShared(file).Length == beforeCount + 100);
+
+            // 删目录后自动重建
+            Directory.Delete(logDir, true);
+            TestEventLogger.Write("RE", 1, "重建", "dir", null, null);
+            Check("删Logs目录后自动重建", File.Exists(file));
         }
 
         // =====================================================================
@@ -880,6 +1151,114 @@ namespace AgingTestSystem.Tests
             var reloaded = HomeLayoutConfig.LoadOrDefault();
             Check("Save→Load 往返读到修改值 44", reloaded.TopBarHeight == 44);
             if (File.Exists(cfgPath)) File.Delete(cfgPath); // 还原，避免影响后续用例
+
+            // 调整范围约束（编辑器钳制依据，与 HomeLayoutEditorForm 常量同步）
+            Check("标题栏范围15~80", HomeLayoutConfig.TopBarRange.Min == 15 && HomeLayoutConfig.TopBarRange.Max == 80);
+            Check("菜单栏范围25~100", HomeLayoutConfig.MenuRange.Min == 25 && HomeLayoutConfig.MenuRange.Max == 100);
+            Check("右侧区范围180~600", HomeLayoutConfig.RightPanelRange.Min == 180 && HomeLayoutConfig.RightPanelRange.Max == 600);
+            Check("状态栏范围15~60", HomeLayoutConfig.StatusBarRange.Min == 15 && HomeLayoutConfig.StatusBarRange.Max == 60);
+
+            // 损坏回退：写垃圾后仍返回默认值（BaseDirectory 是共享 run 目录，用完必须还原）
+            try
+            {
+                File.WriteAllText(cfgPath, "{broken json");
+                var fallback = HomeLayoutConfig.LoadOrDefault();
+                Check("损坏文件回退默认40/50/260/30",
+                    fallback.TopBarHeight == 40 && fallback.MenuHeight == 50
+                    && fallback.RightPanelWidth == 260 && fallback.StatusBarHeight == 30);
+            }
+            finally
+            {
+                if (File.Exists(cfgPath)) File.Delete(cfgPath);
+            }
+        }
+
+        // =====================================================================
+        // 10b. ModelDefaults —— 模型枚举值与构造默认值锁定（V1.62 新增）
+        // =====================================================================
+        private static void ModelDefaultsTests()
+        {
+            // DeviceConfig 构造默认值（App.config 缺项时的回退口径，全锁死防手滑）
+            var cfg = new DeviceConfig();
+            Check("默认72/80/160", cfg.TotalBarometers == 72 && cfg.TotalInputs == 80 && cfg.TotalOutputs == 160);
+            Check("默认COM1/19200/8/1/None", cfg.PortName == "COM1" && cfg.BaudRate == 19200
+                && cfg.DataBits == 8 && cfg.StopBits == 1 && cfg.Parity == "None");
+            Check("默认采集1000/面板8x9", cfg.CollectInterval == 1000 && cfg.PanelColumns == 8 && cfg.PanelRows == 9);
+            Check("默认Mock=true", cfg.UseMockCommunication == true);
+            Check("默认超时1000/1000/3000/3000",
+                cfg.SerialReadTimeoutMs == 1000 && cfg.SerialWriteTimeoutMs == 1000
+                && cfg.TcpSendTimeoutMs == 3000 && cfg.TcpReceiveTimeoutMs == 3000);
+            Check("默认不取反/UnitId=1", cfg.InvertInputs == false && cfg.InvertOutputs == false && cfg.IoUnitId == 1);
+            Check("默认寄存器0x1000/0x2000/0x0001",
+                cfg.IoInputRegisterStartAddress == 0x1000 && cfg.IoOutputRegisterStartAddress == 0x2000
+                && cfg.BarometerPressureRegisterAddress == 0x0001);
+            Check("默认小数1/缩放1", cfg.BarometerDefaultDecimalPlaces == 1 && cfg.BarometerPressureScale == 1m);
+            Check("默认备用映射关闭+空表", cfg.IoBackupChannelMappingEnabled == false && cfg.IoBackupChannelMappings != null
+                && cfg.IoBackupChannelMappings.Count == 0);
+            Check("默认风机220/50000/1/3000", cfg.FanIpAddress == "192.168.1.220" && cfg.FanPort == 50000
+                && cfg.FanUnitId == 1 && cfg.FanTimeoutMs == 3000);
+            Check("默认风机自识别开+空候选", cfg.FanAutoDetectEnabled == true && cfg.FanIpCandidates != null
+                && cfg.FanIpCandidates.Count == 0);
+            Check("默认15000/3/0", cfg.VacuumConfirmTimeoutMs == 15000 && cfg.CommunicationLossAlarmCount == 3
+                && cfg.MaxTestDurationSeconds == 0);
+            Check("默认DI不并入/温度告警关", cfg.UseDiAlarmContact == false && cfg.FanTempAlarmLimitC == 0f);
+            Check("默认扫码枪关闭全套", cfg.ScannerEnabled == false && cfg.ScannerPort == ""
+                && cfg.ScannerDeviceKeyword == "Xenon 1902" && cfg.ScannerBaudRate == 115200
+                && cfg.ScannerDataBits == 8 && cfg.ScannerStopBits == 1 && cfg.ScannerParity == "None"
+                && cfg.ScannerDebugLog == false);
+
+            // 风机状态枚举 = 寄存器值（改一个数就读错设备，必须锁）
+            Check("风机枚举映射-1/0/1/2/3",
+                (int)FanRunState.Unknown == -1 && (int)FanRunState.ProgramStopped == 0
+                && (int)FanRunState.ProgramRunning == 1 && (int)FanRunState.FixedValueStopped == 2
+                && (int)FanRunState.FixedValueRunning == 3);
+
+            // FanData.Clone 全字段（含旧用例漏的设定值/时间戳）
+            var f = new FanData
+            {
+                RunState = FanRunState.FixedValueRunning, Temperature = 36.6f, Humidity = 44.4f,
+                TempSetpoint = 37f, HumSetpoint = 45f, IsOnline = true,
+                CollectTime = new DateTime(2026, 9, 10, 12, 0, 0)
+            };
+            var fc = f.Clone();
+            fc.TempSetpoint = 0f;
+            Check("FanData.Clone全字段",
+                fc.RunState == FanRunState.FixedValueRunning && fc.Temperature == 36.6f
+                && fc.Humidity == 44.4f && fc.HumSetpoint == 45f && fc.IsOnline
+                && fc.CollectTime == f.CollectTime && f.TempSetpoint == 37f);
+
+            // BarometerData.Clone 数组深拷贝 + 默认列宽
+            var b = new BarometerData { DeviceId = 1 };
+            Check("默认输入1列输出2列", b.InputStatus.Length == 1 && b.OutputStatus.Length == 2
+                && b.LastTestResult == "");
+            b.InputStatus[0] = true; b.OutputStatus[1] = true;
+            var bc = b.Clone();
+            bc.InputStatus[0] = false; bc.OutputStatus[1] = false;
+            Check("Clone数组深拷贝", b.InputStatus[0] && b.OutputStatus[1]);
+            var bn = new BarometerData { InputStatus = null, OutputStatus = null };
+            var bnc = bn.Clone(); // null 数组不抛
+            Check("Clone空数组不抛且仍null", bnc.InputStatus == null && bnc.OutputStatus == null);
+
+            // UserAccount.LoginResult 工厂
+            var u = new UserAccount("op", "h", UserRole.Operator);
+            var ok = LoginResult.Ok(u);
+            Check("Ok三字段", ok.Success && object.ReferenceEquals(ok.User, u) && ok.ErrorMessage == null);
+            var fail = LoginResult.Fail("密码错");
+            Check("Fail用户null+带原因", !fail.Success && fail.User == null && fail.ErrorMessage == "密码错");
+
+            // 权限枚举值（权限比较地基）
+            Check("角色值0/1/2", (int)UserRole.Operator == 0 && (int)UserRole.Technician == 1
+                && (int)UserRole.Administrator == 2);
+
+            // TestSession 构造默认值
+            var ts = new TestSession();
+            Check("快照默认空批号+非空清单", ts.LotNumber == "" && ts.Stations != null && ts.Stations.Count == 0);
+            var tst = new TestSessionStation();
+            Check("快照台默认空串+零时长", tst.SerialNumber == "" && tst.RecipeName == ""
+                && tst.DurationSeconds == 0 && tst.DelaySeconds == 0);
+
+            // RecipeConfig 默认启用
+            Check("新配方默认启用", new RecipeConfig().IsEnabled == true);
         }
 
         // =====================================================================
@@ -975,6 +1354,27 @@ namespace AgingTestSystem.Tests
                 AgingSequencer.IsVacuumBuildFailed(false, TimeSpan.FromMilliseconds(15000), 15000));
             Check("未到位且远超窗口判失败",
                 AgingSequencer.IsVacuumBuildFailed(false, TimeSpan.FromSeconds(60), 15000));
+            Check("计时为负永不判失败",
+                !AgingSequencer.IsVacuumBuildFailed(false, TimeSpan.FromSeconds(-1), 15000));
+            Check("零宽限+未到位立即失败",
+                AgingSequencer.IsVacuumBuildFailed(false, TimeSpan.Zero, 0));
+
+            // ── IsPressureOutOfRange（V1.62 新增：两处私有判定的唯一口径）──
+            Check("默认方向-4>-5越限", AgingSequencer.IsPressureOutOfRange(-4m, -5m, true));
+            Check("默认方向-6<-5正常", !AgingSequencer.IsPressureOutOfRange(-6m, -5m, true));
+            Check("默认方向恰等阈值不越限", !AgingSequencer.IsPressureOutOfRange(-5m, -5m, true));
+            Check("反方向-6<-5越限", AgingSequencer.IsPressureOutOfRange(-6m, -5m, false));
+            Check("反方向-4>-5正常", !AgingSequencer.IsPressureOutOfRange(-4m, -5m, false));
+            Check("反方向恰等阈值不越限", !AgingSequencer.IsPressureOutOfRange(-5m, -5m, false));
+            Check("常压0恒越限(默认方向)", AgingSequencer.IsPressureOutOfRange(0m, -5m, true));
+
+            // ── 负时间输入语义锁 ──
+            Check("延时为负视为已到(立即上电)",
+                AgingSequencer.ShouldPowerOn(true, TimeSpan.Zero, -5));
+            Check("计时为负不上电",
+                !AgingSequencer.ShouldPowerOn(true, TimeSpan.FromSeconds(-1), 0));
+            Check("计时为负不完成",
+                !AgingSequencer.ShouldComplete(TimeSpan.FromSeconds(-1), 3600));
         }
 
         // =====================================================================
@@ -1042,6 +1442,13 @@ namespace AgingTestSystem.Tests
             TestSessionStore.Save(new TestSession());
             Check("空清单快照 Load=null", TestSessionStore.Load() == null);
 
+            // V1.62：Stations:null 与字面量 null 的 Load 语义
+            File.WriteAllText("TestSession.json", "{\"LotNumber\":\"L\",\"Stations\":null}");
+            Check("Stations为null Load=null", TestSessionStore.Load() == null);
+            File.WriteAllText("TestSession.json", "null");
+            Check("json字面量null Load=null", TestSessionStore.Load() == null);
+            Check("Save(null)返回false", TestSessionStore.Save(null) == false);
+
             TestSessionStore.Clear();
         }
 
@@ -1089,6 +1496,584 @@ namespace AgingTestSystem.Tests
                 info.RecipeNegativePressure == -60m && ic.DelayTime == TimeSpan.FromSeconds(30));
             Check("RecipeNegativePressure 可为 null(未配置=全局兜底)",
                 new StationInfo().RecipeNegativePressure == null);
+        }
+
+        // =====================================================================
+        // 14b. SettingsValidate —— 保存校验/范围/键表一致性（V1.62 新增）
+        // =====================================================================
+        private static void SettingsValidateTests()
+        {
+            // —— ValidateValue 全类型矩阵（反射私有静态，无需窗体实例） ——
+            var vv = typeof(SettingsForm).GetMethod("ValidateValue",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Check("反射找到 ValidateValue", vv != null);
+            if (vv != null)
+            {
+                Func<string, string, bool> ok = (k, v) =>
+                {
+                    object[] args = new object[] { k, v, null };
+                    return (bool)vv.Invoke(null, args);
+                };
+                Func<string, string, string> errOf = (k, v) =>
+                {
+                    object[] args = new object[] { k, v, null };
+                    vv.Invoke(null, args);
+                    return args[2] as string;
+                };
+                Check("整数合法", ok("TotalBarometers", "72") && errOf("TotalBarometers", "72") == null);
+                Check("整数非法文案", !ok("TotalBarometers", "abc") && errOf("TotalBarometers", "abc") == "应为整数");
+                Check("波特率非数字拦截", !ok("BaudRate", "abc"));
+                Check("IoUnitId边界255合法", ok("IoUnitId", "255"));
+                Check("IoUnitId=256越界(byte)", !ok("IoUnitId", "256"));
+                Check("IoUnitId负数拦截", !ok("IoUnitId", "-1"));
+                Check("寄存器0x写法合法", ok("BarometerPressureRegisterAddress", "0x1000"));
+                Check("寄存器十进制合法", ok("BarometerPressureRegisterAddress", "4096"));
+                Check("寄存器乱写拦截", !ok("BarometerPressureRegisterAddress", "xyz"));
+                Check("小数阈值-5.5合法", ok("AlarmPressureThresholdKPa", "-5.5"));
+                Check("小数乱写拦截", !ok("BarometerPressureScale", "abc"));
+                Check("温度小数合法", ok("FanTempAlarmLimitC", "36.6"));
+                Check("布尔true合法", ok("UseMockCommunication", "true"));
+                Check("布尔大小写兼容", ok("UseMockCommunication", "True"));
+                Check("布尔YES拦截", !ok("UseMockCommunication", "YES"));
+                Check("文本端口不校验", ok("PortName", "COM9") && ok("PortName", ""));
+                Check("IP候选/映射表不强制校验",
+                    ok("FanIpCandidates", "xxx") && ok("IoBackupChannelMappings", "xxx"));
+
+                // _boolKeys 10 项逐项过校验（防"只加一边"的配置漂移）
+                var boolKeys = (HashSet<string>)typeof(SettingsForm).GetField("_boolKeys",
+                    BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
+                Check("布尔键10项", boolKeys != null && boolKeys.Count == 10);
+                if (boolKeys != null)
+                {
+                    bool allBoolOk = boolKeys.All(k => ok(k, "true") && ok(k, "false") && !ok(k, "YES"));
+                    Check("布尔键true/false过YES不过", allBoolOk);
+                    Check("含关键布尔键",
+                        boolKeys.Contains("AlarmWhenPressureHigherThanThreshold")
+                        && boolKeys.Contains("ScannerDebugLog")
+                        && boolKeys.Contains("UseMockCommunication"));
+                }
+            }
+
+            // —— TryParseUShort 双重载（反射选双参版） ——
+            var tpu = typeof(SettingsForm).GetMethods(BindingFlags.NonPublic | BindingFlags.Static)
+                .First(m => m.Name == "TryParseUShort" && m.GetParameters().Length == 2);
+            Func<string, Tuple<bool, ushort>> parse = v =>
+            {
+                object[] args = new object[] { v, (ushort)0 };
+                bool r = (bool)tpu.Invoke(null, args);
+                return Tuple.Create(r, (ushort)args[1]);
+            };
+            var p1 = parse("4096");
+            Check("十进制4096", p1.Item1 && p1.Item2 == 4096);
+            var p2 = parse("0x1000");
+            Check("十六进制0x1000", p2.Item1 && p2.Item2 == 4096);
+            var p3 = parse("0X1000");
+            Check("大写0X兼容", p3.Item1 && p3.Item2 == 4096);
+            Check("上限65535合法", parse("65535").Item1);
+            Check("65536越界", !parse("65536").Item1);
+            Check("空串非法", !parse("").Item1);
+            Check("null非法", !parse(null).Item1);
+            Check("0x后缀缺失非法", !parse("0x").Item1);
+            Check("负数非法", !parse("-1").Item1);
+
+            // —— _numericKeys 范围抽查 + 默认值落在范围内 ——
+            var nkf = typeof(SettingsForm).GetField("_numericKeys",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            var ranges = (Dictionary<string, ValueTuple<decimal, decimal, int, decimal>>)nkf.GetValue(null);
+            var th = ranges["AlarmPressureThresholdKPa"];
+            Check("阈值范围±200/2位小数", th.Item1 == -200m && th.Item2 == 200m && th.Item3 == 2);
+            Check("新默认-5落在范围内", -5m >= th.Item1 && -5m <= th.Item2);
+            var tb = ranges["TotalBarometers"];
+            Check("总数范围1~999整数", tb.Item1 == 1m && tb.Item2 == 999m && tb.Item3 == 0);
+            Check("端口范围上限65535", ranges["PlcPort"].Item2 == 65535m);
+            Check("采集间隔下限10", ranges["CollectInterval"].Item1 == 10m);
+
+            // —— 公开连接键集合契约 ——
+            Check("结构键含数量/Mock/风机",
+                SettingsForm.StructuralKeys.Contains("TotalBarometers")
+                && SettingsForm.StructuralKeys.Contains("UseMockCommunication")
+                && SettingsForm.StructuralKeys.Contains("FanEnabled"));
+            Check("气压表连接键含串口五件套",
+                SettingsForm.BarometerConnectionKeys.Contains("PortName")
+                && SettingsForm.BarometerConnectionKeys.Contains("Parity"));
+            Check("IO连接键含地址端口",
+                SettingsForm.IoConnectionKeys.Contains("PlcAddress")
+                && SettingsForm.IoConnectionKeys.Contains("PlcPort"));
+            Check("FanEnabled是结构键不是连接键",
+                !SettingsForm.FanConnectionKeys.Contains("FanEnabled")
+                && SettingsForm.FanConnectionKeys.Contains("FanIpCandidates"));
+            Check("扫码枪连接键含端口识别",
+                SettingsForm.ScannerConnectionKeys.Contains("ScannerPort")
+                && SettingsForm.ScannerConnectionKeys.Contains("ScannerDeviceKeyword"));
+            Check("调试日志开关不触发重连",
+                !SettingsForm.ScannerConnectionKeys.Contains("ScannerDebugLog"));
+
+            // —— CreateValueCell 分发（反射私有静态，返回类型即契约） ——
+            var cvc = typeof(SettingsForm).GetMethod("CreateValueCell",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Func<string, string, DataGridViewCell> cellOf = (k, v) =>
+                (DataGridViewCell)cvc.Invoke(null, new object[] { k, v });
+            var boolCell = cellOf("UseMockCommunication", "TRUE");
+            Check("布尔→下拉且TRUE归一true",
+                boolCell is DataGridViewComboBoxCell && Equals(boolCell.Value, "true"));
+            Check("布尔非法值归一false",
+                Equals(cellOf("UseMockCommunication", "yes").Value, "false"));
+            var portCell = cellOf("PortName", "COM99");
+            Check("串口→下拉且保留已配值",
+                portCell is DataGridViewComboBoxCell && Equals(portCell.Value, "COM99"));
+            Check("空串口保持空(自动识别语义)",
+                cellOf("ScannerPort", "").Value == null);
+            Check("扫描串口同走下拉", cellOf("ScannerPort", "COM10") is DataGridViewComboBoxCell);
+            var popCell = cellOf("IoBackupChannelMappings", "0x2000@0x00->0x2009@0x00");
+            Check("映射表→弹窗只读格",
+                popCell is DataGridViewPopupEditCell && Equals(popCell.Value, "0x2000@0x00->0x2009@0x00"));
+            Check("IP候选→弹窗格", cellOf("FanIpCandidates", "a") is DataGridViewPopupEditCell);
+            Check("主页布局→弹窗格", cellOf("HomeLayout", "") is DataGridViewPopupEditCell);
+            var baudCell = cellOf("BaudRate", "230400");
+            Check("波特率含档位+自定义回显",
+                baudCell is DataGridViewComboBoxCell
+                && ((DataGridViewComboBoxCell)baudCell).Items.Contains("19200")
+                && ((DataGridViewComboBoxCell)baudCell).Items.Contains("230400"));
+            var bitsCell = (DataGridViewComboBoxCell)cellOf("DataBits", "8");
+            Check("数据位5~8", bitsCell.Items.Count == 4 && bitsCell.Items.Contains("8"));
+            var stopCell = cellOf("StopBits", "15");
+            Check("停止位15存值(显示走ValueMember)",
+                stopCell is DataGridViewStrictComboBoxCell && Equals(stopCell.Value, "15"));
+            Check("停止位非法归一1", Equals(cellOf("StopBits", "3").Value, "1"));
+            var parCell = cellOf("Parity", "Odd");
+            Check("校验位存枚举名", Equals(parCell.Value, "Odd"));
+            var numCell = (DataGridViewNumericUpDownCell)cellOf("AlarmPressureThresholdKPa", "-5.5");
+            Check("数字格范围小数位一致",
+                numCell.Minimum == -200m && numCell.Maximum == 200m && numCell.DecimalPlaces == 2
+                && Equals(numCell.Value, -5.5m));
+            Check("数字超界钳Max", Equals(cellOf("TotalBarometers", "99999").Value, 999m));
+            Check("数字非法文本钳Min", Equals(cellOf("TotalBarometers", "abc").Value, 1m));
+            var txtCell = cellOf("PlcAddress", "192.168.1.20");
+            Check("其余走文本格", txtCell is DataGridViewTextBoxCell && Equals(txtCell.Value, "192.168.1.20"));
+
+            // —— 分类/说明键对齐（需窗体实例读实例字典；构造失败则只记一条） ——
+            SettingsForm sf = null;
+            string buildErr = null;
+            try { sf = new SettingsForm(new DeviceConfig()); }
+            catch (Exception ex) { buildErr = ex.GetType().Name + ":" + ex.Message; }
+            Check("设置窗可构造", sf != null, buildErr);
+            if (sf != null)
+            {
+                try
+                {
+                    var desc = (Dictionary<string, string>)typeof(SettingsForm).GetField("_descriptions",
+                        BindingFlags.NonPublic | BindingFlags.Instance).GetValue(sf);
+                    var cats = (Array)typeof(SettingsForm).GetField("_categories",
+                        BindingFlags.NonPublic | BindingFlags.Instance).GetValue(sf);
+                    var catKeys = new List<string>();
+                    foreach (object c in cats)
+                    {
+                        var keys = (string[])c.GetType().GetField("Item2").GetValue(c);
+                        catKeys.AddRange(keys);
+                    }
+                    Check("分类键全有说明", catKeys.All(k => desc.ContainsKey(k)),
+                        "缺:" + string.Join(",", catKeys.Where(k => !desc.ContainsKey(k)).ToArray()));
+                    Check("关键键在分类里",
+                        catKeys.Contains("AlarmPressureThresholdKPa")
+                        && catKeys.Contains("IoBackupChannelMappings")
+                        && catKeys.Contains("HomeLayout"));
+                    Check("分类键50+项", catKeys.Count >= 50);
+                }
+                finally { sf.Dispose(); }
+            }
+        }
+
+        // =====================================================================
+        // 14c. ScannerParse —— 扫码枪纯解析（V1.62 新增，反射私有静态）
+        // =====================================================================
+        private static void ScannerParseTests()
+        {
+            var t = typeof(ScannerService);
+            var join = t.GetMethod("JoinPorts", BindingFlags.NonPublic | BindingFlags.Static);
+            Func<IEnumerable<string>, string> jp = v => (string)join.Invoke(null, new object[] { v });
+            Check("null端口→-", jp(null) == "-");
+            Check("空列表→-", jp(new string[0]) == "-");
+            Check("多项逗号拼接", jp(new[] { "COM3", "COM5" }) == "COM3,COM5");
+
+            var pp = t.GetMethod("ParseParity", BindingFlags.NonPublic | BindingFlags.Static);
+            Func<string, string> par = v => pp.Invoke(null, new object[] { v }).ToString();
+            Check("None", par("None") == "None");
+            Check("小写even", par("even") == "Even");
+            Check("大写ODD", par("ODD") == "Odd");
+            Check("空→None", par("") == "None" && par(null) == "None");
+            Check("非法→None", par("xyz") == "None");
+
+            var ps = t.GetMethod("ParseStopBits", BindingFlags.NonPublic | BindingFlags.Static);
+            Func<int, string> stb = v => ps.Invoke(null, new object[] { v }).ToString();
+            Check("2→Two", stb(2) == "Two");
+            Check("15→1.5", stb(15) == "OnePointFive");
+            Check("1→One", stb(1) == "One");
+            Check("非法→One", stb(9) == "One" && stb(0) == "One");
+            // 跨文件契约：与 SettingsForm.NormalizeStopBits 两端一致（15↔1.5）
+            var norm = typeof(SettingsForm).GetMethod("NormalizeStopBits",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Check("两端15口径一致",
+                ((string)norm.Invoke(null, new object[] { "1.5" }) == "15") && stb(15) == "OnePointFive");
+        }
+
+        // =====================================================================
+        // 14d. ModbusConvert —— 气压换算/端口故障判定/未连接约定（V1.62 新增）
+        // =====================================================================
+        private static void ModbusConvertTests()
+        {
+            // —— 纯换算（公开静态，直接调） ——
+            Check("0xFFFE→-2再除10=-0.2",
+                ModbusRtuBarometerReader.ConvertRawToPressureKPa(unchecked((short)0xFFFE), 1, 1m) == -0.2m);
+            Check("-50/10=-5.0",
+                ModbusRtuBarometerReader.ConvertRawToPressureKPa(-50, 1, 1m) == -5.0m);
+            Check("小数位0不除",
+                ModbusRtuBarometerReader.ConvertRawToPressureKPa(123, 0, 1m) == 123m);
+            Check("缩放系数生效",
+                ModbusRtuBarometerReader.ConvertRawToPressureKPa(100, 1, 0.5m) == 5.0m);
+            Check("short下界换算",
+                ModbusRtuBarometerReader.ConvertRawToPressureKPa(short.MinValue, 1, 1m) == -3276.8m);
+            Check("阈值-5.0/1位→-50",
+                ModbusRtuBarometerReader.ConvertThresholdToRegister(-5.0m, 1) == -50L);
+            Check("阈值12.345/3位→12345",
+                ModbusRtuBarometerReader.ConvertThresholdToRegister(12.345m, 3) == 12345L);
+            Check("阈值0→0",
+                ModbusRtuBarometerReader.ConvertThresholdToRegister(0m, 1) == 0L);
+            Check("阈值-95.06/1位→-951",
+                ModbusRtuBarometerReader.ConvertThresholdToRegister(-95.06m, 1) == -951L);
+
+            // —— 端口级故障判定（反射私有静态） ——
+            var ipf = typeof(ModbusRtuBarometerReader).GetMethod("IsPortLevelFailure",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Func<Exception, bool> isPortFail = ex => (bool)ipf.Invoke(null, new object[] { ex });
+            Check("无权限访问算端口故障", isPortFail(new UnauthorizedAccessException()));
+            Check("对象释放算端口故障", isPortFail(new ObjectDisposedException("sp")));
+            Check("英文port closed算", isPortFail(new System.IO.IOException("port closed")));
+            Check("中文信号量超时算", isPortFail(new System.IO.IOException("信号量超时")));
+            Check("普通IO异常不算", !isPortFail(new System.IO.IOException("普通读写超时")));
+            Check("读写超时异常不算", !isPortFail(new TimeoutException("x")));
+            Check("从站异常响应不算", !isPortFail(new Exception("Slave device failed")));
+
+            // —— 未连接约定（全新实例，不碰硬件） ——
+            var reader = new ModbusRtuBarometerReader();
+            Check("初始未连接", reader.IsConnected == false);
+            Check("未连接读单台=null", reader.ReadData(1) == null);
+            Check("未连接批量=空数组", reader.ReadAllData().Length == 0);
+            Check("未连接写阈值=false", reader.SetThreshold(1, -5m) == false);
+            Check("未连接批量写=空字典", reader.SetAllThresholds(-5m).Count == 0);
+            reader.Disconnect(); // 未连接时断开不抛
+            Check("断开幂等", reader.IsConnected == false);
+
+            // —— 串口参数解析（反射私有实例，需实例但不动硬件） ——
+            var r2 = new ModbusRtuBarometerReader();
+            var mpp = typeof(ModbusRtuBarometerReader).GetMethod("ParseParity",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Func<string, string> rpar = v => mpp.Invoke(r2, new object[] { v }).ToString();
+            Check("Rtu:None", rpar("None") == "None");
+            Check("Rtu:小写odd", rpar("odd") == "Odd");
+            Check("Rtu:空→None", rpar("") == "None" && rpar(null) == "None");
+            Check("Rtu:非法→None", rpar("xyz") == "None");
+            var msb = typeof(ModbusRtuBarometerReader).GetMethod("ParseStopBits",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Func<int, string> rstb = v => msb.Invoke(r2, new object[] { v }).ToString();
+            Check("Rtu:1→One", rstb(1) == "One");
+            Check("Rtu:2→Two", rstb(2) == "Two");
+            Check("Rtu:15→1.5", rstb(15) == "OnePointFive");
+            Check("Rtu:非法→One", rstb(3) == "One");
+        }
+
+        // =====================================================================
+        // 14e. FanParse —— 风机寄存器解析/未连接约定（V1.62 新增）
+        // =====================================================================
+        private static void FanParseTests()
+        {
+            // —— 纯解析（公开静态，直接调；数值全选二进制精确值防抖动） ——
+            Check("null→null", FanControllerClient.ParseFanRegisters(null) == null);
+            Check("不足6个→null", FanControllerClient.ParseFanRegisters(new ushort[] { 1, 2, 3 }) == null);
+            var fd = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 2500, 6000, 3700, 5000 });
+            Check("6寄存器解析全字段",
+                fd != null && fd.RunState == FanRunState.FixedValueRunning
+                && fd.Temperature == 25f && fd.Humidity == 60f
+                && fd.TempSetpoint == 37f && fd.HumSetpoint == 50f && fd.IsOnline);
+            var fd0 = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 0, 0, 0, 0, 0 });
+            Check("全0→程式停止+零值", fd0.RunState == FanRunState.ProgramStopped && fd0.Temperature == 0f);
+            var fdbad = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 9, 0, 0, 0, 0 });
+            Check("非法枚举值透传(显示层兜底)", (int)fdbad.RunState == 9);
+
+            // —— 未连接约定（全新实例，不碰网络） ——
+            var fan = new FanControllerClient();
+            Check("初始未连接", fan.IsConnected == false);
+            Check("配置空读状态=null", fan.ReadStatus() == null);
+            Check("配置空启动=false", fan.StartFixedValue() == false);
+            Check("配置空停止=false", fan.Stop() == false);
+            bool threw = false;
+            bool rc = false;
+            try { rc = fan.ReconnectNow(); }
+            catch { threw = true; }
+            Check("配置空重连false不抛", !threw && rc == false);
+            bool cnull = false;
+            threw = false;
+            try { cnull = fan.Connect(null); }
+            catch { threw = true; }
+            Check("Connect(null)返回false不抛", !threw && cnull == false);
+            Check("ActiveIp初始null", fan.ActiveIp == null);
+            fan.Dispose(); // 未连接释放不抛
+        }
+
+        // =====================================================================
+        // 14f. StationTime —— 工位时间 helpers（V1.62 新增，含 24h 截断修复）
+        // =====================================================================
+        private static void StationTimeTests()
+        {
+            var t = typeof(StationSettingsForm);
+            var get = t.GetMethod("GetTimeSpan", BindingFlags.NonPublic | BindingFlags.Static);
+            var set = t.GetMethod("SetTimeInputs", BindingFlags.NonPublic | BindingFlags.Static);
+            var txt = t.GetMethod("GetTimeText", BindingFlags.NonPublic | BindingFlags.Static);
+            Check("反射找到三方法", get != null && set != null && txt != null);
+            if (get == null || set == null || txt == null) return;
+
+            NumericUpDown h = new NumericUpDown { Minimum = 0, Maximum = 99 };
+            NumericUpDown m = new NumericUpDown { Minimum = 0, Maximum = 59 };
+            NumericUpDown s = new NumericUpDown { Minimum = 0, Maximum = 59 };
+            h.Value = 1; m.Value = 10; s.Value = 20;
+            var ts = (TimeSpan)get.Invoke(null, new object[] { h, m, s });
+            Check("组合01:10:20", ts == new TimeSpan(1, 10, 20));
+
+            // V1.62 修复：25 小时不再截断成 1
+            set.Invoke(null, new object[] { h, m, s, new TimeSpan(25, 10, 20) });
+            Check("25小时回填不截断", h.Value == 25m && m.Value == 10m && s.Value == 20m);
+            var back = (TimeSpan)get.Invoke(null, new object[] { h, m, s });
+            Check("25小时往返一致", back == new TimeSpan(25, 10, 20));
+            set.Invoke(null, new object[] { h, m, s, new TimeSpan(150, 0, 0) });
+            Check("超99钳99", h.Value == 99m);
+            Check("文本01:10:20", (string)txt.Invoke(null, new object[] { new TimeSpan(1, 10, 20) }) == "01:10:20");
+            Check("文本25小时不截断", (string)txt.Invoke(null, new object[] { new TimeSpan(25, 0, 0) }) == "25:00:00");
+            Check("文本零值", (string)txt.Invoke(null, new object[] { TimeSpan.Zero }) == "00:00:00");
+
+            var clamp = t.GetMethod("Clamp", BindingFlags.NonPublic | BindingFlags.Static);
+            Check("钳制上界", Equals(clamp.Invoke(null, new object[] { h, 500 }), 99m));
+            Check("钳制下界", Equals(clamp.Invoke(null, new object[] { h, -5 }), 0m));
+        }
+
+        // =====================================================================
+        // 14g. HistoryCsv —— 历史记录 CSV 解析 + 与写入器互逆（V1.62 新增）
+        // =====================================================================
+        private static void HistoryCsvTests()
+        {
+            HistoryRecordForm form = null;
+            string buildErr = null;
+            try { form = new HistoryRecordForm(); }
+            catch (Exception ex) { buildErr = ex.GetType().Name + ":" + ex.Message; }
+            Check("历史窗可构造", form != null, buildErr);
+            if (form == null) return;
+            try
+            {
+                var mi = typeof(HistoryRecordForm).GetMethod("ParseCsvLine",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Check("反射找到 ParseCsvLine", mi != null);
+                if (mi == null) return;
+                Func<string, string[]> parse = v => (string[])mi.Invoke(form, new object[] { v });
+                Check("普通3段", parse("a,b,c").Length == 3);
+                Check("引号逗号1+1", parse("\"a,b\",c")[0] == "a,b" && parse("\"a,b\",c")[1] == "c");
+                // CSV 里 "" 转义只在引号字段内有效（写入器永远整字段包裹，与解析器配对）
+                Check("双引号翻倍还原", parse("\"a\"\"b\"")[0] == "a\"b");
+                Check("尾逗号出空尾段", parse("a,").Length == 2 && parse("a,")[1] == "");
+                Check("空行出1空段", parse("").Length == 1 && parse("")[0] == "");
+
+                // 互逆：写入器转义 → 解析器还原（7 列对齐，详情含逗号引号）
+                EnterCleanDir();
+                TestEventLogger.Write("INV", 5, "报警", "详情,有\"引号\"", -5.5m, 36.6f);
+                string file = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs",
+                    "TestLog_" + DateTime.Now.ToString("yyyyMMdd") + ".csv");
+                string[] lines = ReadAllLinesShared(file);
+                string[] f = parse(lines[lines.Length - 1]);
+                Check("互逆7列", f.Length == 7);
+                if (f.Length == 7)
+                {
+                    Check("互逆批号/编号/事件", f[1] == "INV" && f[2] == "5" && f[3] == "报警");
+                    Check("互逆详情还原", f[4] == "详情,有\"引号\"");
+                    Check("互逆压力温度", f[5] == "-5.5" && f[6] == "36.6");
+                }
+            }
+            finally { form.Dispose(); }
+        }
+
+        // =====================================================================
+        // 14h. UiPureHelpers —— 对话框/控件/串口识别纯函数（V1.62 新增）
+        // =====================================================================
+        private static void UiPureHelperTests()
+        {
+            // —— 批号录入（公开方法，scanner=null 可构造） ——
+            var lotForm = new InputLotForm();
+            try
+            {
+                var txtLot = typeof(InputLotForm).GetField("txtLot",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(lotForm) as TextBox;
+                Check("反射拿到批号框", txtLot != null);
+                if (txtLot != null)
+                {
+                    txtLot.Text = "  LOT-9 ";
+                    Check("批号去首尾空格", lotForm.GetLotNumber() == "LOT-9");
+                    txtLot.Text = "";
+                    Check("空批号→空串", lotForm.GetLotNumber() == "");
+                }
+            }
+            finally { lotForm.Dispose(); }
+
+            // —— 配方管理查找（忽略大小写，需实例+列表） ——
+            var recipes = new List<RecipeConfig>
+            {
+                new RecipeConfig { Id = 1, Name = "高温配方" },
+                new RecipeConfig { Id = 2, Name = "r2-abc" }
+            };
+            var rmForm = new RecipeManagerForm(recipes);
+            try
+            {
+                var find = typeof(RecipeManagerForm).GetMethod("FindRecipeIndex",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Check("反射找到 FindRecipeIndex", find != null);
+                if (find != null)
+                {
+                    Func<string, int> idx = v => (int)find.Invoke(rmForm, new object[] { v });
+                    Check("精确命中0", idx("高温配方") == 0);
+                    Check("大小写命中1", idx("R2-ABC") == 1);
+                    Check("未命中-1", idx("没有这个") == -1);
+                }
+                // SetTimeInputs 走 TotalHours（与工位窗 V1.62 修复对齐，防回退）
+                var rmSet = typeof(RecipeManagerForm).GetMethod("SetTimeInputs",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                if (rmSet != null)
+                {
+                    NumericUpDown h = new NumericUpDown { Minimum = 0, Maximum = 99 };
+                    NumericUpDown m = new NumericUpDown { Minimum = 0, Maximum = 59 };
+                    NumericUpDown s = new NumericUpDown { Minimum = 0, Maximum = 59 };
+                    rmSet.Invoke(rmForm, new object[] { h, m, s, new TimeSpan(25, 10, 20) });
+                    Check("配方窗25小时不截断", h.Value == 25m && m.Value == 10m && s.Value == 20m);
+                }
+            }
+            finally { rmForm.Dispose(); }
+
+            // —— 工位窗温度解析（实例方法读文本框，构造传 null 设备管理器可测） ——
+            StationSettingsForm stForm = null;
+            try { stForm = new StationSettingsForm(null, new DeviceConfig(), new List<RecipeConfig>(), 1); }
+            catch { }
+            Check("工位窗可构造", stForm != null);
+            if (stForm != null)
+            {
+                try
+                {
+                    var txtTemp = typeof(StationSettingsForm).GetField("txtTemp",
+                        BindingFlags.NonPublic | BindingFlags.Instance).GetValue(stForm) as TextBox;
+                    var parseTemp = typeof(StationSettingsForm).GetMethod("ParseTemperature",
+                        BindingFlags.NonPublic | BindingFlags.Instance);
+                    Check("反射拿到温度框与解析", txtTemp != null && parseTemp != null);
+                    if (txtTemp != null && parseTemp != null)
+                    {
+                        Func<string, decimal> pt = v =>
+                        {
+                            txtTemp.Text = v;
+                            return (decimal)parseTemp.Invoke(stForm, null);
+                        };
+                        Check("温度37.5", pt("37.5") == 37.5m);
+                        Check("非法温度→0", pt("abc") == 0m);
+                        Check("空温度→0", pt("") == 0m);
+                    }
+                }
+                finally { stForm.Dispose(); }
+            }
+
+            // —— IP 合法性（反射私有静态） ——
+            var isIp = typeof(IpListEditorPopup).GetMethod("IsValidIp",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Func<string, bool> validIp = v => (bool)isIp.Invoke(null, new object[] { v });
+            Check("IPv4合法", validIp("192.168.1.20"));
+            Check("IPv4带空格合法", validIp(" 192.168.1.20 "));
+            Check("IPv6拒绝(与弹窗口径一致)", !validIp("::1"));
+            Check("空/null拒绝", !validIp("") && !validIp(null));
+            Check("越界拒绝", !validIp("256.1.1.1") && !validIp("abc"));
+
+            // —— 数字格解析钳制（公开重写，直接 new 格） ——
+            var numCell = new DataGridViewNumericUpDownCell { Minimum = -200m, Maximum = 200m };
+            var style = new DataGridViewCellStyle();
+            Check("decimal原样", Equals(numCell.ParseFormattedValue(12.5m, style, null, null), 12.5m));
+            Check("字符串解析", Equals(numCell.ParseFormattedValue("12", style, null, null), 12m));
+            Check("超界钳Max", Equals(numCell.ParseFormattedValue("300", style, null, null), 200m));
+            Check("欠界钳Min", Equals(numCell.ParseFormattedValue("-300", style, null, null), -200m));
+
+            // —— 网格命中/边界/状态色（直接 new 控件 + Configure，反射私有方法） ——
+            var grid = new WorkstationGridView();
+            try
+            {
+                grid.Configure(8, 9, 72);
+                var tg = typeof(WorkstationGridView);
+                var hitPanel = tg.GetMethod("TryHitPanel", BindingFlags.NonPublic | BindingFlags.Instance);
+                var boundsOf = tg.GetMethod("GetPanelBounds", BindingFlags.NonPublic | BindingFlags.Instance);
+                var backOf = tg.GetMethod("GetStatusBackColor", BindingFlags.NonPublic | BindingFlags.Instance);
+                Check("反射找到命中三方法", hitPanel != null && boundsOf != null && backOf != null);
+                if (hitPanel != null && boundsOf != null && backOf != null)
+                {
+                    Rectangle b1 = (Rectangle)boundsOf.Invoke(grid, new object[] { 1 });
+                    Rectangle b2 = (Rectangle)boundsOf.Invoke(grid, new object[] { 2 });
+                    Check("1号面板原点", b1.X == 0 && b1.Y == 0);
+                    Check("2号面板紧贴1号", b2.X == b1.Width && b2.Y == 0);
+                    Func<Point, Tuple<bool, int>> hit = p =>
+                    {
+                        object[] args = new object[] { p, 0, new Point() };
+                        bool r = (bool)hitPanel.Invoke(grid, args);
+                        return Tuple.Create(r, (int)args[1]);
+                    };
+                    Check("超大坐标不命中", !hit(new Point(100000, 100000)).Item1);
+                    Check("负坐标不命中", !hit(new Point(-5, -5)).Item1);
+                    var center = hit(new Point(b1.Width / 2, b1.Height / 2));
+                    Check("1号中心命中1", center.Item1 && center.Item2 == 1);
+                    Func<DeviceStatus, Color> bc = st => (Color)backOf.Invoke(grid, new object[] { st });
+                    var cFault = bc(DeviceStatus.Fault); var cTest = bc(DeviceStatus.Testing);
+                    var cDone = bc(DeviceStatus.Completed); var cIdle = bc(DeviceStatus.Idle);
+                    Check("四状态四色互异",
+                        cFault.ToArgb() != cTest.ToArgb() && cFault.ToArgb() != cDone.ToArgb()
+                        && cFault.ToArgb() != cIdle.ToArgb() && cTest.ToArgb() != cDone.ToArgb()
+                        && cTest.ToArgb() != cIdle.ToArgb() && cDone.ToArgb() != cIdle.ToArgb());
+                    grid.SetDarkMode(true);
+                    var cFaultDark = bc(DeviceStatus.Fault);
+                    Check("深色故障色与浅色不同", cFaultDark.ToArgb() != cFault.ToArgb());
+                    grid.SetDarkMode(false);
+                    Check("切回浅色还原", bc(DeviceStatus.Fault).ToArgb() == cFault.ToArgb());
+                }
+            }
+            finally { grid.Dispose(); }
+
+            // —— 通讯测试位值→通道号（公开静态） ——
+            Check("0x0001→0", CommunicationTestForm.ChannelOf(0x0001) == 0);
+            Check("0x0002→1", CommunicationTestForm.ChannelOf(0x0002) == 1);
+            Check("0x0100→8", CommunicationTestForm.ChannelOf(0x0100) == 8);
+            Check("0x8000→15", CommunicationTestForm.ChannelOf(0x8000) == 15);
+            Check("0→0", CommunicationTestForm.ChannelOf(0) == 0);
+
+            // —— 风机状态中文（反射私有静态；与主窗文案差异已知，锁本窗契约） ——
+            var gst = typeof(FanTestForm).GetMethod("GetStateText",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Func<FanRunState, string> stx = v => (string)gst.Invoke(null, new object[] { v });
+            Check("四态中文", stx(FanRunState.ProgramStopped) == "程式停止"
+                && stx(FanRunState.ProgramRunning) == "程式启动"
+                && stx(FanRunState.FixedValueStopped) == "定值停止"
+                && stx(FanRunState.FixedValueRunning) == "定值启动");
+            Check("未知态→--", stx(FanRunState.Unknown) == "--"
+                && stx((FanRunState)99) == "--");
+
+            // —— CH340 识别谓词（公开静态） ——
+            Check("标准CH340命中",
+                SerialPortHelper.IsCh340Device("USB-SERIAL CH340 (COM3)",
+                "USB\\VID_1A86&PID_7523\\6&1 confusion"));
+            Check("小写描述命中(忽略大小写)",
+                SerialPortHelper.IsCh340Device("usb-serial ch340 (COM3)", "USB\\VID_1A86&PID_7523\\X"));
+            Check("FTDI拒绝",
+                !SerialPortHelper.IsCh340Device("USB Serial Port (COM4)", "USB\\VID_0403&PID_6001\\X"));
+            Check("错VID拒绝",
+                !SerialPortHelper.IsCh340Device("USB-SERIAL CH340 (COM3)", "USB\\VID_0403&PID_7523\\X"));
+            Check("null/空拒绝",
+                !SerialPortHelper.IsCh340Device(null, "USB\\VID_1A86&PID_7523\\X")
+                && !SerialPortHelper.IsCh340Device("USB-SERIAL CH340 (COM3)", null)
+                && !SerialPortHelper.IsCh340Device("", ""));
+            Check("系统串口列表非null", SerialPortHelper.GetAllPortNames() != null);
         }
 
         // =====================================================================
@@ -1237,6 +2222,45 @@ namespace AgingTestSystem.Tests
                 HomeLayoutEditorForm.GetPreviewBackColor(true).ToArgb() == Color.Black.ToArgb());
             Check("浅色布局预览画布白纸",
                 HomeLayoutEditorForm.GetPreviewBackColor(false).ToArgb() == Color.White.ToArgb());
+
+            // —— V1.62：映射表剩余分支全锁（公开查表函数直接断言） ——
+            Check("单元格Empty/白→深格底",
+                ThemeManager.MapGridCellBack(Color.Empty, true).ToArgb() == ThemeManager.DarkCellBack.ToArgb()
+                && ThemeManager.MapGridCellBack(Color.White, true).ToArgb() == ThemeManager.DarkCellBack.ToArgb());
+            Check("单元格浅蓝→深表头",
+                ThemeManager.MapGridCellBack(Color.FromArgb(237, 243, 253), true).ToArgb()
+                == ThemeManager.DarkHeaderBack.ToArgb());
+            Check("单元格红保留",
+                ThemeManager.MapGridCellBack(Color.Red, true).ToArgb() == Color.Red.ToArgb());
+            Check("单元格字黑→浅字",
+                ThemeManager.MapGridCellFore(Color.Black, true).ToArgb() == ThemeManager.DarkText.ToArgb());
+            Check("单元格字48灰→浅字",
+                ThemeManager.MapGridCellFore(Color.FromArgb(48, 48, 48), true).ToArgb()
+                == ThemeManager.DarkText.ToArgb());
+            Check("容器245灰→深档",
+                ThemeManager.MapContainerBack(Color.FromArgb(245, 245, 245), true).ToArgb()
+                == Color.FromArgb(55, 55, 58).ToArgb());
+            Check("容器243蓝→深档",
+                ThemeManager.MapContainerBack(Color.FromArgb(243, 249, 255), true).ToArgb()
+                == Color.FromArgb(48, 58, 84).ToArgb());
+            Check("文字 slate 映射+往返",
+                ThemeManager.MapForeColor(Color.DarkSlateGray, true).ToArgb()
+                == ThemeManager.DarkSlateText.ToArgb()
+                && ThemeManager.MapForeColor(
+                    ThemeManager.MapForeColor(Color.DarkSlateGray, true), false).ToArgb()
+                == Color.DarkSlateGray.ToArgb());
+            Check("文字30蓝→提示蓝",
+                ThemeManager.MapForeColor(Color.FromArgb(30, 80, 160), true).ToArgb()
+                == ThemeManager.DarkHintBlue.ToArgb());
+            Check("文字80灰→灰字",
+                ThemeManager.MapForeColor(Color.FromArgb(80, 80, 80), true).ToArgb()
+                == ThemeManager.DarkGrayText.ToArgb());
+            Check("输入Window→深输入底",
+                ThemeManager.MapInputBack(SystemColors.Window, true).ToArgb()
+                == ThemeManager.DarkInputBack.ToArgb());
+            Check("输入Control→深界面底",
+                ThemeManager.MapInputBack(SystemColors.Control, true).ToArgb()
+                == ThemeManager.DarkSurfaceBack.ToArgb());
         }
 
     }
