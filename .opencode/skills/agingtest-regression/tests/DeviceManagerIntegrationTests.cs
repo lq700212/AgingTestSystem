@@ -14,7 +14,7 @@
 //    场景5 断电恢复：在测快照落盘 → 重启(new)后 LoadPendingSession 命中 →
 //                   RecoverSession 整台重测(重新只开阀进抽真空态)
 //    场景6 扫码重绑：完成态工位重新绑定 SN 自动复位回空闲
-//    场景7 配方阈值优先：压力在全局阈值(-95)下越限、配方阈值(-60)下正常 →
+//    场景7 配方阈值优先：压力在全局阈值(-5)下越限、配方阈值(-3)下正常 →
 //                    证明判定用的是配方值而非全局兜底
 //
 //  【怎么跑】由 run_unit_tests.ps1 与 TestRunner.cs 一起编译（partial class
@@ -194,7 +194,7 @@ namespace AgingTestSystem.Tests
             config.CommunicationLossAlarmCount = 3;   // 连续 3 次读失败判失联
             config.MaxTestDurationSeconds = 0;        // 默认不限时长（用配方时长驱动完成）
             config.AlarmWhenPressureHigherThanThreshold = true;
-            config.AlarmPressureThresholdKPa = -95m;  // 全局兜底阈值
+            config.AlarmPressureThresholdKPa = -5m;   // 全局兜底阈值（与产品默认对齐）
             config.FanEnabled = false;                // 送风机不参测（UpdateFanLifecycle 判空跳过）
 
             reader = new FakeBarometerReader(config.TotalBarometers);
@@ -231,8 +231,8 @@ namespace AgingTestSystem.Tests
             try
             {
                 // ================= 场景7+1：正常全流程（工位1）=================
-                // 配方：负压值 -60（到位/报警阈值）、延时开启 0.5s、老化 1.5s
-                dm.SetStationRecipe(1, "配方R1", -60m);
+                // 配方：负压值 -3（到位/报警阈值）、延时开启 0.5s、老化 1.5s
+                dm.SetStationRecipe(1, "配方R1", -3m);
                 dm.SetStationDelayTimes(1, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1.5));
 
                 dm.StartTesting(new[] { 1 });
@@ -243,9 +243,9 @@ namespace AgingTestSystem.Tests
                 Check("[流程] 启动后载台未上电(未吸附固定不通电)",
                     !io.ReadOutput(PowerOut(config, 1)));
 
-                // 压力 -70kPa：对配方阈值 -60 是"到位"，对全局 -95 是"越限"——
+                // 压力 -4kPa：对配方阈值 -3 是"到位"，对全局 -5 是"越限"——
                 // 若判定误用全局值，此台会立刻报警断电而不是进入后续阶段（一石二鸟的断言）
-                reader.SetPressure(1, -70m);
+                reader.SetPressure(1, -4m);
 
                 Check("[流程] 真空到位+延时开启到后自动上电",
                     WaitUntil(() => io.ReadOutput(PowerOut(config, 1)), 2500));
@@ -263,7 +263,7 @@ namespace AgingTestSystem.Tests
                 Check("[流程] 完成后载台已断电", !io.ReadOutput(PowerOut(config, 1)));
                 Check("[流程] 完成后真空阀已关闭", !io.ReadOutput(ValveOut(config, 1)));
                 Check("[流程] 完成后无在测任务(GetTestingCount=0)", dm.GetTestingCount() == 0);
-                Check("[流程] 全程未触发越限报警(证明配方阈值生效而非全局-95)",
+                Check("[流程] 全程未触发越限报警(证明配方阈值生效而非全局-5)",
                     WaitUntil(() => true, 50) && done != null && done.LastTestResult != "FAIL");
 
                 // ================= 场景6：扫码重绑清完成态（工位1）=================
@@ -281,7 +281,7 @@ namespace AgingTestSystem.Tests
 
                 // ================= 场景2：真空建立失败（工位2）=================
                 dm.StartTesting(new[] { 2 });
-                // 不给压力（常压 0 > -95 恒越限）：600ms 宽限窗口耗尽应判真空建立失败
+                // 不给压力（常压 0 > -5 恒越限）：600ms 宽限窗口耗尽应判真空建立失败
                 Check("[真空失败] 宽限窗口超时后报警断电标Fault",
                     WaitUntil(() =>
                     {
@@ -313,10 +313,10 @@ namespace AgingTestSystem.Tests
 
                 // ================= 场景4：手动中止（工位2 复位后再启停）=================
                 dm.ResetDevices(new[] { 2 }); // 清掉场景2的故障态
-                dm.SetStationRecipe(2, "R2", -95m);
+                dm.SetStationRecipe(2, "R2", -5m);
                 dm.SetStationDelayTimes(2, TimeSpan.Zero, TimeSpan.FromSeconds(60)); // 长老化
                 dm.StartTesting(new[] { 2 });
-                reader.SetPressure(2, -96m); // -96 ≤ -95 到位 → 应自动上电
+                reader.SetPressure(2, -6m); // -6 ≤ -5 到位 → 应自动上电
                 Check("[中止] 到位上电进入老化",
                     WaitUntil(() => io.ReadOutput(PowerOut(config, 2)), 2500));
                 dm.StopTesting(new[] { 2 });

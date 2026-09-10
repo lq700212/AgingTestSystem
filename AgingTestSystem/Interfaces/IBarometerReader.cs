@@ -71,7 +71,7 @@ namespace AgingTestSystem.Interfaces
         /// 是否设、设成什么值属工艺决策，单位需按设备说明书确认后再调用本方法。
         /// </summary>
         /// <param name="deviceId">气压表编号（1-72）</param>
-        /// <param name="thresholdValue">设备单位阈值（如 -95.0）</param>
+        /// <param name="thresholdValue">设备单位阈值（如 -5.0）</param>
         /// <returns>是否写入成功（设备不响应返回 false）</returns>
         bool SetThreshold(int deviceId, decimal thresholdValue);
 

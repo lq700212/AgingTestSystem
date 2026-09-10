@@ -1136,7 +1136,7 @@ namespace AgingTestSystem.Services
         /// 不是软件报警阈值 AlarmPressureThresholdKPa（kPa）。写前务必确认设备单位。
         /// </summary>
         /// <param name="deviceId">气压表编号（1~TotalBarometers）</param>
-        /// <param name="thresholdValue">设备单位阈值（如 -95.0）</param>
+        /// <param name="thresholdValue">设备单位阈值（如 -5.0）</param>
         /// <returns>是否写入成功（设备不响应返回 false）</returns>
         public bool SetBarometerThreshold(int deviceId, decimal thresholdValue)
         {
@@ -1150,9 +1150,9 @@ namespace AgingTestSystem.Services
         /// <see cref="DeviceConfig.AlarmPressureThresholdKPa"/>，让 DeviceManager 的压力
         /// 报警判定（IsAlarm / PressureOutOfRange）与气压表设备阈值保持一致。
         ///
-        /// 【单位】thresholdKPa 单位是 kPa（与气压表读数同单位，如 -95）。
+        /// 【单位】thresholdKPa 单位是 kPa（与气压表读数同单位，如 -5）。
         /// </summary>
-        /// <param name="thresholdKPa">报警压力阈值（kPa，如 -95）</param>
+        /// <param name="thresholdKPa">报警压力阈值（kPa，如 -5）</param>
         public void UpdateAlarmPressureThresholdKPa(decimal thresholdKPa)
         {
             _config.AlarmPressureThresholdKPa = thresholdKPa;
