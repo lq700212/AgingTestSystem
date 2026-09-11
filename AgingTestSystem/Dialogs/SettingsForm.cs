@@ -22,14 +22,16 @@ namespace AgingTestSystem.Dialogs
     ///
     /// 分类（见 _categories）：
     ///   基础配置 / 气压表串口通讯 / IO耦合器（Modbus TCP）/ 气压表寄存器 /
-    ///   报警参数 / 冷却送风机 / 老化测试业务 / 扫码枪
+    ///   报警参数 / 冷却送风机 / 老化测试业务 / 工艺策略（V1.67）/ 扫码枪
     ///
     /// 内容放在单个 UIDataGridView（填满 pnlScroll）里，表格自带垂直滚动条
     /// （DataGridView 虚拟化绘制，只重绘可见行），所有分类一眼看全，不用来回切页签，
     /// 滚动流畅不卡顿。
     ///
-    /// 点击【保存设置】后，把所有改动写回程序运行目录下的 exe.config
-    /// （即程序实际读取的配置文件，与 App.config 同源），
+    /// 点击【保存设置】后分流写回（【V1.67】）：
+    /// - 策略 key（ProjectPolicyStore.PolicyKeys，工艺策略分类）→
+    ///   Projects/&lt;当前项目&gt;/Policy.json（跟项目走，切项目即换策略）；
+    /// - 其余 → 程序运行目录下的 exe.config（跟机器走）；
     /// 写完后刷新 appSettings 缓存，并把非结构型配置就地回写内存中的 DeviceConfig 实例：
     /// 各服务每次读写实时访问该实例，因此业务逻辑类配置（寄存器地址/IO 映射/取反/阈值等）
     /// 保存后立即生效；连接参数类由主窗体触发重连后生效；只有结构型配置
@@ -308,6 +310,17 @@ namespace AgingTestSystem.Dialogs
             { "FanTempAlarmLimitC", "送风机温度告警上限（°C，0=不启用）" },
             { "FanTempShutdownEnabled", "超温是否全线联停（false=只记日志；true=超温自动停全部在测工位，默认false）" },
 
+            // ===== 工艺策略（V1.67：7 个待确认点全部可配，跟项目走存 Policy.json）=====
+            { "ZeroDurationPolicy", "0时长启动策略：只警告=提示后可继续（现状）/硬拦截=含0时长工位直接阻断" },
+            { "EmptySnPolicy", "空SN启动策略：只警告=提示后可继续（现状）/硬拦截=含空SN工位直接阻断" },
+            { "FanDisconnectPolicy", "送风机断连策略：只提示=警告后照跑（现状）/阻断启动=风机未连接不让点火" },
+            { "VacuumFailKind", "真空失败责任：产品责任=记FAIL（现状）/治具责任=记装夹异常可重测" },
+            { "CompletionJudgePolicy", "完成判定口径：自动PASS=到时无报警即PASS（现状）/待判定=下料人工录PASS/FAIL" },
+            { "PowerLossPolicy", "断电恢复策略：整台重测=满时长重跑（现状）/续跑剩余时长=重抽真空+补足剩余" },
+            { "AgingPressureLossPolicy", "老化中失压策略：停机报警=关阀断电（现状）/只记不停=记事件继续老化" },
+            { "CompletionAction", "到时完成动作：只下电关阀（现状）/蜂鸣提醒/破空泄压（需配点位）/都要" },
+            { "VentValveDoPoint", "破空阀DO输出点内部编号（如225），0=未配置（默认，选了泄压也只记日志不写DO）" },
+
             // ===== 扫码枪 =====
             { "ScannerEnabled", "是否启用扫码枪（false/true）" },
             { "ScannerPort", "扫码枪固定串口（留空则按关键词自动识别）" },
@@ -376,6 +389,16 @@ namespace AgingTestSystem.Dialogs
                 "VacuumConfirmTimeoutMs", "CommunicationLossAlarmCount",
                 "MaxTestDurationSeconds", "UseDiAlarmContact", "FanTempAlarmLimitC",
                 "FanTempShutdownEnabled"
+            }),
+            // 【V1.67】工艺策略独立分类（7 个待确认点 + 完成动作 + 破空点位，共 10 项；
+            // FanTempShutdownEnabled 同时是策略，显示在老化测试业务里，这里不再重复列，
+            // 但它进 Policy.json——名单以 ProjectPolicyStore.PolicyKeys 为准，不以分类为准）
+            ("工艺策略", new string[]
+            {
+                "ZeroDurationPolicy", "EmptySnPolicy",
+                "FanDisconnectPolicy", "VacuumFailKind",
+                "CompletionJudgePolicy", "PowerLossPolicy",
+                "AgingPressureLossPolicy", "CompletionAction", "VentValveDoPoint"
             }),
             ("扫码枪", new string[]
             {
@@ -727,6 +750,17 @@ namespace AgingTestSystem.Dialogs
                     _grid.Rows[rowIdx].Cells["colKey"].Value = key;
                     _grid.Rows[rowIdx].Cells["colDesc"].Value = desc ?? "";
                     _grid.Rows[rowIdx].Cells["colValue"] = CreateValueCell(key, GetEffectiveValue(key));
+
+                    // 【V1.67】说明 tooltip：悬停任一单元格都显示完整说明，
+                    // 超过 40 字自动换行（WinForms ToolTip 不自动换行，靠 WrapTooltip 插换行符）。
+                    string tip = WrapTooltip(desc ?? "");
+                    if (!string.IsNullOrEmpty(tip))
+                    {
+                        foreach (DataGridViewCell c in _grid.Rows[rowIdx].Cells)
+                        {
+                            c.ToolTipText = tip;
+                        }
+                    }
                 }
             }
         }
@@ -1179,8 +1213,9 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 获取配置项的当前值
-        /// 优先读 ConfigurationManager.AppSettings（与程序启动读取一致）；
-        /// 若配置里没有该键，则用内存中 DeviceConfig 的属性值兜底
+        /// 【V1.67】取值优先级：项目策略文件 Policy.json（策略 key）→ AppSettings →
+        /// 内存 DeviceConfig 属性兜底。策略 key 优先读项目文件，保证界面显示的是
+        /// 当前项目真正生效的值（而不是 App.config 里的机器缺省）。
         /// </summary>
         private string GetEffectiveValue(string key)
         {
@@ -1190,6 +1225,13 @@ namespace AgingTestSystem.Dialogs
             {
                 var layout = GetEffectiveHomeLayout();
                 return $"点击编辑：右侧区域 {layout.RightPanelWidth}px | 顶部标题栏 {layout.TopBarHeight}px | 菜单栏 {layout.MenuHeight}px | 状态栏 {layout.StatusBarHeight}px";
+            }
+
+            // 【V1.67】策略 key 优先读项目文件（当前项目生效值优先于机器缺省）
+            if (ProjectPolicyStore.PolicyKeys.Contains(key))
+            {
+                string policyRaw = ProjectPolicyStore.GetRaw(key);
+                if (policyRaw != null) return policyRaw;
             }
 
             string raw = System.Configuration.ConfigurationManager.AppSettings[key];
@@ -1204,9 +1246,9 @@ namespace AgingTestSystem.Dialogs
             return "";
         }
 
-        /// <summary>
         /// 根据配置项类型创建"设置值"单元格控件，防止用户乱输导致配置写坏：
         /// - 布尔项（_boolKeys）：下拉框只允许选择 true / false
+        /// - 策略项（V1.67，ProjectPolicyStore.EnumOptions）：下拉框中文显示、存英文名
         /// - PortName：下拉框列出系统当前检测到的所有串口，供用户直接选择
         /// - 串口通讯参数：波特率用可手输下拉（常用档位 + 自定义），数据位/停止位/校验位用固定选项下拉
         /// - 数字项（_numericKeys）：用 NumericUpDown 单元格，按范围限制上下限与小数位
@@ -1219,6 +1261,20 @@ namespace AgingTestSystem.Dialogs
                 return CreateStrictComboCell(
                     new[] { "false", "true" },
                     value != null && value.Trim().Equals("true", StringComparison.OrdinalIgnoreCase) ? "true" : "false");
+            }
+
+            // 【V1.67】工艺策略下拉：中文显示（随便改文案不影响已存配置）、英文名存储；
+            // 存值非法（手改文件写错）时 NormalizePolicyValue 兜底回缺省（= 现状行为），
+            // 界面永远显示合法选项，已存的脏值在保存时被洗掉（所见即所得）。
+            Tuple<string, string>[] policyOptions;
+            if (ProjectPolicyStore.EnumOptions.TryGetValue(key, out policyOptions))
+            {
+                var options = new ComboOption[policyOptions.Length];
+                for (int i = 0; i < policyOptions.Length; i++)
+                {
+                    options[i] = new ComboOption(policyOptions[i].Item1, policyOptions[i].Item2);
+                }
+                return CreateOptionComboCell(options, NormalizePolicyValue(key, value));
             }
 
             if (key == "PortName" || key == "ScannerPort")
@@ -1308,6 +1364,75 @@ namespace AgingTestSystem.Dialogs
             var textCell = new DataGridViewTextBoxCell();
             textCell.Value = value;
             return textCell;
+        }
+
+        /// <summary>
+        /// 把策略配置值规整为合法存储值（【V1.67 新增】与 NormalizeParity 同思路）：
+        /// 大小写不敏感匹配合法名单；非法/空一律回第一个选项（= 现状行为）。
+        /// </summary>
+        private static string NormalizePolicyValue(string key, string value)
+        {
+            Tuple<string, string>[] options;
+            if (!ProjectPolicyStore.EnumOptions.TryGetValue(key, out options)
+                || options == null || options.Length == 0)
+            {
+                return value ?? "";
+            }
+            string v = (value ?? "").Trim();
+            foreach (var opt in options)
+            {
+                if (string.Equals(opt.Item2, v, StringComparison.OrdinalIgnoreCase))
+                {
+                    return opt.Item2;
+                }
+            }
+            return options[0].Item2;
+        }
+
+        /// <summary>
+        /// Tooltip 换行（【V1.67 新增】）：WinForms 的 ToolTip 不会自动换行，
+        /// 超长说明会横向溢出屏幕。这里按字符每 40 字插入换行（中文 1 字 1 位；
+        /// 换行点尽量落在标点后，不断英文单词——现场小屏也看得全）。
+        /// </summary>
+        /// <param name="text">原始说明文本</param>
+        /// <returns>插入换行后的文本；空输入返回 ""</returns>
+        internal static string WrapTooltip(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            const int width = 40;
+            if (text.Length <= width) return text;
+            var sb = new System.Text.StringBuilder();
+            int lineStart = 0;
+            while (lineStart < text.Length)
+            {
+                int remain = text.Length - lineStart;
+                if (remain <= width)
+                {
+                    sb.Append(text, lineStart, remain);
+                    break;
+                }
+                // 在 40 字窗口内找最后一个可断点（标点/空格），找不到就硬断
+                int cut = lineStart + width;
+                int breakAt = -1;
+                for (int i = cut; i > lineStart; i--)
+                {
+                    char c = text[i - 1];
+                    if (c == ' ' || c == '，' || c == '。' || c == '；' || c == '：'
+                        || c == '、' || c == ',' || c == '.' || c == ';' || c == ':'
+                        || c == '）' || c == ')')
+                    {
+                        breakAt = i;
+                        break;
+                    }
+                }
+                if (breakAt <= lineStart) breakAt = cut;
+                sb.Append(text, lineStart, breakAt - lineStart);
+                sb.Append("\r\n");
+                lineStart = breakAt;
+                // 跳过行首空格（上一行断在空格时），中文无此问题但英文有
+                while (lineStart < text.Length && text[lineStart] == ' ') lineStart++;
+            }
+            return sb.ToString();
         }
 
         /// <summary>把停止位配置值规整为下拉项实际保存的值（1.5 或 15 都统一为 15）</summary>
@@ -1492,6 +1617,26 @@ namespace AgingTestSystem.Dialogs
                     return true;
             }
 
+            // 策略枚举（【V1.67】）：必须命中合法名单（大小写不敏感）。
+            // 界面下拉选出来的天然合法；这道校验防的是手改 Policy.json/App.config 写错，
+            // 脏值在这里被拦截并报出合法选项，不会带着脏值保存。
+            Tuple<string, string>[] enumOptions;
+            if (ProjectPolicyStore.EnumOptions.TryGetValue(key, out enumOptions))
+            {
+                string v = (value ?? "").Trim();
+                foreach (var opt in enumOptions)
+                {
+                    if (string.Equals(opt.Item2, v, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+                var names = new List<string>();
+                foreach (var opt in enumOptions) names.Add(opt.Item2);
+                error = "应为下拉选项之一（" + string.Join(" / ", names.ToArray()) + "）";
+                return false;
+            }
+
             switch (key)
             {
                 // 整数
@@ -1558,6 +1703,16 @@ namespace AgingTestSystem.Dialogs
                     if (!bool.TryParse(value, out _)) { error = "应为 true 或 false"; return false; }
                     return true;
 
+                // 破空阀点位（非负整数，0=未配置）
+                case "VentValveDoPoint":
+                    int ventPoint;
+                    if (!int.TryParse(value, out ventPoint) || ventPoint < 0)
+                    {
+                        error = "应为 ≥0 的整数（0=未配置破空阀）";
+                        return false;
+                    }
+                    return true;
+
                 // 其余为字符串类（端口名、IP、关键词、校验位等），不做强制校验
                 default:
                     return true;
@@ -1588,12 +1743,66 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
+        /// 策略组合校验（【V1.67 新增】供保存按钮调用；校验逻辑本体在
+        /// AgingSequencer.ValidatePolicyCombination（纯函数，回归可单测），
+        /// 这里只负责拼出"内存现值 + 本次修改叠加后"的生效值）。
+        /// </summary>
+        /// <param name="changes">本次收集到的全部修改（key → 界面值）</param>
+        /// <returns>矛盾描述；null=组合合法</returns>
+        private string CheckPolicyCombination(Dictionary<string, string> changes)
+        {
+            bool shutdown = ResolveEffectiveBool(changes, "FanTempShutdownEnabled", _config.FanTempShutdownEnabled);
+            float limitC = ResolveEffectiveFloat(changes, "FanTempAlarmLimitC", _config.FanTempAlarmLimitC);
+            CompletionAction action = ResolveEffectiveEnum(changes, "CompletionAction", _config.CompletionAction);
+            int ventPoint = ResolveEffectiveInt(changes, "VentValveDoPoint", _config.VentValveDoPoint);
+            return AgingSequencer.ValidatePolicyCombination(shutdown, limitC, action, ventPoint);
+        }
+
+        /// <summary>取某项的生效值：本次改了用本次的，否则用内存现值（下同三个）。</summary>
+        private bool ResolveEffectiveBool(Dictionary<string, string> changes, string key, bool current)
+        {
+            string v;
+            if (changes.TryGetValue(key, out v) && bool.TryParse((v ?? "").Trim(), out bool b)) return b;
+            return current;
+        }
+
+        /// <summary>取某项的生效值（float 版）。</summary>
+        private float ResolveEffectiveFloat(Dictionary<string, string> changes, string key, float current)
+        {
+            string v;
+            if (changes.TryGetValue(key, out v) && float.TryParse((v ?? "").Trim(), out float f)) return f;
+            return current;
+        }
+
+        /// <summary>取某项的生效值（int 版）。</summary>
+        private int ResolveEffectiveInt(Dictionary<string, string> changes, string key, int current)
+        {
+            string v;
+            if (changes.TryGetValue(key, out v) && int.TryParse((v ?? "").Trim(), out int i)) return i;
+            return current;
+        }
+
+        /// <summary>取某项的生效值（枚举版，非法回现值——单项校验已拦过脏值，这里只求不炸）。</summary>
+        private CompletionAction ResolveEffectiveEnum(Dictionary<string, string> changes, string key, CompletionAction current)
+        {
+            string v;
+            object parsed;
+            if (changes.TryGetValue(key, out v)
+                && (parsed = ProjectPolicyStore.ParseValue(typeof(CompletionAction), v)) != null)
+            {
+                return (CompletionAction)parsed;
+            }
+            return current;
+        }
+
+        /// <summary>
         /// "保存设置"按钮点击事件
         ///
         /// 【流程】
         /// 1. 遍历全部分类表格，收集每行的 key / 值
         /// 2. 按类型校验每个值，不合法项整批拦截并列出（避免写坏配置文件）
-        /// 3. 写回 exe.config 的 appSettings（OpenExeConfiguration + Save）
+        /// 2.5 【V1.67】策略组合校验（联停开但上限0 / 泄压选但点位0 直接拦截并指明先填哪个）
+        /// 3. 分流写回：策略 key → 项目 Policy.json；其余 → exe.config 的 appSettings
         /// 4. 刷新 appSettings 缓存，提示重启生效
         /// </summary>
         private void btnSave_Click(object sender, EventArgs e)
@@ -1632,13 +1841,35 @@ namespace AgingTestSystem.Dialogs
                 return;
             }
 
+            // 【V1.67】策略组合校验（"配置即代码"：联停开但上限0、泄压选但点位0这类
+            // 自相矛盾的组合在这里整批拦截，报错信息直接告诉用户先填哪个）。
+            // 校验用"内存现值 + 本次修改叠加后"的生效值，不是只看本次改了哪几项
+            // （比如上限上周填的0、今天只开了联停，同样要拦）。
+            string comboError = CheckPolicyCombination(changes);
+            if (comboError != null)
+            {
+                MessageBox.Show("策略组合矛盾，保存已拦截：\r\n\r\n" + comboError,
+                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // 【V1.67】分流写回：策略 key → 项目 Policy.json（跟项目走）；
+            // 其余 → exe.config 的 appSettings（跟机器走）。
+            var policyChanges = new Dictionary<string, string>();
+            var machineChanges = new Dictionary<string, string>();
+            foreach (var kv in changes)
+            {
+                if (ProjectPolicyStore.PolicyKeys.Contains(kv.Key)) policyChanges[kv.Key] = kv.Value;
+                else machineChanges[kv.Key] = kv.Value;
+            }
+
             // 写回配置文件（程序运行目录下的 exe.config，与 App.config 同源）
             try
             {
                 var config = System.Configuration.ConfigurationManager.OpenExeConfiguration(
                     System.Configuration.ConfigurationUserLevel.None);
 
-                foreach (var kv in changes)
+                foreach (var kv in machineChanges)
                 {
                     var setting = config.AppSettings.Settings[kv.Key];
                     if (setting == null)
@@ -1659,6 +1890,21 @@ namespace AgingTestSystem.Dialogs
                 MessageBox.Show("保存配置失败：" + ex.Message, "错误",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
+            }
+
+            // 策略写项目文件（失败同样拦截，不走到热回写，避免"内存与文件不一致"）
+            if (policyChanges.Count > 0)
+            {
+                try
+                {
+                    ProjectPolicyStore.Save(policyChanges);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("保存项目策略失败：" + ex.Message, "错误",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
             }
 
             // 【热生效】保存成功后就地回写内存中的 DeviceConfig 实例（主窗体传入的同一引用）：
@@ -1730,6 +1976,8 @@ namespace AgingTestSystem.Dialogs
             if (propType == typeof(decimal)){ return decimal.TryParse(value, out decimal d) ? d : (object)null; }
             if (propType == typeof(float))  { return float.TryParse(value, out float f) ? f : (object)null; }
             if (propType == typeof(string)) { return value; }
+            // 【V1.67】策略枚举：走 ProjectPolicyStore.ParseValue（与启动叠加同口径）
+            if (propType.IsEnum) { return ProjectPolicyStore.ParseValue(propType, value); }
             if (propType == typeof(List<IoOutputChannelRemap>)) { return IoOutputChannelRemap.ParseAll(value, out _); }
             if (propType == typeof(List<string>)) { return DeviceConfig.ParseFanIpCandidates(value); }
             return null;

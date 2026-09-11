@@ -59,8 +59,11 @@ namespace AgingTestSystem.Services
     /// </summary>
     public static class StationSettingsCache
     {
-        /// <summary>缓存文件路径（程序运行目录下的 StationSettings.json）</summary>
-        private const string CacheFilePath = "StationSettings.json";
+        /// <summary>缓存文件路径（【V1.67】跟项目走：Projects/&lt;当前项目&gt;/StationSettings.json）</summary>
+        private static string CacheFilePath
+        {
+            get { return ProjectProfile.ResolveDataPath("StationSettings.json", true); }
+        }
 
         /// <summary>内存缓存（deviceId → 缓存条目），懒加载</summary>
         private static Dictionary<int, StationCacheEntry> _cache;

@@ -890,5 +890,213 @@ namespace AgingTestSystem.Tests
                 try { TestSessionStore.Clear(); } catch { }
             }
         }
+
+        // =====================================================================
+        // 15c. 工艺策略端到端（V1.67 新增：一期 L2 策略层执行侧）
+        // 与 15/15b 共用 Fake 三件套；每个策略独立 dm，互不污染。
+        // 策略缺省=现状的部分由既有场景覆盖（15 的 PASS/FAIL/重测），这里只测
+        // 非缺省分支：治具责任 / 待判定+下料 / 失压保持 / 续跑 / 泄压。
+        // =====================================================================
+        private static void DeviceManagerPolicyTests()
+        {
+            EnterCleanDir();
+
+            // 当日 CSV 行数统计（报警边沿单次/下料判定/失压标记不断言用）
+            Func<string, int> countLines = marker =>
+            {
+                try
+                {
+                    string file = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs",
+                        "TestLog_" + DateTime.Now.ToString("yyyyMMdd") + ".csv");
+                    if (!File.Exists(file)) return 0;
+                    int n = 0;
+                    foreach (string line in File.ReadAllLines(file))
+                    {
+                        if (line.Contains(marker)) n++;
+                    }
+                    return n;
+                }
+                catch { return 0; }
+            };
+
+            // ---------- P1 真空失败记治具（Q19=FixtureAlarm） ----------
+            FakeBarometerReader r1; FakeIoController io1; DeviceConfig c1;
+            DeviceManager dm1 = BuildTestManager(out r1, out io1, out c1);
+            try
+            {
+                c1.VacuumFailKind = VacuumFailKind.FixtureAlarm;
+                dm1.StartTesting(new[] { 1 });
+                // 常压 0 恒越限：600ms 宽限耗尽判真空建立失败
+                Check("[策略P1] 治具责任下真空失败仍报警断电标Fault",
+                    WaitUntil(() =>
+                    {
+                        var d = dm1.GetBarometerData(1);
+                        return d != null && d.Status == DeviceStatus.Fault;
+                    }, 3000));
+                Check("[策略P1] 结果记装夹异常而非FAIL",
+                    (dm1.GetBarometerData(1) ?? new BarometerData()).LastTestResult == "装夹异常");
+                Check("[策略P1] CSV记报警(装夹异常)",
+                    WaitUntil(() => countLines("报警(装夹异常)") >= 1, 2000));
+            }
+            finally { try { dm1.StopAll(); } catch { } try { dm1.Dispose(); } catch { } }
+
+            // ---------- P2 待判定+下料录入（Q22=PendingReview） ----------
+            FakeBarometerReader r2; FakeIoController io2; DeviceConfig c2;
+            DeviceManager dm2 = BuildTestManager(out r2, out io2, out c2);
+            try
+            {
+                c2.CompletionJudgePolicy = CompletionJudgePolicy.PendingReview;
+                dm2.SetStationRecipe(1, "配方R1", -3m, null);
+                dm2.SetStationDelayTimes(1, TimeSpan.Zero, TimeSpan.FromSeconds(1.5));
+                dm2.StartTesting(new[] { 1 });
+                r2.SetPressure(1, -4m); // 配方阈值-3下到位
+                Check("[策略P2] 待判定模式仍正常上电",
+                    WaitUntil(() => io2.ReadOutput(PowerOut(c2, 1)), 2500));
+                Check("[策略P2] 到时完成但标待判定而非PASS",
+                    WaitUntil(() =>
+                    {
+                        var d = dm2.GetBarometerData(1);
+                        return d != null && d.Status == DeviceStatus.Completed
+                            && d.LastTestResult == "待判定";
+                    }, 4000));
+                int[] judged; int[] skipped;
+                dm2.RecordUnloadJudge(new[] { 1 }, false, "黑点", "报废", out judged, out skipped);
+                Check("[策略P2] 下料判定收完成态台",
+                    judged.Length == 1 && judged[0] == 1 && skipped.Length == 0);
+                Check("[策略P2] 判定后回空闲(确认取件)",
+                    WaitUntil(() =>
+                    {
+                        var d = dm2.GetBarometerData(1);
+                        return d != null && d.Status == DeviceStatus.Idle;
+                    }, 2000));
+                Check("[策略P2] CSV记下料判定明细",
+                    WaitUntil(() => countLines("下料判定") >= 1, 2000));
+                dm2.RecordUnloadJudge(new[] { 2 }, true, "", "—", out judged, out skipped);
+                Check("[策略P2] 非完成态台跳过不碰",
+                    judged.Length == 0 && skipped.Length == 1);
+                dm2.RecordUnloadJudge(null, true, "", "—", out judged, out skipped);
+                Check("[策略P2] null输入静默", judged.Length == 0 && skipped.Length == 0);
+            }
+            finally { try { dm2.StopAll(); } catch { } try { dm2.Dispose(); } catch { } }
+
+            // ---------- P3 老化中失压只记不停（Q11=KeepRunning） ----------
+            FakeBarometerReader r3; FakeIoController io3; DeviceConfig c3;
+            DeviceManager dm3 = BuildTestManager(out r3, out io3, out c3);
+            try
+            {
+                c3.AgingPressureLossPolicy = AgingPressureLossPolicy.KeepRunning;
+                dm3.SetStationRecipe(1, "配方R1", -5m, null);
+                dm3.SetStationDelayTimes(1, TimeSpan.Zero, TimeSpan.FromSeconds(60)); // 长老化不自己完成
+                dm3.StartTesting(new[] { 1 });
+                r3.SetPressure(1, -6m);
+                Check("[策略P3] 到位上电进入老化",
+                    WaitUntil(() => io3.ReadOutput(PowerOut(c3, 1)), 2500));
+                r3.SetPressure(1, 0m); // 老化中掉真空
+                Thread.Sleep(600);     // 数个采集周期：缺省会报警，这里应保持
+                var d3 = dm3.GetBarometerData(1);
+                Check("[策略P3] 失压不停机(仍Testing非Fault)",
+                    d3 != null && d3.Status == DeviceStatus.Testing);
+                Check("[策略P3] 失压不写判定结果",
+                    string.IsNullOrEmpty((dm3.GetBarometerData(1) ?? new BarometerData()).LastTestResult));
+                Check("[策略P3] 边沿记一条失压保持运行",
+                    WaitUntil(() => countLines("失压保持运行") >= 1, 2000));
+                Thread.Sleep(600);
+                Check("[策略P3] 不刷屏(仍只有一条)",
+                    countLines("失压保持运行") == 1);
+            }
+            finally { try { dm3.StopAll(); } catch { } try { dm3.Dispose(); } catch { } }
+
+            // ---------- P4 断电续跑（Q21①=ResumeRemaining） ----------
+            FakeBarometerReader r4; FakeIoController io4; DeviceConfig c4;
+            DeviceManager dm4 = BuildTestManager(out r4, out io4, out c4);
+            try
+            {
+                // 先跑进 Aging，验证快照带阶段+上电时刻
+                dm4.SetStationRecipe(1, "配方R1", -5m, null);
+                dm4.SetStationDelayTimes(1, TimeSpan.Zero, TimeSpan.FromSeconds(100));
+                dm4.StartTesting(new[] { 1 });
+                r4.SetPressure(1, -6m);
+                Check("[策略P4] 跑进老化",
+                    WaitUntil(() => io4.ReadOutput(PowerOut(c4, 1)), 2500));
+                var snap = TestSessionStore.Load();
+                var s1 = snap != null && snap.Stations != null
+                    ? snap.Stations.Find(s => s != null && s.DeviceId == 1) : null;
+                Check("[策略P4] 快照带Aging阶段",
+                    s1 != null && s1.Phase == (int)AgingPhase.Aging);
+                Check("[策略P4] 快照带有上电时刻",
+                    s1 != null && s1.PowerOnTime != default(DateTime));
+                dm4.StopAll();
+                TestSessionStore.Clear();
+
+                // 手工构造"中断40秒"的快照，在新 dm 上续跑：100-40=60
+                FakeBarometerReader r4b; FakeIoController io4b; DeviceConfig c4b;
+                DeviceManager dm4b = BuildTestManager(out r4b, out io4b, out c4b);
+                try
+                {
+                    c4b.PowerLossPolicy = PowerLossPolicy.ResumeRemaining;
+                    DateTime now = DateTime.Now;
+                    var session = new TestSession
+                    {
+                        LotNumber = "LOT-RESUME",
+                        SavedAt = now,
+                        Stations = new List<TestSessionStation>
+                        {
+                            new TestSessionStation
+                            {
+                                DeviceId = 1, SerialNumber = "S1", RecipeName = "R",
+                                DurationSeconds = 100, DelaySeconds = 0,
+                                AlarmThresholdKPa = -5m,
+                                Phase = (int)AgingPhase.Aging,
+                                PowerOnTime = now.AddSeconds(-40)
+                            }
+                        }
+                    };
+                    dm4b.RecoverSession(session);
+                    Thread.Sleep(150);
+                    int resumed = -1;
+                    try
+                    {
+                        resumed = ((int[])GetDmField(dm4b, "_sessionDurationSecs"))[0];
+                    }
+                    catch { }
+                    Check("[策略P4] 续跑时长=剩余(100-40=60)",
+                        resumed == 60);
+                    Check("[策略P4] 续跑从重抽真空开始(阀开/电不开)",
+                        io4b.ReadOutput(ValveOut(c4b, 1)) && !io4b.ReadOutput(PowerOut(c4b, 1)));
+                    dm4b.DiscardSession(dm4b.LoadPendingSession());
+                }
+                finally { try { dm4b.StopAll(); } catch { } try { dm4b.Dispose(); } catch { } }
+            }
+            finally { try { dm4.StopAll(); } catch { } try { dm4.Dispose(); } catch { } }
+
+            // ---------- P5 完成泄压+复位关阀（Q6/Q15=PowerOffVentAndBeep） ----------
+            FakeBarometerReader r5; FakeIoController io5; DeviceConfig c5;
+            DeviceManager dm5 = BuildTestManager(out r5, out io5, out c5);
+            try
+            {
+                c5.CompletionAction = CompletionAction.PowerOffVentAndBeep;
+                c5.VentValveDoPoint = 200; // Fake 输出空间 240，200 合法
+                dm5.SetStationRecipe(1, "配方R1", -3m, null);
+                dm5.SetStationDelayTimes(1, TimeSpan.Zero, TimeSpan.FromSeconds(1.5));
+                dm5.StartTesting(new[] { 1 });
+                r5.SetPressure(1, -4m);
+                Check("[策略P5] 到时完成",
+                    WaitUntil(() =>
+                    {
+                        var d = dm5.GetBarometerData(1);
+                        return d != null && d.Status == DeviceStatus.Completed;
+                    }, 4000));
+                Check("[策略P5] 破空阀已开启",
+                    WaitUntil(() => io5.ReadOutput(200), 1000));
+                Check("[策略P5] CSV记破空泄压",
+                    WaitUntil(() => countLines("破空泄压") >= 1, 2000));
+                dm5.ResetDevices(new[] { 1 });
+                Check("[策略P5] 复位关闭破空阀(不残留)",
+                    WaitUntil(() => !io5.ReadOutput(200), 1000));
+            }
+            finally { try { dm5.StopAll(); } catch { } try { dm5.Dispose(); } catch { } }
+
+            try { TestSessionStore.Clear(); } catch { }
+        }
     }
 }

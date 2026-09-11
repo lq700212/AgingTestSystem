@@ -40,6 +40,24 @@
   `_descriptions` + `_categories`）。`ValidateValue` 的布尔分支是硬编码 switch，
   只进 `_boolKeys` 会导致"YES 也能过"——回归里"布尔键一致"锁（逐项 true/false 过、YES 不过）
   就是防这个的，改完看它变绿才算完。
+- **新增工艺策略 key 六处同步（V1.67，枚举型配置走另一套）**：`PolicyEnums` 枚举（0 值=现状行为，
+  只能追加禁改序）+ `DeviceConfig` 属性（缺省=现状）+ `ProjectPolicyStore.PolicyKeys`
+  （**唯一名单**，分流/校验/叠加全认它）+ `EnumOptions` 下拉选项（中文显示/英文存储，
+  显示改文案不影响已存）+ `App.config` key（机器缺省）+ `MainForm` 读取
+  （`ParsePolicyEnum` 非法兜底现状）+ `SettingsForm`（`_descriptions` + `_categories`
+  + `ValidateValue` 名单分支 + `CreateValueCell` 下拉分支——枚举不进 `_boolKeys`，
+  不归一化就"脏值也能存"）。回归里"三处同步锁"（PolicyKeys↔属性↔选项可解析）看绿才算完。
+- **判定类分支先写 AgingSequencer 纯函数（V1.67 收紧）**：策略执行侧一律先加纯函数
+  （`BuildStartBlockText`/`MapAlarmResult`/`ComputeResumeDurationSeconds`/
+  `ValidatePolicyCombination`）并同步用例，`DeviceManager` 只做"调用决策 + IO + 日志"。
+  快照加字段时同步列"哪些状态变迁写快照"（上电边沿漏一次，P4 用例红过）。
+- **运行时文件跟项目还是跟机器（V1.67）**：配方/工位设置/主页布局/策略跟项目
+  （`ProjectProfile.ResolveDataPath(file, true)`，`Projects/<项目>/`）；用户/快照/
+  面板布局/日志/连接参数跟机器（程序目录）。改存储路径必须 rg 全仓扫字面文件名，
+  老用例的字面路径会批量红（V1.67 实锤）；`Projects/` 住运行目录（bin/ 下，天然 gitignore）。
+- **设置表 tooltip 全覆盖（V1.67 用户原则）**：配置项说明悬停可见，超 40 字按
+  `WrapTooltip` 换行（断点优先标点，不断英文单词）；新增配置项的 `_descriptions`
+  写清"现状是什么/改了会怎样"，别只写名字。
 - **配方加字段三窗同步（V1.66）**：`RecipeConfig` 加字段 → 三个录入窗
   （`RecipeManagerForm`/`BatchRecipeForm`/`StationSettingsForm`：输入框 + 保存 + 回填 +
   自动检索回调 + 头部 ASCII 图）→ `SetStationRecipe` 下发 → `StationInfo`（+`Clone`）→
@@ -87,6 +105,11 @@
 | `AgingTestSystem/Services/PasswordHasher.cs` | 密码哈希（PBKDF2-SHA256，Users.json 落盘前转换；改密码/登录/迁移入口全在 UserManager） |
 | `AgingTestSystem/Services/DeviceManager.cs` | 业务编排核心（采集/报警联动/**三阶段老化状态机 V1.59**：Vacuuming 抽真空→Aging 计时→Completed 待取料） |
 | `AgingTestSystem/Services/AgingSequencer.cs` | 老化时序纯函数决策器（ShouldPowerOn/ShouldComplete/IsVacuumBuildFailed）；**改编排时序逻辑先改这里并同步用例**，保持 DeviceManager 只做执行 |
+| `AgingTestSystem/Models/PolicyEnums.cs` | 工艺策略枚举（V1.67；0 值=现状行为，只能追加） |
+| `AgingTestSystem/Services/ProjectProfile.cs` | 项目档案（Projects/&lt;项目&gt;/ 路径解析/迁移/切换；跟项目 vs 跟机器见上） |
+| `AgingTestSystem/Services/ProjectPolicyStore.cs` | 项目策略存储（Policy.json 分流/叠加；PolicyKeys 唯一名单；EnumOptions 下拉） |
+| `AgingTestSystem/Dialogs/UnloadJudgeForm.cs` | 下料判定窗（V1.67；Q22 待判定配套，纯代码窗体） |
+| `AgingTestSystem/Dialogs/ProjectSwitchForm.cs` | 项目切换窗（V1.67；仅管理员，纯代码窗体） |
 | `AgingTestSystem/Services/TestSessionStore.cs` | 在测任务快照持久化（TestSession.json，断电恢复用，gitignore） |
 | `AgingTestSystem/Services/RecipeAutoCompleteProvider.cs` | 配方名称自动检索 |
 | `AgingTestSystem/Services/ThemeManager.cs` | 深色/浅色主题服务（V1.60；AppTheme 配置 + 双向映射表着色；新窗体打开前 ApplyTo） |
@@ -103,7 +126,10 @@
 ```
 
 - 构建成功标准：输出 `AgingTestSystem -> ...\bin\Debug\AgingTestSystem.exe` 且无 error。
-- **最终测试验证手段（V1.58.23 起）**：一键跑 `powershell -ExecutionPolicy Bypass -File .opencode\skills\agingtest-regression\scripts\build_and_test.ps1`，自动完成"构建 → 真机冒烟（exe 启动存活）→ 全量回归用例（828+ 断言，覆盖 PasswordHasher/UserManager/配置归一化/IO 映射/配方存储/双日志器/面板布局锚定联动/编排扩展场景等核心逻辑类）"。也可单独跑同目录 `smoke_test.ps1`（只冒烟）/ `run_unit_tests.ps1`（只回归）。退出码 0 = 全绿。
+- **新增 .cs 文件必须手工在 csproj 登记**（老式项目无通配，漏登记报 CS0246）：
+  在 `<Compile Include="...">` 段按目录加一行（纯代码窗体加 `<SubType>Form</SubType>` 即可，
+  无需 Designer/resx）。V1.67 实锤：5 个新文件漏登记编译全红。
+- **最终测试验证手段（V1.58.23 起）**：一键跑 `powershell -ExecutionPolicy Bypass -File .opencode\skills\agingtest-regression\scripts\build_and_test.ps1`，自动完成"构建 → 真机冒烟（exe 启动存活）→ 全量回归用例（918+ 断言，覆盖 PasswordHasher/UserManager/配置归一化/IO 映射/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案/编排扩展场景等核心逻辑类）"。也可单独跑同目录 `smoke_test.ps1`（只冒烟）/ `run_unit_tests.ps1`（只回归）。退出码 0 = 全绿。
 - **界面像素级 bug（竖线/横线/颜色/叠色/裁剪/滚动条）**：调用全局技能 `winforms-ui-debug`——编译独立 harness 直接 new 目标窗体（指哪打哪，绕过登录/主流程），用反射探私有字段 + PrintWindow 截图 + 像素扫描定位根因并验证修复。含可复用的 csc 编译命令、坐标映射、色值字典与踩坑清单。
 - **调试完自动沉淀技能**：每次用 `winforms-ui-debug` 排查成功（尤其是"一次性改对"的高光案例）后，**主动把可复用的新套路/新踩坑/新型探针代码回写到全局技能 `winforms-ui-debug` 的 SKILL.md**（新增/补充小节、追加踩坑条目），不用等用户提醒。价值标准：换个人靠这份 skill 能更快解决同类问题。
 - 改构建输出（csproj 路径/bin 目录/主 exe 名）时，同步改全局技能 `winforms-ui-debug` 附录 A 的 AgingTestSystem 行（防开工查表拿到旧值）。

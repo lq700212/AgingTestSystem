@@ -25,9 +25,13 @@ namespace AgingTestSystem.Services
     public static class RecipeStorage
     {
         /// <summary>
-        /// 配方数据文件路径（程序运行目录下的 Recipes.json）
+        /// 配方数据文件路径（【V1.67】跟项目走：Projects/&lt;当前项目&gt;/Recipes.json，
+        /// 经 ProjectProfile 解析；切项目即换配方文件）。
         /// </summary>
-        private const string RecipeDataFilePath = "Recipes.json";
+        private static string RecipeDataFilePath
+        {
+            get { return ProjectProfile.ResolveDataPath("Recipes.json", true); }
+        }
 
         /// <summary>
         /// 从 JSON 文件加载配方列表

@@ -47,12 +47,13 @@ namespace AgingTestSystem.Views
     /// │   (9列 × 8行布局)           │ 上部温度: [D4702]       │
     /// │   (V1.50 单窗口滚动容器)    │ 下部温度: [D4704]       │
     /// │                              │                         │
-    /// │                              │ 操作（V1.59.1 精简版）  │
+    /// │                              │ 操作（V1.59.1 精简版，V1.67 加下料判定）  │
     /// │                              │ [批量设置配方]          │
     /// │                              │ [录入批号]             │
     /// │                              │ [启动运行（选中台）]    │
     /// │                              │ [停止运行（选中台）]    │
     /// │                              │ [报警复位（选中台）]    │
+    /// │                              │ [下料判定（选中台）]    │
     /// │                              │ [全部停止（急停）]      │
     /// ├──────────────────────────────┴──────────────────────────┤
     /// │ 状态栏：设备数量: 72 | 采集间隔: 1s | 当前时间          │
@@ -196,6 +197,12 @@ namespace AgingTestSystem.Views
 
             // 【V1.49】主窗体开启双缓冲，与工位面板/网格双缓冲配合，消除滚动撕裂
             this.DoubleBuffered = true;
+
+            // 【V1.67】项目档案就位（必须在 ApplyHomeLayout/LoadConfig/LoadRecipes 之前：
+            // HomeLayout/配方/策略文件的路径都依赖当前项目目录）。
+            // 首跑自动建 Default 并把程序目录下的老文件搬进去，老用户无感迁移。
+            string activeProject = ProjectProfile.EnsureActiveProfile();
+            System.Diagnostics.Debug.WriteLine($"[项目档案] 当前项目: {activeProject}");
 
             // 1.5 应用主页布局（从 HomeLayout.json 读取各区域尺寸；文件不存在则用内置默认）
             // 【V1.58】原来这里调用 AdjustRightPanelWidth 按内容自动算右侧宽度，
@@ -374,7 +381,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 【V1.58】把"操作"分组里的 6 个按钮宽度同步为分组可用宽度 - 左右边距。
+        /// 【V1.58】把"操作"分组里的 7 个按钮宽度同步为分组可用宽度 - 左右边距（V1.67 加下料判定）。
         /// 原设计按钮宽 256（groupBox 宽 292）；右侧区域可调后，分组框宽度随之变化，
         /// 若仍用固定宽会导致按钮溢出分组框或被截断。宽度 = 分组客户区宽 - 30（左右各 15）。
         /// </summary>
@@ -850,6 +857,33 @@ namespace AgingTestSystem.Views
                 config.ScannerDebugLog = scannerDebugLog;
             }
 
+            // 【V1.67】工艺策略（机器级缺省；随后 ProjectPolicyStore.ApplyOverlay 用
+            // 当前项目的 Policy.json 覆盖——项目没配过的项保持这里的缺省=现状行为）。
+            // 枚举非法/缺省一律回"现状值"，不抛异常（手改配置文件写错也不炸，见 ParsePolicyEnum）。
+            config.ZeroDurationPolicy = ParsePolicyEnum(
+                System.Configuration.ConfigurationManager.AppSettings["ZeroDurationPolicy"], ZeroDurationPolicy.Warn);
+            config.EmptySnPolicy = ParsePolicyEnum(
+                System.Configuration.ConfigurationManager.AppSettings["EmptySnPolicy"], EmptySnPolicy.Warn);
+            config.FanDisconnectPolicy = ParsePolicyEnum(
+                System.Configuration.ConfigurationManager.AppSettings["FanDisconnectPolicy"], FanDisconnectPolicy.LogOnly);
+            config.VacuumFailKind = ParsePolicyEnum(
+                System.Configuration.ConfigurationManager.AppSettings["VacuumFailKind"], VacuumFailKind.ProductFail);
+            config.CompletionJudgePolicy = ParsePolicyEnum(
+                System.Configuration.ConfigurationManager.AppSettings["CompletionJudgePolicy"], CompletionJudgePolicy.AutoPass);
+            config.PowerLossPolicy = ParsePolicyEnum(
+                System.Configuration.ConfigurationManager.AppSettings["PowerLossPolicy"], PowerLossPolicy.RestartFull);
+            config.AgingPressureLossPolicy = ParsePolicyEnum(
+                System.Configuration.ConfigurationManager.AppSettings["AgingPressureLossPolicy"], AgingPressureLossPolicy.StopOnLoss);
+            config.CompletionAction = ParsePolicyEnum(
+                System.Configuration.ConfigurationManager.AppSettings["CompletionAction"], CompletionAction.PowerOffOnly);
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["VentValveDoPoint"], out int ventPoint))
+            {
+                config.VentValveDoPoint = Math.Max(0, ventPoint);
+            }
+
+            // 【V1.67】项目策略叠加（Projects/<当前项目>/Policy.json 覆盖同名机器缺省）
+            ProjectPolicyStore.ApplyOverlay(config);
+
             if (config.TotalInputs < config.TotalBarometers)
             {
                 System.Diagnostics.Debug.WriteLine(
@@ -875,6 +909,24 @@ namespace AgingTestSystem.Views
             }
 
             return config;
+        }
+
+        /// <summary>
+        /// 解析工艺策略枚举（【V1.67 新增】）：
+        /// 大小写不敏感（"warn"/"Warn" 都认）；空/非法/未定义值一律回 fallback
+        /// （= 现状行为）——手改配置文件写错也不炸，SettingsForm 下拉选项保证正常路径全合法。
+        /// </summary>
+        private static T ParsePolicyEnum<T>(string raw, T fallback) where T : struct
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return fallback;
+            T parsed;
+            if (Enum.TryParse<T>(raw.Trim(), true, out parsed)
+                && Enum.IsDefined(typeof(T), parsed))
+            {
+                return parsed;
+            }
+            System.Diagnostics.Debug.WriteLine($"[工艺策略] 非法值 \"{raw}\" 已兜底为 {fallback}（{typeof(T).Name}）");
+            return fallback;
         }
 
         /// <summary>
@@ -1017,11 +1069,16 @@ namespace AgingTestSystem.Views
             if (session?.Stations == null || session.Stations.Count == 0) return;
 
             var idList = string.Join("、", session.Stations.ConvertAll(s => s.DeviceId));
+            // 【V1.67】恢复文案跟随 PowerLossPolicy：续跑（重抽真空+补剩余）/ 整台重测
+            bool resume = (_config.PowerLossPolicy == PowerLossPolicy.ResumeRemaining);
+            string resumeLine = resume
+                ? "【是】恢复测试 —— 这些台将重抽真空，按中断时刻的剩余时长补足老化（断电期间不计）\n"
+                : "【是】恢复测试 —— 这些台将按原参数整台重新老化（推荐，老化要求连续性）\n";
             DialogResult r = MessageBox.Show(
                 $"检测到上次退出时有 {session.Stations.Count} 台工位的老化测试未完成：\n\n" +
                 $"批号：{(string.IsNullOrEmpty(session.LotNumber) ? "（无批号）" : session.LotNumber)}\n" +
                 $"工位：{idList}\n\n" +
-                "【是】恢复测试 —— 这些台将按原参数整台重新老化（推荐，老化要求连续性）\n" +
+                resumeLine +
                 "【否】放弃任务 —— 关闭这些工位的真空阀与载台电",
                 "断电恢复",
                 MessageBoxButtons.YesNo,
@@ -1031,7 +1088,9 @@ namespace AgingTestSystem.Views
             if (r == DialogResult.Yes)
             {
                 _deviceManager.RecoverSession(session);
-                WriteLog($"[断电恢复] {session.Stations.Count} 台已重新投入测试（整台重测）");
+                WriteLog(resume
+                    ? $"[断电恢复] {session.Stations.Count} 台已投入续跑（重抽真空+补足剩余时长）"
+                    : $"[断电恢复] {session.Stations.Count} 台已重新投入测试（整台重测）");
             }
             else
             {
@@ -1775,15 +1834,36 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 参数设置按钮点击 → 显示参数设置下拉菜单
-        /// 菜单项：公共参数 / 配方管理
+        /// 菜单项：公共参数 / 配方管理 / 项目切换（【V1.67 新增】管理员限定，见 MenuParamProject_Click）
         /// </summary>
         private void btnParameter_Click(object sender, EventArgs e)
         {
             ShowDropdownPopup(btnParameter, new (string, EventHandler)[]
             {
                 ("公共参数", MenuParamCommon_Click),
-                ("配方管理", MenuParamRecipe_Click)
+                ("配方管理", MenuParamRecipe_Click),
+                ("项目切换", MenuParamProject_Click)
             });
+        }
+
+        /// <summary>
+        /// 项目切换 → 弹出项目档案窗体（【V1.67 新增】仅管理员：项目=工艺归属，
+        /// 切错项目=跑错工艺，所以与系统设置同级管控；技术员/操作员点此直接提示）。
+        /// 切换后必须重启（运行时文件路径在启动时解析，运行中切换会读劈叉）。
+        /// </summary>
+        private void MenuParamProject_Click(object sender, EventArgs e)
+        {
+            if (!_userManager.HasPermission(UserRole.Administrator))
+            {
+                MessageBox.Show("项目切换仅管理员可用，请先在【用户权限】中切换为管理员权限。",
+                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            using (var form = new ProjectSwitchForm(() => _deviceManager.GetTestingDeviceIds().Length))
+            {
+                ThemeManager.ApplyTo(form);
+                form.ShowDialog(this);
+            }
         }
 
         /// <summary>
@@ -1878,7 +1958,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 把主题配色应用到"停止运行/报警复位"两按钮（【V1.60.1】）。
+        /// 把主题配色应用到"停止运行/报警复位/下料判定"三个无语义灰按钮（【V1.60.1】，V1.67 加下料判定）。
         /// 为什么只有它俩特殊：ThemeManager 对按钮一律不动（语义色保护），
         /// 但它俩浅色是"无语义的默认灰"，深色下黑字偏弱，才单独提出来处理。
         /// 启动与每次主题切换后调用（切换入口只有 MenuThemeToggle_Click 一处，不会漏）。
@@ -1897,6 +1977,12 @@ namespace AgingTestSystem.Views
             {
                 btnResetAlarm.BackColor = back;
                 btnResetAlarm.ForeColor = fore;
+            }
+            // 【V1.67】下料判定同为无语义默认灰，随它俩一起换肤
+            if (btnUnloadJudge != null)
+            {
+                btnUnloadJudge.BackColor = back;
+                btnUnloadJudge.ForeColor = fore;
             }
         }
 
@@ -2534,6 +2620,19 @@ namespace AgingTestSystem.Views
             string riskWarning = AgingSequencer.BuildStartWarningText(
                 zeroDurationIds.ToArray(), emptySnIds.ToArray());
 
+            // 【V1.67】Q13 硬拦截：策略=Block 且命中 0 时长/空 SN 工位时直接阻断，
+            // 连确认框都不进（Warn 走上面的警告拼框，点"是"照跑）。
+            string blockText = AgingSequencer.BuildStartBlockText(
+                zeroDurationIds.ToArray(), emptySnIds.ToArray(),
+                _config.ZeroDurationPolicy, _config.EmptySnPolicy);
+            if (!string.IsNullOrEmpty(blockText))
+            {
+                MessageBox.Show("启动已被工艺策略阻断：\n\n" + blockText +
+                    "\n\n（如现场允许放行，到系统设置 → 工艺策略 改回\"只警告\"）",
+                    "启动阻断", MessageBoxButtons.OK, MessageBoxIcon.Stop);
+                return;
+            }
+
             DialogResult r = MessageBox.Show(
                 $"确认启动 {ids.Length} 台老化测试？\n\n" +
                 "将执行：\n" +
@@ -2553,11 +2652,20 @@ namespace AgingTestSystem.Views
 
             // 【V1.16.2】启动测试依赖送风机保持温控：送风机没连上时给一次异步按需重连
             //（弹"连接中"），仍连不上则提示（不阻断测试，但操作员要知道没有温控）。
+            // 【V1.67】Q16：FanDisconnectPolicy=BlockStart 时改为阻断启动（先修风机再点火）。
             if (_deviceManager.IsFanEnabled && !_deviceManager.IsFanConnected)
             {
                 bool fanOk = await EnsureFanReadyAsync();
                 if (!fanOk)
                 {
+                    if (_config.FanDisconnectPolicy == FanDisconnectPolicy.BlockStart)
+                    {
+                        MessageBox.Show("送风机未连接，工艺策略要求阻断启动：\n\n" +
+                            "请先连上送风机（测试需要环境温控），\n" +
+                            "或到系统设置 → 工艺策略 改回\"只提示\"。",
+                            "启动阻断", MessageBoxButtons.OK, MessageBoxIcon.Stop);
+                        return;
+                    }
                     MessageBox.Show("送风机未连接，请先连接（测试仍会启动，但老化过程没有环境温控）", "提示",
                         MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
@@ -2613,6 +2721,32 @@ namespace AgingTestSystem.Views
 
             _deviceManager.ResetDevices(ids);
             WriteLog($"复位（{ids.Length} 台：报警/完成态已清除）");
+        }
+
+        /// <summary>
+        /// 下料判定按钮点击（【V1.67 新增】Q22 PendingReview 配套）。
+        /// 选中已完成·待取料的台 → 弹窗录 PASS/FAIL + 不良代码 + 处置 → 写 CSV 追溯 → 回空闲。
+        /// AutoPass 模式下点它只提示（无需判定），不做任何事——操作员误触零风险。
+        /// </summary>
+        private void btnUnloadJudge_Click(object sender, EventArgs e)
+        {
+            if (_config.CompletionJudgePolicy != CompletionJudgePolicy.PendingReview)
+            {
+                MessageBox.Show("当前完成判定 = 自动PASS，无需下料判定。\n\n" +
+                    "如需人工判定，到系统设置 → 工艺策略 把完成判定切到\"待判定\"。",
+                    "下料判定", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            int[] ids = GetSelectedDeviceIds();
+            if (ids == null) return;
+
+            using (var form = new UnloadJudgeForm(ids, _deviceManager))
+            {
+                ThemeManager.ApplyTo(form);
+                form.ShowDialog(this);
+                WriteLog($"下料判定窗口已关闭（{ids.Length} 台送判，明细见历史查询 CSV）");
+            }
         }
 
         /// <summary>

@@ -84,6 +84,7 @@
     <Compile Include="Models\FanData.cs" />
     <Compile Include="Models\RecipeConfig.cs" />
     <Compile Include="Models\StationInfo.cs" />
+    <Compile Include="Models\PolicyEnums.cs" />
     <Compile Include="Models\PanelLayoutConfig.cs" />
     <Compile Include="Models\HomeLayoutConfig.cs" />
     <Compile Include="Models\UserRole.cs" />
@@ -109,6 +110,8 @@
     <Compile Include="Services\TestEventLogger.cs" />
     <Compile Include="Services\TestSessionStore.cs" />
     <Compile Include="Services\AgingSequencer.cs" />
+    <Compile Include="Services\ProjectProfile.cs" />
+    <Compile Include="Services\ProjectPolicyStore.cs" />
     <Compile Include="Services\DeviceManager.cs" />
     <Compile Include="Services\UserManager.cs" />
     <Compile Include="Services\PasswordHasher.cs" />
@@ -178,6 +181,12 @@
     </Compile>
     <Compile Include="Dialogs\HistoryRecordForm.Designer.cs">
       <DependentUpon>HistoryRecordForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Dialogs\UnloadJudgeForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Dialogs\ProjectSwitchForm.cs">
+      <SubType>Form</SubType>
     </Compile>
     <Compile Include="Dialogs\LoginForm.cs">
       <SubType>Form</SubType>

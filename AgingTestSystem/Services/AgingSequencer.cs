@@ -1,5 +1,5 @@
-
 using System;
+using AgingTestSystem.Models;
 
 namespace AgingTestSystem.Services
 {
@@ -126,6 +126,109 @@ namespace AgingTestSystem.Services
                 sb.Append(string.Join("、", emptySnIds));
             }
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// 启动前硬拦截文案（【V1.67 新增】Q13 策略化：Warn 走 BuildStartWarningText，
+        /// Block 走本函数——含 0 时长/空 SN 工位时直接阻断，连确认框都不进）。
+        /// </summary>
+        /// <param name="zeroDurationIds">有效时长为 0 的工位号</param>
+        /// <param name="emptySnIds">未绑定 SN 的工位号</param>
+        /// <param name="zeroPolicy">0 时长策略</param>
+        /// <param name="snPolicy">空 SN 策略</param>
+        /// <returns>阻断原因文案；""=不阻断（调用方直接拼，不用判空）</returns>
+        public static string BuildStartBlockText(int[] zeroDurationIds, int[] emptySnIds,
+            ZeroDurationPolicy zeroPolicy, EmptySnPolicy snPolicy)
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            if (zeroPolicy == ZeroDurationPolicy.Block
+                && zeroDurationIds != null && zeroDurationIds.Length > 0)
+            {
+                sb.Append("以下工位老化时长为 0（策略=硬拦截，不限时长不许启动）：");
+                sb.Append(string.Join("、", zeroDurationIds));
+            }
+            if (snPolicy == EmptySnPolicy.Block
+                && emptySnIds != null && emptySnIds.Length > 0)
+            {
+                if (sb.Length > 0) sb.Append("\r\n");
+                sb.Append("以下工位未绑定 SN（策略=硬拦截，无追溯不许启动）：");
+                sb.Append(string.Join("、", emptySnIds));
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// 报警结果映射（【V1.67 新增】Q19 策略化：真空失败记 FAIL 还是装夹异常）。
+        ///
+        /// 【映射表】
+        /// - 设备异常（通讯失联，productRelated=false）→ "设备异常"（策略管不着，不判产品）；
+        /// - 真空类报警（压力越限/真空建立失败）→ 策略决定：ProductFail="FAIL"，FixtureAlarm="装夹异常"；
+        /// - 非真空的产品报警（DI 触点）→ 永远 "FAIL"（触点是仪表硬件判的，责任不在真空）。
+        /// </summary>
+        /// <param name="productRelated">是否产品相关（沿用 HandleAlarm 语义）</param>
+        /// <param name="vacuumCause">是否为真空类原因（调用方按"压力越限/真空建立失败"判定）</param>
+        /// <param name="vacuumKind">真空失败责任策略</param>
+        public static string MapAlarmResult(bool productRelated, bool vacuumCause, VacuumFailKind vacuumKind)
+        {
+            if (!productRelated) return "设备异常";
+            if (vacuumCause && vacuumKind == VacuumFailKind.FixtureAlarm) return "装夹异常";
+            return "FAIL";
+        }
+
+        /// <summary>
+        /// 断电续跑的剩余时长（【V1.67 新增】Q21① 策略化，纯函数）。
+        ///
+        /// 【语义】remaining = duration - (savedAt - powerOn)：中断时刻已跑掉的不补，
+        /// 断电期间（savedAt 之后）的不计入老化——补的是"欠的产能"，不是" wall clock"。
+        /// - duration ≤ 0（不限时长）→ 返回 0（续跑仍不限时长）；
+        /// - 已跑超（remaining ≤ 0）→ 返回 0？不：返回 -1 表示"断电前已到时"，
+        ///   调用方直接按完成处理（重抽真空都省了？不——安全起见仍走一次完整重抽+立即完成？
+        ///   不：产品已足时，直接标完成更合理。但阀/电状态未知，调用方仍需安全关闭）。
+        ///   这里返回 0，调用方 ShouldComplete(≥0 的已跑, 0)... 注意 duration 原值语义：
+        ///   返回 0 会被 ShouldComplete 判"不限时长永不完成"——错！
+        ///   所以约定：返回 0 仅当输入不限时长；跑超返回 1 秒（下一轮即完成），简单无歧义。
+        /// </summary>
+        /// <param name="durationSeconds">中断前的定格总时长（秒）</param>
+        /// <param name="powerOnTime">上电时刻（老化计时起点；Vacuuming 阶段中断传 MinValue）</param>
+        /// <param name="savedAt">快照保存时刻（≈中断时刻）</param>
+        /// <returns>续跑时长（秒）；不限时长返回 0；跑超返回 1</returns>
+        public static int ComputeResumeDurationSeconds(int durationSeconds, DateTime powerOnTime, DateTime savedAt)
+        {
+            if (durationSeconds <= 0) return 0;                    // 不限时长：续跑仍不限
+            if (powerOnTime == DateTime.MinValue) return durationSeconds; // 还没上电：整段重跑
+            int elapsed = (int)(savedAt - powerOnTime).TotalSeconds;
+            if (elapsed < 0) elapsed = 0;                          // 时钟回拨兜底：按没跑过算
+            int remaining = durationSeconds - elapsed;
+            return remaining > 0 ? remaining : 1;                  // 跑超：给 1 秒，下一轮即完成
+        }
+
+        /// <summary>
+        /// 策略组合校验（【V1.67 新增】防配出自相矛盾的组合；SettingsForm 保存时调用，
+        /// 回归同步用例——"配置即代码"，校验器与策略同等重要）。
+        ///
+        /// 【目前锁定的矛盾组合】
+        /// 1) 超温联停开了，但上限 ≤ 0（= 温度告警都没启用）→ 联停永远触发不了，
+        ///    配了等于没配，必须先填 FanTempAlarmLimitC；
+        /// 2) 完成动作选了泄压，但破空阀点位 = 0（未接硬件）→ 到时会"跳过泄压只记日志"，
+        ///    现场会误以为泄了，必须先填 VentValveDoPoint 或改回不泄压。
+        /// </summary>
+        /// <returns>矛盾描述；null=组合合法</returns>
+        public static string ValidatePolicyCombination(bool fanShutdownEnabled, float fanLimitC,
+            CompletionAction action, int ventPoint)
+        {
+            if (fanShutdownEnabled && fanLimitC <= 0f)
+            {
+                return "超温联停已开，但温度告警上限为 0（=未启用）："
+                    + "请先填 FanTempAlarmLimitC，否则联停永远触发不了。";
+            }
+            bool wantVent = (action == CompletionAction.PowerOffAndVent
+                || action == CompletionAction.PowerOffVentAndBeep);
+            if (wantVent && ventPoint <= 0)
+            {
+                return "完成动作选了泄压，但破空阀点位为 0（=未接硬件）："
+                    + "请先填 VentValveDoPoint（现场确认点位后），或改回不泄压。";
+            }
+            return null;
         }
 
         /// <summary>

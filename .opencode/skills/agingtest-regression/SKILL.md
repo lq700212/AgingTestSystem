@@ -1,6 +1,6 @@
 ---
 name: agingtest-regression
-description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动等全部核心逻辑类（828+ 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
+description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案等全部核心逻辑类（918+ 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
 ---
 
 # AgingTestSystem 回归测试套件（冒烟 + 用例一体）
@@ -41,7 +41,7 @@ agingtest-regression/
     └── TestRunner.cs         ← 全部测试用例源码（加用例就改这里）
 ```
 
-## 三、测试覆盖范围（28 个模块，828+ 断言）
+## 三、测试覆盖范围（30 个模块，918+ 断言）
 
 | 模块 | 覆盖点 |
 | --- | --- |
@@ -73,6 +73,8 @@ agingtest-regression/
 | HistoryCsv(V1.62) | CSV 解析边角、与 TestEventLogger 互逆 7 列 |
 | UiPureHelpers(V1.62) | 批号去空格、配方查找(ignoreCase)+25h 不截断、工位温度读取(V1.63 数字框恒合法+回填钳制)、IP 合法、数字格钳制、网格命中/边界/四色、位值→通道、风机中文(V1.63 对齐主窗)、CH340 谓词/串口参数钳制(V1.63)、右侧宽度比例 ComputeRightPanelWidth(V1.65：0.234 常量/护栏/兜底/自定义优先 8 条)、配方窗负压/显示模式框回填(V1.66) |
 | **DeviceManagerExtended(V1.62)** | 状态口/在线数/启动错误、批量 SN、配方名负压联动、副本隔离、非法电池、连接与间隔热生效、批量阈值+定时器恢复、反方向报警端到端、全局时长回退、定格隔离、清理回全局、不限时、2s 延时门、空闲容错、自愈计数、报警驻留、边沿单次(CSV 计数)、快照全字段+双台+批号、急停、停止再启动、风机生命周期(MockFan)、超长数组与错 id 防火墙、脏快照恢复、显示模式下发/保持/清空+叠加采集可见+GetTestingDeviceIds(V1.66) |
+| PolicyV167(V1.67) | BuildStartBlockText 阻断文案、MapAlarmResult 责任映射、ComputeResumeDuration 剩余/跑超/回拨、ValidatePolicyCombination 矛盾锁、ParseValue 大小写/非法、PolicyKeys↔DeviceConfig↔下拉选项三处同步锁、DeviceConfig 缺省=现状锁、快照新字段缺省锁、ValidateValue 策略分支+点位、NormalizePolicyValue 脏值兜底、WrapTooltip 40字换行、ProjectProfile 非法名/重复/切换拒绝/路径分流、Policy.json 存取往返 |
+| **DeviceManagerPolicy(V1.67)** | 治具责任端到端(装夹异常+CSV)、待判定完成+下料录入(收/跳过/null)+CSV明细、失压保持(不停机+边沿单条不刷屏)、续跑(快照阶段/上电时刻+剩余60s+重抽真空)、泄压(破空阀开+CSV+复位关阀不残留) |
 
 **不在覆盖范围**（明确边界）：真串口/真设备通讯（ModbusRtuBarometerReader /
 ScannerService / FanControllerClient / ModbusTcpIoController，靠现场联调）、
@@ -157,6 +159,20 @@ UI 弹窗分支（如配方同名覆盖确认框，靠界面手工测试）、�
      过期语义靠 _lastGoodTimes 写入逻辑（每次成功读数刷新，CollectData 内一行）
      的代码审查保证。
 17. **新用例引用新程序集要同步改编译脚本**：UiPureHelpers 直接 new SunnyUI 派生窗体
-     后，harness 编译报 CS0012（UIForm 基类未引用）——在 run_unit_tests.ps1 的
-     csc 参数里加 `/r:$runDir\SunnyUI.dll` 解决（dll 随产物拷贝，不用装 SDK）。
-     以后用例用到 NModbus 等类型同理。
+    后，harness 编译报 CS0012（UIForm 基类未引用）——在 run_unit_tests.ps1 的
+    csc 参数里加 `/r:$runDir\SunnyUI.dll` 解决（dll 随产物拷贝，不用装 SDK）。
+    以后用例用到 NModbus 等类型同理。
+18. **运行时文件改道后老用例的字面路径全失效**（V1.67：Recipes/StationSettings/
+    HomeLayout 改走 `ProjectProfile.ResolveDataPath` 进 `Projects/<项目>/`）：
+     symptom 是"保存后文件存在/损坏回退"类用例批量红。修法是把用例里的字面量
+    同步改成 ResolveDataPath 调用（BaseDirectory 即 run 隔离目录，隔离性不变）。
+    **教训：改存储路径必须 rg 全仓扫字面文件名**（docs/CHANGELOG 历史条目除外）。
+19. **快照字段与写入时机要一起加**（V1.67：TestSessionStation 加 Phase/PowerOnTime
+    后，P4 用例仍红——SaveSessionSnapshot 只在启动/完成/报警时落盘，上电边沿
+    没写，快照 Phase 恒为 Vacuuming）。修法是在上电边沿补一次快照。
+    **教训：给快照加字段时，把"哪些状态变迁会写快照"列一遍，变迁与落盘要对齐。**
+20. **老式 csproj 新文件必须手工登记**（V1.67：PolicyEnums/ProjectProfile/
+    ProjectPolicyStore/UnloadJudgeForm/ProjectSwitchForm 加完编译报 CS0246 找不到类型）。
+    修法是在 csproj 的 Compile Include 里补 5 行（纯代码窗体用 SubType Form 即可，
+    无需 Designer/resx）。**教训：write 新 .cs 后先查 csproj 有没有通配，
+    没有就地登记再编译。**
