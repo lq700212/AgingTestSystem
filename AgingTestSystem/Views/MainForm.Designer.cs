@@ -105,12 +105,15 @@
             // rootScrollPanel
             // 
             this.rootScrollPanel.AutoScroll = true;
-            this.rootScrollPanel.AutoScrollMinSize = new System.Drawing.Size(1400, 900);
+            // 【V1.65】窗体级最小尺寸 1400×900 → 1150×800：原来 1400 宽在 1366 宽工控机上
+            // 一最大化就出现窗体级横向滚动条（就差 34px）。1150 保证 1366/1280 屏一屏显示；
+            // 右侧按 23.4% 比例自适应（见 MainForm.ComputeRightPanelWidth），不再靠最小宽撑布局。
+            this.rootScrollPanel.AutoScrollMinSize = new System.Drawing.Size(1150, 800);
             this.rootScrollPanel.Controls.Add(this.tableLayoutPanelMain);
             this.rootScrollPanel.Dock = System.Windows.Forms.DockStyle.Fill;
             this.rootScrollPanel.Location = new System.Drawing.Point(0, 0);
             this.rootScrollPanel.Name = "rootScrollPanel";
-            this.rootScrollPanel.Size = new System.Drawing.Size(1400, 900);
+            this.rootScrollPanel.Size = new System.Drawing.Size(1280, 900);
             this.rootScrollPanel.TabIndex = 0;
             // 
             // tableLayoutPanelMain
@@ -125,14 +128,14 @@
             this.tableLayoutPanelMain.Controls.Add(this.splitContainerMain, 0, 2);
             this.tableLayoutPanelMain.Controls.Add(this.statusStripMain, 0, 3);
             this.tableLayoutPanelMain.Location = new System.Drawing.Point(0, 0);
-            this.tableLayoutPanelMain.MinimumSize = new System.Drawing.Size(1400, 900);
+            this.tableLayoutPanelMain.MinimumSize = new System.Drawing.Size(1150, 800);
             this.tableLayoutPanelMain.Name = "tableLayoutPanelMain";
             this.tableLayoutPanelMain.RowCount = 4;
             this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 30F));
             this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 40F));
             this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 25F));
-            this.tableLayoutPanelMain.Size = new System.Drawing.Size(1400, 900);
+            this.tableLayoutPanelMain.Size = new System.Drawing.Size(1280, 900);
             this.tableLayoutPanelMain.TabIndex = 0;
             // 
             // tableLayoutPanelTop
@@ -151,7 +154,7 @@
             this.tableLayoutPanelTop.Name = "tableLayoutPanelTop";
             this.tableLayoutPanelTop.RowCount = 1;
             this.tableLayoutPanelTop.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelTop.Size = new System.Drawing.Size(1394, 24);
+            this.tableLayoutPanelTop.Size = new System.Drawing.Size(1274, 24);
             this.tableLayoutPanelTop.TabIndex = 0;
             // 
             // lblTitle
@@ -237,7 +240,7 @@
             this.tableLayoutPanelMenu.Name = "tableLayoutPanelMenu";
             this.tableLayoutPanelMenu.RowCount = 1;
             this.tableLayoutPanelMenu.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelMenu.Size = new System.Drawing.Size(1394, 34);
+            this.tableLayoutPanelMenu.Size = new System.Drawing.Size(1274, 34);
             this.tableLayoutPanelMenu.TabIndex = 1;
             // 
             // btnUserPermission
@@ -299,8 +302,10 @@
             // splitContainerMain.Panel2
             // 
             this.splitContainerMain.Panel2.Controls.Add(this.tableLayoutPanelRight);
-            this.splitContainerMain.Size = new System.Drawing.Size(1394, 799);
-            this.splitContainerMain.SplitterDistance = 1064;
+            this.splitContainerMain.Size = new System.Drawing.Size(1274, 799);
+            // 【V1.65】设计值按比例换算：1274 × 0.234 ≈ 298 右侧 → 1274-298-4(分隔条)=972。
+            // 运行时会被 AdjustRightPanelWidth 按窗口实际宽度重算覆盖，这里只保证设计视图不错位。
+            this.splitContainerMain.SplitterDistance = 972;
             this.splitContainerMain.TabIndex = 2;
             // 
             // tableLayoutPanelRight
@@ -319,7 +324,7 @@
             this.tableLayoutPanelRight.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 120F));
             this.tableLayoutPanelRight.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 300F));
             this.tableLayoutPanelRight.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelRight.Size = new System.Drawing.Size(326, 799);
+            this.tableLayoutPanelRight.Size = new System.Drawing.Size(298, 799);
             this.tableLayoutPanelRight.TabIndex = 0;
             // 
             // groupBoxStatus
@@ -328,7 +333,7 @@
             this.groupBoxStatus.Dock = System.Windows.Forms.DockStyle.Fill;
             this.groupBoxStatus.Location = new System.Drawing.Point(3, 3);
             this.groupBoxStatus.Name = "groupBoxStatus";
-            this.groupBoxStatus.Size = new System.Drawing.Size(320, 84);
+            this.groupBoxStatus.Size = new System.Drawing.Size(292, 84);
             this.groupBoxStatus.TabIndex = 0;
             this.groupBoxStatus.TabStop = false;
             this.groupBoxStatus.Text = "运行状态";
@@ -354,7 +359,7 @@
             this.groupBoxMonitor.Dock = System.Windows.Forms.DockStyle.Fill;
             this.groupBoxMonitor.Location = new System.Drawing.Point(3, 93);
             this.groupBoxMonitor.Name = "groupBoxMonitor";
-            this.groupBoxMonitor.Size = new System.Drawing.Size(320, 114);
+            this.groupBoxMonitor.Size = new System.Drawing.Size(292, 114);
             this.groupBoxMonitor.TabIndex = 1;
             this.groupBoxMonitor.TabStop = false;
             this.groupBoxMonitor.Text = "监视";
@@ -424,7 +429,7 @@
             this.groupBoxOperation.Dock = System.Windows.Forms.DockStyle.Fill;
             this.groupBoxOperation.Location = new System.Drawing.Point(3, 243);
             this.groupBoxOperation.Name = "groupBoxOperation";
-            this.groupBoxOperation.Size = new System.Drawing.Size(320, 294);
+            this.groupBoxOperation.Size = new System.Drawing.Size(292, 294);
             this.groupBoxOperation.TabIndex = 2;
             this.groupBoxOperation.TabStop = false;
             this.groupBoxOperation.Text = "操作";
@@ -435,7 +440,7 @@
             this.btnBatchRecipe.ForeColor = System.Drawing.Color.White;
             this.btnBatchRecipe.Location = new System.Drawing.Point(15, 18);
             this.btnBatchRecipe.Name = "btnBatchRecipe";
-            this.btnBatchRecipe.Size = new System.Drawing.Size(300, 28);
+            this.btnBatchRecipe.Size = new System.Drawing.Size(256, 28);
             this.btnBatchRecipe.TabIndex = 0;
             this.btnBatchRecipe.Text = "批量设置配方";
             this.btnBatchRecipe.UseVisualStyleBackColor = false;
@@ -447,7 +452,7 @@
             this.btnInputLot.ForeColor = System.Drawing.Color.White;
             this.btnInputLot.Location = new System.Drawing.Point(15, 47);
             this.btnInputLot.Name = "btnInputLot";
-            this.btnInputLot.Size = new System.Drawing.Size(300, 28);
+            this.btnInputLot.Size = new System.Drawing.Size(256, 28);
             this.btnInputLot.TabIndex = 1;
             this.btnInputLot.Text = "录入批号";
             this.btnInputLot.UseVisualStyleBackColor = false;
@@ -459,7 +464,7 @@
             this.btnStartRun.ForeColor = System.Drawing.Color.White;
             this.btnStartRun.Location = new System.Drawing.Point(15, 76);
             this.btnStartRun.Name = "btnStartRun";
-            this.btnStartRun.Size = new System.Drawing.Size(300, 28);
+            this.btnStartRun.Size = new System.Drawing.Size(256, 28);
             this.btnStartRun.TabIndex = 2;
             this.btnStartRun.Text = "启动运行（选中台）";
             this.btnStartRun.UseVisualStyleBackColor = false;
@@ -470,7 +475,7 @@
             this.btnStopRun.BackColor = System.Drawing.SystemColors.Control;
             this.btnStopRun.Location = new System.Drawing.Point(15, 105);
             this.btnStopRun.Name = "btnStopRun";
-            this.btnStopRun.Size = new System.Drawing.Size(300, 28);
+            this.btnStopRun.Size = new System.Drawing.Size(256, 28);
             this.btnStopRun.TabIndex = 3;
             this.btnStopRun.Text = "停止运行（选中台）";
             this.btnStopRun.UseVisualStyleBackColor = false;
@@ -481,7 +486,7 @@
             this.btnResetAlarm.BackColor = System.Drawing.SystemColors.Control;
             this.btnResetAlarm.Location = new System.Drawing.Point(15, 134);
             this.btnResetAlarm.Name = "btnResetAlarm";
-            this.btnResetAlarm.Size = new System.Drawing.Size(300, 28);
+            this.btnResetAlarm.Size = new System.Drawing.Size(256, 28);
             this.btnResetAlarm.TabIndex = 4;
             this.btnResetAlarm.Text = "报警复位（选中台）";
             this.btnResetAlarm.UseVisualStyleBackColor = false;
@@ -493,7 +498,7 @@
             this.btnStopAll.ForeColor = System.Drawing.Color.White;
             this.btnStopAll.Location = new System.Drawing.Point(15, 163);
             this.btnStopAll.Name = "btnStopAll";
-            this.btnStopAll.Size = new System.Drawing.Size(300, 28);
+            this.btnStopAll.Size = new System.Drawing.Size(256, 28);
             this.btnStopAll.TabIndex = 5;
             this.btnStopAll.Text = "全部停止（急停）";
             this.btnStopAll.UseVisualStyleBackColor = false;
@@ -505,7 +510,7 @@
             this.groupBoxLog.Dock = System.Windows.Forms.DockStyle.Fill;
             this.groupBoxLog.Location = new System.Drawing.Point(3, 543);
             this.groupBoxLog.Name = "groupBoxLog";
-            this.groupBoxLog.Size = new System.Drawing.Size(320, 253);
+            this.groupBoxLog.Size = new System.Drawing.Size(292, 253);
             this.groupBoxLog.TabIndex = 3;
             this.groupBoxLog.TabStop = false;
             this.groupBoxLog.Text = "日志";
@@ -519,7 +524,7 @@
             this.txtLog.Name = "txtLog";
             this.txtLog.ReadOnly = true;
             this.txtLog.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.txtLog.Size = new System.Drawing.Size(314, 233);
+            this.txtLog.Size = new System.Drawing.Size(280, 233);
             this.txtLog.TabIndex = 0;
             // 
             // statusStripMain
@@ -533,7 +538,7 @@
             this.toolStripStatusLabelTime});
             this.statusStripMain.Location = new System.Drawing.Point(0, 878);
             this.statusStripMain.Name = "statusStripMain";
-            this.statusStripMain.Size = new System.Drawing.Size(1400, 22);
+            this.statusStripMain.Size = new System.Drawing.Size(1280, 22);
             this.statusStripMain.TabIndex = 3;
             this.statusStripMain.Text = "statusStrip1";
             // 
@@ -583,7 +588,7 @@
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1400, 900);
+            this.ClientSize = new System.Drawing.Size(1280, 900);
             this.Controls.Add(this.rootScrollPanel);
             this.MinimumSize = new System.Drawing.Size(800, 600);
             this.Name = "MainForm";

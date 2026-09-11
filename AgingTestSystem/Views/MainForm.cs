@@ -75,15 +75,33 @@ namespace AgingTestSystem.Views
     public partial class MainForm : System.Windows.Forms.Form
     {
         /// <summary>
-        /// 【V1.58.1】右侧状态按钮区宽度的默认值（写死在本窗体，不放在 HomeLayoutConfig）。
+        /// 【V1.58.1】右侧状态按钮区宽度的兜底绝对值（写死在本窗体，不放在 HomeLayoutConfig）。
         ///
-        /// 设计约定：
-        /// - 现场未保存过 HomeLayout.json（即没用"主页区域调整"编辑器改过）时，
-        ///   MainForm 直接用它作为右侧面板宽度，调整只需改这一个数字；
-        /// - 一旦现场在编辑器里保存过配置，则以 HomeLayout.json 里的
-        ///   <see cref="HomeLayoutConfig.RightPanelWidth"/> 为准（用户自定义优先）。
+        /// 【V1.65】右侧宽度改由 <see cref="RightPanelRatio"/> 按比例自适应（默认跟随窗口，
+        /// 只有现场在"主页区域调整"编辑器里保存过 HomeLayout.json 才用文件里的绝对值）。
+        /// 本常量退为两处兜底：①窗体构造极早期分隔容器宽还不可读时；②编辑器"恢复默认"
+        /// 按钮的右侧值。平时不要直接拿它当右侧宽度，用 <see cref="ComputeRightPanelWidth"/>
+        /// 算出来的才是当前生效值。
         /// </summary>
-        public const int DefaultRightPanelWidth = 300;
+        public const int DefaultRightPanelWidth = 240;
+
+        /// <summary>
+        /// 【V1.65】右侧状态按钮区宽度占分隔容器（splitContainerMain）总宽的比例。
+        ///
+        /// 为什么用比例而不用写死像素（用户要求，血泪原则）：
+        /// - 写死 300px 在 1400 宽设计屏上正好（占 23.4%），到 1366 宽工控机上右侧纹丝不动，
+        ///   全靠左侧网格区压缩，换一台设备就得改一次代码；
+        /// - 0.234 就是现状比例（326 ÷ 1394），按此比例换算：1366 屏右侧≈318、1080p 屏≈448→
+        ///   被 <see cref="RightPanelMaxWidth"/> 钳到 340。正常屏上看起来和以前一模一样，
+        ///   只是分母从"写死的设计宽"变成了"窗口实际宽"，换设备自动等比。
+        /// </summary>
+        public const double RightPanelRatio = 0.234;
+
+        /// <summary>【V1.65】比例算出的右侧宽度下限：再窄操作按钮文字（"启动运行（选中台）"）放不下。与编辑器钳制下限对齐。</summary>
+        public const int RightPanelMinWidth = 180;
+
+        /// <summary>【V1.65】比例算出的右侧宽度上限：大屏上按 23.4% 会算出 400+，右侧用不了那么多，省给左侧网格。</summary>
+        public const int RightPanelMaxWidth = 340;
 
         /// <summary>
         /// 设备配置
@@ -234,34 +252,80 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
+        /// 计算右侧操作面板的目标宽度（【V1.65】纯函数，可单元测试，不碰任何控件）。
+        ///
+        /// 规则：
+        /// - 现场保存过 HomeLayout.json（hasCustomLayout=true）→ 用户自定义优先，原样返回
+        ///   文件里的绝对值，不做比例换算（用户在编辑器里拖的就是像素，所见即所得）；
+        /// - 否则 → 分隔容器宽 × <see cref="RightPanelRatio"/>（0.234，现状比例），再用
+        ///   <see cref="RightPanelMinWidth"/>（180）/ <see cref="RightPanelMaxWidth"/>（340）
+        ///   钳制：小屏不挤坏按钮文字，大屏不浪费网格空间。
+        /// </summary>
+        /// <param name="containerWidth">分隔容器当前总宽（像素）；≤0 时按设计宽 1400 兜底</param>
+        /// <param name="hasCustomLayout">现场是否保存过 HomeLayout.json</param>
+        /// <param name="customWidth">文件里的 RightPanelWidth（仅 hasCustomLayout=true 时有效）</param>
+        public static int ComputeRightPanelWidth(int containerWidth, bool hasCustomLayout, int customWidth)
+        {
+            if (hasCustomLayout) return customWidth;
+            int baseWidth = containerWidth > 0 ? containerWidth : 1400;
+            int target = (int)Math.Round(baseWidth * RightPanelRatio);
+            if (target < RightPanelMinWidth) target = RightPanelMinWidth;
+            if (target > RightPanelMaxWidth) target = RightPanelMaxWidth;
+            return target;
+        }
+
+        /// <summary>
+        /// 窗口宽度变化记忆（SplitContainer.Resize 防重复入口）：
+        /// - 只有总宽变了才按比例重算右侧（高度变化不重算，避免无谓抖动）；
+        /// - 用户手动拖分隔条只改 SplitterDistance、不改总宽，不会触发重算，
+        ///   手动拖动不会被比例覆盖；但下次窗口宽度变化时仍会按比例重算
+        ///   （想永久固定就去"主页区域调整"编辑器保存，json 绝对值优先）。
+        /// </summary>
+        private int _lastSplitWidth = -1;
+
+        /// <summary>
+        /// 分隔容器尺寸变化 → 窗口宽度变了且无自定义 json 时，按比例重算右侧宽度。
+        /// 有 json 时直接返回（绝对值优先，窗口缩放右侧保持不动，符合 FixedPanel=Panel2 语义）。
+        /// </summary>
+        private void SplitContainerMain_Resize(object sender, EventArgs e)
+        {
+            if (splitContainerMain.Width == _lastSplitWidth) return;
+            _lastSplitWidth = splitContainerMain.Width;
+            if (System.IO.File.Exists(HomeLayoutConfig.GetConfigPath())) return;
+            AdjustRightPanelWidth();
+        }
+
+        /// <summary>
         /// 自适应调整右侧操作面板（tableLayoutPanelRight）的宽度
         ///
         /// 【V1.58 改造】原实现用"临时 AutoSize 测量内容最小宽度"来自动定右侧宽度；
         /// 现在右侧宽度由 <see cref="HomeLayoutConfig.RightPanelWidth"/> 驱动（可在
         /// "关于 → 主页区域调整"编辑器里拖边缘调整）。本方法改为：
         /// 1. 设置 splitContainerMain.SplitterDistance，使 Panel2 宽度 = 配置的右侧宽度；
-        /// 2. 同步缩放"操作"分组里的按钮宽度（按钮原设计宽 300，若右侧被调窄则按比例缩，
+        /// 2. 同步缩放"操作"分组里的按钮宽度（按钮原设计宽 256，若右侧被调窄则按比例缩，
         ///    避免按钮溢出分组框）。
         /// FixedPanel=Panel2（已在 Designer 中设置）确保窗口缩放时右侧宽度不变。
         ///
-        /// 【默认值来源（V1.58.1 调整）】
-        /// 右侧宽度的默认值写死在 MainForm（<see cref="DefaultRightPanelWidth"/>，300），
-        /// 不放在 HomeLayoutConfig 里——只有现场在编辑器里保存过 HomeLayout.json，
-        /// 才用配置文件里的宽度覆盖默认值。判断依据是"配置文件是否存在"。
+        /// 【V1.65】"配置的右侧宽度"语义变化：无 json 时不再是写死的
+        /// <see cref="DefaultRightPanelWidth"/>，而是 <see cref="ComputeRightPanelWidth"/>
+        /// 按窗口实际宽度 × 0.234 算出的比例值（180~340 钳制），窗口缩放由
+        /// <see cref="SplitContainerMain_Resize"/> 自动跟进。有 json 时仍是文件绝对值优先。
         ///
         /// 【注意】右侧宽度并非随便能调：若窄到按钮文字放不下会被截断，编辑器里有
         /// 180~600 的下限保护；现场不满意可在编辑器里再拖回来。
         /// </summary>
         private void AdjustRightPanelWidth()
         {
-            // 默认宽度写死在 MainForm（300），与 HomeLayoutConfig 的类默认值（260）解耦。
-            // 若现场保存过 HomeLayout.json（编辑器里改过），则以文件里的值为准。
-            int targetRight = DefaultRightPanelWidth;
-            if (System.IO.File.Exists(HomeLayoutConfig.GetConfigPath()))
+            // 无 json → 按窗口比例算；有 json → 文件绝对值优先（用户自定义）。
+            // 构造极早期分隔容器宽不可读（≤0）时，ComputeRightPanelWidth 内部按设计宽 1400 兜底。
+            bool hasCustom = System.IO.File.Exists(HomeLayoutConfig.GetConfigPath());
+            int custom = 0;
+            if (hasCustom)
             {
-                var layout = HomeLayoutConfig.LoadOrDefault();
-                targetRight = layout.RightPanelWidth;
+                custom = HomeLayoutConfig.LoadOrDefault().RightPanelWidth;
             }
+            int targetRight = ComputeRightPanelWidth(splitContainerMain.Width, hasCustom, custom);
+            _lastSplitWidth = splitContainerMain.Width;
 
             // 1. 设置 SplitterDistance，让 Panel2 宽度 = 目标右侧宽度
             //    Panel2 宽度 = splitContainerMain 总宽 - SplitterDistance - 分隔条宽度
@@ -272,7 +336,7 @@ namespace AgingTestSystem.Views
                 splitContainerMain.SplitterDistance = distance;
             }
 
-            // 2. 同步缩放"操作"分组里的按钮宽度（按钮 X=15、宽 300 是设计值，
+            // 2. 同步缩放"操作"分组里的按钮宽度（按钮 X=15、宽 256 是设计值，
             //    右侧变窄后按分组可用宽度重新计算，保证按钮不溢出、文字尽量完整）
             ResizeOperationButtons();
         }
@@ -310,9 +374,9 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 【V1.58】把"操作"分组里的 9 个按钮宽度同步为分组可用宽度 - 左右边距。
-        /// 原设计按钮宽 300（groupBox 宽 320）；右侧区域可调后，分组框宽度随之变化，
-        /// 若仍用 300 固定宽会导致按钮溢出分组框或被截断。宽度 = 分组客户区宽 - 30（左右各 15）。
+        /// 【V1.58】把"操作"分组里的 6 个按钮宽度同步为分组可用宽度 - 左右边距。
+        /// 原设计按钮宽 256（groupBox 宽 292）；右侧区域可调后，分组框宽度随之变化，
+        /// 若仍用固定宽会导致按钮溢出分组框或被截断。宽度 = 分组客户区宽 - 30（左右各 15）。
         /// </summary>
         private void ResizeOperationButtons()
         {
@@ -839,6 +903,15 @@ namespace AgingTestSystem.Views
         {
             // 动态创建工位显示面板（根据配置的设备数量）
             CreateWorkstationPanels();
+
+            // 【V1.65】窗口宽度变化时右侧按比例跟进（无自定义 json 才跟进，有则保持绝对值）。
+            // 挂在分隔容器 Resize 上：只关心总宽变化（见 SplitContainerMain_Resize 内部防重复），
+            // 用户手动拖分隔条不触发重算。先记当前宽为基准。
+            _lastSplitWidth = splitContainerMain.Width;
+            splitContainerMain.Resize += SplitContainerMain_Resize;
+            // Load 时窗口可能还没最大化：主动按当前实际宽度对齐一次右侧，
+            // 后续最大化/还原/拖边框都由 Resize 事件自动跟进。
+            AdjustRightPanelWidth();
 
             // 【启动优化】原逻辑在 UI 线程同步执行 _deviceManager.Start()（连接气压表串口、
             // IO 耦合器、送风机 + 首次同步轮询全部 72 台气压表，串口/网线异常时可能耗时数秒）
@@ -2071,7 +2144,12 @@ namespace AgingTestSystem.Views
                 return;
             }
 
-            using (var form = new SettingsForm(_config))
+            // 【V1.65】把当前生效的右侧宽度传给设置窗体，供"主页区域"行显示/编辑用
+            // （无 json 时为按窗口比例算出的值，有 json 时为文件绝对值，与主界面一致）。
+            bool hasHomeCustom = System.IO.File.Exists(HomeLayoutConfig.GetConfigPath());
+            int homeCustomWidth = hasHomeCustom ? HomeLayoutConfig.LoadOrDefault().RightPanelWidth : 0;
+            int effectiveRightWidth = ComputeRightPanelWidth(splitContainerMain.Width, hasHomeCustom, homeCustomWidth);
+            using (var form = new SettingsForm(_config, effectiveRightWidth))
             {
                 ThemeManager.ApplyTo(form);
                 if (form.ShowDialog(this) == DialogResult.OK &&
@@ -2100,14 +2178,16 @@ namespace AgingTestSystem.Views
         /// </summary>
         private void MenuHelpHomeLayout_Click(object sender, EventArgs e)
         {
-            // 若现场从未保存过 HomeLayout.json，则当前生效的就是本窗体的默认值
-            // （DefaultRightPanelWidth=300），编辑器里应显示这个值而不是
-            // HomeLayoutConfig 的类默认（260），否则会出现"编辑器里显示 260、
-            // 主界面实际 300"的偏差。因此这里手动把未配置项补成 MainForm 默认。
+            // 若现场从未保存过 HomeLayout.json，则当前生效的是按窗口比例算出的值
+            // （ComputeRightPanelWidth，约 23.4%），编辑器里应显示这个值而不是
+            // HomeLayoutConfig 的类默认（240），否则会出现"编辑器里显示 240、
+            // 主界面实际 320"的偏差。因此这里手动把未配置项补成当前生效值。
+            // 注意：编辑器里点【保存】会把该值写成 json 绝对值并定格（此后不再跟随窗口）；
+            // 想恢复跟随，删掉程序目录下的 HomeLayout.json 并重启。
             var layout = HomeLayoutConfig.LoadOrDefault();
             if (!System.IO.File.Exists(HomeLayoutConfig.GetConfigPath()))
             {
-                layout.RightPanelWidth = DefaultRightPanelWidth;
+                layout.RightPanelWidth = ComputeRightPanelWidth(splitContainerMain.Width, false, 0);
             }
 
             using (var form = new HomeLayoutEditorForm(layout))

@@ -1213,7 +1213,7 @@ namespace AgingTestSystem.Tests
             if (c == null) return;
             Check("TopBarHeight 默认 40", c.TopBarHeight == 40);
             Check("MenuHeight 默认 50", c.MenuHeight == 50);
-            Check("RightPanelWidth 默认 260", c.RightPanelWidth == 260);
+            Check("RightPanelWidth 默认 240(V1.65比例时代的编辑器基准)", c.RightPanelWidth == 240);
             Check("StatusBarHeight 默认 30", c.StatusBarHeight == 30);
 
             // 往返：改值保存 → 重新加载应读到新值
@@ -1234,9 +1234,9 @@ namespace AgingTestSystem.Tests
             {
                 File.WriteAllText(cfgPath, "{broken json");
                 var fallback = HomeLayoutConfig.LoadOrDefault();
-                Check("损坏文件回退默认40/50/260/30",
+                Check("损坏文件回退默认40/50/240/30",
                     fallback.TopBarHeight == 40 && fallback.MenuHeight == 50
-                    && fallback.RightPanelWidth == 260 && fallback.StatusBarHeight == 30);
+                    && fallback.RightPanelWidth == 240 && fallback.StatusBarHeight == 30);
             }
             finally
             {
@@ -2130,6 +2130,27 @@ namespace AgingTestSystem.Tests
             Check("0x0100→8", CommunicationTestForm.ChannelOf(0x0100) == 8);
             Check("0x8000→15", CommunicationTestForm.ChannelOf(0x8000) == 15);
             Check("0→0", CommunicationTestForm.ChannelOf(0) == 0);
+
+            // —— 右侧宽度比例自适应（V1.65：MainForm.ComputeRightPanelWidth 纯函数） ——
+            Check("比例常量0.234/护栏180~340",
+                MainForm.RightPanelRatio == 0.234
+                && MainForm.RightPanelMinWidth == 180 && MainForm.RightPanelMaxWidth == 340);
+            Check("设计宽1394→326(与现状一致)",
+                MainForm.ComputeRightPanelWidth(1394, false, 0) == 326);
+            Check("1366屏分隔容器1360→318",
+                MainForm.ComputeRightPanelWidth(1360, false, 0) == 318);
+            Check("新设计宽1274→298",
+                MainForm.ComputeRightPanelWidth(1274, false, 0) == 298);
+            Check("1080p大屏钳到上限340",
+                MainForm.ComputeRightPanelWidth(1914, false, 0) == 340);
+            Check("小屏700钳到下限180",
+                MainForm.ComputeRightPanelWidth(700, false, 0) == 180);
+            Check("宽0/负数按设计宽兜底→328",
+                MainForm.ComputeRightPanelWidth(0, false, 0) == 328
+                && MainForm.ComputeRightPanelWidth(-5, false, 0) == 328);
+            Check("有json自定义值原样优先",
+                MainForm.ComputeRightPanelWidth(1394, true, 260) == 260
+                && MainForm.ComputeRightPanelWidth(1394, true, 500) == 500);
 
             // —— 风机状态中文（反射私有静态；与主窗文案差异已知，锁本窗契约） ——
             var gst = typeof(FanTestForm).GetMethod("GetStateText",
