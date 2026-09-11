@@ -18,6 +18,7 @@
 //   12b. PolicyV167            —— 工艺策略纯函数 + 名单同步锁 + tooltip + 项目档案
 //   12c. MesV168                —— MES 映射解析 + 组包 + 上报器（Fake 传输，零外网）
 //   12d. RuleExprV169            —— 规则表达式解析求值 + 规则表 + 执行器（假时钟）
+//   12e. FlowCockpitV170          —— 流程图静态文本 + 布局存取（纯函数，零 UI）
 //
 //  【怎么跑】
 //  不直接运行本文件。用本 skill 目录 scripts\run_unit_tests.ps1：
@@ -183,6 +184,7 @@ namespace AgingTestSystem.Tests
             Module("DeviceManagerPolicy", DeviceManagerPolicyTests);
             Module("DeviceManagerMes", DeviceManagerMesTests);
             Module("DeviceManagerRules", DeviceManagerRulesTests);
+            Module("FlowCockpitV170", FlowCockpitTests);
 
             // 统一清理临时目录（尽力而为，删不掉不影响结果）
             foreach (string dir in _tempDirs)
@@ -2236,6 +2238,158 @@ namespace AgingTestSystem.Tests
             else
             {
                 Check("反射找到 ValidateValue", false);
+            }
+        }
+
+        // =====================================================================
+        // 12e. 流程驾驶舱静态图（V1.70：拓扑画死，文本按配置生成，纯函数零 UI）
+        // =====================================================================
+        private static void FlowCockpitTests()
+        {
+            // ── 拓扑完整性锁：7 节点 8 边，id 全可查 ──
+            Check("节点7个", Views.FlowGraph.Nodes.Count == 7);
+            Check("连线8条", Views.FlowGraph.Edges.Count == 8);
+            string[] ids = { "start", "vacuum", "power", "done", "alarm", "recover", "unload" };
+            bool allFound = true;
+            foreach (string id in ids)
+            {
+                if (Views.FlowGraph.FindNode(id) == null) allFound = false;
+            }
+            Check("7节点id全可查", allFound);
+            Check("未知节点返回null", Views.FlowGraph.FindNode("bogus") == null);
+            Check("未知连线返回null", Views.FlowGraph.FindEdge("bogus") == null);
+            // 边的端点必须都是已知节点（拓扑不断线）
+            bool edgesOk = true;
+            foreach (var e in Views.FlowGraph.Edges)
+            {
+                if (Views.FlowGraph.FindNode(e.From) == null
+                    || Views.FlowGraph.FindNode(e.To) == null) edgesOk = false;
+            }
+            Check("边端点全是已知节点", edgesOk);
+            // 每个可编辑节点至少挂1个 key（点谁都有东西可改）；unload 是唯一纯展示节点
+            bool keysOk = true;
+            foreach (var n in Views.FlowGraph.Nodes)
+            {
+                if (n.Id == "unload")
+                {
+                    if (n.Keys.Count != 0 || string.IsNullOrEmpty(n.Info)) keysOk = false;
+                }
+                else if (n.Keys.Count == 0) keysOk = false;
+            }
+            Check("可编辑节点全挂key（unload纯展示带说明）", keysOk);
+            // 节点 key 必须全是 DeviceConfig 真属性（防挂错名存不上）
+            bool propsOk = true;
+            foreach (var n in Views.FlowGraph.Nodes)
+            {
+                foreach (var k in n.Keys)
+                {
+                    if (typeof(DeviceConfig).GetProperty(k.Key) == null) propsOk = false;
+                }
+            }
+            Check("节点key全是DeviceConfig真属性", propsOk);
+
+            // ── 缺省文本锁（缺省配置画出来长什么样） ──
+            var dc = new DeviceConfig();
+            var zero = new Views.FlowGraph.FlowCounts();
+            Func<string, string> linesOf = id =>
+                string.Join("|", Views.FlowGraph.BuildNodeLines(id, dc, zero));
+            Check("启动节点缺省（警告/警告/空闲0台）",
+                linesOf("start").Contains("警告") && linesOf("start").Contains("空闲 0 台"));
+            Check("抽真空缺省（超时15000/失联3次）",
+                linesOf("vacuum").Contains("15000") && linesOf("vacuum").Contains("3"));
+            Check("上电缺省（全局不限/时长到）",
+                linesOf("power").Contains("全局不限") && linesOf("power").Contains("时长到"));
+            Check("完成缺省（自动/下电）",
+                linesOf("done").Contains("自动") && linesOf("done").Contains("下电"));
+            Check("报警缺省（0条规则）",
+                linesOf("alarm").Contains("0 条"));
+            Check("恢复缺省（重测/无快照）",
+                linesOf("recover").Contains("重测") && linesOf("recover").Contains("无待恢复"));
+            Check("下料缺省（自动PASS）",
+                linesOf("unload").Contains("自动PASS"));
+            Check("未知节点空行", Views.FlowGraph.BuildNodeLines("bogus", dc, zero).Length == 0);
+            Check("配置null空行", Views.FlowGraph.BuildNodeLines("start", null, zero).Length == 0);
+
+            // ── 策略切换文本跟着变 ──
+            dc.SkipVacuum = true;
+            Check("跳过抽真空节点变文案",
+                linesOf("vacuum").Contains("跳过") && linesOf("vacuum").Contains("豁免"));
+            Check("跳过抽真空边变文案",
+                Views.FlowGraph.BuildEdgeLabel("e_vacuum_power", dc).Contains("跳过"));
+            dc.SkipVacuum = false;
+            dc.CompletionJudgePolicy = CompletionJudgePolicy.PendingReview;
+            Check("待判定边变文案",
+                Views.FlowGraph.BuildEdgeLabel("e_done_unload", dc).Contains("待判定"));
+            Check("待判定节点变文案",
+                linesOf("unload").Contains("待判定"));
+            dc.CompletionJudgePolicy = CompletionJudgePolicy.AutoPass;
+            dc.CompleteExpression = "temp > 85";
+            Check("完成表达式边变文案",
+                Views.FlowGraph.BuildEdgeLabel("e_power_done", dc).Contains("表达式"));
+            dc.CompleteExpression = "";
+            dc.PowerLossPolicy = PowerLossPolicy.ResumeRemaining;
+            Check("续跑边变文案",
+                Views.FlowGraph.BuildEdgeLabel("e_recover_vacuum", dc).Contains("续跑"));
+            Check("未知边空串", Views.FlowGraph.BuildEdgeLabel("bogus", dc) == "");
+            Check("配置null边空串", Views.FlowGraph.BuildEdgeLabel("e_start_vacuum", null) == "");
+            Check("固定边开阀", Views.FlowGraph.BuildEdgeLabel("e_start_vacuum", dc) == "开阀");
+            Check("复位边文案",
+                Views.FlowGraph.BuildEdgeLabel("e_alarm_unload", dc).Contains("复位"));
+            Check("连线说明含两端标题",
+                Views.FlowGraph.BuildEdgeInfo("e_vacuum_power", dc).Contains("抽真空")
+                && Views.FlowGraph.BuildEdgeInfo("e_vacuum_power", dc).Contains("上电老化"));
+            Check("未知连线说明", Views.FlowGraph.BuildEdgeInfo("bogus", dc).Contains("未知"));
+
+            // ── 台数进文本 ──
+            var counts = new Views.FlowGraph.FlowCounts
+            {
+                Idle = 70, Vacuuming = 1, Aging = 1,
+                Completed = 0, Fault = 0, PendingJudge = 0, Snapshot = 0
+            };
+            Func<string, string> linesOf2 = id =>
+                string.Join("|", Views.FlowGraph.BuildNodeLines(id, dc, counts));
+            Check("台数进节点文本",
+                linesOf2("start").Contains("空闲 70 台")
+                && linesOf2("vacuum").Contains("抽真空 1 台")
+                && linesOf2("power").Contains("老化 1 台"));
+
+            // ── 布局存取往返（运行目录隔离；用完删干净不污染） ──
+            string layoutPath = System.IO.Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory, "FlowLayout.json");
+            bool hadLayout = File.Exists(layoutPath);
+            string backup = hadLayout ? File.ReadAllText(layoutPath) : null;
+            try
+            {
+                var pos = new Dictionary<string, System.Drawing.Point>();
+                pos["start"] = new System.Drawing.Point(11, 22);
+                pos["bogus-node"] = new System.Drawing.Point(1, 2);
+                Views.FlowGraph.LayoutStore.Save(pos);
+                Check("布局文件落盘", File.Exists(layoutPath));
+                var loaded = Views.FlowGraph.LayoutStore.Load();
+                Check("布局往返一致",
+                    loaded.ContainsKey("start")
+                    && loaded["start"].X == 11 && loaded["start"].Y == 22);
+                Check("未知id也保留（画布按缺省画，不丢）",
+                    loaded.ContainsKey("bogus-node"));
+                // 钳制：±5000 外的坐标被拉回
+                var wild = new Dictionary<string, System.Drawing.Point>();
+                wild["start"] = new System.Drawing.Point(99999, -99999);
+                Views.FlowGraph.LayoutStore.Save(wild);
+                var loaded2 = Views.FlowGraph.LayoutStore.Load();
+                Check("野坐标钳制±5000",
+                    loaded2["start"].X == 5000 && loaded2["start"].Y == -5000);
+                File.WriteAllText(layoutPath, "{broken json");
+                Check("损坏布局按空处理",
+                    Views.FlowGraph.LayoutStore.Load().Count == 0);
+            }
+            finally
+            {
+                try
+                {
+                    if (hadLayout) File.WriteAllText(layoutPath, backup);
+                    else if (File.Exists(layoutPath)) File.Delete(layoutPath);
+                }
+                catch { }
             }
         }
 

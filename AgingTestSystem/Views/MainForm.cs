@@ -1934,8 +1934,29 @@ namespace AgingTestSystem.Views
             {
                 ("公共参数", MenuParamCommon_Click),
                 ("配方管理", MenuParamRecipe_Click),
+                ("流程驾驶舱", MenuParamFlow_Click),
                 ("项目切换", MenuParamProject_Click)
             });
+        }
+
+        /// <summary>
+        /// 流程驾驶舱 → 弹出可视化流程配置窗体（【V1.70 新增】点节点改配置，
+        /// 与系统设置同一条保存路； savedKeys 非空走同样的热生效分发）。
+        /// 入口挂在参数设置下拉下（技术员及以上可见；编辑限管理员——
+        /// 只读看图所有人可看，改配置与系统设置同级，不开后门）。
+        /// </summary>
+        private void MenuParamFlow_Click(object sender, EventArgs e)
+        {
+            bool canEdit = _userManager.HasPermission(UserRole.Administrator);
+            using (var form = new FlowCockpitForm(_config, _deviceManager, canEdit))
+            {
+                ThemeManager.ApplyTo(form);
+                if (form.ShowDialog(this) == DialogResult.OK &&
+                    form.SavedKeys != null && form.SavedKeys.Count > 0)
+                {
+                    ApplySettingsHotReload(form.SavedKeys);
+                }
+            }
         }
 
         /// <summary>
