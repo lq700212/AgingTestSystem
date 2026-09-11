@@ -1204,5 +1204,105 @@ namespace AgingTestSystem.Tests
                 try { TestSessionStore.Clear(); } catch { }
             }
         }
+
+        // =====================================================================
+        // 15e. 规则流程端到端（V1.69 新增：三期规则表达式 + 阶段流）
+        // 场景：R1 自定义报警触发FAIL / R2 完成表达式提前完成 /
+        //       R3 跳过抽真空直接上电（压力豁免不误报）。
+        // =====================================================================
+        private static void DeviceManagerRulesTests()
+        {
+            EnterCleanDir();
+
+            // ---------- R1 自定义报警（压力规则，常压0恒成立，立即触发） ----------
+            FakeBarometerReader r1; FakeIoController io1; DeviceConfig c1;
+            DeviceManager dm1 = BuildTestManager(out r1, out io1, out c1);
+            try
+            {
+                c1.VacuumConfirmTimeoutMs = 60000;   // 内置真空失败先靠边站，只看自定义规则
+                c1.CustomAlarmRules = "失压测试 | pressure > -1 | 0";
+                dm1.StartTesting(new[] { 1 });
+                // 常压 0 > -1：首轮即触发（内置宽限窗口还没耗尽，证明是规则先开的火）
+                Check("[规则R1] 自定义报警标Fault",
+                    WaitUntil(() =>
+                    {
+                        var d = dm1.GetBarometerData(1);
+                        return d != null && d.Status == DeviceStatus.Fault;
+                    }, 3000));
+                Check("[规则R1] 结果记FAIL(非真空类，Q19不改它)",
+                    (dm1.GetBarometerData(1) ?? new BarometerData()).LastTestResult == "FAIL");
+                Check("[规则R1] CSV记规则名",
+                    WaitUntil(() => HasCsvLine("自定义规则[失压测试]触发"), 2000));
+            }
+            finally { try { dm1.StopAll(); } catch { } try { dm1.Dispose(); } catch { } }
+
+            // ---------- R2 完成表达式提前完成（agesecs>=1，定格60s） ----------
+            FakeBarometerReader r2; FakeIoController io2; DeviceConfig c2;
+            DeviceManager dm2 = BuildTestManager(out r2, out io2, out c2);
+            try
+            {
+                c2.CompleteExpression = "agesecs >= 1";
+                dm2.SetStationRecipe(1, "配方R1", -3m, null);
+                dm2.SetStationDelayTimes(1, TimeSpan.Zero, TimeSpan.FromSeconds(60));
+                dm2.StartTesting(new[] { 1 });
+                r2.SetPressure(1, -4m);
+                Check("[规则R2] 上电进入老化",
+                    WaitUntil(() => io2.ReadOutput(PowerOut(c2, 1)), 2500));
+                Check("[规则R2] 上电约1秒后提前完成（远不到60s）",
+                    WaitUntil(() =>
+                    {
+                        var d = dm2.GetBarometerData(1);
+                        return d != null && d.Status == DeviceStatus.Completed;
+                    }, 8000));
+                Check("[规则R2] CSV记自定义完成原因",
+                    WaitUntil(() => HasCsvLine("自定义完成条件触发"), 2000));
+            }
+            finally { try { dm2.StopAll(); } catch { } try { dm2.Dispose(); } catch { } }
+
+            // ---------- R3 跳过抽真空（常压0不报警，直接上电） ----------
+            FakeBarometerReader r3; FakeIoController io3; DeviceConfig c3;
+            DeviceManager dm3 = BuildTestManager(out r3, out io3, out c3);
+            try
+            {
+                c3.SkipVacuum = true;
+                dm3.SetStationDelayTimes(1, TimeSpan.Zero, TimeSpan.FromSeconds(60));
+                dm3.StartTesting(new[] { 1 });
+                // 常压 0：内置压力报警被豁免，不会Fault；载台应立即上电（不等真空）
+                Check("[规则R3] 跳过抽真空直接上电",
+                    WaitUntil(() => io3.ReadOutput(PowerOut(c3, 1)), 1500));
+                Thread.Sleep(400);
+                var d3 = dm3.GetBarometerData(1);
+                Check("[规则R3] 常压下不误报（仍Testing）",
+                    d3 != null && d3.Status == DeviceStatus.Testing);
+                var snap = TestSessionStore.Load();
+                var s1 = snap != null && snap.Stations != null
+                    ? snap.Stations.Find(s => s != null && s.DeviceId == 1) : null;
+                Check("[规则R3] 快照阶段=Aging（计时起点即启动时刻）",
+                    s1 != null && s1.Phase == (int)AgingPhase.Aging
+                    && s1.PowerOnTime != default(DateTime));
+                Check("[规则R3] CSV记跳过抽真空",
+                    WaitUntil(() => HasCsvLine("跳过抽真空"), 2000));
+            }
+            finally { try { dm3.StopAll(); } catch { } try { dm3.Dispose(); } catch { } }
+
+            try { TestSessionStore.Clear(); } catch { }
+        }
+
+        /// <summary>当日事件 CSV 是否含标记行（规则场景的CSV断言用）</summary>
+        private static bool HasCsvLine(string marker)
+        {
+            try
+            {
+                string file = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs",
+                    "TestLog_" + DateTime.Now.ToString("yyyyMMdd") + ".csv");
+                if (!File.Exists(file)) return false;
+                foreach (string line in File.ReadAllLines(file))
+                {
+                    if (line.Contains(marker)) return true;
+                }
+                return false;
+            }
+            catch { return false; }
+        }
     }
 }

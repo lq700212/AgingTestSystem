@@ -44,6 +44,9 @@ namespace AgingTestSystem.Services
             "MesTriggers",
             "MesFieldMap",
             "MesStaticFields",
+            "CustomAlarmRules",
+            "CompleteExpression",
+            "SkipVacuum",
         };
 
         /// <summary>当前项目的策略文件路径（Projects/&lt;项目&gt;/Policy.json）。</summary>

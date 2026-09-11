@@ -1,6 +1,6 @@
 ---
 name: agingtest-regression
-description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案/MES映射上报等全部核心逻辑类（1013+ 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
+description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案/MES映射上报/规则表达式等全部核心逻辑类（1095+ 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
 ---
 
 # AgingTestSystem 回归测试套件（冒烟 + 用例一体）
@@ -41,7 +41,7 @@ agingtest-regression/
     └── TestRunner.cs         ← 全部测试用例源码（加用例就改这里）
 ```
 
-## 三、测试覆盖范围（32 个模块，1013+ 断言）
+## 三、测试覆盖范围（34 个模块，1095+ 断言）
 
 | 模块 | 覆盖点 |
 | --- | --- |
@@ -77,6 +77,8 @@ agingtest-regression/
 | **DeviceManagerPolicy(V1.67)** | 治具责任端到端(装夹异常+CSV)、待判定完成+下料录入(收/跳过/null)+CSV明细、失压保持(不停机+边沿单条不刷屏)、续跑(快照阶段/上电时刻+剩余60s+重抽真空)、泄压(破空阀开+CSV+复位关阀不残留) |
 | MesV168(V1.68) | 触发器解析(空全开/中英文分隔/未知进错/去重/命中)、字段映射(合法/未知本站/坏组/坏MES名/重复覆盖/大小写)、静态字段(坏组/空值)、组包(直通/改名/静态合并覆盖)、ParseValue字符串直通、PolicyKeys含MES三key、MES缺省锁(零行为)、ValidateValue鉴权/触发/映射/静态/布尔/整数分支、NormalizeMesAuthType兜底None、上报器Fake传输(发出/映射/静态/地址/开关零发送/触发器零发送/Mock只写CSV/全灭落盘/恢复补发清盘)、DPAPI往返/前缀/明文兼容/篡改回null、自定义头解析与鉴权优先、分地址解析与命中回退 |
 | **DeviceManagerMes(V1.68)** | Fake抓包端到端：启动/完成(PASS+映射+静态+SN)/下料判定(不良代码)/报警(FAIL)四触发器各一条+发往配置地址 |
+| RuleExprV169(V1.69) | 四则优先级/括号/负号/取模/字面量、比较逻辑与或非、变量大小写、短路跳过除零、除零模零未知变量错、语法错位置、NaN恒false、规则表行格式/行号/上限20、执行器持续计时(假时钟/中断复位/同配置不清/换配置清/非在测复位/立即/求值错)、完成表达式(空禁用/到点/求值错)、缺省锁、ValidateValue规则分支 |
+| **DeviceManagerRules(V1.69)** | 自定义报警端到端(首轮触发FAIL+CSV规则名)、完成表达式提前完成(CSV原因)、跳过抽真空(直接上电+常压不误报+快照Aging+CSV) |
 
 **不在覆盖范围**（明确边界）：真串口/真设备通讯（ModbusRtuBarometerReader /
 ScannerService / FanControllerClient / ModbusTcpIoController，靠现场联调）、
@@ -190,3 +192,7 @@ UI 弹窗分支（如配方同名覆盖确认框，靠界面手工测试）、�
     "中文头"误放行，用例红）。修法是 IsAsciiLetter（A-Z/a-z/0-9/-/_/.）。
     **教训：凡"协议层字符集"（HTTP 头、URL、串口关键词）一律按 ASCII 白名单写，
     别用 .NET 的 Unicode 字符分类。**
+24. **表达式引擎一次写对的关键：短路语义先定再写测试**（V1.69：`&&` 短路用例把
+    "值false"当"出错"断言，红；引擎本身是对的——`||` 对照组绿即证明）。
+    **教训：短路/惰性语义的用例必须把"值断言"和"无错断言"分开写（evalErr==null
+    且 eval==期望值），混在一起红了都不知道哪边错。**

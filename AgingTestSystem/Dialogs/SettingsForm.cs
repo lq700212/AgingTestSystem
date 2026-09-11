@@ -150,6 +150,7 @@ namespace AgingTestSystem.Dialogs
             "ScannerDebugLog",
             "MesEnabled",
             "MesMockEnabled",
+            "SkipVacuum",
         };
 
         /// <summary>
@@ -340,6 +341,11 @@ namespace AgingTestSystem.Dialogs
             { "MesCustomHeaders", "自定义HTTP头（头名=头值，分号分隔。如 X-Line=L5;X-ApiVer=2；鉴权头同名时鉴权优先）" },
             { "MesEndpointMap", "按事件分地址（触发器=URL，分号分隔。如 Alarm=http://x/api/alarm；没配的事件回退默认地址）" },
 
+            // ===== 规则流程（V1.69 三期：规则表达式 + 阶段流，全部跟项目走 Policy.json）=====
+            { "SkipVacuum", "跳过抽真空（false=现状三阶段；true=启动即上电+压力报警同步豁免，机械夹具专用。配错在真空架上开=真空保护全丢，开前确认产品已机械固定！）" },
+            { "CompleteExpression", "完成表达式（单行，空=禁用走内置时长；成立即完成，只能提前。如 temp > 85。变量12个：pressure/temp/tempset/hum/device/delaysecs/vacsecs/agesecs/duration/threshold/di0/hour）" },
+            { "CustomAlarmRules", "自定义报警规则（点击编辑，多行，一行一条：名称 | 表达式 | 持续秒。触发=关阀断电记FAIL。变量同上）" },
+
             // ===== 扫码枪 =====
             { "ScannerEnabled", "是否启用扫码枪（false/true）" },
             { "ScannerPort", "扫码枪固定串口（留空则按关键词自动识别）" },
@@ -418,6 +424,11 @@ namespace AgingTestSystem.Dialogs
                 "FanDisconnectPolicy", "VacuumFailKind",
                 "CompletionJudgePolicy", "PowerLossPolicy",
                 "AgingPressureLossPolicy", "CompletionAction", "VentValveDoPoint"
+            }),
+            // 【V1.69】规则流程（表达式 + 阶段流，全部跟项目；同表编辑，保存按 PolicyKeys 分流）
+            ("规则流程", new string[]
+            {
+                "SkipVacuum", "CompleteExpression", "CustomAlarmRules"
             }),
             // 【V1.68】MES 对接（连接跟机器；触发器/映射/静态跟项目但同表编辑，
             // 保存时按 PolicyKeys 分流——名单以 ProjectPolicyStore.PolicyKeys 为准）
@@ -996,6 +1007,12 @@ namespace AgingTestSystem.Dialogs
                 string currentValue = grid.Rows[e.RowIndex].Cells["colValue"].Value?.ToString() ?? "";
                 ShowIoMappingPopup(grid, e.RowIndex, currentValue);
             }
+            else if (key == "CustomAlarmRules")
+            {
+                // 【V1.69】自定义报警规则：多行文本弹窗编辑（实时校验），结果写回单元格
+                string currentValue = grid.Rows[e.RowIndex].Cells["colValue"].Value?.ToString() ?? "";
+                ShowRuleListPopup(grid, e.RowIndex, currentValue);
+            }
             else if (key == "HomeLayout")
             {
                 // 【V1.58】主页区域调整：弹出可视化编辑器，保存后刷新该行显示。
@@ -1241,6 +1258,43 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
+        /// 弹出自定义报警规则编辑器，并把编辑结果写回单元格。
+        /// 多行文本（一行一条"名称 | 表达式 | 持续秒"），弹窗内实时校验，
+        /// 确定时复检（与 ShowIpListPopup 同一套定位/越界保护/主题流程）。
+        /// </summary>
+        private void ShowRuleListPopup(DataGridView grid, int rowIndex, string currentValue)
+        {
+            var popup = new Controls.RuleListEditorPopup(currentValue);
+
+            // 定位到该单元格正下方
+            Rectangle cellRect = grid.GetCellDisplayRectangle(grid.Columns["colValue"].Index, rowIndex, true);
+            Rectangle screenRect = grid.RectangleToScreen(cellRect);
+            popup.Location = new Point(screenRect.Left, screenRect.Bottom + 2);
+
+            // 越界保护：弹窗底部超出屏幕时改为显示在单元格上方
+            var workArea = Screen.FromControl(grid).WorkingArea;
+            if (popup.Bottom > workArea.Bottom)
+            {
+                popup.Location = new Point(screenRect.Left, screenRect.Top - popup.Height - 2);
+            }
+
+            popup.FormClosed += (s, args) =>
+            {
+                if (popup.ResultValue != null)
+                {
+                    grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
+                    // 值可能变化，重新按内容算行高
+                    LayoutSections();
+                }
+            };
+
+            // 【V1.60】弹窗打开前按当前主题着色（与 IP/IO 弹窗一致）
+            AgingTestSystem.Services.ThemeManager.ApplyTo(popup);
+            popup.Show(this);
+            popup.Activate();
+        }
+
+        /// <summary>
         /// 获取配置项的当前值
         /// 【V1.67】取值优先级：项目策略文件 Policy.json（策略 key）→ AppSettings →
         /// 内存 DeviceConfig 属性兜底。策略 key 优先读项目文件，保证界面显示的是
@@ -1320,8 +1374,9 @@ namespace AgingTestSystem.Dialogs
                 return CreatePortComboCell(value);
             }
 
-            // 送风机候选 IP 列表 / IO 备用通道映射：只读单元格 + 点击弹出编辑器
-            if (key == "FanIpCandidates" || key == "IoBackupChannelMappings")
+            // 送风机候选 IP 列表 / IO 备用通道映射 / 自定义报警规则：只读单元格 + 点击弹出编辑器
+            if (key == "FanIpCandidates" || key == "IoBackupChannelMappings"
+                || key == "CustomAlarmRules")
             {
                 var cell = new DataGridViewPopupEditCell();
                 cell.Value = value;
@@ -1760,6 +1815,27 @@ namespace AgingTestSystem.Dialogs
                 return false;
             }
 
+            // 规则流程（【V1.69】）：完成表达式单行语法校验（空=禁用合法）；
+            // 规则表逐行校验（错行带行号，报全不只报首条——保存拦截要一次看全）。
+            if (key == "CompleteExpression")
+            {
+                if (string.IsNullOrWhiteSpace(value)) return true;
+                RuleExpr.RuleExpression expr;
+                string exprErr;
+                if (RuleExpr.TryParse(value.Trim(), out expr, out exprErr)) return true;
+                error = "表达式错误：" + exprErr;
+                return false;
+            }
+            if (key == "CustomAlarmRules")
+            {
+                List<RuleEngine.RuleDef> defs;
+                List<string> ruleErrs;
+                RuleEngine.ParseRuleList(value, out defs, out ruleErrs);
+                if (ruleErrs.Count == 0) return true;
+                error = string.Join("；", ruleErrs.ToArray());
+                return false;
+            }
+
             switch (key)
             {
                 // 整数
@@ -1828,6 +1904,7 @@ namespace AgingTestSystem.Dialogs
                 case "ScannerDebugLog":
                 case "MesEnabled":
                 case "MesMockEnabled":
+                case "SkipVacuum":
                     if (!bool.TryParse(value, out _)) { error = "应为 true 或 false"; return false; }
                     return true;
 
