@@ -336,7 +336,10 @@ namespace AgingTestSystem.Dialogs
         private const int HIT_TOLERANCE = 6;
 
         /// <summary>当前编辑的布局配置</summary>
-        public HomeLayoutConfig Layout { get; set; }
+        /// 【V1.64.3】加 new 显式声明有意隐藏基类 Control.Layout 事件（CS0108）：
+        /// 基类那个 Layout 是布局事件，本预览控件从不用它（类内 18 处 Layout. 全指本属性），
+        /// 不改名是为少动调用方（_preview = new ... { Layout = _layout } 等），加 new 即零警告。
+        public new HomeLayoutConfig Layout { get; set; }
 
         /// <summary>布局任一尺寸被拖动改变时触发（供输入框同步）</summary>
         public event EventHandler LayoutChanged;

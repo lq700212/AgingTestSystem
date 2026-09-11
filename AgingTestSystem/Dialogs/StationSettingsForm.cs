@@ -172,10 +172,11 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 计算工位的当前状态文本（中文：空闲 / 选中 / 繁忙 / 故障，V1.18 由英文改中文）
-        /// 规则与工位面板工作状态一致：
+        /// 计算工位的当前状态文本（中文：空闲 / 选中 / 繁忙 / 故障 / 已完成，V1.18 由英文改中文）
+        /// 规则与工位面板工作状态一致（见 WorkstationGridView.ApplyData）：
         /// - 故障 → 故障
         /// - 测试中 → 繁忙
+        /// - 已完成·待取料 → 已完成（V1.64.2补：以前漏了这一支，完成台会误显示为空闲）
         /// - 空闲且载台已上电 → 选中
         /// - 空闲且载台未上电 → 空闲
         /// </summary>
@@ -185,6 +186,7 @@ namespace AgingTestSystem.Dialogs
         {
             if (data.Status == DeviceStatus.Fault) return "故障";
             if (data.Status == DeviceStatus.Testing) return "繁忙";
+            if (data.Status == DeviceStatus.Completed) return "已完成";
 
             // 载台上电输出状态（OutputStatus[1]）
             bool carrierPower = data.OutputStatus != null &&
