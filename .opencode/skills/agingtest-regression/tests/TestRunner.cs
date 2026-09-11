@@ -17,6 +17,7 @@
 //   11. 模型序列化            —— RecipeConfig/StationInfo/UserAccount 往返与 Clone
 //   12b. PolicyV167            —— 工艺策略纯函数 + 名单同步锁 + tooltip + 项目档案
 //   12c. MesV168                —— MES 映射解析 + 组包 + 上报器（Fake 传输，零外网）
+//   12d. RuleExprV169            —— 规则表达式解析求值 + 规则表 + 执行器（假时钟）
 //
 //  【怎么跑】
 //  不直接运行本文件。用本 skill 目录 scripts\run_unit_tests.ps1：
@@ -162,6 +163,7 @@ namespace AgingTestSystem.Tests
             Module("AgingSequencer", AgingSequencerTests);
             Module("PolicyV167", PolicyTests);
             Module("MesV168", MesTests);
+            Module("RuleExprV169", RuleExprTests);
             Module("TestSessionStore", TestSessionStoreTests);
             Module("AgingBusinessModel", AgingBusinessModelTests);
             Module("ThemeManager", ThemeManagerTests);
@@ -180,6 +182,7 @@ namespace AgingTestSystem.Tests
             Module("DeviceManagerExtended", DeviceManagerExtendedTests);
             Module("DeviceManagerPolicy", DeviceManagerPolicyTests);
             Module("DeviceManagerMes", DeviceManagerMesTests);
+            Module("DeviceManagerRules", DeviceManagerRulesTests);
 
             // 统一清理临时目录（尽力而为，删不掉不影响结果）
             foreach (string dir in _tempDirs)
@@ -1579,10 +1582,12 @@ namespace AgingTestSystem.Tests
             bool optsOk = true;
             foreach (string k in ProjectPolicyStore.PolicyKeys)
             {
-                // VentValveDoPoint 是数字项、FanTempShutdownEnabled 是布尔项、
-                // MesTriggers/MesFieldMap/MesStaticFields 是自由文本（V1.68），都无策略下拉
-                if (k == "VentValveDoPoint" || k == "FanTempShutdownEnabled"
-                    || k == "MesTriggers" || k == "MesFieldMap" || k == "MesStaticFields") continue;
+                // VentValveDoPoint 是数字项、FanTempShutdownEnabled/SkipVacuum 是布尔项、
+                // MesTriggers/MesFieldMap/MesStaticFields/CustomAlarmRules/CompleteExpression
+                // 是自由文本（V1.68/V1.69），都无策略下拉
+                if (k == "VentValveDoPoint" || k == "FanTempShutdownEnabled" || k == "SkipVacuum"
+                    || k == "MesTriggers" || k == "MesFieldMap" || k == "MesStaticFields"
+                    || k == "CustomAlarmRules" || k == "CompleteExpression") continue;
                 Tuple<string, string>[] opts;
                 if (!ProjectPolicyStore.EnumOptions.TryGetValue(k, out opts) || opts.Length < 2) { optsOk = false; break; }
                 var prop = typeof(DeviceConfig).GetProperty(k);
@@ -2040,6 +2045,200 @@ namespace AgingTestSystem.Tests
             }
         }
 
+        // =====================================================================
+        // 12d. 规则表达式引擎 + 执行器（V1.69 三期：沙盒解析求值 + 持续计时）
+        // =====================================================================
+        private static void RuleExprTests()
+        {
+            // —— 求值小工具：文本 + 变量 → bool（失败记 FAIL 并返回 false） ——
+            Func<string, Dictionary<string, double>, bool> eval = (text, vars) =>
+            {
+                RuleExpr.RuleExpression ex;
+                string perr;
+                if (!RuleExpr.TryParse(text, out ex, out perr)) return false;
+                string eerr;
+                return RuleExpr.TryEvalBool(ex, vars, out eerr);
+            };
+            Func<string, Dictionary<string, double>, string> evalErr = (text, vars) =>
+            {
+                RuleExpr.RuleExpression ex;
+                string perr;
+                if (!RuleExpr.TryParse(text, out ex, out perr)) return "parse:" + perr;
+                double v;
+                string eerr;
+                if (!RuleExpr.TryEval(ex, vars, out v, out eerr)) return "eval:" + eerr;
+                return null;
+            };
+            var empty = new Dictionary<string, double>();
+
+            // ── 四则与优先级 ──
+            Check("1+2*3=7",
+                eval("1+2*3==7", empty));
+            Check("括号改变优先级",
+                eval("(1+2)*3==9", empty));
+            Check("单目负号",
+                eval("-5+2==-3", empty));
+            Check("除法小数",
+                eval("10/4==2.5", empty));
+            Check("取模",
+                eval("10%3==1", empty));
+            Check("空格容忍",
+                eval("  1 + 2 == 3 ", empty));
+            Check("true/false字面量",
+                eval("TRUE && True", empty) && !eval("true && false", empty));
+
+            // ── 比较与逻辑 ──
+            Check("大于", eval("3>2", empty));
+            Check("大于等于边界", eval("2>=2", empty));
+            Check("小于否", !eval("3<2", empty));
+            Check("不等", eval("2!=3", empty));
+            Check("与或非", eval("1&&1", empty) && !eval("1&&0", empty)
+                && eval("0||1", empty) && eval("!0", empty) && !eval("!5", empty));
+            Check("&&优先级高于||",
+                !eval("0||1&&0", empty) && eval("1||0&&0", empty));
+            Check("混合表达式",
+                eval("1+2>2 && 3<4", empty));
+
+            // ── 变量（大小写无所谓） ──
+            var vp = new Dictionary<string, double> { { "Pressure", -4.0 } };
+            Check("变量大小写兼容", eval("pressure>-5", vp) && eval("PRESSURE<-3", vp));
+
+            // ── 短路（右分支除零被跳过：不断言值，只断言"无错"；值用下一行单测） ──
+            Check("&&短路跳过除零(无错)",
+                evalErr("0==1 && 10/0>1", empty) == null);
+            Check("&&短路值为假",
+                !eval("0==1 && 10/0>1", empty));
+            Check("||短路跳过除零(无错且为真)",
+                evalErr("1==1 || 10/0>1", empty) == null && eval("1==1 || 10/0>1", empty));
+            Check("非短路分支除零报错", evalErr("1==1 && 10/0>1", empty) != null);
+
+            // ── 除零/模零/未知变量 ──
+            Check("除零求值错", evalErr("1/0>1", empty) != null);
+            Check("模零求值错", evalErr("1%0==0", empty) != null);
+            Check("未知变量求值错", evalErr("bogus>1", empty) != null);
+
+            // ── 语法错（带位置） ──
+            Check("空表达式错", evalErr("", empty) != null);
+            Check("缺操作数错", evalErr("1+", empty) != null);
+            Check("括号未闭合错", evalErr("(1+2", empty) != null);
+            Check("多余内容错", evalErr("1 2", empty) != null);
+            Check("单&非法", evalErr("1 & 0", empty) != null);
+            Check("单|非法", evalErr("1 | 0", empty) != null);
+            Check("单目+不支持", evalErr("+5==5", empty) != null);
+            Check("非法字符错", evalErr("1 $ 2", empty) != null);
+
+            // ── NaN语义（死传感器不触发） ──
+            var vn = new Dictionary<string, double> { { "temp", double.NaN } };
+            Check("NaN比较恒false", !eval("temp>1", vn) && !eval("temp<100", vn));
+            Check("NaN相等也false（非IEEE，fail-safe）",
+                !eval("temp==temp", vn) && !eval("temp!=0", vn));
+            Check("NaN取反为true", eval("!(temp>1)", vn));
+
+            // ── ParseRuleList：行格式 ──
+            List<RuleEngine.RuleDef> defs;
+            List<string> rerrs;
+            RuleEngine.ParseRuleList("超温偏离 | temp - tempset > 10 | 30\r\n即时 | pressure>1", out defs, out rerrs);
+            Check("两行解析（含\\r\\n）",
+                rerrs.Count == 0 && defs.Count == 2
+                && defs[0].Name == "超温偏离" && defs[0].SustainedSecs == 30
+                && defs[1].Name == "即时" && defs[1].SustainedSecs == 0);
+            RuleEngine.ParseRuleList("", out defs, out rerrs);
+            Check("空=零规则", defs.Count == 0 && rerrs.Count == 0);
+            RuleEngine.ParseRuleList("没有分隔符", out defs, out rerrs);
+            Check("坏行带行号", rerrs.Count == 1 && rerrs[0].Contains("第1行"));
+            RuleEngine.ParseRuleList("名 | temp>", out defs, out rerrs);
+            Check("坏表达式带名", rerrs.Count == 1 && rerrs[0].Contains("名"));
+            RuleEngine.ParseRuleList("名 | temp>1 | abc", out defs, out rerrs);
+            Check("坏持续秒被拦", rerrs.Count == 1);
+            RuleEngine.ParseRuleList("名 | temp>1 | -1", out defs, out rerrs);
+            Check("负持续秒被拦", rerrs.Count == 1);
+            RuleEngine.ParseRuleList(" | temp>1", out defs, out rerrs);
+            Check("空名称被拦", rerrs.Count == 1);
+            var many = new System.Text.StringBuilder();
+            for (int i = 0; i < 25; i++) many.AppendLine("r" + i + " | 1>0");
+            RuleEngine.ParseRuleList(many.ToString(), out defs, out rerrs);
+            Check("超20条上限被拦", rerrs.Count == 1 && rerrs[0].Contains("上限"));
+
+            // ── RuleEngine：持续计时（假时钟） ──
+            DateTime fakeNow = new DateTime(2026, 9, 11, 10, 0, 0);
+            var eng = new RuleEngine(4, () => fakeNow);
+            eng.UpdateRules("r | pressure > 1 | 10", "");
+            Check("编译1条", eng.RuleCount == 1 && !eng.HasCompleteExpr);
+            var v1 = new Dictionary<string, double> { { "pressure", 2.0 } };
+            Check("刚成立不触发", eng.EvalAlarms(1, v1, true) == null);
+            fakeNow = fakeNow.AddSeconds(9);
+            Check("9秒未满不触发", eng.EvalAlarms(1, v1, true) == null);
+            fakeNow = fakeNow.AddSeconds(2);
+            Check("满10秒触发", eng.EvalAlarms(1, v1, true) == "r");
+            // 中断复位
+            var v0 = new Dictionary<string, double> { { "pressure", 0.0 } };
+            Check("变false复位计时", eng.EvalAlarms(1, v0, true) == null);
+            Check("重成立从头计时", eng.EvalAlarms(1, v1, true) == null);
+            // 同配置更新不清计时
+            fakeNow = fakeNow.AddSeconds(10);
+            eng.UpdateRules("r | pressure > 1 | 10", "");
+            Check("同配置不清计时（累计满即触发）", eng.EvalAlarms(1, v1, true) == "r");
+            // 换配置清计时
+            eng.UpdateRules("r2 | pressure > 1 | 100", "");
+            Check("换配置清计时", eng.EvalAlarms(1, v1, true) == null);
+            // 非在测复位
+            Check("非在测返回null", eng.EvalAlarms(1, v1, false) == null);
+            Check("越界工位返回null", eng.EvalAlarms(99, v1, true) == null);
+            // 立即规则
+            eng.UpdateRules("now | 1==1 | 0", "");
+            Check("持续0立即触发", eng.EvalAlarms(2, v0, true) == "now");
+            // 求值错按不触发+记错
+            eng.UpdateRules("bad | bogus > 1 | 0", "");
+            Check("未知变量不触发", eng.EvalAlarms(2, v0, true) == null);
+            Check("求值错记LastError", eng.LastError != null && eng.LastError.Contains("bad"));
+            eng.ResetStation(2);
+            Check("ResetStation不抛", true);
+
+            // ── RuleEngine：完成表达式 ──
+            var eng2 = new RuleEngine(4, () => fakeNow);
+            eng2.UpdateRules("", "");
+            Check("空完成表达式恒false",
+                !eng2.EvalComplete(new Dictionary<string, double> { { "agesecs", 99999.0 } }));
+            eng2.UpdateRules("", "agesecs>=100");
+            Check("完成表达式生效标记", eng2.HasCompleteExpr);
+            Check("未到不完成",
+                !eng2.EvalComplete(new Dictionary<string, double> { { "agesecs", 90.0 } }));
+            Check("到点完成",
+                eng2.EvalComplete(new Dictionary<string, double> { { "agesecs", 100.0 } }));
+            eng2.UpdateRules("", "bogus>1");
+            Check("完成表达式求值错按false",
+                !eng2.EvalComplete(new Dictionary<string, double>()));
+            Check("完成求值错记LastError", eng2.LastError != null);
+
+            // ── DeviceConfig 缺省锁：三项全空/关=零行为 ──
+            var dc = new DeviceConfig();
+            Check("缺省规则空/表达式空/不跳真空",
+                dc.CustomAlarmRules == "" && dc.CompleteExpression == "" && dc.SkipVacuum == false);
+
+            // ── SettingsForm.ValidateValue 规则分支（反射） ──
+            const BindingFlags Flags = BindingFlags.NonPublic | BindingFlags.Static;
+            var miValidate = typeof(SettingsForm).GetMethod("ValidateValue", Flags);
+            if (miValidate != null)
+            {
+                Func<string, string, bool> valid = (k, v) =>
+                {
+                    object[] a = new object[] { k, v, null };
+                    return (bool)miValidate.Invoke(null, a);
+                };
+                Check("完成表达式合法过", valid("CompleteExpression", "temp > 85"));
+                Check("完成表达式空过(禁用)", valid("CompleteExpression", ""));
+                Check("完成表达式脏值被拦", !valid("CompleteExpression", "temp >"));
+                Check("规则表合法过", valid("CustomAlarmRules", "超温 | temp>80 | 30\r\n即时 | 1>0"));
+                Check("规则表空过(零规则)", valid("CustomAlarmRules", ""));
+                Check("规则表坏行被拦", !valid("CustomAlarmRules", "没有分隔符"));
+                Check("规则表坏表达式被拦", !valid("CustomAlarmRules", "名 | temp>"));
+            }
+            else
+            {
+                Check("反射找到 ValidateValue", false);
+            }
+        }
+
         /// <summary>轮询等待（MesTests 用：后台线程投递需等待；超时返回 false）</summary>
         private static bool WaitFor(Func<bool> condition, int timeoutMs)
         {
@@ -2235,10 +2434,10 @@ namespace AgingTestSystem.Tests
                 Check("IP候选/映射表不强制校验",
                     ok("FanIpCandidates", "xxx") && ok("IoBackupChannelMappings", "xxx"));
 
-                // _boolKeys 13 项逐项过校验（防"只加一边"的配置漂移；V1.68 +MesEnabled/MesMockEnabled）
+                // _boolKeys 14 项逐项过校验（防"只加一边"的配置漂移；V1.68 +MesEnabled/MesMockEnabled；V1.69 +SkipVacuum）
                 var boolKeys = (HashSet<string>)typeof(SettingsForm).GetField("_boolKeys",
                     BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
-                Check("布尔键13项", boolKeys != null && boolKeys.Count == 13);
+                Check("布尔键14项", boolKeys != null && boolKeys.Count == 14);
                 if (boolKeys != null)
                 {
                     bool allBoolOk = boolKeys.All(k => ok(k, "true") && ok(k, "false") && !ok(k, "YES"));
@@ -2248,7 +2447,8 @@ namespace AgingTestSystem.Tests
                         && boolKeys.Contains("ScannerDebugLog")
                         && boolKeys.Contains("UseMockCommunication")
                         && boolKeys.Contains("MesEnabled")
-                        && boolKeys.Contains("MesMockEnabled"));
+                        && boolKeys.Contains("MesMockEnabled")
+                        && boolKeys.Contains("SkipVacuum"));
                 }
             }
 

@@ -233,6 +233,17 @@ namespace AgingTestSystem.Services
         private readonly MesReporter _mes;
 
         /// <summary>
+        /// 规则执行器（【V1.69 新增】三期；自定义报警 + 完成表达式；规则空=零开销）。
+        /// </summary>
+        private readonly RuleEngine _rules;
+
+        /// <summary>
+        /// 【V1.69】上次已记日志的规则求值错误（边沿去重：同一错误只记一次，不刷屏；
+        /// 错误变化/消失重现时再记）。
+        /// </summary>
+        private string _lastRuleErrorLogged = "";
+
+        /// <summary>
         /// 每台是否正在老化测试
         /// 【V1.10 新增】由"启动运行/停止运行/报警/复位"控制
         /// </summary>
@@ -528,6 +539,9 @@ namespace AgingTestSystem.Services
             // 【V1.68】MES 上报器（持 _config 引用读最新配置；MesEnabled=false 时
             // Report 直接返回、worker 懒建，零开销；Dispose 时释放后台线程）
             _mes = new MesReporter(_config);
+
+            // 【V1.69】规则执行器（编译缓存 + 持续计时；规则全空时 Eval 直接返回，零开销）
+            _rules = new RuleEngine(_config.TotalBarometers);
         }
 
         /// <summary>
@@ -1726,14 +1740,21 @@ namespace AgingTestSystem.Services
             TurnOffVentValve();
 
             // ---- 3) 状态进入 Vacuuming，定格参数 ----
+            // 【V1.69】SkipVacuum=true（机械夹具、无真空管路）→ 直接进 Aging 并立即上电，
+            // 不等真空到位+延时。开之前必须确认产品已机械固定（配错=真空保护全丢，
+            // 压力报警同步豁免，见 ClassifyAlarm）。
+            bool skipVacuum = _config.SkipVacuum;
             lock (_stateLock)
             {
                 DateTime now = DateTime.Now;
                 _testingStates[deviceId - 1] = true;                 // 进入测试中
-                _testPhases[deviceId - 1] = AgingPhase.Vacuuming;    // 子阶段：抽真空（载台断电）
+                _testPhases[deviceId - 1] = skipVacuum
+                    ? AgingPhase.Aging : AgingPhase.Vacuuming;       // 跳过抽真空：直接老化计时
                 _valveOpenTimes[deviceId - 1] = now;                 // 延时/确认超时的计时起点
-                _vacuumConfirmTimes[deviceId - 1] = now;             // 真空确认宽限开始
-                _testStartTimes[deviceId - 1] = DateTime.MinValue;   // 上电后才计时
+                _vacuumConfirmTimes[deviceId - 1] = skipVacuum
+                    ? DateTime.MinValue : now;                       // 跳过=无确认宽限
+                _testStartTimes[deviceId - 1] = skipVacuum
+                    ? now : DateTime.MinValue;                       // 跳过=计时起点即此刻
                 _testDurations[deviceId - 1] = durationSecs;
                 _sessionDurationSecs[deviceId - 1] = durationSecs;
                 _sessionDelaySecs[deviceId - 1] = (int)Math.Round(delayTime.TotalSeconds);
@@ -1742,9 +1763,21 @@ namespace AgingTestSystem.Services
                 _lossNoted[deviceId - 1] = false;                    // 【V1.67】清失压保持标记
                 _readFailCounts[deviceId - 1] = 0;                   // 清通讯失败计数
             }
+            _rules.ResetStation(deviceId);   // 【V1.69】清规则持续计时（旧任务不带到新任务）
+
+            if (skipVacuum)
+            {
+                // 跳过抽真空：阀照开（管路阀动作保持一致），载台立即上电
+                _ioController.WriteOutput(
+                    _config.TotalInputs + _config.TotalBarometers + deviceId, true);
+                TestEventLogger.Write(_currentLotNumber, deviceId, "跳过抽真空",
+                    "策略 SkipVacuum=true：未验证吸附即上电！已确认产品机械固定，压力报警同步豁免");
+            }
 
             TestEventLogger.Write(_currentLotNumber, deviceId, "启动",
-                $"启动老化测试（开真空，待真空建立+延时开启到后自动上电）SN:{sn} 配方:{recipeName}" +
+                (skipVacuum
+                    ? $"启动老化测试（跳过抽真空，直接上电计时）SN:{sn} 配方:{recipeName}"
+                    : $"启动老化测试（开真空，待真空建立+延时开启到后自动上电）SN:{sn} 配方:{recipeName}") +
                 (string.IsNullOrEmpty(displayMode) ? "" : $" 显示模式:{displayMode}"));
 
             // 【V1.68】MES 上报：启动事件（触发器 Start；字段按 MesFieldMap 改名；
@@ -1802,6 +1835,7 @@ namespace AgingTestSystem.Services
                     _sessionDelaySecs[deviceId - 1] = 0;
                     _sessionThresholdKPa[deviceId - 1] = _config.AlarmPressureThresholdKPa;
                 }
+                _rules.ResetStation(deviceId);   // 【V1.69】清规则持续计时
 
                 TestEventLogger.Write(_currentLotNumber, deviceId, "中止", "手动停止（未到时中止，不计判定结果）");
             }
@@ -1856,6 +1890,7 @@ namespace AgingTestSystem.Services
                     _lastAlarmStates[deviceId - 1] = false;
                     _lossNoted[deviceId - 1] = false;   // 【V1.67】清失压保持标记
                 }
+                _rules.ResetStation(deviceId);   // 【V1.69】清规则持续计时
 
                 // 复位后保证输出处于安全关闭状态
                 _ioController.WriteOutput(_config.TotalInputs + deviceId, false);
@@ -1894,6 +1929,67 @@ namespace AgingTestSystem.Services
                 { "lot", _currentLotNumber ?? "" },
                 { "device", deviceId.ToString() },
                 { "project", ProjectProfile.ActiveProfileName }
+            };
+        }
+        /// <summary>
+        /// 组装规则变量表（【V1.69 新增】三期：一次快照，多处复用——自定义报警 + 完成表达式）。
+        /// 传感器不可用 → NaN（表达式里含它的比较恒 false，不误报，见 RuleExpr 注释）；
+        /// 未上电 → agesecs=0；数组越界防御（防火墙同思路）。
+        /// </summary>
+        private Dictionary<string, double> BuildRuleVars(int deviceId, BarometerData data, DateTime now)
+        {
+            int idx = deviceId - 1;
+            double pressure = (data != null) ? (double)data.VacuumPressure : double.NaN;
+            double di0 = (data != null && data.InputStatus != null
+                && data.InputStatus.Length >= 1 && data.InputStatus[0]) ? 1.0 : 0.0;
+
+            double temp = double.NaN, tempset = double.NaN, hum = double.NaN;
+            lock (_cacheLock)
+            {
+                // 风机离线/未启用 → 保持 NaN（含 temp 的规则不触发，不误报）
+                if (_fanDataCache != null && _fanDataCache.IsOnline)
+                {
+                    temp = _fanDataCache.Temperature;
+                    tempset = _fanDataCache.TempSetpoint;
+                    hum = _fanDataCache.Humidity;
+                }
+            }
+
+            int duration = 0, delay = 0;
+            double threshold = 0;
+            DateTime valveOpen = DateTime.MinValue, powerOn = DateTime.MinValue;
+            AgingPhase phase = AgingPhase.None;
+            lock (_stateLock)
+            {
+                if (idx >= 0 && idx < _sessionDurationSecs.Length)
+                {
+                    duration = _sessionDurationSecs[idx];
+                    delay = _sessionDelaySecs[idx];
+                    threshold = (double)_sessionThresholdKPa[idx];
+                    valveOpen = _valveOpenTimes[idx];
+                    powerOn = _testStartTimes[idx];
+                    phase = _testPhases[idx];
+                }
+            }
+            double vacsecs = (valveOpen == DateTime.MinValue) ? 0.0
+                : Math.Max(0.0, (now - valveOpen).TotalSeconds);
+            double agesecs = (phase == AgingPhase.Aging && powerOn != DateTime.MinValue)
+                ? Math.Max(0.0, (now - powerOn).TotalSeconds) : 0.0;
+
+            return new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "pressure", pressure },
+                { "temp", temp },
+                { "tempset", tempset },
+                { "hum", hum },
+                { "device", (double)deviceId },
+                { "delaysecs", (double)delay },
+                { "vacsecs", vacsecs },
+                { "agesecs", agesecs },
+                { "duration", (double)duration },
+                { "threshold", threshold },
+                { "di0", di0 },
+                { "hour", (double)now.Hour }
             };
         }
 
@@ -2048,6 +2144,7 @@ namespace AgingTestSystem.Services
                     _sessionThresholdKPa[i] = _config.AlarmPressureThresholdKPa;
                     _lastAlarmStates[i] = false;
                     _lossNoted[i] = false;   // 【V1.67】清失压保持标记
+                    _rules.ResetStation(i + 1);   // 【V1.69】清规则持续计时
                 }
             }
 
@@ -2393,6 +2490,9 @@ namespace AgingTestSystem.Services
 
                 DateTime now = DateTime.Now;
 
+                // 【V1.69】规则配置同步（两次字符串比较，配置没变零开销；变了自动重编+清计时）
+                _rules.UpdateRules(_config.CustomAlarmRules, _config.CompleteExpression);
+
                 // 【V1.62 防火墙】只处理前 TotalBarometers 个位置：
                 // 内置读取器返回数组长度恒等于总数；若某个读取器实现返回更长的数组，
                 // 超出的位置会先把 _readFailCounts[i] 等状态数组索引越界（越界检查在后）。
@@ -2569,6 +2669,24 @@ namespace AgingTestSystem.Services
                                 _lossNoted[deviceId - 1] = false;
                             }
 
+                            // 【V1.69】自定义报警规则（只在内置没报警时评估；触发→产品 FAIL 联动，
+                            // 与内置走同一个边沿（_lastAlarmStates 共用，进一次出一次，不重复下发）。
+                            // 规则求值错 → 按不触发 + 边沿记一条日志（LastError 去重，不刷屏）。
+                            string customRule = null;
+                            if (isAlarm == false)
+                            {
+                                customRule = _rules.EvalAlarms(deviceId,
+                                    BuildRuleVars(deviceId, data, now), true);
+                                if (customRule != null) isAlarm = true;
+                                string ruleErr = _rules.LastError;
+                                if (ruleErr != null && ruleErr != _lastRuleErrorLogged)
+                                {
+                                    _lastRuleErrorLogged = ruleErr;
+                                    TestEventLogger.Write(_currentLotNumber, deviceId,
+                                        "规则求值失败", ruleErr + "（已按不触发处理）");
+                                }
+                            }
+
                             lock (_stateLock)
                             {
                                 if (isAlarm && !_lastAlarmStates[deviceId - 1])
@@ -2576,12 +2694,17 @@ namespace AgingTestSystem.Services
                                     // 进入报警边沿：执行一次联动输出
                                     // 【V1.59】压力类报警（越限/真空建立失败）= 产品责任
                                     // 【V1.67】Q19：真空类按 VacuumFailKind 记 FAIL/装夹异常
+                                    // 【V1.69】自定义规则 = 产品相关但非真空类 → 永远 FAIL
                                     // （HandleAlarm 内部会退出测试态并把结果写入缓存；
                                     //   这里同步给本轮广播数据，面板当轮就能显示）
                                     _lastAlarmStates[deviceId - 1] = true;
-                                    prevResult = HandleAlarm(deviceId, GetAlarmReason(data),
-                                        productRelated: classified.ProductRelated,
-                                        vacuumCause: classified.VacuumCause);
+                                    prevResult = HandleAlarm(deviceId,
+                                        customRule != null
+                                            ? $"自定义规则[{customRule}]触发"
+                                            : GetAlarmReason(data),
+                                        productRelated: true,
+                                        vacuumCause: customRule != null
+                                            ? false : classified.VacuumCause);
                                 }
                                 _lastAlarmStates[deviceId - 1] = isAlarm;
                             }
@@ -2696,6 +2819,7 @@ namespace AgingTestSystem.Services
 
             bool powerOnNow = false;   // 锁内决策、锁外执行 IO
             bool completeNow = false;
+            bool completeByRule = false;   // 【V1.69】完成表达式触发（与时长到取或，只能提前）
 
             lock (_stateLock)
             {
@@ -2738,6 +2862,30 @@ namespace AgingTestSystem.Services
                 }
             }
 
+            // 【V1.69】完成表达式 OR（锁外求值：BuildRuleVars 自己取锁，不持锁调）：
+            // 未配置/求值错 → false（按内置时长走）；成立 → 提前完成。
+            // 只能提前不能拖后——烧屏架少点亮比多点亮安全（过老化+火灾风险），方向是加严。
+            if (!completeNow)
+            {
+                try
+                {
+                    if (_rules.EvalComplete(BuildRuleVars(deviceId, data, DateTime.Now)))
+                    {
+                        lock (_stateLock)
+                        {
+                            // 复查：求值期间状态可能已变（报警/停止），只对仍在 Aging 的台动手
+                            if (_testingStates[idx] && _testPhases[idx] == AgingPhase.Aging)
+                            {
+                                _testingStates[idx] = false;
+                                completeNow = true;
+                                completeByRule = true;
+                            }
+                        }
+                    }
+                }
+                catch { /* 求值永不阻断计时 */ }
+            }
+
             // ---- 锁外执行副作用（IO / 日志 / 快照），不持锁做网络通讯 ----
             if (powerOnNow)
             {
@@ -2753,7 +2901,8 @@ namespace AgingTestSystem.Services
 
             if (completeNow)
             {
-                CompleteDeviceInternal(deviceId, "老化时长到");
+                CompleteDeviceInternal(deviceId,
+                    completeByRule ? "自定义完成条件触发" : "老化时长到");
 
                 // 【V1.59 关键】同步修正本轮广播数据：状态分支在本轮早于完成动作执行，
                 // data.Status 还是 Testing；若不改回来，本轮末尾"批量更新缓存"会用
@@ -3042,6 +3191,11 @@ namespace AgingTestSystem.Services
 
             // 压力越限判断（按该台的有效阈值）
             bool pressureAlarm = PressureOutOfRange(data.VacuumPressure, threshold);
+
+            // 【V1.69】跳过抽真空 = 无真空治具（机械夹具）：没真空就没压力信号，
+            // 压力越限恒为"误报"，直接豁免（DI 触点/失联不受影响，照常报警）。
+            // 配错在真空架上开本开关 = 真空保护全丢，启动日志已大写警告，责任在配置不在代码。
+            if (_config.SkipVacuum) pressureAlarm = false;
 
             // ===== 真空确认宽限窗口 =====
             if (isTesting && inConfirmWindow)

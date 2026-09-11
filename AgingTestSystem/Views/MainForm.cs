@@ -939,6 +939,13 @@ namespace AgingTestSystem.Views
             config.MesAuthToken = DecryptMesSecret("MesAuthToken", rawToken);
             config.MesAuthPassword = DecryptMesSecret("MesAuthPassword", rawPass);
 
+            // 【V1.69】规则流程（机器缺省；项目 Policy.json 随后叠加覆盖）。
+            // 字符串默认空（=禁用）；SkipVacuum 默认 false（=现状三阶段）。
+            if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["SkipVacuum"], out bool skipVacuum))
+            {
+                config.SkipVacuum = skipVacuum;
+            }
+
             // 【V1.67】项目策略叠加（Projects/<当前项目>/Policy.json 覆盖同名机器缺省）
             ProjectPolicyStore.ApplyOverlay(config);
 

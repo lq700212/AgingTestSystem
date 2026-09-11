@@ -117,12 +117,17 @@
     <Compile Include="Services\MesMapping.cs" />
     <Compile Include="Services\MesReporter.cs" />
     <Compile Include="Services\MesCrypto.cs" />
+    <Compile Include="Services\RuleExpr.cs" />
+    <Compile Include="Services\RuleEngine.cs" />
     <Compile Include="Services\DeviceManager.cs" />
     <Compile Include="Services\UserManager.cs" />
     <Compile Include="Services\PasswordHasher.cs" />
     <Compile Include="Services\RecipeStorage.cs" />
     <Compile Include="Models\TestSession.cs" />
     <Compile Include="Controls\DataGridViewNumericUpDownCell.cs" />
+    <Compile Include="Controls\RuleListEditorPopup.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Controls\IpListEditorPopup.cs">
       <SubType>Form</SubType>
     </Compile>

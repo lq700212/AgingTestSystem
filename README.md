@@ -71,6 +71,8 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Services/StationSettingsCache.cs` | 工位配置缓存（V1.67 起跟项目走 `Projects/<项目>/StationSettings.json`，按工位缓存 SN/配方/延时/极限温度/负压阈值/显示模式，设置窗口下次打开自动回填，V1.26；V1.66 加后两项） |
 | `Services/ThemeManager.cs` | 深色/浅色主题服务（V1.60）：App.config 存 AppTheme（Light/Dark），双向映射表递归着色（语义色保留、按钮不动），打开窗体前 ApplyTo、切换时 ApplyToAllOpenForms |
 | `Services/MesMapping.cs` / `Services/MesReporter.cs` | MES 对接（V1.68）：映射解析纯函数（触发器/字段映射/静态字段 vocabulary 唯一出处）+ 上报器（后台 POST JSON/鉴权/重试/离线缓存 MesQueue.json；Transport 测试缝；Mock 只写 CSV） |
+| `Services/RuleExpr.cs` / `Services/RuleEngine.cs` | 规则表达式（V1.69）：沙盒解析求值（12 变量冻结）+ 执行器（编译缓存/持续计时/完成表达式 OR，只能加严不能松绑） |
+| `Controls/RuleListEditorPopup.cs` | 规则表编辑弹窗（V1.69：多行文本+实时校验+变量速查） |
 | `Services/Mock*.cs` | Mock 实现（免接线演示） |
 | `Views/MainForm.cs` | 主窗体：面板区（9×8）、菜单下拉、状态栏（"在线"全部离线标红，V1.24）、权限控制、扫码事件、操作区按钮；菜单栏 4 按钮（V1.64 起深色切换从"关于"右侧收进关于下拉，仅 dev 可见） |
 | `Views/WorkstationGridView.cs` | 工位网格（自绘大画布，V1.51）：1 个 UserControl 画全部面板 + 行全选列，滚动零撕裂；文字绝对坐标绘制无模糊；布局外部化（程序目录 PanelLayout.json 可改坐标/颜色/字号/文字，无需重编译）；坐标命中实现长按选中/设置按钮/选中框/行全选/悬停提示；V1.60 起 SetDarkMode 跟随全局主题（语义状态色不动） |
@@ -87,7 +89,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Models/` | BarometerData / FanData(+FanRunState) / IoStatus / DeviceConfig / RecipeConfig / StationInfo / PanelLayoutConfig / HomeLayoutConfig / PolicyEnums（V1.67 工艺策略枚举） / 用户模型 |
 | `Services/ProjectProfile.cs` / `Services/ProjectPolicyStore.cs` | 项目档案（V1.67）：`Projects/<项目>/` 路径解析/迁移/切换（配方/工位设置/主页布局/策略跟项目，用户/快照/日志跟机器）；策略分流读写 Policy.json（PolicyKeys 唯一名单） |
 | `Dialogs/UnloadJudgeForm.cs` / `Dialogs/ProjectSwitchForm.cs` | 下料判定窗（V1.67，Q22 待判定配套）/ 项目切换窗（V1.67，仅管理员；纯代码窗体） |
-| `.opencode/skills/agingtest-regression/` | 项目最终测试验证技能（V1.58.23）：一键"构建→冒烟→982+ 条回归断言（V1.68）"，用例源码 `tests/TestRunner.cs`，新测试用例一律沉淀于此（用法见其 SKILL.md） |
+| `.opencode/skills/agingtest-regression/` | 项目最终测试验证技能（V1.58.23）：一键"构建→冒烟→1095+ 条回归断言（V1.69）"，用例源码 `tests/TestRunner.cs`，新测试用例一律沉淀于此（用法见其 SKILL.md） |
 
 > WinForms 视图均拆 `.cs` + `.Designer.cs` 两个 partial；**所有 .cs 必须 UTF-8 with BOM 编码**（否则设计器报"无法设计基类 System.Void"）。
 
@@ -107,6 +109,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 [急停] 全部停止：全关阀+全断电+停送风机+清任务快照（带防误触确认）
 [断电恢复] 异常退出后再启动：检测到 TestSession.json 快照 → 弹窗选"恢复测试"或"放弃并安全关闭阀与电源"（V1.67：策略=整台重测现状，或重抽真空+补足剩余时长，断电期间不计）
 [MES上报] 启动/完成/报警/下料判定四事件按触发器后台 POST JSON 到 MesEndpoint（V1.68；映射/静态可配；Mock 只写 CSV；失败重试+离线缓存，永不阻断生产）
+[规则] 自定义报警规则成立即报警记FAIL（V1.69，与内置同一边沿）；完成表达式成立即提前完成（只能提前）；跳过抽真空=启动即上电+压力豁免（机械夹具，启动大写警告）
 ```
 
 ### 4.2 报警来源（DeviceManager.IsAlarm）
@@ -180,6 +183,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `MesCustomHeaders` / `MesEndpointMap` | 空 / 空 | 自定义头/按事件分地址(V1.68：头名纯 ASCII；鉴权优先；分地址回退默认） |
 | `MesRetryCount` / `MesRetryIntervalMs` | 3 / 2000 | 失败重试次数/间隔（全灭进离线缓存，下次成功补发） |
 | `MesTriggers` / `MesFieldMap` / `MesStaticFields` | 空 / 空 / 空 | 触发器/字段映射/静态字段(V1.68：跟项目走 Policy.json；留空=全开/直通/无） |
+| `SkipVacuum` / `CompleteExpression` / `CustomAlarmRules` | false / 空 / 空 | 规则流程(V1.69：跳过抽真空/完成表达式/自定义报警规则；全空=零行为） |
 | `ScannerEnabled` / `ScannerPort` | false / 空 | 扫码枪开关 / 固定串口（空=WMI 自动识别） |
 | `ScannerDeviceKeyword` / `ScannerBaudRate` | Xenon 1902 / 115200 | 扫码枪识别关键词 / 波特率 |
 
@@ -217,6 +221,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 | 版本 | 要点 |
 | :--- | :--- |
+| V1.69 | 三期规则表达式+阶段流：沙盒引擎（12 变量冻结，短路，NaN 恒 false）+ 自定义报警（持续计时，只多报）+ 完成表达式 OR（只能提前）+ 跳过抽真空（机械夹具，压力同步豁免）+ 规则编辑弹窗（实时校验） |
 | V1.68 | 二期 MES 映射层可配：后台 POST JSON（单入口+鉴权+重试+离线缓存，失败永不阻断生产）+ 触发器/字段映射/静态字段可配（连接跟机器，映射跟项目）+ Mock 联调（只写 CSV）+ Fake 传输回归缝 + 密钥 DPAPI 加密/自定义头/按事件分地址 |
 | V1.67 | 一期"万物可配"：7 个待确认点全部策略化（缺省=现状；系统设置"工艺策略"分类，下拉中文存英文名，矛盾组合保存即拦）+ 策略跟项目走（`Projects/<项目>/Policy.json`）+ 项目档案切换（配方/工位设置/主页布局跟项目，用户/快照跟机器；参数设置下拉"项目切换"仅管理员，切换必重启，在测禁切）+ 下料判定（操作区新按钮+判定窗，待判定配套，CSV 追溯）+ 设置表 tooltip 全覆盖超 40 字换行 |
 | V1.64 | dev 最高权限账号（dev/dev123，走管理员登录框隐藏进入，可删改业务管理员；dev 名保留不可注册；dev 自身不可改名/删除；老 Users.json 自动补 dev）+ 深色切换收进关于下拉仅 dev 可见（顶部菜单 5→4 按钮）+ 通讯测试页空白修复（UIPage 改回 AddPage 挂接）+ 两份现场文档精简重整 |
