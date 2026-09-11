@@ -1,6 +1,6 @@
 ---
 name: agingtest-regression
-description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动等全部核心逻辑类（766+ 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
+description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动等全部核心逻辑类（800+ 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
 ---
 
 # AgingTestSystem 回归测试套件（冒烟 + 用例一体）
@@ -41,12 +41,12 @@ agingtest-regression/
     └── TestRunner.cs         ← 全部测试用例源码（加用例就改这里）
 ```
 
-## 三、测试覆盖范围（28 个模块，766+ 断言）
+## 三、测试覆盖范围（28 个模块，800+ 断言）
 
 | 模块 | 覆盖点 |
 | --- | --- |
 | PasswordHasher | PBKDF2 格式自描述、盐随机性、正反例、损坏串静默失败、中文/超长密码 |
-| UserManager | 默认账号、登录边界（空值/Trim/大小写/角色错配）、AddAccount 唯一性与保底、RemoveAccount 保护、改密链路、HasPermission 权限矩阵、记住登录往返、Users.json 损坏回退重建、缺角色自动补齐、手改双管理员防呆 |
+| UserManager | 默认账号、登录边界（空值/Trim/大小写/角色错配）、AddAccount 唯一性与保底、RemoveAccount 保护、改密链路、HasPermission 权限矩阵、记住登录往返、Users.json 损坏回退重建、缺角色自动补齐、手改双管理员防呆；V1.64 起 dev 最高权限 J 组 34 条（种子+隐藏登录+注册保护不可用+删改矩阵+老文件自愈+手改保留 dev+第一业务管理员） |
 | SettingsForm.Normalize | StopBits(1/15/2) 与 Parity(None/Odd/Even/Mark/Space) 归一映射（反射调私有静态方法），含中文/缩写/非法值兜底 |
 | IoOutputChannelRemap | 多组解析、中英文分号/箭头、0X 大小写、脏项跳过汇总 error、源=目标、通道 0x00~0x0F（V1.62 起 0x10+ 直接拒绝）、缺前缀 |
 | DeviceConfig.ParseFanIpCandidates | 中英文分隔符、非法过滤、去重保序、IPv6、空输入族 |

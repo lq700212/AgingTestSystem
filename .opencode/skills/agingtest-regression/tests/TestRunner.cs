@@ -412,6 +412,77 @@ namespace AgingTestSystem.Tests
             var umDup = new UserManager();
             Check("手改双管理员只保留第一个(a1 可登录)", umDup.Login(UserRole.Administrator, "a1", "1111").Success);
             Check("第二个管理员(a2)被丢弃", !umDup.Login(UserRole.Administrator, "a2", "2222").Success);
+
+            // ── J. dev 最高权限账号（V1.64）：种子/隐藏登录/管管理员/注册保护/老文件自愈 ──
+            EnterCleanDir();
+            var umDevFresh = new UserManager();
+            Check("新装自带 dev 账号(管理员组)", umDevFresh.GetAccounts(UserRole.Administrator).Any(a => a.Username == "dev"));
+            Check("Users.json 不含 dev 明文密码", !File.ReadAllText("Users.json").Contains("dev123"));
+            var rDev = umDevFresh.Login(UserRole.Administrator, "dev", "dev123");
+            Check("dev 走管理员登录入口成功(隐藏入口)", rDev.Success && umDevFresh.IsDevLoggedIn);
+            Check("dev 密码错误被拒", !new UserManager().Login(UserRole.Administrator, "dev", "wrong").Success);
+            Check("dev 不能走技术员入口(角色错配)", !new UserManager().Login(UserRole.Technician, "dev", "dev123").Success);
+            var umAdmChk = new UserManager();
+            umAdmChk.Login(UserRole.Administrator, "admin", "123456");
+            Check("普通管理员登录成功", umAdmChk.CurrentUser != null && umAdmChk.CurrentUser.Username == "admin");
+            Check("普通管理员 IsDevLoggedIn 为 false", !umAdmChk.IsDevLoggedIn);
+
+            // 注册保护：dev 名任何人都要不到
+            var addDev = umAdmChk.AddAccount(UserRole.Operator, "dev", "abcd1234");
+            Check("注册 dev 名被拒", !addDev.Success);
+            Check("注册 dev 名提示不可用", addDev.Message.Contains("不可用"));
+            Check("注册 DEV 大小写变体被拒", !umAdmChk.AddAccount(UserRole.Operator, "DEV", "abcd1234").Success);
+            Check("注册 Dev 变体被拒", !umAdmChk.AddAccount(UserRole.Technician, " Dev ", "abcd1234").Success);
+            Check("第二个业务管理员仍被拒", !umAdmChk.AddAccount(UserRole.Administrator, "admin2", "abcd1234").Success);
+
+            // 普通管理员碰管理员组一律被拒；dev 全放行（除动 dev 自身）
+            Check("管理员删管理员被拒", !umAdmChk.RemoveAccount(UserRole.Administrator, "admin").Success);
+            var bizAdmin = umAdmChk.GetAccounts(UserRole.Administrator).First(a => a.Username == "admin");
+            Check("管理员重置管理员密码被拒", !umAdmChk.UpdatePassword(bizAdmin, "newpw99").Success);
+            Check("管理员改管理员名被拒", !umAdmChk.UpdateUsername(bizAdmin, "admin_x").Success);
+
+            var umDev = new UserManager();
+            umDev.Login(UserRole.Administrator, "dev", "dev123");
+            Check("dev 登录后 IsDevLoggedIn 为 true", umDev.IsDevLoggedIn);
+            var devSelf = umDev.GetAccounts(UserRole.Administrator).First(a => a.Username == "dev");
+            var bizAdm2 = umDev.GetAccounts(UserRole.Administrator).First(a => a.Username == "admin");
+            Check("dev 重置管理员密码成功", umDev.UpdatePassword(bizAdm2, "newadminpw").Success);
+            Check("dev 改管理员用户名成功", umDev.UpdateUsername(bizAdm2, "admin_renamed").Success);
+            Check("改名为 dev 被拒(不可用)", !umDev.UpdateUsername(
+                umDev.GetAccounts(UserRole.Operator).First(a => a.Username == "operator"), "dev").Success);
+            Check("dev 自身不允许改名", !umDev.UpdateUsername(devSelf, "dev2").Success);
+            Check("dev 自身不允许删除", !umDev.RemoveAccount(UserRole.Administrator, "dev").Success);
+            var umAdmDel = new UserManager();
+            Check("改名改密后业务管理员仍可登录",
+                umAdmDel.Login(UserRole.Administrator, "admin_renamed", "newadminpw").Success);
+            Check("管理员删 dev 被拒", !umAdmDel.RemoveAccount(UserRole.Administrator, "dev").Success);
+            Check("dev 删除业务管理员成功", umDev.RemoveAccount(UserRole.Administrator, "admin_renamed").Success);
+            Check("被删管理员不再能登录",
+                !new UserManager().Login(UserRole.Administrator, "admin_renamed", "newadminpw").Success);
+            Check("dev 可建新业务管理员(空出名额)", umDev.AddAccount(UserRole.Administrator, "admin2", "abcd1234").Success);
+            Check("新业务管理员可登录", new UserManager().Login(UserRole.Administrator, "admin2", "abcd1234").Success);
+            Check("dev 改自己密码(验旧密)成功", umDev.ChangeOwnPassword("dev123", "dev456").Success);
+            Check("dev 新密码可登录", new UserManager().Login(UserRole.Administrator, "dev", "dev456").Success);
+
+            // 老文件自愈：没有 dev 的旧 Users.json → 自动补 dev，且老密码一个不动
+            EnterCleanDir();
+            File.WriteAllText("Users.json",
+                "[{\"Username\":\"operator\",\"Password\":\"" + PasswordHasher.Hash("123456") + "\",\"Role\":0}," +
+                "{\"Username\":\"technician\",\"Password\":\"" + PasswordHasher.Hash("123456") + "\",\"Role\":1}," +
+                "{\"Username\":\"admin\",\"Password\":\"" + PasswordHasher.Hash("oldadminpw") + "\",\"Role\":2}]");
+            var umHeal = new UserManager();
+            Check("老文件无 dev 时自动补上", umHeal.Login(UserRole.Administrator, "dev", "dev123").Success);
+            Check("老管理员密码未被重置", umHeal.Login(UserRole.Administrator, "admin", "oldadminpw").Success);
+
+            // 手改文件同时有 dev+双业务管理员 → 保留 dev+第一个
+            File.WriteAllText("Users.json",
+                "[{\"Username\":\"dev\",\"Password\":\"" + PasswordHasher.Hash("dev123") + "\",\"Role\":2}," +
+                "{\"Username\":\"b1\",\"Password\":\"" + PasswordHasher.Hash("1111") + "\",\"Role\":2}," +
+                "{\"Username\":\"b2\",\"Password\":\"" + PasswordHasher.Hash("2222") + "\",\"Role\":2}]");
+            var umKeep = new UserManager();
+            Check("dev+双业务管理员保留 dev", umKeep.Login(UserRole.Administrator, "dev", "dev123").Success);
+            Check("dev+双业务管理员保留第一个(b1)", umKeep.Login(UserRole.Administrator, "b1", "1111").Success);
+            Check("dev+双业务管理员丢弃第二个(b2)", !umKeep.Login(UserRole.Administrator, "b2", "2222").Success);
         }
 
         // =====================================================================

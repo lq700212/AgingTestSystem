@@ -65,13 +65,13 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Services/ScannerService.cs` | 扫码枪：WMI 识别串口、串口读码、断线心跳重连 |
 | `Services/TestEventLogger.cs` | 测试事件 CSV 落盘（启动/停止/报警/复位/急停/真空建立） |
 | `Services/AppLogFileWriter.cs` | 主窗体 UI 操作日志落盘（Logs\AppLog_yyyyMMdd.log，按日期分文件，与文本框逐行一致，写失败静默） |
-| `Services/UserManager.cs` | 用户/登录/权限，Users.json 持久化（密码哈希，V1.58.22） |
+| `Services/UserManager.cs` | 用户/登录/权限，Users.json 持久化（密码哈希，V1.58.22）；V1.64 起含 dev 最高权限账号（可删改管理员，dev 名系统保留） |
 | `Services/PasswordHasher.cs` | 密码哈希（PBKDF2-HMAC-SHA256，随机盐 + 10 万次迭代，`PBKDF2$迭代$盐$哈希` 自描述格式） |
 | `Services/RecipeStorage.cs` | 配方列表持久化（Recipes.json，启动加载/操作即写盘；SaveWithDuplicateCheck 同名覆盖保存，V1.25/1.26） |
 | `Services/StationSettingsCache.cs` | 工位配置缓存（StationSettings.json，按工位缓存 SN/配方/延时/极限温度，设置窗口下次打开自动回填，V1.26） |
 | `Services/ThemeManager.cs` | 深色/浅色主题服务（V1.60）：App.config 存 AppTheme（Light/Dark），双向映射表递归着色（语义色保留、按钮不动），打开窗体前 ApplyTo、切换时 ApplyToAllOpenForms |
 | `Services/Mock*.cs` | Mock 实现（免接线演示） |
-| `Views/MainForm.cs` | 主窗体：面板区（9×8）、菜单下拉、状态栏（"在线"全部离线标红，V1.24）、权限控制、扫码事件、操作区按钮；菜单栏 5 按钮（V1.60"关于"右侧加"深色模式"切换） |
+| `Views/MainForm.cs` | 主窗体：面板区（9×8）、菜单下拉、状态栏（"在线"全部离线标红，V1.24）、权限控制、扫码事件、操作区按钮；菜单栏 4 按钮（V1.64 起深色切换从"关于"右侧收进关于下拉，仅 dev 可见） |
 | `Views/WorkstationGridView.cs` | 工位网格（自绘大画布，V1.51）：1 个 UserControl 画全部面板 + 行全选列，滚动零撕裂；文字绝对坐标绘制无模糊；布局外部化（程序目录 PanelLayout.json 可改坐标/颜色/字号/文字，无需重编译）；坐标命中实现长按选中/设置按钮/选中框/行全选/悬停提示；V1.60 起 SetDarkMode 跟随全局主题（语义状态色不动） |
 | `Models/PanelLayoutConfig.cs` | 工位面板布局配置模型（V1.51）：面板网格尺寸/面板内各元素坐标/字体/颜色（"R,G,B"）/按钮与提示文字；`LoadOrDefault` 文件缺失或损坏回退内置默认；V1.58.13~1.58.19 起全部元素改为"锚定"解析（右缘/上缘/下缘/对齐/垂直居中，改面板宽高自动联动），字段全表见类头注释 |
 | `Dialogs/CommunicationTestForm.cs` | 通讯测试窗体（IO 耦合器 DO 输出测试，负压阀/载台上电两页 9×8 灯按钮 + 一键遍历） |
@@ -168,12 +168,13 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 | 按钮 | 下拉项 | 权限 |
 | :--- | :--- | :--- |
-| 用户权限 | 操作员 / 技术员 / 管理员 / 用户管理* | *仅管理员 |
+| 用户权限 | 操作员 / 技术员 / 管理员 / 用户管理* | *仅管理员（dev 登录时用户管理多出"管理员"角色，可删改业务管理员） |
 | 参数设置 | 公共参数（批量写气压表阈值）/ 配方管理 | 技术员+ |
 | 日志记录 | 历史记录（读 CSV） | 任意 |
-| 关于 | 设置* / 通讯测试** / 送风机测试** / 版本说明 | *仅管理员；**技术员+ |
+| 关于 | 设置* / 通讯测试** / 送风机测试** / 版本说明 / 深浅模式切换*** | *仅管理员；**技术员+；***仅 dev |
 
 默认账号（Users.json）：operator / technician / admin，密码均 123456（PBKDF2 哈希存储，明文不落盘，见 `Services/PasswordHasher.cs`）。
+最高权限账号 dev / dev123（V1.64）：走"用户权限→管理员"登录框输入即进，界面无任何提示（隐藏入口）；dev 可删改业务管理员（用户管理窗），dev 名注册/改名一律回"该账号名不可用"，dev 自身不允许改名/删除。
 
 ## 7. 关键设计决策与坑点（排障/新功能必读）
 
@@ -197,6 +198,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 | 版本 | 要点 |
 | :--- | :--- |
+| V1.64 | dev 最高权限账号（dev/dev123，走管理员登录框隐藏进入，可删改业务管理员；dev 名保留不可注册；dev 自身不可改名/删除；老 Users.json 自动补 dev）+ 深色切换收进关于下拉仅 dev 可见（顶部菜单 5→4 按钮）+ 通讯测试页空白修复（UIPage 改回 AddPage 挂接）+ 两份现场文档精简重整 |
 | V1.59 | 业务串联完善：启动只开阀、真空到位+配方延时开启到才自动上电（未吸附固定不通电）；老化时长/延时/报警阈值接入配方参数（负压值优先参与判定，参数启动定格）；到时自动完成标"已完成·待取料"蓝面板+日志 PASS；报警责任分类（压力类=产品FAIL/通讯失联=设备异常）；扫码重绑自动清完成态；在测任务快照 TestSession.json 断电恢复（重启询问整台重测或放弃并安全关阀断电）；新增 AgingSequencer 决策器与 35 条回归用例（281 全绿） |
 | V1.30 | IO 触发后气压表压力值快速刷新：写输出成功（开/关阀、上/断电、启动/停止测试）对目标工位启动独立 250ms 高频补读，压力变化 ≤0.5 秒可见，跟踪 12s 后自动退出恢复正常轮询，不影响 72 台全量采集性能 |
 | V1.29 | 移除时间字段 [JsonProperty] 兼容（JSON 键名直接用 DelayTime/StartTime，旧 Recipes.json/StationSettings.json 需删除重建）+ 工位面板配色微调：boxPower 下电 / boxVacuumOpen 真空关由红底白字改浅灰(LightGray)底黑字（与行全选按钮同色），红仅保留给工作状态"故障" |
