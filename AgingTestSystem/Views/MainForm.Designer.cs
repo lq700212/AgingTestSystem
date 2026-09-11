@@ -74,6 +74,7 @@
             this.btnStartRun = new System.Windows.Forms.Button();
             this.btnStopRun = new System.Windows.Forms.Button();
             this.btnResetAlarm = new System.Windows.Forms.Button();
+            this.btnUnloadJudge = new System.Windows.Forms.Button();
             this.btnStopAll = new System.Windows.Forms.Button();
             this.btnInputLot = new System.Windows.Forms.Button();
             this.btnBatchRecipe = new System.Windows.Forms.Button();
@@ -423,6 +424,7 @@
             this.groupBoxOperation.Controls.Add(this.btnStartRun);
             this.groupBoxOperation.Controls.Add(this.btnStopRun);
             this.groupBoxOperation.Controls.Add(this.btnResetAlarm);
+            this.groupBoxOperation.Controls.Add(this.btnUnloadJudge);
             this.groupBoxOperation.Controls.Add(this.btnStopAll);
             this.groupBoxOperation.Controls.Add(this.btnInputLot);
             this.groupBoxOperation.Controls.Add(this.btnBatchRecipe);
@@ -492,14 +494,26 @@
             this.btnResetAlarm.UseVisualStyleBackColor = false;
             this.btnResetAlarm.Click += new System.EventHandler(this.btnResetAlarm_Click);
             //
+            // btnUnloadJudge（V1.67：Q22 待判定配套，下料时人工录 PASS/FAIL；平时隐藏？不：
+            // 常驻但 AutoPass 下点它只提示，无操作员误触风险；位置在复位下、急停上，29px 步进）
+            //
+            this.btnUnloadJudge.BackColor = System.Drawing.SystemColors.Control;
+            this.btnUnloadJudge.Location = new System.Drawing.Point(15, 192);
+            this.btnUnloadJudge.Name = "btnUnloadJudge";
+            this.btnUnloadJudge.Size = new System.Drawing.Size(256, 28);
+            this.btnUnloadJudge.TabIndex = 6;
+            this.btnUnloadJudge.Text = "下料判定（选中台）";
+            this.btnUnloadJudge.UseVisualStyleBackColor = false;
+            this.btnUnloadJudge.Click += new System.EventHandler(this.btnUnloadJudge_Click);
+            //
             // btnStopAll
             //
             this.btnStopAll.BackColor = System.Drawing.Color.Crimson;
             this.btnStopAll.ForeColor = System.Drawing.Color.White;
-            this.btnStopAll.Location = new System.Drawing.Point(15, 163);
+            this.btnStopAll.Location = new System.Drawing.Point(15, 221);
             this.btnStopAll.Name = "btnStopAll";
             this.btnStopAll.Size = new System.Drawing.Size(256, 28);
-            this.btnStopAll.TabIndex = 5;
+            this.btnStopAll.TabIndex = 7;
             this.btnStopAll.Text = "全部停止（急停）";
             this.btnStopAll.UseVisualStyleBackColor = false;
             this.btnStopAll.Click += new System.EventHandler(this.btnStopAll_Click);
@@ -674,7 +688,7 @@
         private System.Windows.Forms.Label lblSetTempLabel;
         /// <summary>设置温度值显示（V1.16.3：TextBox → Label）</summary>
         private System.Windows.Forms.Label lblSetTemp;
-        /// <summary>操作分组（V1.59.1 精简为 6 个按钮：批量设置配方/录入批号/启动运行/停止运行/报警复位/全部停止）</summary>
+        /// <summary>操作分组（V1.67：7 个按钮，新增下料判定；顺序：批量设置配方/录入批号/启动运行/停止运行/报警复位/下料判定/全部停止）</summary>
         private System.Windows.Forms.GroupBox groupBoxOperation;
         /// <summary>启动运行按钮</summary>
         private System.Windows.Forms.Button btnStartRun;
@@ -682,6 +696,8 @@
         private System.Windows.Forms.Button btnStopRun;
         /// <summary>报警复位按钮（V1.10）</summary>
         private System.Windows.Forms.Button btnResetAlarm;
+        /// <summary>下料判定按钮（V1.67：Q22 待判定配套）</summary>
+        private System.Windows.Forms.Button btnUnloadJudge;
         /// <summary>全部停止（急停）按钮（V1.10）</summary>
         private System.Windows.Forms.Button btnStopAll;
         /// <summary>录入批号按钮</summary>

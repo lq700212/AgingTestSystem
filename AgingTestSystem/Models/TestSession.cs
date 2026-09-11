@@ -70,5 +70,18 @@ namespace AgingTestSystem.Models
         /// 配方负压值优先，未配置回退全局 AlarmPressureThresholdKPa。
         /// </summary>
         public decimal AlarmThresholdKPa { get; set; }
+
+        /// <summary>
+        /// 中断时的子阶段（【V1.67 新增】断电续跑用：(int)AgingPhase）。
+        /// Vacuuming=还没上电→恢复时整段重跑；Aging=已上电→可按剩余时长续跑。
+        /// 老快照没有本字段（默认 0=None）→ 按整段重跑，安全回退。
+        /// </summary>
+        public int Phase { get; set; }
+
+        /// <summary>
+        /// 上电时刻（【V1.67 新增】老化计时起点；还没上电=MinValue）。
+        /// 续跑剩余时长 = DurationSeconds - (SavedAt - PowerOnTime)，断电期间不计入老化。
+        /// </summary>
+        public DateTime PowerOnTime { get; set; }
     }
 }

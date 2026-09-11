@@ -3,6 +3,46 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.67 — 一期"万物可配"：7 个待确认点全部策略化 + 项目档案切换（2026-09-11）
+
+### 改动范围
+- **工艺策略 L2 层（8 枚举 + 2 配套 key，缺省=现状行为）**：`ZeroDurationPolicy`/
+  `EmptySnPolicy`（Q13：Warn 只警告现状 / Block 硬拦截，连确认框都不进）；
+  `FanDisconnectPolicy`（Q16 前半：LogOnly 照跑现状 / BlockStart 风机未连阻断启动，只管启动那一下）；
+  `VacuumFailKind`（Q19：ProductFail 记 FAIL 现状 / FixtureAlarm 记"装夹异常"可重测，只管真空类，
+  DI 与失联口径不变）；`CompletionJudgePolicy`（Q22：AutoPass 现状 / PendingReview 到时标"待判定"）；
+  `PowerLossPolicy`（Q21①：RestartFull 整台重测现状 / ResumeRemaining 重抽真空+补足剩余时长，
+  断电期间不计）；`AgingPressureLossPolicy`（Q11：StopOnLoss 现状 / KeepRunning 只记事件继续老化，
+  只管 Aging 阶段，抽真空失败永远报警）；`CompletionAction` + `VentValveDoPoint`
+  （Q6/Q15：PowerOffOnly 现状 / 蜂鸣 / 破空泄压 / 都要；点位 0=未接硬件只记日志跳过，绝不写坏通道）。
+  超温联停沿用 V1.66 `FanTempShutdownEnabled`（Q16 后半，全机单探头只有全线一种动作）。
+- **策略存项目文件**：`Projects/<项目>/Policy.json` 覆盖 App.config 机器缺省；
+  系统设置新增"工艺策略"分类（下拉中文显示、存英文名，大小写兼容，脏值兜底现状+保存时拦截）；
+  矛盾组合保存即拦（联停开但上限 0 / 泄压选但点位 0，直接告诉用户先填哪个，
+  纯函数 `AgingSequencer.ValidatePolicyCombination`）。
+- **项目档案切换**：`Projects/<项目>/` 下放配方/工位设置/主页布局/策略；用户/快照/日志跟机器。
+  参数设置下拉新增"项目切换"（仅管理员；新建=以当前为模板复制；切换必重启；在测禁切）。
+  首跑自动建 Default 并把老文件搬进去，老用户无感迁移。
+- **下料判定**：操作区新增"下料判定（选中台）"按钮 + `UnloadJudgeForm`
+  （PASS/FAIL + 不良代码 + 处置重测/报废/降级/让步；只收 Completed 台 → 写 CSV 追溯 → 回空闲；
+  AutoPass 下点它只提示）。判定结果以 CSV/历史查询为准（LastTestResult 本来就只活到复位）。
+- **tooltip 全覆盖**：设置表全部单元格悬停显示说明，超 40 字自动换行（`WrapTooltip`，断点优先标点）。
+- **执行侧分支**：报警分类 `ClassifyAlarm`（IsAlarm 转调，口径一份）；上电边沿补快照
+  （Phase + 上电时刻，续跑就靠它）；破空阀复位/启动/急停统一关，不残留输出。
+
+### 为什么这么改
+- 出差目标：不等客户确认——客户 A 要拦截、B 要放行，改配置 30 秒生效，不动代码。
+  7 个确认点全部收敛为策略 key，默认值=现状行为，老项目零变化；新项目建档案即隔离。
+- 有意不做的（见问题清单 §四落子）：业务流可视化编排（三期，流程稳定不值得造引擎）、
+  MES 全可视化（只做映射层，二期等真需求）、阈值类进档案（二期候选，先稳一期）、
+  定格改实时跟随（Q18，不接受=大改，仍等签字）。
+
+### 验证
+- `build_and_test.ps1` 全绿（构建 + 冒烟 + **918 回归**，0 失败；V1.66 的 828 + 新增 90：
+  PolicyV167 模块策略纯函数/名单同步锁/tooltip/档案 + DeviceManagerPolicy 端到端 5 场景）。
+- 回归抓到真问题 1 个：上电边沿没落快照 → 续跑快照 Phase 恒为 Vacuuming，
+  P4 用例红 → 产品代码补 `SaveSessionSnapshot()`（边沿一次）→ 绿。
+
 ## V1.66 — 烧屏锚免确认四项：配方负压必填+显示模式+启动警告+超温联停开关（2026-09-11）
 
 ### 改动范围

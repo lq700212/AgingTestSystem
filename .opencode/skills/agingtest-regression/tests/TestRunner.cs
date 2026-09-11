@@ -15,6 +15,7 @@
 //    9. PanelLayoutConfig     —— 默认布局解析、锚定幂等性、宽高联动推导
 //   10. HomeLayoutConfig      —— 主页布局默认配置加载
 //   11. 模型序列化            —— RecipeConfig/StationInfo/UserAccount 往返与 Clone
+//   12b. PolicyV167            —— 工艺策略纯函数 + 名单同步锁 + tooltip + 项目档案
 //
 //  【怎么跑】
 //  不直接运行本文件。用本 skill 目录 scripts\run_unit_tests.ps1：
@@ -157,6 +158,7 @@ namespace AgingTestSystem.Tests
             Module("HomeLayoutConfig", HomeLayoutTests);
             Module("ModelRoundtrip", ModelRoundtripTests);
             Module("AgingSequencer", AgingSequencerTests);
+            Module("PolicyV167", PolicyTests);
             Module("TestSessionStore", TestSessionStoreTests);
             Module("AgingBusinessModel", AgingBusinessModelTests);
             Module("ThemeManager", ThemeManagerTests);
@@ -173,6 +175,7 @@ namespace AgingTestSystem.Tests
             Module("UiPureHelpers", UiPureHelperTests);
             Module("DeviceManagerIntegration", DeviceManagerIntegrationTests);
             Module("DeviceManagerExtended", DeviceManagerExtendedTests);
+            Module("DeviceManagerPolicy", DeviceManagerPolicyTests);
 
             // 统一清理临时目录（尽力而为，删不掉不影响结果）
             foreach (string dir in _tempDirs)
@@ -788,16 +791,16 @@ namespace AgingTestSystem.Tests
             Check("重启后落盘可读", StationSettingsCache.Get(1) != null && StationSettingsCache.Get(1).SerialNumber == "SN-B002");
 
             // 脏文件三态
-            File.WriteAllText("StationSettings.json", "{broken json");
+            File.WriteAllText(ProjectProfile.ResolveDataPath("StationSettings.json", true), "{broken json");
             ResetStationCache();
             Check("损坏文件读null不抛", StationSettingsCache.Get(1) == null);
-            File.WriteAllText("StationSettings.json", "[]");
+            File.WriteAllText(ProjectProfile.ResolveDataPath("StationSettings.json", true), "[]");
             ResetStationCache();
             Check("空数组读null", StationSettingsCache.Get(1) == null);
-            File.WriteAllText("StationSettings.json", "[{\"DeviceId\":0},{\"DeviceId\":-3},null]");
+            File.WriteAllText(ProjectProfile.ResolveDataPath("StationSettings.json", true), "[{\"DeviceId\":0},{\"DeviceId\":-3},null]");
             ResetStationCache();
             Check("非法编号条目被过滤", StationSettingsCache.Get(0) == null);
-            File.Delete("StationSettings.json");
+            File.Delete(ProjectProfile.ResolveDataPath("StationSettings.json", true));
             ResetStationCache();
         }
 
@@ -873,7 +876,7 @@ namespace AgingTestSystem.Tests
                 }
             };
             Check("Save 返回 true", RecipeStorage.Save(src));
-            Check("保存后文件存在", File.Exists("Recipes.json"));
+            Check("保存后文件存在", File.Exists(ProjectProfile.ResolveDataPath("Recipes.json", true)));
 
             var loaded = RecipeStorage.Load();
             Check("Load 返回非 null 且 2 条", loaded != null && loaded.Count == 2);
@@ -891,14 +894,14 @@ namespace AgingTestSystem.Tests
                 Check("IsEnabled 往返一致(false)", loaded[1].IsEnabled == false);
             }
 
-            File.WriteAllText("Recipes.json", "{broken json");
+            File.WriteAllText(ProjectProfile.ResolveDataPath("Recipes.json", true), "{broken json");
             Check("损坏 json Load 返回 null(不抛异常)", RecipeStorage.Load() == null);
 
-            File.WriteAllText("Recipes.json", "[]");
+            File.WriteAllText(ProjectProfile.ResolveDataPath("Recipes.json", true), "[]");
             var empty = RecipeStorage.Load();
             Check("空数组 json Load 返回空列表(非 null)", empty != null && empty.Count == 0);
 
-            File.WriteAllText("Recipes.json", "null");
+            File.WriteAllText(ProjectProfile.ResolveDataPath("Recipes.json", true), "null");
             var nulllit = RecipeStorage.Load();
             Check("json字面量null Load 返回空列表(非 null)", nulllit != null && nulllit.Count == 0);
 
@@ -907,7 +910,7 @@ namespace AgingTestSystem.Tests
             var r = new RecipeConfig { Name = "新建配方", NegativePressure = -70m };
             Check("SaveWithDuplicateCheck 新增返回 true", RecipeStorage.SaveWithDuplicateCheck(shared, r));
             Check("新增后 Id 自动分配为 1", shared.Count == 1 && shared[0].Id == 1);
-            Check("新增后立即落盘", File.Exists("Recipes.json"));
+            Check("新增后立即落盘", File.Exists(ProjectProfile.ResolveDataPath("Recipes.json", true)));
             var r2 = new RecipeConfig { Name = "第二个配方" };
             Check("第二条新增 Id=2", RecipeStorage.SaveWithDuplicateCheck(shared, r2) && shared[1].Id == 2);
             // V1.62：删中间配方后新增不许撞号（Max+1，不是 Count+1）
@@ -1208,7 +1211,7 @@ namespace AgingTestSystem.Tests
         // =====================================================================
         private static void HomeLayoutTests()
         {
-            string cfgPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "HomeLayout.json");
+            string cfgPath = ProjectProfile.ResolveDataPath("HomeLayout.json", true);
             if (File.Exists(cfgPath)) File.Delete(cfgPath);
 
             var c = HomeLayoutConfig.LoadOrDefault();
@@ -1474,6 +1477,230 @@ namespace AgingTestSystem.Tests
                 !AgingSequencer.IsFanOverTempShutdown(60f, 60f, true));
             Check("超限+开关开+上限>0才停",
                 AgingSequencer.IsFanOverTempShutdown(60.1f, 60f, true));
+        }
+
+        // =====================================================================
+        // 12b. 工艺策略纯函数（V1.67 一期 L2 策略层：7 个待确认点全部可配）
+        //     铁律锁：缺省=现状行为；非法值兜底现状；策略 key 三处同步
+        //     （PolicyKeys/DeviceConfig 属性/SettingsForm 名单）防"存了用不上"。
+        // =====================================================================
+        private static void PolicyTests()
+        {
+            // ── BuildStartBlockText：Warn 不拦，Block 才拦 ──
+            Check("Warn模式永不阻断",
+                AgingSequencer.BuildStartBlockText(new[] { 1 }, new[] { 2 },
+                    ZeroDurationPolicy.Warn, EmptySnPolicy.Warn) == "");
+            Check("Block模式0时长阻断含工位号",
+                AgingSequencer.BuildStartBlockText(new[] { 3 }, new int[0],
+                    ZeroDurationPolicy.Block, EmptySnPolicy.Warn).Contains("3"));
+            Check("Block模式空SN阻断含工位号",
+                AgingSequencer.BuildStartBlockText(new int[0], new[] { 7 },
+                    ZeroDurationPolicy.Warn, EmptySnPolicy.Block).Contains("7"));
+            Check("Block模式两类并存拼两段",
+                AgingSequencer.BuildStartBlockText(new[] { 1 }, new[] { 2 },
+                    ZeroDurationPolicy.Block, EmptySnPolicy.Block).Contains("1")
+                && AgingSequencer.BuildStartBlockText(new[] { 1 }, new[] { 2 },
+                    ZeroDurationPolicy.Block, EmptySnPolicy.Block).Contains("2"));
+            Check("Block模式两类都空不阻断",
+                AgingSequencer.BuildStartBlockText(new int[0], new int[0],
+                    ZeroDurationPolicy.Block, EmptySnPolicy.Block) == "");
+            Check("Block模式null不阻断",
+                AgingSequencer.BuildStartBlockText(null, null,
+                    ZeroDurationPolicy.Block, EmptySnPolicy.Block) == "");
+
+            // ── MapAlarmResult：设备异常/Q19 责任/DI 口径 ──
+            Check("失联永远设备异常(策略管不着)",
+                AgingSequencer.MapAlarmResult(false, true, VacuumFailKind.FixtureAlarm) == "设备异常");
+            Check("真空类+产品责任=FAIL(现状)",
+                AgingSequencer.MapAlarmResult(true, true, VacuumFailKind.ProductFail) == "FAIL");
+            Check("真空类+治具责任=装夹异常",
+                AgingSequencer.MapAlarmResult(true, true, VacuumFailKind.FixtureAlarm) == "装夹异常");
+            Check("DI触点永远FAIL(非真空类，Q19不改它)",
+                AgingSequencer.MapAlarmResult(true, false, VacuumFailKind.FixtureAlarm) == "FAIL");
+            Check("DI触点现状同样FAIL",
+                AgingSequencer.MapAlarmResult(true, false, VacuumFailKind.ProductFail) == "FAIL");
+
+            // ── ComputeResumeDurationSeconds：补欠的产能，断电期间不计 ──
+            DateTime on = new DateTime(2026, 9, 11, 10, 0, 0);
+            Check("不限时长续跑仍不限(返回0)",
+                AgingSequencer.ComputeResumeDurationSeconds(0, on, on.AddHours(1)) == 0);
+            Check("还没上电整段重跑",
+                AgingSequencer.ComputeResumeDurationSeconds(3600, DateTime.MinValue, on) == 3600);
+            Check("正常剩余=总-已跑",
+                AgingSequencer.ComputeResumeDurationSeconds(3600, on, on.AddMinutes(10)) == 3000);
+            Check("断电前已到时给1秒(下一轮即完成)",
+                AgingSequencer.ComputeResumeDurationSeconds(3600, on, on.AddHours(2)) == 1);
+            Check("时钟回拨按没跑过算",
+                AgingSequencer.ComputeResumeDurationSeconds(3600, on, on.AddMinutes(-5)) == 3600);
+
+            // ── ValidatePolicyCombination：矛盾组合锁 ──
+            Check("全缺省组合合法",
+                AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffOnly, 0) == null);
+            Check("联停开但上限0被拦",
+                AgingSequencer.ValidatePolicyCombination(true, 0f, CompletionAction.PowerOffOnly, 0) != null);
+            Check("联停开+上限>0放行",
+                AgingSequencer.ValidatePolicyCombination(true, 60f, CompletionAction.PowerOffOnly, 0) == null);
+            Check("泄压选但点位0被拦",
+                AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffAndVent, 0) != null);
+            Check("蜂鸣+泄压都要但点位0同样被拦",
+                AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffVentAndBeep, 0) != null);
+            Check("泄压+有点位放行",
+                AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffAndVent, 225) == null);
+            Check("纯蜂鸣无点位放行(无硬件要求)",
+                AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffAndBeep, 0) == null);
+
+            // ── ProjectPolicyStore.ParseValue：大小写兼容，非法回null ──
+            Check("枚举正常解析",
+                Equals(ProjectPolicyStore.ParseValue(typeof(ZeroDurationPolicy), "Block"), ZeroDurationPolicy.Block));
+            Check("枚举小写兼容",
+                Equals(ProjectPolicyStore.ParseValue(typeof(ZeroDurationPolicy), "block"), ZeroDurationPolicy.Block));
+            Check("枚举非法回null(调用方保持缺省)",
+                ProjectPolicyStore.ParseValue(typeof(ZeroDurationPolicy), "xxx") == null);
+            Check("枚举空回null",
+                ProjectPolicyStore.ParseValue(typeof(ZeroDurationPolicy), "  ") == null);
+            Check("布尔解析",
+                Equals(ProjectPolicyStore.ParseValue(typeof(bool), "true"), true));
+            Check("整数非法回null",
+                ProjectPolicyStore.ParseValue(typeof(int), "abc") == null);
+
+            // ── 名单同步锁：PolicyKeys/DeviceConfig属性/下拉选项三处一一对应 ──
+            bool keysOk = true;
+            foreach (string k in ProjectPolicyStore.PolicyKeys)
+            {
+                if (typeof(DeviceConfig).GetProperty(k) == null) keysOk = false;
+            }
+            Check("PolicyKeys 每个都有 DeviceConfig 同名属性(防存了用不上)", keysOk);
+            Check("PolicyKeys 含超温联停开关(老 key 收编)",
+                ProjectPolicyStore.PolicyKeys.Contains("FanTempShutdownEnabled"));
+            bool optsOk = true;
+            foreach (string k in ProjectPolicyStore.PolicyKeys)
+            {
+                // VentValveDoPoint 是数字项、FanTempShutdownEnabled 是布尔项，都无策略下拉
+                if (k == "VentValveDoPoint" || k == "FanTempShutdownEnabled") continue;
+                Tuple<string, string>[] opts;
+                if (!ProjectPolicyStore.EnumOptions.TryGetValue(k, out opts) || opts.Length < 2) { optsOk = false; break; }
+                var prop = typeof(DeviceConfig).GetProperty(k);
+                foreach (var o in opts)
+                {
+                    if (ProjectPolicyStore.ParseValue(prop.PropertyType, o.Item2) == null) { optsOk = false; break; }
+                }
+            }
+            Check("每个枚举策略都有≥2个下拉选项且选项全可解析", optsOk);
+
+            // ── DeviceConfig 缺省锁：不配=和以前一模一样 ──
+            var dc = new DeviceConfig();
+            Check("缺省0时长=Warn/空SN=Warn/断连=LogOnly",
+                dc.ZeroDurationPolicy == ZeroDurationPolicy.Warn
+                && dc.EmptySnPolicy == EmptySnPolicy.Warn
+                && dc.FanDisconnectPolicy == FanDisconnectPolicy.LogOnly);
+            Check("缺省真空责任=ProductFail/完成=AutoPass/断电=RestartFull",
+                dc.VacuumFailKind == VacuumFailKind.ProductFail
+                && dc.CompletionJudgePolicy == CompletionJudgePolicy.AutoPass
+                && dc.PowerLossPolicy == PowerLossPolicy.RestartFull);
+            Check("缺省失压=StopOnLoss/完成动作=PowerOffOnly/破空点位=0",
+                dc.AgingPressureLossPolicy == AgingPressureLossPolicy.StopOnLoss
+                && dc.CompletionAction == CompletionAction.PowerOffOnly
+                && dc.VentValveDoPoint == 0);
+
+            // ── 快照新字段缺省锁：老快照(无阶段字段)按整段重跑，安全回退 ──
+            var oldSnap = new TestSessionStation { DeviceId = 1, DurationSeconds = 100 };
+            Check("老快照Phase缺省0(None≠Aging)",
+                oldSnap.Phase == 0 && oldSnap.PowerOnTime == default(DateTime));
+
+            // ── SettingsForm.ValidateValue 策略分支（反射，防手改文件脏值入库） ──
+            const BindingFlags Flags = BindingFlags.NonPublic | BindingFlags.Static;
+            var miValidate = typeof(SettingsForm).GetMethod("ValidateValue", Flags);
+            Check("反射找到 ValidateValue", miValidate != null);
+            if (miValidate != null)
+            {
+                object[] args = new object[] { "ZeroDurationPolicy", "Block", null };
+                Check("策略合法值过",
+                    (bool)miValidate.Invoke(null, args) == true);
+                args = new object[] { "ZeroDurationPolicy", "xxx", null };
+                Check("策略脏值被拦",
+                    (bool)miValidate.Invoke(null, args) == false);
+                args = new object[] { "VentValveDoPoint", "0", null };
+                Check("破空点位0过(未配置合法)",
+                    (bool)miValidate.Invoke(null, args) == true);
+                args = new object[] { "VentValveDoPoint", "-1", null };
+                Check("破空点位负数被拦",
+                    (bool)miValidate.Invoke(null, args) == false);
+            }
+
+            // ── SettingsForm.NormalizePolicyValue（反射：脏值兜底回缺省） ──
+            var miNorm = typeof(SettingsForm).GetMethod("NormalizePolicyValue", Flags);
+            Check("反射找到 NormalizePolicyValue", miNorm != null);
+            if (miNorm != null)
+            {
+                Check("小写归一到存储名",
+                    (string)miNorm.Invoke(null, new object[] { "ZeroDurationPolicy", "block" }) == "Block");
+                Check("脏值兜底回首选项(现状)",
+                    (string)miNorm.Invoke(null, new object[] { "ZeroDurationPolicy", "xxx" }) == "Warn");
+            }
+
+            // ── SettingsForm.WrapTooltip（反射：40字换行） ──
+            var miWrap = typeof(SettingsForm).GetMethod("WrapTooltip", Flags);
+            Check("反射找到 WrapTooltip", miWrap != null);
+            if (miWrap != null)
+            {
+                Func<string, string> wrap = s => (string)miWrap.Invoke(null, new object[] { s });
+                Check("短文本原样返回",
+                    wrap("报警压力阈值（kPa，如 -5）") == "报警压力阈值（kPa，如 -5）");
+                Check("空返回空串", wrap("") == "" && wrap(null) == "");
+                string long60 = new string('测', 60);
+                string wrapped = wrap(long60);
+                bool linesOk = true;
+                foreach (string line in wrapped.Split(new[] { "\r\n" }, StringSplitOptions.None))
+                {
+                    if (line.Length > 40) linesOk = false;
+                }
+                Check("长文本换行且每行≤40字",
+                    wrapped.Contains("\r\n") && linesOk
+                    && wrapped.Replace("\r\n", "").Length == 60);
+            }
+
+            // ── ProjectProfile：非法名/重复/不存在切换全拒绝（运行目录隔离，见 EnterCleanDir） ──
+            EnterCleanDir();
+            Check("空名建项目被拒", !ProjectProfile.CreateProfile("  "));
+            Check("路径穿越字符被拒", !ProjectProfile.CreateProfile("../逃逸"));
+            Check("斜杠被拒", !ProjectProfile.CreateProfile("a/b"));
+            string tmpName = "UT_TMP_单元测试";
+            Check("合法名可建(中文下划线)", ProjectProfile.CreateProfile(tmpName));
+            Check("重复建被拒", !ProjectProfile.CreateProfile(tmpName));
+            Check("列表含新建项目", ProjectProfile.ListProfiles().Contains(tmpName));
+            Check("切换不存在项目被拒", !ProjectProfile.SwitchTo("UT_不存在_999"));
+            string resolved = ProjectProfile.ResolveDataPath("Recipes.json", true);
+            Check("项目文件路径落在Projects目录下",
+                resolved.Contains("Projects") && resolved.EndsWith("Recipes.json"));
+            string global = ProjectProfile.ResolveDataPath("Users.json", false);
+            Check("全局文件路径不进Projects",
+                !global.Contains("Projects") && global.EndsWith("Users.json"));
+            try { Directory.Delete(System.IO.Path.Combine(ProjectProfile.ProjectsRoot, tmpName), true); }
+            catch { }
+            Check("临时项目已清理", !ProjectProfile.ListProfiles().Contains(tmpName));
+
+            // ── ProjectPolicyStore.Save/Load 往返（写当前项目 Policy.json，隔离目录） ──
+            string policyPath = ProjectPolicyStore.PolicyFilePath;
+            bool hadPolicy = File.Exists(policyPath);
+            string backup = hadPolicy ? File.ReadAllText(policyPath) : null;
+            try
+            {
+                ProjectPolicyStore.Save(new Dictionary<string, string>
+                    { { "ZeroDurationPolicy", "Block" } });
+                Check("策略存取往返",
+                    ProjectPolicyStore.GetRaw("ZeroDurationPolicy") == "Block");
+                Check("没存的项回null(走机器缺省)",
+                    ProjectPolicyStore.GetRaw("EmptySnPolicy") == null);
+            }
+            finally
+            {
+                try
+                {
+                    if (hadPolicy) File.WriteAllText(policyPath, backup);
+                    else if (File.Exists(policyPath)) File.Delete(policyPath);
+                }
+                catch { }
+            }
         }
 
         // =====================================================================

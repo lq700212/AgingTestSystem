@@ -409,6 +409,71 @@ namespace AgingTestSystem.Models
         public bool FanTempShutdownEnabled { get; set; } = false;
 
         // =====================================================================
+        // 工艺策略（【V1.67 新增】一期 L2 策略层：7 个待确认点全部可配）
+        // 说明：
+        // - 每个策略的缺省值 = V1.67 之前的行为（枚举 0 值），不配=和以前一模一样；
+        // - 策略是跟项目的：存 Projects/<项目>/Policy.json（见 ProjectPolicyStore），
+        //   App.config 里同名 key 只做机器级缺省兜底（手改 App.config 也生效，优先级低于项目文件）；
+        // - SettingsForm"工艺策略"分类集中编辑，下拉中文显示、存英文名；
+        // - 判定类分支一律先写 AgingSequencer 纯函数（家规），DeviceManager 只做执行。
+        // =====================================================================
+
+        /// <summary>
+        /// 0 时长启动策略（问题清单 Q13 前半）。Warn=只警告（现状），Block=硬拦截。
+        /// </summary>
+        public ZeroDurationPolicy ZeroDurationPolicy { get; set; } = ZeroDurationPolicy.Warn;
+
+        /// <summary>
+        /// 空 SN 启动策略（问题清单 Q13 后半）。Warn=只警告（现状），Block=硬拦截。
+        /// </summary>
+        public EmptySnPolicy EmptySnPolicy { get; set; } = EmptySnPolicy.Warn;
+
+        /// <summary>
+        /// 送风机断连策略（问题清单 Q16 前半）。LogOnly=只提示照跑（现状），
+        /// BlockStart=风机未连接时阻断启动。只管启动那一下，不管跑中掉线。
+        /// </summary>
+        public FanDisconnectPolicy FanDisconnectPolicy { get; set; } = FanDisconnectPolicy.LogOnly;
+
+        /// <summary>
+        /// 真空失败责任归属（问题清单 Q19）。ProductFail=记 FAIL（现状），
+        /// FixtureAlarm=记"装夹异常"（不计产品不良，可重测）。只影响真空类报警
+        /// （压力越限/真空建立失败）；DI 触点与通讯失联口径不变。
+        /// </summary>
+        public VacuumFailKind VacuumFailKind { get; set; } = VacuumFailKind.ProductFail;
+
+        /// <summary>
+        /// 完成判定口径（问题清单 Q22）。AutoPass=到时自动 PASS（现状），
+        /// PendingReview=到时标"待判定"，下料时人工录 PASS/FAIL+不良代码+处置。
+        /// </summary>
+        public CompletionJudgePolicy CompletionJudgePolicy { get; set; } = CompletionJudgePolicy.AutoPass;
+
+        /// <summary>
+        /// 断电恢复策略（问题清单 Q21①）。RestartFull=整台重测（现状），
+        /// ResumeRemaining=重抽真空后补足中断时刻的剩余时长（断电期间不计入老化）。
+        /// </summary>
+        public PowerLossPolicy PowerLossPolicy { get; set; } = PowerLossPolicy.RestartFull;
+
+        /// <summary>
+        /// 老化中失压策略（问题清单 Q11）。StopOnLoss=停机报警（现状），
+        /// KeepRunning=只记事件继续老化。只管 Aging 阶段；抽真空阶段失败永远报警。
+        /// </summary>
+        public AgingPressureLossPolicy AgingPressureLossPolicy { get; set; } = AgingPressureLossPolicy.StopOnLoss;
+
+        /// <summary>
+        /// 到时完成动作（问题清单 Q6/Q15）。PowerOffOnly=只下电关阀（现状）；
+        /// 带 Beep=PC 蜂鸣提醒取料；带 Vent=开破空阀泄压（需配 VentValveDoPoint）。
+        /// </summary>
+        public CompletionAction CompletionAction { get; set; } = CompletionAction.PowerOffOnly;
+
+        /// <summary>
+        /// 破空阀 DO 输出点编号（内部编号，与 TotalInputs/DeviceId 同口径，如 225）。
+        /// 0 = 未配置（默认）：CompletionAction 选了泄压也只记日志跳过，不写坏任何通道。
+        /// 配了点位才真写 DO；复位/启动/急停时自动关闭（不残留输出）。
+        /// 【管路/点位需现场确认后填，现在先留 0】
+        /// </summary>
+        public int VentValveDoPoint { get; set; } = 0;
+
+        // =====================================================================
         // 扫码枪配置（V1.16 新增，参考 SerialScannerTest Demo 实现）
         // 说明：扫码枪（Honeywell Xenon 1902 等）通过虚拟串口接入，
         //       扫到的条码内容 + 回车/换行 结尾（一行一条码）。

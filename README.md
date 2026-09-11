@@ -67,8 +67,8 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Services/AppLogFileWriter.cs` | 主窗体 UI 操作日志落盘（Logs\AppLog_yyyyMMdd.log，按日期分文件，与文本框逐行一致，写失败静默） |
 | `Services/UserManager.cs` | 用户/登录/权限，Users.json 持久化（密码哈希，V1.58.22）；V1.64 起含 dev 最高权限账号（可删改管理员，dev 名系统保留） |
 | `Services/PasswordHasher.cs` | 密码哈希（PBKDF2-HMAC-SHA256，随机盐 + 10 万次迭代，`PBKDF2$迭代$盐$哈希` 自描述格式） |
-| `Services/RecipeStorage.cs` | 配方列表持久化（Recipes.json，启动加载/操作即写盘；SaveWithDuplicateCheck 同名覆盖保存，V1.25/1.26） |
-| `Services/StationSettingsCache.cs` | 工位配置缓存（StationSettings.json，按工位缓存 SN/配方/延时/极限温度/负压阈值/显示模式，设置窗口下次打开自动回填，V1.26；V1.66 加后两项） |
+| `Services/RecipeStorage.cs` | 配方列表持久化（V1.67 起跟项目走 `Projects/<项目>/Recipes.json`，启动加载/操作即写盘；SaveWithDuplicateCheck 同名覆盖保存，V1.25/1.26） |
+| `Services/StationSettingsCache.cs` | 工位配置缓存（V1.67 起跟项目走 `Projects/<项目>/StationSettings.json`，按工位缓存 SN/配方/延时/极限温度/负压阈值/显示模式，设置窗口下次打开自动回填，V1.26；V1.66 加后两项） |
 | `Services/ThemeManager.cs` | 深色/浅色主题服务（V1.60）：App.config 存 AppTheme（Light/Dark），双向映射表递归着色（语义色保留、按钮不动），打开窗体前 ApplyTo、切换时 ApplyToAllOpenForms |
 | `Services/Mock*.cs` | Mock 实现（免接线演示） |
 | `Views/MainForm.cs` | 主窗体：面板区（9×8）、菜单下拉、状态栏（"在线"全部离线标红，V1.24）、权限控制、扫码事件、操作区按钮；菜单栏 4 按钮（V1.64 起深色切换从"关于"右侧收进关于下拉，仅 dev 可见） |
@@ -76,15 +76,17 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Models/PanelLayoutConfig.cs` | 工位面板布局配置模型（V1.51）：面板网格尺寸/面板内各元素坐标/字体/颜色（"R,G,B"）/按钮与提示文字；`LoadOrDefault` 文件缺失或损坏回退内置默认；V1.58.13~1.58.19 起全部元素改为"锚定"解析（右缘/上缘/下缘/对齐/垂直居中，改面板宽高自动联动），字段全表见类头注释 |
 | `Dialogs/CommunicationTestForm.cs` | 通讯测试窗体（IO 耦合器 DO 输出测试，负压阀/载台上电两页 9×8 灯按钮 + 一键遍历） |
 | `Dialogs/FanTestForm.cs` | 送风机测试窗体（定值启停 + 温湿度显示） |
-| `Dialogs/SettingsForm.cs` | 系统设置（管理员，按分类编辑 App.config 全部配置项，写回 exe.config 保存即生效，连接参数自动重连；仅设备数量/布局/模拟开关等结构型配置重启生效） |
+| `Dialogs/SettingsForm.cs` | 系统设置（管理员，按分类编辑 App.config 全部配置项 + V1.67“工艺策略”分类（策略存项目 Policy.json）；写回 exe.config/Policy.json 保存即生效，连接参数自动重连；仅设备数量/布局/模拟开关等结构型配置重启生效；说明悬停 tooltip 超 40 字换行） |
 | `Dialogs/HomeLayoutEditorForm.cs` | 主页区域调整编辑器（V1.58，管理员）：自绘预览 + 拖动四条边缘实时改标题栏/菜单栏/右侧区/状态栏尺寸，保存写 `HomeLayout.json` 即生效，无需重编译 |
 | `Models/HomeLayoutConfig.cs` | 主页布局配置模型（V1.58）：标题栏/菜单栏/右侧区/状态栏四个尺寸 + Range 约束，`LoadOrDefault` 缺文件或损坏回退内置默认；MainForm 启动与保存后据此应用布局 |
 | `Dialogs/StationSettingsForm.cs` | 工位设置（SN/配方/延时/启动时间/极限温度/负压阈值/显示模式 写入 StationInfo，V1.66 加后两项；延时/启动时间三 NumericUpDown 冒号分隔，V1.28；保存=应用+缓存+存配方、加入对列=应用+存配方、下电=关闭载台上电） |
 | `Dialogs/RecipeManagerForm.cs` | 配方管理窗口（左侧列表可滚动 + 右侧可编辑输入，延时/启动时间冒号分隔三 NumericUpDown，V1.28；V1.66 加负压阈值/显示模式；添加/更新/删除操作即自动落盘 Recipes.json，V1.27 起无"保存设置"按钮） |
 | `Dialogs/BatchRecipeForm.cs` | 批量设置配方窗口（配方名称/延时时间/启动时间/极限温度/负压阈值/显示模式，V1.66 加后两项；延时/启动时间均三 NumericUpDown 冒号分隔，V1.28 删"延时时间2"，两个时间都写入配方：延时→延时开启、启动→延时到达；加入队列=保存配方+应用到选中工位，无选中先保存配方并提示选择） |
 | `Dialogs/IdBindingForm.cs` / `InputLotForm.cs` | 录入批号 + 工位↔SN 绑定（扫码枪自动识别填充，生成 Excel） |
-| `Models/` | BarometerData / FanData(+FanRunState) / IoStatus / DeviceConfig / RecipeConfig / StationInfo / PanelLayoutConfig / HomeLayoutConfig / 用户模型 |
-| `.opencode/skills/agingtest-regression/` | 项目最终测试验证技能（V1.58.23）：一键"构建→冒烟→828+ 条回归断言"，用例源码 `tests/TestRunner.cs`，新测试用例一律沉淀于此（用法见其 SKILL.md） |
+| `Models/` | BarometerData / FanData(+FanRunState) / IoStatus / DeviceConfig / RecipeConfig / StationInfo / PanelLayoutConfig / HomeLayoutConfig / PolicyEnums（V1.67 工艺策略枚举） / 用户模型 |
+| `Services/ProjectProfile.cs` / `Services/ProjectPolicyStore.cs` | 项目档案（V1.67）：`Projects/<项目>/` 路径解析/迁移/切换（配方/工位设置/主页布局/策略跟项目，用户/快照/日志跟机器）；策略分流读写 Policy.json（PolicyKeys 唯一名单） |
+| `Dialogs/UnloadJudgeForm.cs` / `Dialogs/ProjectSwitchForm.cs` | 下料判定窗（V1.67，Q22 待判定配套）/ 项目切换窗（V1.67，仅管理员；纯代码窗体） |
+| `.opencode/skills/agingtest-regression/` | 项目最终测试验证技能（V1.58.23）：一键"构建→冒烟→918+ 条回归断言（V1.67）"，用例源码 `tests/TestRunner.cs`，新测试用例一律沉淀于此（用法见其 SKILL.md） |
 
 > WinForms 视图均拆 `.cs` + `.Designer.cs` 两个 partial；**所有 .cs 必须 UTF-8 with BOM 编码**（否则设计器报"无法设计基类 System.Void"）。
 
@@ -97,12 +99,12 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 [抽真空] 等「真空到位」且「距开阀≥配方延时开启」两者满足（判定阈值=配方负压值优先，全局-5kPa兜底；
          VacuumConfirmTimeoutMs 默认15s 内始终不到位→真空建立失败报警：关阀断电标故障，全程不带电）
 [上电] 条件满足自动载台上电 → 进入老化计时
-[老化] 计时时长=配方"启动时间"(>0)，否则回退 MaxTestDurationSeconds(0=不限时长手动停；V1.66 起启动框对 0 时长/空 SN 工位追加警告，可继续）
-[完成] 到时自动下电+关阀 → 状态"已完成·待取料"(面板蓝) → 日志记 PASS → 人工复位/重新扫码回空闲
-[监控] 压力越限(产品FAIL) / 真空建立失败(产品FAIL) / 通讯失联(设备异常) / DI触点(可选,产品FAIL) / 送风机超温全线联停(可选，默认关，V1.66) → 报警联动
+[老化] 计时时长=配方"启动时间"(>0)，否则回退 MaxTestDurationSeconds(0=不限时长手动停；V1.66 起启动框对 0 时长/空 SN 工位追加警告，可继续；V1.67 起策略可切硬拦截）
+[完成] 到时自动下电+关阀 → 状态"已完成·待取料"(面板蓝) → 日志记 PASS（V1.67：策略=待判定时记"待判定"，下料时人工录 PASS/FAIL+不良代码+处置，进 CSV 追溯）→ 人工复位/重新扫码/下料判定回空闲
+[监控] 压力越限(产品FAIL；V1.67 真空责任策略可切"装夹异常") / 真空建立失败(同前) / 通讯失联(设备异常) / DI触点(可选,产品FAIL，策略不改) / 送风机超温全线联停(可选，默认关，V1.66) / 老化中失压(V1.67 策略：停机报警现状，或只记事件继续老化）→ 报警联动
 [停止] 手动停止=中止(回空闲,不计判定)；末台时送风机自动停止
 [急停] 全部停止：全关阀+全断电+停送风机+清任务快照（带防误触确认）
-[断电恢复] 异常退出后再启动：检测到 TestSession.json 快照 → 弹窗选"按原参数整台重测"或"放弃并安全关闭阀与电源"
+[断电恢复] 异常退出后再启动：检测到 TestSession.json 快照 → 弹窗选"恢复测试"或"放弃并安全关闭阀与电源"（V1.67：策略=整台重测现状，或重抽真空+补足剩余时长，断电期间不计）
 ```
 
 ### 4.2 报警来源（DeviceManager.IsAlarm）
@@ -120,8 +122,8 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 - V1.59.1 起主界面不再提供手动定值启/停按钮（与自动生命周期管理重复且误导），维护调试请用"关于→送风机测试"。
 - **IP 自动识别**：连接顺序 = FanLastIp.cache（上次成功）→ FanIpAddress → FanIpCandidates；候选列表配几个识别几个，设备换 IP 自动找到并更新缓存。
 
-### 4.4 主界面操作入口（右侧"操作"区，V1.59.1 精简）
-批量设置配方 / 录入批号 / 启动运行 / 停止运行 / 报警复位 / 全部停止(急停) / 面板"设置" / 行"全选"。
+### 4.4 主界面操作入口（右侧"操作"区，V1.59.1 精简，V1.67 加下料判定）
+批量设置配方 / 录入批号 / 启动运行 / 停止运行 / 报警复位 / 下料判定（V1.67：完成判定=待判定时用，AutoPass 下点它只提示） / 全部停止(急停) / 面板"设置" / 行"全选"。
 
 > V1.59.1 起移除了三个冗余按钮：送风机定值启动/停止（送风机生命周期已由 `UpdateFanLifecycle`
 > 全自动管理，手动停止在测试期间会被采集循环立即重启，属误导性操作）、开启真空（V1.59 三阶段
@@ -135,7 +137,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 > **面板选中交互（V1.19.5~6 / V1.24）**：空白处"长按约 0.8s"选中该工位（选中框平时全隐藏，有选中才全部显示）；
 > 已有选中时长按空白处 = **取消全部选中并隐藏所有选中框**；选中框显示时单击空白处/选中框 = 切换该工位选中状态。
 
-## 5. 配置项速查（App.config，可在"关于→设置"管理员界面编辑；保存后大部分配置立即生效，连接参数自动重连，仅结构型配置重启生效）
+## 5. 配置项速查（App.config + 项目 Policy.json，可在"关于→设置"管理员界面编辑；保存后大部分配置立即生效，连接参数自动重连，仅结构型配置重启生效；策略跟项目走 `Projects/<项目>/Policy.json`，切项目即换策略）
 
 | 配置项 | 默认值 | 说明 |
 | :--- | :--- | :--- |
@@ -162,6 +164,14 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `UseDiAlarmContact` | false | DI 报警触点并入判定（需现场确认电平） |
 | `FanTempAlarmLimitC` | 0 | 送风机温度告警上限(0=不启用) |
 | `FanTempShutdownEnabled` | false | 超温全线联停开关(V1.66，默认关=只记日志；开=超温自动停全部在测工位） |
+| `ZeroDurationPolicy` / `EmptySnPolicy` | Warn | 0时长/空SN启动策略(V1.67：Warn=警告可继续 / Block=硬拦截） |
+| `FanDisconnectPolicy` | LogOnly | 送风机断连策略(V1.67：LogOnly=提示后照跑 / BlockStart=阻断启动） |
+| `VacuumFailKind` | ProductFail | 真空失败责任(V1.67：ProductFail=记FAIL / FixtureAlarm=记装夹异常） |
+| `CompletionJudgePolicy` | AutoPass | 完成判定口径(V1.67：AutoPass=自动PASS / PendingReview=待判定+下料人工录） |
+| `PowerLossPolicy` | RestartFull | 断电恢复(V1.67：RestartFull=整台重测 / ResumeRemaining=续跑剩余） |
+| `AgingPressureLossPolicy` | StopOnLoss | 老化中失压(V1.67：StopOnLoss=停机报警 / KeepRunning=只记不停） |
+| `CompletionAction` / `VentValveDoPoint` | PowerOffOnly / 0 | 完成动作(V1.67：蜂鸣/破空泄压；点位0=未接硬件，选泄压只记日志） |
+| `ActiveProject` | Default | 当前项目指针(V1.67：机器级，项目切换改，配方/策略/布局跟项目走 `Projects/<项目>/`） |
 | `ScannerEnabled` / `ScannerPort` | false / 空 | 扫码枪开关 / 固定串口（空=WMI 自动识别） |
 | `ScannerDeviceKeyword` / `ScannerBaudRate` | Xenon 1902 / 115200 | 扫码枪识别关键词 / 波特率 |
 
@@ -170,7 +180,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | 按钮 | 下拉项 | 权限 |
 | :--- | :--- | :--- |
 | 用户权限 | 操作员 / 技术员 / 管理员 / 用户管理* | *仅管理员（dev 登录时用户管理多出"管理员"角色，可删改业务管理员） |
-| 参数设置 | 公共参数（批量写气压表阈值）/ 配方管理 | 技术员+ |
+| 参数设置 | 公共参数（批量写气压表阈值）/ 配方管理 / 项目切换*（V1.67：新建/切换项目档案，切换必重启，在测禁切） | 技术员+（*仅管理员） |
 | 日志记录 | 历史记录（读 CSV） | 任意 |
 | 关于 | 设置* / 通讯测试** / 送风机测试** / 版本说明 / 深浅模式切换*** | *仅管理员；**技术员+；***仅 dev |
 
@@ -199,6 +209,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 | 版本 | 要点 |
 | :--- | :--- |
+| V1.67 | 一期"万物可配"：7 个待确认点全部策略化（缺省=现状；系统设置"工艺策略"分类，下拉中文存英文名，矛盾组合保存即拦）+ 策略跟项目走（`Projects/<项目>/Policy.json`）+ 项目档案切换（配方/工位设置/主页布局跟项目，用户/快照跟机器；参数设置下拉"项目切换"仅管理员，切换必重启，在测禁切）+ 下料判定（操作区新按钮+判定窗，待判定配套，CSV 追溯）+ 设置表 tooltip 全覆盖超 40 字换行 |
 | V1.64 | dev 最高权限账号（dev/dev123，走管理员登录框隐藏进入，可删改业务管理员；dev 名保留不可注册；dev 自身不可改名/删除；老 Users.json 自动补 dev）+ 深色切换收进关于下拉仅 dev 可见（顶部菜单 5→4 按钮）+ 通讯测试页空白修复（UIPage 改回 AddPage 挂接）+ 两份现场文档精简重整 |
 | V1.59 | 业务串联完善：启动只开阀、真空到位+配方延时开启到才自动上电（未吸附固定不通电）；老化时长/延时/报警阈值接入配方参数（负压值优先参与判定，参数启动定格）；到时自动完成标"已完成·待取料"蓝面板+日志 PASS；报警责任分类（压力类=产品FAIL/通讯失联=设备异常）；扫码重绑自动清完成态；在测任务快照 TestSession.json 断电恢复（重启询问整台重测或放弃并安全关阀断电）；新增 AgingSequencer 决策器与 35 条回归用例（281 全绿） |
 | V1.30 | IO 触发后气压表压力值快速刷新：写输出成功（开/关阀、上/断电、启动/停止测试）对目标工位启动独立 250ms 高频补读，压力变化 ≤0.5 秒可见，跟踪 12s 后自动退出恢复正常轮询，不影响 72 台全量采集性能 |

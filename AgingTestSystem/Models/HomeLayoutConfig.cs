@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using AgingTestSystem.Services;
 using Newtonsoft.Json;
 
 namespace AgingTestSystem.Models
@@ -123,10 +124,10 @@ namespace AgingTestSystem.Models
             }
         }
 
-        /// <summary>配置文件路径（程序运行目录下的 HomeLayout.json）</summary>
+        /// <summary>配置文件路径（【V1.67】跟项目走：Projects/&lt;当前项目&gt;/HomeLayout.json）</summary>
         public static string GetConfigPath()
         {
-            return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "HomeLayout.json");
+            return ProjectProfile.ResolveDataPath("HomeLayout.json", true);
         }
     }
 }
