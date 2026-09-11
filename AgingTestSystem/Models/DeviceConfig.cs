@@ -396,6 +396,18 @@ namespace AgingTestSystem.Models
         /// </summary>
         public float FanTempAlarmLimitC { get; set; } = 0f;
 
+        /// <summary>
+        /// 超温是否全线联停（【V1.66 新增】烧屏安全项，默认 false = 现状只记日志）。
+        ///
+        /// 【业务意义】
+        /// false：超温只记日志、不停机（V1.66 之前的行为，保持不变）；
+        /// true：送风机当前温度超过 <see cref="FanTempAlarmLimitC"/> 时，
+        /// 主窗体自动停止全部在测工位（关阀+断电，边沿触发一次，回温后自动复位允许再停）。
+        /// 全机只有一个温度探头（送风机控制屏），做不到单台联停，只有"全线停"一种动作；
+        /// 超温停单台还是全线（问题清单 Q16）等现场拍板，在此之前本开关保持关闭。
+        /// </summary>
+        public bool FanTempShutdownEnabled { get; set; } = false;
+
         // =====================================================================
         // 扫码枪配置（V1.16 新增，参考 SerialScannerTest Demo 实现）
         // 说明：扫码枪（Honeywell Xenon 1902 等）通过虚拟串口接入，

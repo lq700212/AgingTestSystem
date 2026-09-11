@@ -42,6 +42,11 @@ namespace AgingTestSystem.Dialogs
             this.lblLimitTempUnit = new System.Windows.Forms.Label();
             this.nudLimitTemp = new System.Windows.Forms.NumericUpDown();
             this.lblLimitTemp = new System.Windows.Forms.Label();
+            this.lblNegativePressure = new System.Windows.Forms.Label();
+            this.nudNegativePressure = new System.Windows.Forms.NumericUpDown();
+            this.lblNegativePressureUnit = new System.Windows.Forms.Label();
+            this.lblDisplayMode = new System.Windows.Forms.Label();
+            this.txtDisplayMode = new System.Windows.Forms.TextBox();
             this.nudStartSeconds = new System.Windows.Forms.NumericUpDown();
             this.lblStartMinutesUnit = new System.Windows.Forms.Label();
             this.nudStartMinutes = new System.Windows.Forms.NumericUpDown();
@@ -62,6 +67,7 @@ namespace AgingTestSystem.Dialogs
             ((System.ComponentModel.ISupportInitialize)(this.dgvRecipes)).BeginInit();
             this.panelRight.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nudLimitTemp)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudNegativePressure)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudStartSeconds)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudStartMinutes)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudStartHours)).BeginInit();
@@ -135,6 +141,11 @@ namespace AgingTestSystem.Dialogs
             this.panelRight.Controls.Add(this.btnDelete);
             this.panelRight.Controls.Add(this.btnUpdate);
             this.panelRight.Controls.Add(this.btnAdd);
+            this.panelRight.Controls.Add(this.txtDisplayMode);
+            this.panelRight.Controls.Add(this.lblDisplayMode);
+            this.panelRight.Controls.Add(this.lblNegativePressureUnit);
+            this.panelRight.Controls.Add(this.nudNegativePressure);
+            this.panelRight.Controls.Add(this.lblNegativePressure);
             this.panelRight.Controls.Add(this.lblLimitTempUnit);
             this.panelRight.Controls.Add(this.nudLimitTemp);
             this.panelRight.Controls.Add(this.lblLimitTemp);
@@ -165,7 +176,7 @@ namespace AgingTestSystem.Dialogs
             this.btnDelete.Location = new System.Drawing.Point(260, 280);
             this.btnDelete.Name = "btnDelete";
             this.btnDelete.Size = new System.Drawing.Size(75, 23);
-            this.btnDelete.TabIndex = 15;
+            this.btnDelete.TabIndex = 17;
             this.btnDelete.Text = "删除";
             this.btnDelete.Click += new System.EventHandler(this.btnDelete_Click);
             //
@@ -174,7 +185,7 @@ namespace AgingTestSystem.Dialogs
             this.btnUpdate.Location = new System.Drawing.Point(165, 280);
             this.btnUpdate.Name = "btnUpdate";
             this.btnUpdate.Size = new System.Drawing.Size(75, 23);
-            this.btnUpdate.TabIndex = 14;
+            this.btnUpdate.TabIndex = 16;
             this.btnUpdate.Text = "更新";
             this.btnUpdate.Click += new System.EventHandler(this.btnUpdate_Click);
             //
@@ -183,7 +194,7 @@ namespace AgingTestSystem.Dialogs
             this.btnAdd.Location = new System.Drawing.Point(70, 280);
             this.btnAdd.Name = "btnAdd";
             this.btnAdd.Size = new System.Drawing.Size(75, 23);
-            this.btnAdd.TabIndex = 13;
+            this.btnAdd.TabIndex = 15;
             this.btnAdd.Text = "添加";
             this.btnAdd.Click += new System.EventHandler(this.btnAdd_Click);
             //
@@ -219,6 +230,68 @@ namespace AgingTestSystem.Dialogs
             this.lblLimitTempUnit.Size = new System.Drawing.Size(12, 12);
             this.lblLimitTempUnit.TabIndex = 0;
             this.lblLimitTempUnit.Text = "℃";
+            //
+            // lblNegativePressure
+            //
+            // 【V1.66】配方负压阈值输入：以前三窗都没有这个框，新建配方 NegativePressure 恒 0，
+            // 下发后阈值≈0（负压域里≈永远到位），等于悄悄关掉真空保护。现在必填实数，
+            // 新建默认=全局 AlarmPressureThresholdKPa（构造传入），存什么定格什么，无魔法值。
+            //
+            this.lblNegativePressure.AutoSize = true;
+            this.lblNegativePressure.Location = new System.Drawing.Point(30, 208);
+            this.lblNegativePressure.Name = "lblNegativePressure";
+            this.lblNegativePressure.Size = new System.Drawing.Size(65, 12);
+            this.lblNegativePressure.TabIndex = 0;
+            this.lblNegativePressure.Text = "负压阈值：";
+            //
+            // nudNegativePressure
+            //
+            this.nudNegativePressure.DecimalPlaces = 1;
+            this.nudNegativePressure.Increment = 0.5M;
+            this.nudNegativePressure.Location = new System.Drawing.Point(95, 204);
+            this.nudNegativePressure.Maximum = new decimal(new int[] {
+            9999,
+            0,
+            0,
+            0});
+            this.nudNegativePressure.Minimum = new decimal(new int[] {
+            9999,
+            0,
+            0,
+            -2147483648});
+            this.nudNegativePressure.Name = "nudNegativePressure";
+            this.nudNegativePressure.Size = new System.Drawing.Size(70, 21);
+            this.nudNegativePressure.TabIndex = 13;
+            this.nudNegativePressure.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            //
+            // lblNegativePressureUnit
+            //
+            this.lblNegativePressureUnit.AutoSize = true;
+            this.lblNegativePressureUnit.Location = new System.Drawing.Point(167, 208);
+            this.lblNegativePressureUnit.Name = "lblNegativePressureUnit";
+            this.lblNegativePressureUnit.Size = new System.Drawing.Size(23, 12);
+            this.lblNegativePressureUnit.TabIndex = 0;
+            this.lblNegativePressureUnit.Text = "kPa";
+            //
+            // lblDisplayMode
+            //
+            // 【V1.66】烧屏画面记录（自由文本如"白场/RGB循环/棋盘格"）：只存配方追溯，
+            // 不参与任何判定；工位透传走 SetStationRecipe（见 DeviceManager）。
+            //
+            this.lblDisplayMode.AutoSize = true;
+            this.lblDisplayMode.Location = new System.Drawing.Point(30, 236);
+            this.lblDisplayMode.Name = "lblDisplayMode";
+            this.lblDisplayMode.Size = new System.Drawing.Size(65, 12);
+            this.lblDisplayMode.TabIndex = 0;
+            this.lblDisplayMode.Text = "显示模式：";
+            //
+            // txtDisplayMode
+            //
+            this.txtDisplayMode.Location = new System.Drawing.Point(95, 232);
+            this.txtDisplayMode.MaxLength = 50;
+            this.txtDisplayMode.Name = "txtDisplayMode";
+            this.txtDisplayMode.Size = new System.Drawing.Size(200, 21);
+            this.txtDisplayMode.TabIndex = 14;
             //
             // lblStartTime
             //
@@ -396,6 +469,7 @@ namespace AgingTestSystem.Dialogs
             this.panelRight.ResumeLayout(false);
             this.panelRight.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nudLimitTemp)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudNegativePressure)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudStartSeconds)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudStartMinutes)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudStartHours)).EndInit();
@@ -482,6 +556,21 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>极限温度单位</summary>
         private System.Windows.Forms.Label lblLimitTempUnit;
+
+        /// <summary>负压阈值标签（【V1.66】配方真空工艺要求，kPa）</summary>
+        private System.Windows.Forms.Label lblNegativePressure;
+
+        /// <summary>负压阈值输入（【V1.66】1位小数/步进0.5/范围±9999，新建默认=全局阈值）</summary>
+        private System.Windows.Forms.NumericUpDown nudNegativePressure;
+
+        /// <summary>负压阈值单位</summary>
+        private System.Windows.Forms.Label lblNegativePressureUnit;
+
+        /// <summary>显示模式标签（【V1.66】烧屏画面记录）</summary>
+        private System.Windows.Forms.Label lblDisplayMode;
+
+        /// <summary>显示模式输入（【V1.66】自由文本，最长50）</summary>
+        private System.Windows.Forms.TextBox txtDisplayMode;
 
         /// <summary>添加按钮</summary>
         private System.Windows.Forms.Button btnAdd;

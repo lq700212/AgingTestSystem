@@ -32,6 +32,17 @@ namespace AgingTestSystem.Services
 
         /// <summary>极限温度（单位：摄氏度）</summary>
         public decimal LimitTemperature { get; set; }
+
+        /// <summary>
+        /// 负压阈值（单位：kPa，【V1.66 新增】与配方 NegativePressure 同义，0=用全局）。
+        /// 工位设置窗回填/下发用，解决"窗口改了阈值下次打开又变回配方值"的问题。
+        /// </summary>
+        public decimal NegativePressure { get; set; }
+
+        /// <summary>
+        /// 显示模式（【V1.66 新增】与配方 DisplayMode 同义，烧屏画面记录，空=没填）。
+        /// </summary>
+        public string DisplayMode { get; set; }
     }
 
     /// <summary>
@@ -174,7 +185,9 @@ namespace AgingTestSystem.Services
                 RecipeName = entry.RecipeName,
                 DelayTime = entry.DelayTime,
                 StartTime = entry.StartTime,
-                LimitTemperature = entry.LimitTemperature
+                LimitTemperature = entry.LimitTemperature,
+                NegativePressure = entry.NegativePressure,
+                DisplayMode = entry.DisplayMode
             };
         }
     }

@@ -30,6 +30,12 @@ namespace AgingTestSystem.Models
         public string RecipeName { get; set; }
 
         /// <summary>
+        /// 当前配方的显示模式（【V1.66 新增】烧屏画面记录，自由文本，可空）。
+        /// 由 StationInfo.DisplayMode 经采集叠加写入；面板暂不显示，启动/报警日志携带追溯。
+        /// </summary>
+        public string DisplayMode { get; set; }
+
+        /// <summary>
         /// 设备状态枚举：空闲、测试中、故障
         /// </summary>
         public DeviceStatus Status { get; set; }
@@ -87,6 +93,7 @@ namespace AgingTestSystem.Models
                 VacuumPressure = this.VacuumPressure,
                 SerialNumber = this.SerialNumber,
                 RecipeName = this.RecipeName,
+                DisplayMode = this.DisplayMode,
                 Status = this.Status,
                 LastTestResult = this.LastTestResult,
                 DelayTime = this.DelayTime,

@@ -13,7 +13,7 @@ namespace AgingTestSystem.Dialogs
     /// 管理老化测试配方，包括：
     /// - 查看配方列表（左侧DataGridView表格，只显示序号和配方名称）
     /// - 选中配方后右侧显示该配方的设置内容，并可编辑
-    ///   （配方名称、延时时间、启动时间、极限温度）
+    ///   （配方名称、延时时间、启动时间、极限温度、负压阈值、显示模式）
     /// - 添加配方：名称与已有配方重名时询问是否更新已有配方
     /// - 更新配方：按当前配方名称找到列表中对应配方并更新其设置
     /// - 删除配方：按当前配方名称找到列表中对应配方并确认删除
@@ -36,10 +36,11 @@ namespace AgingTestSystem.Dialogs
     /// │ │ │ 1     │ ABCDEFGH    │ │  │ │ 延时时间：[ ][ ][ ] │ │   │
     /// │ │ │ 2     │ BBVJKNVK    │ │  │ │ 启动时间：[ ][ ][ ] │ │   │
     /// │ │ │ 3     │ RFTYHYJWF   │ │  │ │ 极限温度：[____]℃   │ │   │
-    /// │ │ │ 4     │ WFRWGYJUK   │ │  │ ├─────────────────────┤ │   │
-    /// │ │ │ 5     │ FGYJKIewF   │ │  │ │ [添加] [更新] [删除] │ │   │
-    /// │ │ │(带滚动条)           │ │  │ └─────────────────────┘ │   │
-    /// │ │ └─────────────────────┘ │  └─────────────────────────┘   │
+    /// │ │ │ 4     │ WFRWGYJUK   │ │  │ │ 负压阈值：[____]kPa │ │   │ ← V1.66
+    /// │ │ │ 5     │ FGYJKIewF   │ │  │ │ 显示模式：[_______] │ │   │ ← V1.66
+    /// │ │ │(带滚动条)           │ │  │ ├─────────────────────┤ │   │
+    /// │ │ └─────────────────────┘ │  │ │ [添加] [更新] [删除] │ │   │
+    /// │ └─────────────────────────┘  │ └─────────────────────┘ │   │
     /// │ └─────────────────────────┘                                │
     /// └─────────────────────────────────────────────────────────────┘
     ///
@@ -54,6 +55,8 @@ namespace AgingTestSystem.Dialogs
     /// - 延时时间：延时开启时间（时:分:秒）
     /// - 启动时间：延时到达时间（时:分:秒）
     /// - 极限温度：测试极限温度（单位：℃）
+    /// - 负压阈值：配方真空工艺要求（单位：kPa，V1.66；新建默认=全局阈值）
+    /// - 显示模式：烧屏画面记录（自由文本，V1.66；只追溯不判定）
     ///
     /// 【持久化】
     /// 添加/更新/删除每次操作成功后自动通过 <see cref="RecipeStorage"/> 把整个配方列表
@@ -67,16 +70,24 @@ namespace AgingTestSystem.Dialogs
         private readonly List<RecipeConfig> _recipes;
 
         /// <summary>
+        /// 新建配方时负压阈值输入框的默认值（【V1.66】= 全局 AlarmPressureThresholdKPa）。
+        /// 项目未上线、无老配方包袱：新建所见即所得，不搞"0=用全局"魔法值。
+        /// </summary>
+        private readonly decimal _defaultNegativePressureKPa;
+
+        /// <summary>
         /// 构造函数
         /// </summary>
-        /// <param name="recipes">外部传入的配方列表，修改将反映到外部</param>
+        /// <param name="recipes">外部传入的配方列表，修改将反映到外部列表实例</param>
+        /// <param name="defaultNegativePressureKPa">新建配方负压阈值默认值（传全局阈值）</param>
         /// <exception cref="System.ArgumentNullException">recipes 为 null 时抛出</exception>
-        public RecipeManagerForm(List<RecipeConfig> recipes)
+        public RecipeManagerForm(List<RecipeConfig> recipes, decimal defaultNegativePressureKPa)
         {
             InitializeComponent();
 
             _recipes = recipes ?? throw new System.ArgumentNullException(nameof(recipes),
                 "配方列表不能为 null，请传入外部维护的列表实例");
+            _defaultNegativePressureKPa = defaultNegativePressureKPa;
 
             LoadRecipesToGrid();
 
@@ -119,6 +130,9 @@ namespace AgingTestSystem.Dialogs
                 nudStartMinutes.Value = nudStartMinutes.Minimum;
                 nudStartSeconds.Value = nudStartSeconds.Minimum;
                 nudLimitTemp.Value = nudLimitTemp.Minimum;
+                // 【V1.66】清空时负压回到新建默认值（全局阈值），显示模式清空
+                nudNegativePressure.Value = ClampPressure(_defaultNegativePressureKPa);
+                txtDisplayMode.Clear();
                 return;
             }
 
@@ -133,6 +147,19 @@ namespace AgingTestSystem.Dialogs
             // 极限温度（超出 NumericUpDown 范围时钳制到边界）
             nudLimitTemp.Value = Math.Max(nudLimitTemp.Minimum,
                 Math.Min(nudLimitTemp.Maximum, recipe.LimitTemperature));
+
+            // 【V1.66】负压阈值 + 显示模式（超出范围钳制；显示模式 null→空串）
+            nudNegativePressure.Value = ClampPressure(recipe.NegativePressure);
+            txtDisplayMode.Text = recipe.DisplayMode ?? "";
+        }
+
+        /// <summary>
+        /// 负压阈值钳制到输入框范围（【V1.66】±9999，超出时取边界，避免设 Value 越界抛异常）
+        /// </summary>
+        private decimal ClampPressure(decimal value)
+        {
+            return Math.Max(nudNegativePressure.Minimum,
+                Math.Min(nudNegativePressure.Maximum, value));
         }
 
         /// <summary>
@@ -173,6 +200,10 @@ namespace AgingTestSystem.Dialogs
             recipe.StartTime = new TimeSpan(
                 (int)nudStartHours.Value, (int)nudStartMinutes.Value, (int)nudStartSeconds.Value);
             recipe.LimitTemperature = nudLimitTemp.Value;
+            // 【V1.66】负压阈值与显示模式一并写入：以前这里漏写 NegativePressure，
+            // 新建配方该值恒 0，下发后真空保护≈关闭。现在存什么定格什么。
+            recipe.NegativePressure = nudNegativePressure.Value;
+            recipe.DisplayMode = txtDisplayMode.Text.Trim();
             return true;
         }
 

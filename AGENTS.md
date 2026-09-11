@@ -35,6 +35,16 @@
   - 备用通道号只认 `0x00`~`0x0F`（单个寄存器 16 个 bit；V1.62 血泪：文档曾写 0x1F，0x10+ 在执行侧静默失效）。解析层直接拒绝 0x10+ 并进 error；编辑弹窗微调框最大值同步 0x0F；执行侧 `MapOutputChannel` 对非法目标保持原通道（绝不写坏掩码）。
   - 界面可显示中文/友好文案，但**存到 App.config 的值必须经过归一化映射**（见 `SettingsForm.NormalizeParity` / `NormalizeStopBits`），禁止把非规范字符写进配置。
 - 配置项编辑控件统一在 `SettingsForm.CreateValueCell` 按 key 分发（布尔/串口/波特率/数据位/停止位/校验位/数字/文本）。新增串口类配置项时，**气压表与扫码枪两套 key（如 `PortName`+`ScannerPort`）都要覆盖**，共用同一套映射逻辑。
+- **新增 App.config 配置项五处同步（V1.66 血泪）**：`DeviceConfig` 属性 + `App.config` key（含中文注释）+
+  `MainForm` 读取 + `SettingsForm`（`_boolKeys` **和** `ValidateValue` 布尔分支 **两个名单都要进** +
+  `_descriptions` + `_categories`）。`ValidateValue` 的布尔分支是硬编码 switch，
+  只进 `_boolKeys` 会导致"YES 也能过"——回归里"布尔键一致"锁（逐项 true/false 过、YES 不过）
+  就是防这个的，改完看它变绿才算完。
+- **配方加字段三窗同步（V1.66）**：`RecipeConfig` 加字段 → 三个录入窗
+  （`RecipeManagerForm`/`BatchRecipeForm`/`StationSettingsForm`：输入框 + 保存 + 回填 +
+  自动检索回调 + 头部 ASCII 图）→ `SetStationRecipe` 下发 → `StationInfo`（+`Clone`）→
+  `ApplyStationInfo` 叠加 → `BarometerData`（+`Clone`）。漏一处就是"存了用不上/下了传不到"，
+  对照此链逐项打勾；`StationSettingsCache` 只在窗口需要回填时才加。
 - **SunnyUI 页签挂接红线（V1.63.2 血泪）**：`UITabControl` + `UIPage` 必须用
   `tabControl.AddPage(page)` 挂接（内部建 TabPage + Dock=Fill + 绑定 + Show()），
   禁止手写 `TabPage` 包裹 + `Controls.Add`——漏掉 `Show()` 会导致页面 `Visible=false`、
@@ -93,7 +103,7 @@
 ```
 
 - 构建成功标准：输出 `AgingTestSystem -> ...\bin\Debug\AgingTestSystem.exe` 且无 error。
-- **最终测试验证手段（V1.58.23 起）**：一键跑 `powershell -ExecutionPolicy Bypass -File .opencode\skills\agingtest-regression\scripts\build_and_test.ps1`，自动完成"构建 → 真机冒烟（exe 启动存活）→ 全量回归用例（766+ 断言，覆盖 PasswordHasher/UserManager/配置归一化/IO 映射/配方存储/双日志器/面板布局锚定联动/编排扩展场景等核心逻辑类）"。也可单独跑同目录 `smoke_test.ps1`（只冒烟）/ `run_unit_tests.ps1`（只回归）。退出码 0 = 全绿。
+- **最终测试验证手段（V1.58.23 起）**：一键跑 `powershell -ExecutionPolicy Bypass -File .opencode\skills\agingtest-regression\scripts\build_and_test.ps1`，自动完成"构建 → 真机冒烟（exe 启动存活）→ 全量回归用例（828+ 断言，覆盖 PasswordHasher/UserManager/配置归一化/IO 映射/配方存储/双日志器/面板布局锚定联动/编排扩展场景等核心逻辑类）"。也可单独跑同目录 `smoke_test.ps1`（只冒烟）/ `run_unit_tests.ps1`（只回归）。退出码 0 = 全绿。
 - **界面像素级 bug（竖线/横线/颜色/叠色/裁剪/滚动条）**：调用全局技能 `winforms-ui-debug`——编译独立 harness 直接 new 目标窗体（指哪打哪，绕过登录/主流程），用反射探私有字段 + PrintWindow 截图 + 像素扫描定位根因并验证修复。含可复用的 csc 编译命令、坐标映射、色值字典与踩坑清单。
 - **调试完自动沉淀技能**：每次用 `winforms-ui-debug` 排查成功（尤其是"一次性改对"的高光案例）后，**主动把可复用的新套路/新踩坑/新型探针代码回写到全局技能 `winforms-ui-debug` 的 SKILL.md**（新增/补充小节、追加踩坑条目），不用等用户提醒。价值标准：换个人靠这份 skill 能更快解决同类问题。
 - 改构建输出（csproj 路径/bin 目录/主 exe 名）时，同步改全局技能 `winforms-ui-debug` 附录 A 的 AgingTestSystem 行（防开工查表拿到旧值）。

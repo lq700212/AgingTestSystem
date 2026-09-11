@@ -49,6 +49,12 @@ namespace AgingTestSystem.Models
         public decimal? RecipeNegativePressure { get; set; }
 
         /// <summary>
+        /// 配方的显示模式（【V1.66 新增】烧屏画面记录，自由文本，可空）。
+        /// 与 RecipeName 同步下发、同步清空；采集叠加到 BarometerData 供面板/日志追溯。
+        /// </summary>
+        public string DisplayMode { get; set; }
+
+        /// <summary>
         /// 延时开启时间（时:分:秒，工位设置窗口录入）
         /// 为空表示尚未配置
         /// </summary>
@@ -72,6 +78,7 @@ namespace AgingTestSystem.Models
                 SerialNumber = this.SerialNumber,
                 RecipeName = this.RecipeName,
                 RecipeNegativePressure = this.RecipeNegativePressure,
+                DisplayMode = this.DisplayMode,
                 DelayTime = this.DelayTime,
                 StartTime = this.StartTime
             };

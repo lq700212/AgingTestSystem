@@ -71,6 +71,11 @@ namespace AgingTestSystem.Dialogs
             this.nudStartSeconds = new System.Windows.Forms.NumericUpDown();
             this.lblTemp = new System.Windows.Forms.Label();
             this.nudTemp = new System.Windows.Forms.NumericUpDown();
+            this.lblPressure = new System.Windows.Forms.Label();
+            this.nudPressure = new System.Windows.Forms.NumericUpDown();
+            this.lblPressureUnit = new System.Windows.Forms.Label();
+            this.lblDisplayMode = new System.Windows.Forms.Label();
+            this.txtDisplayMode = new System.Windows.Forms.TextBox();
             this.btnBreakVacuum = new System.Windows.Forms.Button();
             this.btnPowerOff = new System.Windows.Forms.Button();
             this.btnSave = new System.Windows.Forms.Button();
@@ -83,6 +88,7 @@ namespace AgingTestSystem.Dialogs
             ((System.ComponentModel.ISupportInitialize)(this.nudStartMinutes)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudStartSeconds)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudTemp)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudPressure)).BeginInit();
             this.SuspendLayout();
             //
             // lblState - "状态"设置项名称（左对齐，V1.18 只显示"状态"两字）
@@ -293,6 +299,67 @@ namespace AgingTestSystem.Dialogs
             this.nudTemp.TabIndex = 11;
             this.nudTemp.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             //
+            // lblPressure - "负压阈值"设置项名称（左对齐）
+            //
+            // 【V1.66】本工位真空工艺要求（kPa）：回填优先级 缓存 > 配方 > 全局；
+            // 下发=框里是什么就是什么（存什么定格什么，无魔法值）。项目未上线无老包袱。
+            //
+            this.lblPressure.AutoSize = true;
+            this.lblPressure.Location = new System.Drawing.Point(30, 250);
+            this.lblPressure.Name = "lblPressure";
+            this.lblPressure.Size = new System.Drawing.Size(65, 12);
+            this.lblPressure.TabIndex = 10;
+            this.lblPressure.Text = "负压阈值:";
+            //
+            // nudPressure - 负压阈值输入框（与配方管理窗 nudNegativePressure 对齐：
+            // 1 位小数/步进 0.5/范围 ±9999）
+            //
+            this.nudPressure.DecimalPlaces = 1;
+            this.nudPressure.Increment = 0.5M;
+            this.nudPressure.Location = new System.Drawing.Point(150, 247);
+            this.nudPressure.Maximum = new decimal(new int[] {
+            9999,
+            0,
+            0,
+            0});
+            this.nudPressure.Minimum = new decimal(new int[] {
+            9999,
+            0,
+            0,
+            -2147483648});
+            this.nudPressure.Name = "nudPressure";
+            this.nudPressure.Size = new System.Drawing.Size(120, 21);
+            this.nudPressure.TabIndex = 17;
+            this.nudPressure.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            //
+            // lblPressureUnit - 负压单位
+            //
+            this.lblPressureUnit.AutoSize = true;
+            this.lblPressureUnit.Location = new System.Drawing.Point(275, 250);
+            this.lblPressureUnit.Name = "lblPressureUnit";
+            this.lblPressureUnit.Size = new System.Drawing.Size(23, 12);
+            this.lblPressureUnit.TabIndex = 10;
+            this.lblPressureUnit.Text = "kPa";
+            //
+            // lblDisplayMode - "显示模式"设置项名称（左对齐）
+            //
+            // 【V1.66】烧屏画面记录（自由文本）：回填优先级同负压；下发走 SetStationRecipe。
+            //
+            this.lblDisplayMode.AutoSize = true;
+            this.lblDisplayMode.Location = new System.Drawing.Point(30, 282);
+            this.lblDisplayMode.Name = "lblDisplayMode";
+            this.lblDisplayMode.Size = new System.Drawing.Size(65, 12);
+            this.lblDisplayMode.TabIndex = 10;
+            this.lblDisplayMode.Text = "显示模式:";
+            //
+            // txtDisplayMode - 显示模式输入框
+            //
+            this.txtDisplayMode.Location = new System.Drawing.Point(150, 279);
+            this.txtDisplayMode.MaxLength = 50;
+            this.txtDisplayMode.Name = "txtDisplayMode";
+            this.txtDisplayMode.Size = new System.Drawing.Size(180, 21);
+            this.txtDisplayMode.TabIndex = 18;
+            //
             // btnBreakVacuum - 破空按钮（功能待确认）
             //
             this.btnBreakVacuum.BackColor = System.Drawing.Color.DodgerBlue;
@@ -357,12 +424,17 @@ namespace AgingTestSystem.Dialogs
             //
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(490, 270);
+            this.ClientSize = new System.Drawing.Size(490, 315);
             this.Controls.Add(this.btnClose);
             this.Controls.Add(this.btnAddToQueue);
             this.Controls.Add(this.btnSave);
             this.Controls.Add(this.btnPowerOff);
             this.Controls.Add(this.btnBreakVacuum);
+            this.Controls.Add(this.txtDisplayMode);
+            this.Controls.Add(this.lblDisplayMode);
+            this.Controls.Add(this.lblPressureUnit);
+            this.Controls.Add(this.nudPressure);
+            this.Controls.Add(this.lblPressure);
             this.Controls.Add(this.nudTemp);
             this.Controls.Add(this.lblTemp);
             this.Controls.Add(this.nudStartSeconds);
@@ -397,6 +469,7 @@ namespace AgingTestSystem.Dialogs
             ((System.ComponentModel.ISupportInitialize)(this.nudStartMinutes)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudStartSeconds)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudTemp)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudPressure)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
         }
@@ -444,6 +517,16 @@ namespace AgingTestSystem.Dialogs
         private System.Windows.Forms.Label lblTemp;
         /// <summary>极限温度输入（NumericUpDown，V1.63 由 TextBox 改，与配方管理窗对齐）</summary>
         private System.Windows.Forms.NumericUpDown nudTemp;
+        /// <summary>"负压阈值"设置项名称标签（【V1.66】本工位真空工艺要求，kPa）</summary>
+        private System.Windows.Forms.Label lblPressure;
+        /// <summary>负压阈值输入（NumericUpDown，V1.66：1位小数/步进0.5/范围±9999）</summary>
+        private System.Windows.Forms.NumericUpDown nudPressure;
+        /// <summary>负压单位标签（kPa）</summary>
+        private System.Windows.Forms.Label lblPressureUnit;
+        /// <summary>"显示模式"设置项名称标签（【V1.66】烧屏画面记录）</summary>
+        private System.Windows.Forms.Label lblDisplayMode;
+        /// <summary>显示模式输入框（【V1.66】自由文本，最长50）</summary>
+        private System.Windows.Forms.TextBox txtDisplayMode;
         /// <summary>破空按钮（功能待确认）</summary>
         private System.Windows.Forms.Button btnBreakVacuum;
         /// <summary>下电按钮（功能待确认）</summary>

@@ -1,6 +1,6 @@
 ---
 name: agingtest-regression
-description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动等全部核心逻辑类（808+ 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
+description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动等全部核心逻辑类（828+ 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
 ---
 
 # AgingTestSystem 回归测试套件（冒烟 + 用例一体）
@@ -41,7 +41,7 @@ agingtest-regression/
     └── TestRunner.cs         ← 全部测试用例源码（加用例就改这里）
 ```
 
-## 三、测试覆盖范围（28 个模块，808+ 断言）
+## 三、测试覆盖范围（28 个模块，828+ 断言）
 
 | 模块 | 覆盖点 |
 | --- | --- |
@@ -50,13 +50,13 @@ agingtest-regression/
 | SettingsForm.Normalize | StopBits(1/15/2) 与 Parity(None/Odd/Even/Mark/Space) 归一映射（反射调私有静态方法），含中文/缩写/非法值兜底 |
 | IoOutputChannelRemap | 多组解析、中英文分号/箭头、0X 大小写、脏项跳过汇总 error、源=目标、通道 0x00~0x0F（V1.62 起 0x10+ 直接拒绝）、缺前缀 |
 | DeviceConfig.ParseFanIpCandidates | 中英文分隔符、非法过滤、去重保序、IPv6、空输入族 |
-| RecipeStorage | Load/Save 往返全字段、损坏 json 返 null、空数组、"null"字面量、SaveWithDuplicateCheck 新增分支、删中间配方后 Max+1 不撞号(V1.62) |
+| RecipeStorage | Load/Save 往返全字段、损坏 json 返 null、空数组、"null"字面量、SaveWithDuplicateCheck 新增分支、删中间配方后 Max+1 不撞号(V1.62)、DisplayMode 往返(V1.66) |
 | TestEventLogger | CsvEscape 转义（逗号/引号翻倍/换行/回车 V1.62）、表头、落盘字段格式、null 字段 7 列、温度一位小数、20×5 并发零丢失、删目录自重建 |
 | AppLogFileWriter | UTF-8 追加、空串忽略、8 线程×5 行并发一条不少（lock 生效） |
 | PanelLayoutConfig | 默认布局基准坐标、ResolveAnchors 幂等零漂移、高度+10 纵链全链跟随、宽度+10 右锚定组随动、颜色解析钳位/回退、SaveDefault→重载零差异 |
 | HomeLayoutConfig | 默认值、Save→Load 往返、范围约束、损坏文件回退默认 |
 | ModelRoundtrip | RecipeConfig/UserAccount JSON 往返（含特殊字符）、StationInfo/FanData Clone 深拷贝互不影响 |
-| AgingSequencer | ShouldPowerOn(压力×延时双条件)、ShouldComplete(0=不限时长)、IsVacuumBuildFailed(到位即不失败) 边界族、IsPressureOutOfRange 双方向+恰等不越限(V1.62)、负时间语义锁 |
+| AgingSequencer | ShouldPowerOn(压力×延时双条件)、ShouldComplete(0=不限时长)、IsVacuumBuildFailed(到位即不失败) 边界族、IsPressureOutOfRange 双方向+恰等不越限(V1.62)、负时间语义锁、BuildStartWarningText 0时长/空SN 警告文案(V1.66)、IsFanOverTempShutdown 开关+上限+边界(V1.66) |
 | TestSessionStore | 快照往返全字段、损坏 json 静默 null、Clear 幂等、空清单视为无任务、Stations:null 与"null"字面量、Save(null)=false |
 | AgingBusinessModel | DeviceStatus.Completed 枚举与 BarometerData 往返、LastTestResult 默认值/Clone、AgingPhase 三值、StationInfo.RecipeNegativePressure |
 | ThemeManager | Parse 大小写/空格兼容与乱写兜底浅色、双向映射表往返精确（容器底/文字/单元格/输入底，V1.62 补齐剩余分支）、语义色保留（红/绿不动）、SetMode 内存切换、Panel+Label+TextBox+Button+DataGridView 整树着色冒烟（STA harness 直接 new 控件不断言弹窗；注意 Label/Button 的 Fore/Back 地 getter 在 Empty 时返回父容器值，断言要写"跟父一致"而非具体值，见 TestRunner 注释） |
@@ -71,8 +71,8 @@ agingtest-regression/
 | FanParse(V1.62) | 寄存器解析(/100 全字段)、不足 6 个、非法枚举透传、未连接约定、Connect(null) |
 | StationTime(V1.62) | 时分秒组合、25 小时不截断(V1.62 修复锁)、超 99 钳制、文本格式、Clamp |
 | HistoryCsv(V1.62) | CSV 解析边角、与 TestEventLogger 互逆 7 列 |
-| UiPureHelpers(V1.62) | 批号去空格、配方查找(ignoreCase)+25h 不截断、工位温度读取(V1.63 数字框恒合法+回填钳制)、IP 合法、数字格钳制、网格命中/边界/四色、位值→通道、风机中文(V1.63 对齐主窗)、CH340 谓词/串口参数钳制(V1.63)、右侧宽度比例 ComputeRightPanelWidth(V1.65：0.234 常量/护栏/兜底/自定义优先 8 条) |
-| **DeviceManagerExtended(V1.62)** | 状态口/在线数/启动错误、批量 SN、配方名负压联动、副本隔离、非法电池、连接与间隔热生效、批量阈值+定时器恢复、反方向报警端到端、全局时长回退、定格隔离、清理回全局、不限时、2s 延时门、空闲容错、自愈计数、报警驻留、边沿单次(CSV 计数)、快照全字段+双台+批号、急停、停止再启动、风机生命周期(MockFan)、超长数组与错 id 防火墙、脏快照恢复 |
+| UiPureHelpers(V1.62) | 批号去空格、配方查找(ignoreCase)+25h 不截断、工位温度读取(V1.63 数字框恒合法+回填钳制)、IP 合法、数字格钳制、网格命中/边界/四色、位值→通道、风机中文(V1.63 对齐主窗)、CH340 谓词/串口参数钳制(V1.63)、右侧宽度比例 ComputeRightPanelWidth(V1.65：0.234 常量/护栏/兜底/自定义优先 8 条)、配方窗负压/显示模式框回填(V1.66) |
+| **DeviceManagerExtended(V1.62)** | 状态口/在线数/启动错误、批量 SN、配方名负压联动、副本隔离、非法电池、连接与间隔热生效、批量阈值+定时器恢复、反方向报警端到端、全局时长回退、定格隔离、清理回全局、不限时、2s 延时门、空闲容错、自愈计数、报警驻留、边沿单次(CSV 计数)、快照全字段+双台+批号、急停、停止再启动、风机生命周期(MockFan)、超长数组与错 id 防火墙、脏快照恢复、显示模式下发/保持/清空+叠加采集可见+GetTestingDeviceIds(V1.66) |
 
 **不在覆盖范围**（明确边界）：真串口/真设备通讯（ModbusRtuBarometerReader /
 ScannerService / FanControllerClient / ModbusTcpIoController，靠现场联调）、

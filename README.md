@@ -68,7 +68,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Services/UserManager.cs` | 用户/登录/权限，Users.json 持久化（密码哈希，V1.58.22）；V1.64 起含 dev 最高权限账号（可删改管理员，dev 名系统保留） |
 | `Services/PasswordHasher.cs` | 密码哈希（PBKDF2-HMAC-SHA256，随机盐 + 10 万次迭代，`PBKDF2$迭代$盐$哈希` 自描述格式） |
 | `Services/RecipeStorage.cs` | 配方列表持久化（Recipes.json，启动加载/操作即写盘；SaveWithDuplicateCheck 同名覆盖保存，V1.25/1.26） |
-| `Services/StationSettingsCache.cs` | 工位配置缓存（StationSettings.json，按工位缓存 SN/配方/延时/极限温度，设置窗口下次打开自动回填，V1.26） |
+| `Services/StationSettingsCache.cs` | 工位配置缓存（StationSettings.json，按工位缓存 SN/配方/延时/极限温度/负压阈值/显示模式，设置窗口下次打开自动回填，V1.26；V1.66 加后两项） |
 | `Services/ThemeManager.cs` | 深色/浅色主题服务（V1.60）：App.config 存 AppTheme（Light/Dark），双向映射表递归着色（语义色保留、按钮不动），打开窗体前 ApplyTo、切换时 ApplyToAllOpenForms |
 | `Services/Mock*.cs` | Mock 实现（免接线演示） |
 | `Views/MainForm.cs` | 主窗体：面板区（9×8）、菜单下拉、状态栏（"在线"全部离线标红，V1.24）、权限控制、扫码事件、操作区按钮；菜单栏 4 按钮（V1.64 起深色切换从"关于"右侧收进关于下拉，仅 dev 可见） |
@@ -79,12 +79,12 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Dialogs/SettingsForm.cs` | 系统设置（管理员，按分类编辑 App.config 全部配置项，写回 exe.config 保存即生效，连接参数自动重连；仅设备数量/布局/模拟开关等结构型配置重启生效） |
 | `Dialogs/HomeLayoutEditorForm.cs` | 主页区域调整编辑器（V1.58，管理员）：自绘预览 + 拖动四条边缘实时改标题栏/菜单栏/右侧区/状态栏尺寸，保存写 `HomeLayout.json` 即生效，无需重编译 |
 | `Models/HomeLayoutConfig.cs` | 主页布局配置模型（V1.58）：标题栏/菜单栏/右侧区/状态栏四个尺寸 + Range 约束，`LoadOrDefault` 缺文件或损坏回退内置默认；MainForm 启动与保存后据此应用布局 |
-| `Dialogs/StationSettingsForm.cs` | 工位设置（SN/配方/延时/启动时间 写入 StationInfo；延时/启动时间三 NumericUpDown 冒号分隔，V1.28；保存=应用+缓存+存配方、加入对列=应用+存配方、下电=关闭载台上电） |
-| `Dialogs/RecipeManagerForm.cs` | 配方管理窗口（左侧列表可滚动 + 右侧可编辑输入，延时/启动时间冒号分隔三 NumericUpDown，V1.28；添加/更新/删除操作即自动落盘 Recipes.json，V1.27 起无"保存设置"按钮） |
-| `Dialogs/BatchRecipeForm.cs` | 批量设置配方窗口（配方名称/延时时间/启动时间/极限温度；延时/启动时间均三 NumericUpDown 冒号分隔，V1.28 删"延时时间2"，两个时间都写入配方：延时→延时开启、启动→延时到达；加入队列=保存配方+应用到选中工位，无选中先保存配方并提示选择） |
+| `Dialogs/StationSettingsForm.cs` | 工位设置（SN/配方/延时/启动时间/极限温度/负压阈值/显示模式 写入 StationInfo，V1.66 加后两项；延时/启动时间三 NumericUpDown 冒号分隔，V1.28；保存=应用+缓存+存配方、加入对列=应用+存配方、下电=关闭载台上电） |
+| `Dialogs/RecipeManagerForm.cs` | 配方管理窗口（左侧列表可滚动 + 右侧可编辑输入，延时/启动时间冒号分隔三 NumericUpDown，V1.28；V1.66 加负压阈值/显示模式；添加/更新/删除操作即自动落盘 Recipes.json，V1.27 起无"保存设置"按钮） |
+| `Dialogs/BatchRecipeForm.cs` | 批量设置配方窗口（配方名称/延时时间/启动时间/极限温度/负压阈值/显示模式，V1.66 加后两项；延时/启动时间均三 NumericUpDown 冒号分隔，V1.28 删"延时时间2"，两个时间都写入配方：延时→延时开启、启动→延时到达；加入队列=保存配方+应用到选中工位，无选中先保存配方并提示选择） |
 | `Dialogs/IdBindingForm.cs` / `InputLotForm.cs` | 录入批号 + 工位↔SN 绑定（扫码枪自动识别填充，生成 Excel） |
 | `Models/` | BarometerData / FanData(+FanRunState) / IoStatus / DeviceConfig / RecipeConfig / StationInfo / PanelLayoutConfig / HomeLayoutConfig / 用户模型 |
-| `.opencode/skills/agingtest-regression/` | 项目最终测试验证技能（V1.58.23）：一键"构建→冒烟→766+ 条回归断言"，用例源码 `tests/TestRunner.cs`，新测试用例一律沉淀于此（用法见其 SKILL.md） |
+| `.opencode/skills/agingtest-regression/` | 项目最终测试验证技能（V1.58.23）：一键"构建→冒烟→828+ 条回归断言"，用例源码 `tests/TestRunner.cs`，新测试用例一律沉淀于此（用法见其 SKILL.md） |
 
 > WinForms 视图均拆 `.cs` + `.Designer.cs` 两个 partial；**所有 .cs 必须 UTF-8 with BOM 编码**（否则设计器报"无法设计基类 System.Void"）。
 
@@ -92,14 +92,14 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 ### 4.1 老化测试单台流程（V1.59 三阶段状态机）
 ```
-[准备] 录入批号 → 绑定工位↔SN → 设配方（延时开启/启动时间/负压值随配方生效）
+[准备] 录入批号 → 绑定工位↔SN → 设配方（延时开启/启动时间/负压值/显示模式随配方下发，显示模式仅记录）
 [启动] 只开真空阀 + 送风机定值启动；任务参数(时长/延时/阈值)此刻定格
 [抽真空] 等「真空到位」且「距开阀≥配方延时开启」两者满足（判定阈值=配方负压值优先，全局-5kPa兜底；
          VacuumConfirmTimeoutMs 默认15s 内始终不到位→真空建立失败报警：关阀断电标故障，全程不带电）
 [上电] 条件满足自动载台上电 → 进入老化计时
-[老化] 计时时长=配方"启动时间"(>0)，否则回退 MaxTestDurationSeconds(0=不限时长手动停)
+[老化] 计时时长=配方"启动时间"(>0)，否则回退 MaxTestDurationSeconds(0=不限时长手动停；V1.66 起启动框对 0 时长/空 SN 工位追加警告，可继续）
 [完成] 到时自动下电+关阀 → 状态"已完成·待取料"(面板蓝) → 日志记 PASS → 人工复位/重新扫码回空闲
-[监控] 压力越限(产品FAIL) / 真空建立失败(产品FAIL) / 通讯失联(设备异常) / DI触点(可选,产品FAIL) → 报警联动
+[监控] 压力越限(产品FAIL) / 真空建立失败(产品FAIL) / 通讯失联(设备异常) / DI触点(可选,产品FAIL) / 送风机超温全线联停(可选，默认关，V1.66) → 报警联动
 [停止] 手动停止=中止(回空闲,不计判定)；末台时送风机自动停止
 [急停] 全部停止：全关阀+全断电+停送风机+清任务快照（带防误触确认）
 [断电恢复] 异常退出后再启动：检测到 TestSession.json 快照 → 弹窗选"按原参数整台重测"或"放弃并安全关闭阀与电源"
@@ -161,6 +161,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `MaxTestDurationSeconds` | 0 | 老化最大时长(0=不限) |
 | `UseDiAlarmContact` | false | DI 报警触点并入判定（需现场确认电平） |
 | `FanTempAlarmLimitC` | 0 | 送风机温度告警上限(0=不启用) |
+| `FanTempShutdownEnabled` | false | 超温全线联停开关(V1.66，默认关=只记日志；开=超温自动停全部在测工位） |
 | `ScannerEnabled` / `ScannerPort` | false / 空 | 扫码枪开关 / 固定串口（空=WMI 自动识别） |
 | `ScannerDeviceKeyword` / `ScannerBaudRate` | Xenon 1902 / 115200 | 扫码枪识别关键词 / 波特率 |
 

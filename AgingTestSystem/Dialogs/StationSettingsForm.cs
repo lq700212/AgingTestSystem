@@ -12,7 +12,7 @@ namespace AgingTestSystem.Dialogs
     /// 【功能说明】
     /// 点击工位面板上的"设置"按钮（btnSet）后弹出本窗口，
     /// 用于查看 / 设置单个工位的测试相关参数：
-    /// 状态、SN、配方、延时时间、启动时间、极限温度。
+    /// 状态、SN、配方、延时时间、启动时间、极限温度、负压阈值、显示模式。
     ///
     /// 【界面布局】
     /// ┌────────────────────────────────────────────────┐
@@ -25,6 +25,8 @@ namespace AgingTestSystem.Dialogs
     /// │  延时时间:            [__]:[__]:[__] │ [加入对列]     │
     /// │  启动时间:            [__]:[__]:[__] │ [关闭窗口]     │
     /// │  极限温度:              [___] │               │
+    /// │  负压阈值:           [___]kPa │               │ ← V1.66
+    /// │  显示模式:              [___] │               │ ← V1.66
     /// └────────────────────────────────┴───────────────┘
     ///
     /// 【按钮语义（V1.26）】
@@ -40,6 +42,9 @@ namespace AgingTestSystem.Dialogs
     /// - 延时时间 → 延时开启（DelayTime）
     /// - 启动时间 → 延时到达（StartTime）
     /// - 极限温度 → 配方配置的 LimitTemperature（缓存 / 配方存储，工位面板无此显示）
+    /// - 负压阈值 → 本工位真空工艺要求（V1.66；回填优先级 缓存 > 配方 > 全局，
+    ///   下发=框里是什么就是什么，启动定格，存什么用什么）
+    /// - 显示模式 → 配方 DisplayMode（V1.66；烧屏画面记录，只追溯不判定）
     ///
     /// 【时间输入（V1.28）】
     /// 延时时间 / 启动时间各用三个 NumericUpDown（时:分:秒，冒号分隔，样式与 RecipeManagerForm 一致）：
@@ -99,7 +104,8 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 配方自动检索选中回调（V1.29 新增）
-        /// 用户从自动检索列表中选择一个配方后，自动填写配方名称、延时时间、启动时间、极限温度。
+        /// 用户从自动检索列表中选择一个配方后，自动填写配方名称、延时时间、启动时间、
+        /// 极限温度、负压阈值、显示模式（V1.66 补后两项）。
         /// </summary>
         /// <param name="recipe">选中的配方</param>
         private void OnRecipeSelected(RecipeConfig recipe)
@@ -127,6 +133,11 @@ namespace AgingTestSystem.Dialogs
             // 回填极限温度（超出 NumericUpDown 范围时钳制到边界，与配方管理窗一致）
             nudTemp.Value = Math.Max(nudTemp.Minimum,
                 Math.Min(nudTemp.Maximum, recipe.LimitTemperature));
+
+            // 【V1.66】回填负压阈值 + 显示模式（配方一定有实数，直接显示；显示模式 null→空串）
+            nudPressure.Value = Math.Max(nudPressure.Minimum,
+                Math.Min(nudPressure.Maximum, recipe.NegativePressure));
+            txtDisplayMode.Text = recipe.DisplayMode ?? "";
         }
 
         /// <summary>
@@ -159,6 +170,10 @@ namespace AgingTestSystem.Dialogs
                 SetTimeInputs(nudStartHours, nudStartMinutes, nudStartSeconds, cached.StartTime);
                 nudTemp.Value = Math.Max(nudTemp.Minimum,
                     Math.Min(nudTemp.Maximum, cached.LimitTemperature));
+                // 【V1.66】负压/显示模式回填优先级：缓存（非0/非空）> 配方（按缓存配方名命中）> 全局/空
+                nudPressure.Value = Math.Max(nudPressure.Minimum,
+                    Math.Min(nudPressure.Maximum, ResolveCachedPressure(cached)));
+                txtDisplayMode.Text = ResolveCachedDisplayMode(cached);
                 return;
             }
 
@@ -169,6 +184,53 @@ namespace AgingTestSystem.Dialogs
             txtRecipe.Text = data.RecipeName;
             SetTimeInputs(nudDelayHours, nudDelayMinutes, nudDelaySeconds, data.DelayTime);
             SetTimeInputs(nudStartHours, nudStartMinutes, nudStartSeconds, data.StartTime);
+            // 【V1.66】无缓存时负压/显示模式按面板配方名找配方：命中用配方的，
+            // 否则全局/空。避免框里留 Designer 默认 0 被下发成阈值 0（负压域里≈关保护）。
+            RecipeConfig recipeHit = FindRecipe(data.RecipeName);
+            decimal fallbackPressure = recipeHit != null ? recipeHit.NegativePressure
+                : (_config != null ? _config.AlarmPressureThresholdKPa : 0m);
+            nudPressure.Value = Math.Max(nudPressure.Minimum,
+                Math.Min(nudPressure.Maximum, fallbackPressure));
+            txtDisplayMode.Text = recipeHit?.DisplayMode ?? "";
+        }
+
+        /// <summary>
+        /// 解析回填用负压阈值（【V1.66 新增】优先级：缓存非0 > 配方命中 > 全局）。
+        /// 缓存是上次亲手存的值最可信；0 说明没存过（老缓存/从未保存），
+        /// 此时按缓存里的配方名找配方，命中用配方的，都没有用全局——框里永远是实数。
+        /// </summary>
+        private decimal ResolveCachedPressure(StationCacheEntry cached)
+        {
+            if (cached.NegativePressure != 0m) return cached.NegativePressure;
+            RecipeConfig hit = FindRecipe(cached.RecipeName);
+            if (hit != null) return hit.NegativePressure;
+            return _config != null ? _config.AlarmPressureThresholdKPa : 0m;
+        }
+
+        /// <summary>
+        /// 解析回填用显示模式（【V1.66 新增】优先级：缓存非空 > 配方命中 > 空串）。
+        /// </summary>
+        private string ResolveCachedDisplayMode(StationCacheEntry cached)
+        {
+            if (!string.IsNullOrEmpty(cached.DisplayMode)) return cached.DisplayMode;
+            RecipeConfig hit = FindRecipe(cached.RecipeName);
+            return hit?.DisplayMode ?? "";
+        }
+
+        /// <summary>
+        /// 按配方名检索本地配方列表（忽略大小写，空名/未命中返回 null）
+        /// </summary>
+        private RecipeConfig FindRecipe(string recipeName)
+        {
+            if (string.IsNullOrWhiteSpace(recipeName) || _recipes == null) return null;
+            foreach (RecipeConfig r in _recipes)
+            {
+                if (string.Equals(r.Name, recipeName.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    return r;
+                }
+            }
+            return null;
         }
 
         /// <summary>
@@ -318,23 +380,11 @@ namespace AgingTestSystem.Dialogs
             // ---- 2) 应用配置到当前工位（写入工位静态信息，采集叠加后工位面板更新） ----
             _deviceManager.SetStationSerialNumber(_deviceId, txtSN.Text);
 
-            // 【V1.59】按配方名检索本地配方列表，命中则把配方的负压值一并下发——
-            // 启动测试时该值将作为此工位的真空到位判定/报警阈值（配方优先、全局兜底）。
-            // 检索不命中（手输名字且列表里没有）传 null = 沿用该工位已有负压值。
-            decimal? recipePressure = null;
-            string recipeNameInput = txtRecipe.Text.Trim();
-            if (recipeNameInput.Length > 0 && _recipes != null)
-            {
-                foreach (RecipeConfig r in _recipes)
-                {
-                    if (string.Equals(r.Name, recipeNameInput, StringComparison.OrdinalIgnoreCase))
-                    {
-                        recipePressure = r.NegativePressure;
-                        break;
-                    }
-                }
-            }
-            _deviceManager.SetStationRecipe(_deviceId, txtRecipe.Text, recipePressure);
+            // 【V1.66】下发=框里是什么就是什么：LoadStationData 回填已保证框里是实数
+            // （优先级 缓存 > 配方 > 全局），不再按配方名二次检索。空配方名=清空（含负压/显示模式）。
+            // 启动测试时负压值定格为该工位的真空到位判定/报警阈值（配方优先、全局兜底指"没下发时"，
+            // 下发了就以框值为准——框里永远有数，不存在"没下发"）。
+            _deviceManager.SetStationRecipe(_deviceId, txtRecipe.Text, nudPressure.Value, txtDisplayMode.Text);
             _deviceManager.SetStationDelayTimes(_deviceId, delayStart, delayArrive);
 
             // ---- 3) 缓存配置（下次打开该工位设置窗口自动回填） ----
@@ -345,7 +395,9 @@ namespace AgingTestSystem.Dialogs
                 RecipeName = txtRecipe.Text.Trim(),
                 DelayTime = delayStart,
                 StartTime = delayArrive,
-                LimitTemperature = ParseTemperature()
+                LimitTemperature = ParseTemperature(),
+                NegativePressure = nudPressure.Value,
+                DisplayMode = txtDisplayMode.Text.Trim()
             });
 
             // ---- 4) 保存配方到本地配方列表（同名询问覆盖更新；配方名称为空则跳过） ----
@@ -361,14 +413,16 @@ namespace AgingTestSystem.Dialogs
                 $"配方: {(string.IsNullOrWhiteSpace(txtRecipe.Text) ? "（空）" : txtRecipe.Text.Trim())}\r\n" +
                 $"延时开启: {GetTimeText(delayStart)}\r\n" +
                 $"延时到达: {GetTimeText(delayArrive)}\r\n" +
-                $"极限温度: {nudTemp.Value:0.#}°C",
+                $"极限温度: {nudTemp.Value:0.#}°C\r\n" +
+                $"负压阈值: {nudPressure.Value:0.#}kPa\r\n" +
+                $"显示模式: {(string.IsNullOrWhiteSpace(txtDisplayMode.Text) ? "（空）" : txtDisplayMode.Text.Trim())}",
                 $"{actionName}成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
             return true;
         }
 
         /// <summary>
-        /// 把当前窗口的配方（名称 / 延时 / 极限温度）保存到本地配方列表
+        /// 把当前窗口的配方（名称 / 延时 / 极限温度 / 负压阈值 / 显示模式）保存到本地配方列表
         /// 有同名配方时由 SaveWithDuplicateCheck 询问是否覆盖更新
         /// </summary>
         /// <param name="delayStart">延时开启时间</param>
@@ -381,6 +435,8 @@ namespace AgingTestSystem.Dialogs
                 DelayTime = delayStart,
                 StartTime = delayArrive,
                 LimitTemperature = ParseTemperature(),
+                NegativePressure = nudPressure.Value,
+                DisplayMode = txtDisplayMode.Text.Trim(),
                 CreateTime = DateTime.Now,
                 IsEnabled = true
             };

@@ -783,6 +783,12 @@ namespace AgingTestSystem.Views
                 config.FanTempAlarmLimitC = fanTempAlarmLimitC;
             }
 
+            // 【V1.66】超温全线联停开关：默认 false（只记日志不停机=现状），现场确认后置 true。
+            if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["FanTempShutdownEnabled"], out bool fanTempShutdown))
+            {
+                config.FanTempShutdownEnabled = fanTempShutdown;
+            }
+
             // ===== 扫码枪配置读取（V1.16 新增，参考 SerialScannerTest Demo） =====
             // 扫码枪是可选设备：默认关闭，现场需要扫码（如 ID 绑定扫 SN）时在 App.config 打开
             if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["ScannerEnabled"], out bool scannerEnabled))
@@ -1395,12 +1401,39 @@ namespace AgingTestSystem.Views
                     WriteLog($"[送风机] 上部温度 {data.Temperature:F1}°C 超过告警上限 {_config.FanTempAlarmLimitC:F1}°C");
                 }
             }
+
+            // 【V1.66】超温全线联停：烧屏架 72 台 24h 点亮，超温是火灾级风险。
+            // 开关 FanTempShutdownEnabled 默认 false = 现状（只记日志）；现场答完 Q16 打开即生效，
+            // 不用二次开发。边沿触发：停过一次后必须回温（≤上限）才允许再停，避免每秒重复停；
+            // StopTesting 空数组是 no-op，无在测时只记一行日志。
+            if (AgingSequencer.IsFanOverTempShutdown(
+                data.Temperature, _config.FanTempAlarmLimitC, _config.FanTempShutdownEnabled))
+            {
+                if (!_fanShutdownTriggered)
+                {
+                    _fanShutdownTriggered = true;
+                    int[] testing = _deviceManager.GetTestingDeviceIds();
+                    _deviceManager.StopTesting(testing);
+                    WriteLog($"[送风机] 上部温度 {data.Temperature:F1}°C 超限，全线联停（{testing.Length} 台，" +
+                        "手动复位/重启动前请先排查温控）");
+                }
+            }
+            else
+            {
+                _fanShutdownTriggered = false;
+            }
         }
 
         /// <summary>
         /// 已记录过的送风机温度告警阈值（避免重复写日志）
         /// </summary>
         private float _fanTempAlarmLoggedThreshold = 0f;
+
+        /// <summary>
+        /// 超温全线联停边沿锁（【V1.66】）：true=本次超温已停过，回温（≤上限）后自动复位 false。
+        /// 避免超温期间每秒重复执行 StopTesting + 刷屏写日志。
+        /// </summary>
+        private bool _fanShutdownTriggered = false;
 
         /// <summary>
         /// 更新右侧整机状态汇总（【V1.10 新增】）
@@ -2088,7 +2121,7 @@ namespace AgingTestSystem.Views
         /// </summary>
         private void MenuParamRecipe_Click(object sender, EventArgs e)
         {
-            using (var form = new RecipeManagerForm(_recipes))
+            using (var form = new RecipeManagerForm(_recipes, _config.AlarmPressureThresholdKPa))
             {
                 ThemeManager.ApplyTo(form);
                 form.ShowDialog(this);
@@ -2484,6 +2517,23 @@ namespace AgingTestSystem.Views
             int[] ids = GetSelectedDeviceIds();
             if (ids == null) return;
 
+            // 【V1.66】启动前风险提示（烧屏场景）：0 时长=不限时长永不自动完成（无限点亮），
+            // 空 SN=完成后无法追溯到单体。只警告不拦截——点"是"照跑、点"否"取消，
+            // 是否允许是现场工艺权，软件只负责把丑话说在前面（文案见 AgingSequencer）。
+            var zeroDurationIds = new List<int>();
+            var emptySnIds = new List<int>();
+            foreach (int id in ids)
+            {
+                BarometerData data = _deviceManager.GetBarometerData(id);
+                if (data == null) continue;
+                if (string.IsNullOrWhiteSpace(data.SerialNumber)) emptySnIds.Add(id);
+                double startSecs = data.StartTime.TotalSeconds;
+                int effectiveSecs = startSecs > 0 ? (int)startSecs : _config.MaxTestDurationSeconds;
+                if (effectiveSecs <= 0) zeroDurationIds.Add(id);
+            }
+            string riskWarning = AgingSequencer.BuildStartWarningText(
+                zeroDurationIds.ToArray(), emptySnIds.ToArray());
+
             DialogResult r = MessageBox.Show(
                 $"确认启动 {ids.Length} 台老化测试？\n\n" +
                 "将执行：\n" +
@@ -2491,7 +2541,8 @@ namespace AgingTestSystem.Views
                 "2. 真空到位且延时开启到后，自动载台上电（未吸附固定不通电）\n" +
                 "3. 按配方启动时间老化计时，到时自动下电关阀并标\"已完成\"\n" +
                 "4. 送风机定值启动（保持环境温控）\n\n" +
-                "注：开阀后若真空长时间未建立会自动报警断电（该台全程不会带电）。",
+                "注：开阀后若真空长时间未建立会自动报警断电（该台全程不会带电）。" +
+                riskWarning,
                 "启动运行",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question);
