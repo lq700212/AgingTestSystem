@@ -26,8 +26,9 @@ namespace AgingTestSystem.Models
     /// ├──────────────────────────┬────────────┤
     /// │                          │ 右侧状态按钮区│
     /// │  工作站列表面板（自动占满   │ RightPanelW │
-    /// │  剩余宽度，无需配置）       │ idth（默认  │
-    /// │                          │ 260）        │
+    /// │  剩余宽度，无需配置）       │ idth（无配  │
+    /// │                          │ 置跟窗口23% │
+    /// │                          │ 有配置用文件│
     /// ├──────────────────────────┴────────────┤
     /// │ 状态栏  StatusBarHeight（默认 30）      │
     /// └───────────────────────────────────────┘
@@ -51,8 +52,10 @@ namespace AgingTestSystem.Models
         /// <summary>菜单栏高度（用户权限/参数/日志/关于 一排按钮）</summary>
         public int MenuHeight { get; set; } = 50;
 
-        /// <summary>右侧状态按钮区宽度（运行状态+监视+操作+日志 四块的总宽）</summary>
-        public int RightPanelWidth { get; set; } = 260;
+        /// <summary>右侧状态按钮区宽度（运行状态+监视+操作+日志 四块的总宽）。
+        /// 【V1.65】类默认值 240 只作编辑器"恢复默认"的基准；主窗体无 json 时实际按
+        /// 窗口 23.4% 比例自适应（见 MainForm.ComputeRightPanelWidth），有 json 时以文件值为准。</summary>
+        public int RightPanelWidth { get; set; } = 240;
 
         /// <summary>底部状态栏高度（设备数量/采集间隔/当前时间）</summary>
         public int StatusBarHeight { get; set; } = 30;

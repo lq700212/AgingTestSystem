@@ -201,6 +201,14 @@ namespace AgingTestSystem.Dialogs
         public bool HomeLayoutChanged { get; private set; }
 
         /// <summary>
+        /// 【V1.65】主窗体当前生效的右侧宽度（主窗体构造时传入：无 json 时为按窗口比例
+        /// 算出的值，有 json 时为文件绝对值）。"主页区域"行的摘要显示与编辑器初始化
+        /// 都以它为准，保证设置里看到的和主界面实际一致。为 null 时（理论上只有
+        /// 将来别的调用方不传才出现）回退到 MainForm.DefaultRightPanelWidth。
+        /// </summary>
+        private readonly int? _effectiveRightWidth;
+
+        /// <summary>
         /// 数字类配置项的范围约束（防输入越界/乱输），保存前仍会按 ValidateValue 二次校验。
         /// </summary>
         private static readonly Dictionary<string, (decimal Min, decimal Max, int Decimals, decimal Increment)> _numericKeys =
@@ -382,10 +390,12 @@ namespace AgingTestSystem.Dialogs
         /// 构造函数
         /// </summary>
         /// <param name="config">当前生效的设备配置（主窗体传入，用于取兜底值与类型校验）</param>
-        public SettingsForm(DeviceConfig config)
+        /// <param name="effectiveRightWidth">【V1.65】主窗体当前生效的右侧宽度（见 _effectiveRightWidth）</param>
+        public SettingsForm(DeviceConfig config, int? effectiveRightWidth = null)
         {
             InitializeComponent();
             _config = config;
+            _effectiveRightWidth = effectiveRightWidth;
 
             // 按分类创建分隔标题和表格，再填充数据并排布版面
             SetupSections();
@@ -930,17 +940,17 @@ namespace AgingTestSystem.Dialogs
         /// <summary>
         /// 【V1.58.1】获取"当前生效的主页布局"。
         ///
-        /// 约定：右侧宽度默认值写死在 <see cref="MainForm.DefaultRightPanelWidth"/>（300），
-        /// 只有现场保存过 HomeLayout.json 时才以文件里的值为准。
-        /// 此方法统一"编辑器初始化 / 设置表摘要显示 / 点击编辑"三处的取值，
-        /// 避免未配置时编辑器里显示 260、主界面实际 300 的偏差。
+        /// 【V1.65】右侧宽度的取值语义跟随主窗体：无 HomeLayout.json 时主界面是按窗口
+        /// 比例算出的值（主窗体构造本窗体时经 effectiveRightWidth 传入），有 json 时
+        /// 以文件为准。此方法统一"编辑器初始化 / 设置表摘要显示 / 点击编辑"三处的取值，
+        /// 避免未配置时编辑器里显示固定值、主界面实际是另一套的偏差。
         /// </summary>
-        private static Models.HomeLayoutConfig GetEffectiveHomeLayout()
+        private Models.HomeLayoutConfig GetEffectiveHomeLayout()
         {
             var layout = Models.HomeLayoutConfig.LoadOrDefault();
             if (!System.IO.File.Exists(Models.HomeLayoutConfig.GetConfigPath()))
             {
-                layout.RightPanelWidth = MainForm.DefaultRightPanelWidth;
+                layout.RightPanelWidth = _effectiveRightWidth ?? MainForm.DefaultRightPanelWidth;
             }
             return layout;
         }

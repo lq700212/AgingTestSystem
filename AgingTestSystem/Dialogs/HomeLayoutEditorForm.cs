@@ -281,7 +281,7 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 恢复默认：把四个值重置为内置默认并刷新。
-        /// 注意：右侧宽度默认值写死在 <see cref="MainForm.DefaultRightPanelWidth"/>（300），
+        /// 注意：右侧宽度默认值写死在 <see cref="MainForm.DefaultRightPanelWidth"/>（240），
         /// 其余三区域用 <see cref="HomeLayoutConfig"/> 的类默认，与主窗体未配置时的
         /// 生效值保持一致，避免"恢复默认"反而变成另一套尺寸。
         /// </summary>
@@ -313,21 +313,21 @@ namespace AgingTestSystem.Dialogs
     /// 主页布局预览自绘控件。
     ///
     /// 【坐标系】
-    /// 内部固定使用 1400×900 逻辑坐标系（与主窗体 tableLayoutPanelMain 设计尺寸一致），
-    /// 绘制前先把客户区等比缩放到 1400×900 的视口（居中留白），
+    /// 内部固定使用 1280×900 逻辑坐标系（与主窗体 tableLayoutPanelMain 设计尺寸一致），
+    /// 绘制前先把客户区等比缩放到 1280×900 的视口（居中留白），
     /// 所有区域坐标/鼠标命中判断都在逻辑坐标系里做，天然适配任意窗口大小与 DPI。
     ///
     /// 【可拖动边缘】共 4 条，拖动时通过 <see cref="Layout"/> 属性实时改值并触发
     /// <see cref="LayoutChanged"/> 事件：
     /// 1. 顶部标题栏下边（y = TopBarHeight）→ 调 TopBarHeight
     /// 2. 菜单栏下边（y = TopBarHeight + MenuHeight）→ 调 MenuHeight
-    /// 3. 右侧区域左边（x = 1400 - RightPanelWidth）→ 调 RightPanelWidth
+    /// 3. 右侧区域左边（x = 1280 - RightPanelWidth）→ 调 RightPanelWidth
     /// 4. 状态栏上边（y = 900 - StatusBarHeight）→ 调 StatusBarHeight
     /// </summary>
     internal class HomeLayoutPreviewControl : Control
     {
         /// <summary>逻辑坐标系总宽（与主窗体设计宽一致）</summary>
-        private const int LOGIC_W = 1400;
+        private const int LOGIC_W = 1280;
 
         /// <summary>逻辑坐标系总高（与主窗体设计高一致）</summary>
         private const int LOGIC_H = 900;
@@ -377,7 +377,7 @@ namespace AgingTestSystem.Dialogs
 
         // ===================== 绘制 =====================
 
-        /// <summary>把客户区等比缩放为 1400×900 的视口矩形（居中留白）</summary>
+        /// <summary>把客户区等比缩放为 1280×900 的视口矩形（居中留白）</summary>
         private Rectangle GetViewport()
         {
             int w = ClientSize.Width;
