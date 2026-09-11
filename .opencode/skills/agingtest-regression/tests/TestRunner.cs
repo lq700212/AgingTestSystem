@@ -16,6 +16,7 @@
 //   10. HomeLayoutConfig      —— 主页布局默认配置加载
 //   11. 模型序列化            —— RecipeConfig/StationInfo/UserAccount 往返与 Clone
 //   12b. PolicyV167            —— 工艺策略纯函数 + 名单同步锁 + tooltip + 项目档案
+//   12c. MesV168                —— MES 映射解析 + 组包 + 上报器（Fake 传输，零外网）
 //
 //  【怎么跑】
 //  不直接运行本文件。用本 skill 目录 scripts\run_unit_tests.ps1：
@@ -42,6 +43,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using AgingTestSystem.Controls;
@@ -159,6 +161,7 @@ namespace AgingTestSystem.Tests
             Module("ModelRoundtrip", ModelRoundtripTests);
             Module("AgingSequencer", AgingSequencerTests);
             Module("PolicyV167", PolicyTests);
+            Module("MesV168", MesTests);
             Module("TestSessionStore", TestSessionStoreTests);
             Module("AgingBusinessModel", AgingBusinessModelTests);
             Module("ThemeManager", ThemeManagerTests);
@@ -176,6 +179,7 @@ namespace AgingTestSystem.Tests
             Module("DeviceManagerIntegration", DeviceManagerIntegrationTests);
             Module("DeviceManagerExtended", DeviceManagerExtendedTests);
             Module("DeviceManagerPolicy", DeviceManagerPolicyTests);
+            Module("DeviceManagerMes", DeviceManagerMesTests);
 
             // 统一清理临时目录（尽力而为，删不掉不影响结果）
             foreach (string dir in _tempDirs)
@@ -1575,8 +1579,10 @@ namespace AgingTestSystem.Tests
             bool optsOk = true;
             foreach (string k in ProjectPolicyStore.PolicyKeys)
             {
-                // VentValveDoPoint 是数字项、FanTempShutdownEnabled 是布尔项，都无策略下拉
-                if (k == "VentValveDoPoint" || k == "FanTempShutdownEnabled") continue;
+                // VentValveDoPoint 是数字项、FanTempShutdownEnabled 是布尔项、
+                // MesTriggers/MesFieldMap/MesStaticFields 是自由文本（V1.68），都无策略下拉
+                if (k == "VentValveDoPoint" || k == "FanTempShutdownEnabled"
+                    || k == "MesTriggers" || k == "MesFieldMap" || k == "MesStaticFields") continue;
                 Tuple<string, string>[] opts;
                 if (!ProjectPolicyStore.EnumOptions.TryGetValue(k, out opts) || opts.Length < 2) { optsOk = false; break; }
                 var prop = typeof(DeviceConfig).GetProperty(k);
@@ -1701,6 +1707,367 @@ namespace AgingTestSystem.Tests
                 }
                 catch { }
             }
+        }
+
+        // =====================================================================
+        // 12c. MES 映射与上报（V1.68 二期：映射层可配，传输走 HTTP）
+        //     传输用 Fake（MesReporter.Transport 静态缝），全程零外网。
+        // =====================================================================
+        private static void MesTests()
+        {
+            // ── ParseTriggers：空=全开；中英文分隔；未知进错；去重 ──
+            List<string> tg; List<string> te;
+            MesMapping.ParseTriggers("", out tg, out te);
+            Check("触发器空=零项零错(调用方按全开)", tg.Count == 0 && te.Count == 0);
+            MesMapping.ParseTriggers("Complete,Alarm", out tg, out te);
+            Check("英文逗号解析2项", tg.Count == 2 && te.Count == 0);
+            MesMapping.ParseTriggers("Complete，Alarm、Start", out tg, out te);
+            Check("中文逗号顿号兼容3项", tg.Count == 3 && te.Count == 0);
+            MesMapping.ParseTriggers("Complete,BadTrigger", out tg, out te);
+            Check("未知触发器进错但合法保留", tg.Count == 1 && te.Count == 1);
+            MesMapping.ParseTriggers("complete,Complete", out tg, out te);
+            Check("大小写去重只留1", tg.Count == 1 && te.Count == 0);
+            Check("空配置全命中", MesMapping.TriggerHit("", "Alarm"));
+            Check("小写命中", MesMapping.TriggerHit("complete", "Complete"));
+            Check("未配置不命中", !MesMapping.TriggerHit("Complete", "Alarm"));
+
+            // ── ParseFieldMap：合法/未知本站/坏组/坏MES名/重复 ──
+            Dictionary<string, string> mp; List<string> me;
+            MesMapping.ParseFieldMap("eqId=device;lotNo=lot", out mp, out me);
+            Check("两组映射解析", mp.Count == 2 && mp["eqId"] == "device" && me.Count == 0);
+            MesMapping.ParseFieldMap("", out mp, out me);
+            Check("空=直通零项零错", mp.Count == 0 && me.Count == 0);
+            MesMapping.ParseFieldMap("eqId=bogus", out mp, out me);
+            Check("未知本站字段进错", mp.Count == 0 && me.Count == 1);
+            MesMapping.ParseFieldMap("noequals", out mp, out me);
+            Check("无等号坏组进错", me.Count == 1);
+            MesMapping.ParseFieldMap("has space=device", out mp, out me);
+            Check("MES名含空格进错", me.Count == 1);
+            MesMapping.ParseFieldMap("a=device;a=lot", out mp, out me);
+            Check("MES名重复后者覆盖+提醒", mp.Count == 1 && mp["a"] == "lot" && me.Count == 1);
+            MesMapping.ParseFieldMap("EQ=device", out mp, out me);
+            Check("本站名大小写兼容", mp.Count == 1 && me.Count == 0);
+
+            // ── ParseStaticFields：合法/坏组/空值 ──
+            Dictionary<string, string> st;
+            MesMapping.ParseStaticFields("line=L5;workshop=A3", out st, out me);
+            Check("两组静态解析", st.Count == 2 && st["line"] == "L5" && me.Count == 0);
+            MesMapping.ParseStaticFields("novalue", out st, out me);
+            Check("无等号进错", me.Count == 1);
+            MesMapping.ParseStaticFields("k=", out st, out me);
+            Check("空值合法(空串)", st.Count == 1 && st["k"] == "" && me.Count == 0);
+
+            // ── BuildPayloadJson：直通/改名/静态合并覆盖 ──
+            var ours = new Dictionary<string, string>
+                { { "device", "7" }, { "lot", "LOT1" }, { "result", "PASS" } };
+            string j0 = MesReporter.BuildPayloadJson(ours, "", "");
+            Check("映射空=直通用原名",
+                j0.Contains("\"device\":\"7\"") && j0.Contains("\"lot\":\"LOT1\""));
+            string j1 = MesReporter.BuildPayloadJson(ours, "eqId=device;lotNo=lot", "");
+            Check("映射改名(MES名出现)",
+                j1.Contains("\"eqId\":\"7\"") && j1.Contains("\"lotNo\":\"LOT1\""));
+            string j2 = MesReporter.BuildPayloadJson(ours, "", "line=L5");
+            Check("静态字段并入", j2.Contains("\"line\":\"L5\""));
+            string j3 = MesReporter.BuildPayloadJson(ours, "", "device=STATIC");
+            Check("静态覆盖同名(常量优先)", j3.Contains("\"device\":\"STATIC\""));
+
+            // ── ParseValue 字符串分支（V1.68：MES 文本直通，校验在 ValidateValue） ──
+            Check("字符串原样返回",
+                Equals(ProjectPolicyStore.ParseValue(typeof(string), "a=b;c"), "a=b;c"));
+            Check("MES三key进PolicyKeys(跟项目走)",
+                ProjectPolicyStore.PolicyKeys.Contains("MesTriggers")
+                && ProjectPolicyStore.PolicyKeys.Contains("MesFieldMap")
+                && ProjectPolicyStore.PolicyKeys.Contains("MesStaticFields"));
+
+            // ── MesCrypto DPAPI（V1.68：token/密码加密落盘） ──
+            Check("空串原样返回", MesCrypto.Protect("") == "" && MesCrypto.Unprotect("") == "");
+            string enc = MesCrypto.Protect("s3cr3t-token");
+            Check("加密带前缀且非明文",
+                enc != null && enc.StartsWith("DPAPI:") && !enc.Contains("s3cr3t"));
+            Check("加解密往返一致",
+                enc != null && MesCrypto.Unprotect(enc) == "s3cr3t-token");
+            Check("已加密不再重复加密",
+                enc != null && MesCrypto.Protect(enc) == enc);
+            Check("明文不兼容回null（未上线，明文=配错，逼重填）",
+                MesCrypto.Unprotect("plain-token") == null);
+            Check("IsProtected只认前缀",
+                MesCrypto.IsProtected(enc) && !MesCrypto.IsProtected("plain"));
+            Check("篡改密文解密失败回null",
+                MesCrypto.Unprotect("DPAPI:!!!不是Base64!!!") == null);
+
+            // ── ParseCustomHeaders：合法/坏组/坏名/重复 ──
+            Dictionary<string, string> ch;
+            MesMapping.ParseCustomHeaders("X-Line=L5;X-ApiVer=2", out ch, out me);
+            Check("两组自定义头解析", ch.Count == 2 && ch["X-Line"] == "L5" && me.Count == 0);
+            MesMapping.ParseCustomHeaders("noequals", out ch, out me);
+            Check("无等号进错", me.Count == 1);
+            MesMapping.ParseCustomHeaders("has space=v", out ch, out me);
+            Check("头名含空格进错", me.Count == 1);
+            MesMapping.ParseCustomHeaders("中文头=v", out ch, out me);
+            Check("中文头名进错", me.Count == 1);
+            MesMapping.ParseCustomHeaders("1abc=v", out ch, out me);
+            Check("数字开头进错", me.Count == 1);
+            MesMapping.ParseCustomHeaders("X-K=a;X-K=b", out ch, out me);
+            Check("重复头后者覆盖", ch.Count == 1 && ch["X-K"] == "b");
+            MesMapping.ParseCustomHeaders("X-Token=abc==", out ch, out me);
+            Check("头值Base64填充保留", ch.Count == 1 && ch["X-Token"] == "abc==" && me.Count == 0);
+
+            // ── ParseEndpointMap + ResolveEndpoint：合法/未知触发器/非http/重复/回退 ──
+            Dictionary<string, string> ep;
+            MesMapping.ParseEndpointMap("Alarm=http://x/api/alarm", out ep, out me);
+            Check("分地址解析", ep.Count == 1 && ep["Alarm"] == "http://x/api/alarm" && me.Count == 0);
+            MesMapping.ParseEndpointMap("Bogus=http://x/", out ep, out me);
+            Check("未知触发器进错", me.Count == 1);
+            MesMapping.ParseEndpointMap("Alarm=ftp://x/", out ep, out me);
+            Check("非http拒收", me.Count == 1);
+            MesMapping.ParseEndpointMap("alarm=http://a/;Alarm=http://b/", out ep, out me);
+            Check("大小写归一+重复覆盖提醒",
+                ep.Count == 1 && ep["Alarm"] == "http://b/" && me.Count == 1);
+            Check("命中走分地址",
+                MesMapping.ResolveEndpoint("Alarm", "http://def/", "Alarm=http://x/a") == "http://x/a");
+            Check("未命中回默认",
+                MesMapping.ResolveEndpoint("Complete", "http://def/", "Alarm=http://x/a") == "http://def/");
+            Check("映射空全走默认",
+                MesMapping.ResolveEndpoint("Alarm", "http://def/", "") == "http://def/");
+
+            // ── DeviceConfig MES 缺省锁：不配=零行为 ──
+            var dc = new DeviceConfig();
+            Check("缺省不上报不Mock",
+                dc.MesEnabled == false && dc.MesMockEnabled == false);
+            Check("缺省地址空/超时5000/鉴权None",
+                dc.MesEndpoint == "" && dc.MesTimeoutMs == 5000 && dc.MesAuthType == "None");
+            Check("缺省重试3次/间隔2000",
+                dc.MesRetryCount == 3 && dc.MesRetryIntervalMs == 2000);
+            Check("缺省触发映射静态全空",
+                dc.MesTriggers == "" && dc.MesFieldMap == "" && dc.MesStaticFields == "");
+            Check("缺省自定义头与分地址全空",
+                dc.MesCustomHeaders == "" && dc.MesEndpointMap == "");
+
+            // ── SettingsForm.ValidateValue MES 分支（反射） ──
+            const BindingFlags Flags = BindingFlags.NonPublic | BindingFlags.Static;
+            var miValidate = typeof(SettingsForm).GetMethod("ValidateValue", Flags);
+            if (miValidate != null)
+            {
+                Func<string, string, bool> valid = (k, v) =>
+                {
+                    object[] a = new object[] { k, v, null };
+                    return (bool)miValidate.Invoke(null, a);
+                };
+                Check("鉴权Bearer过", valid("MesAuthType", "Bearer"));
+                Check("鉴权小写过", valid("MesAuthType", "basic"));
+                Check("鉴权脏值被拦", !valid("MesAuthType", "Token"));
+                Check("触发器合法过", valid("MesTriggers", "Complete,Alarm"));
+                Check("触发器空过(全开)", valid("MesTriggers", ""));
+                Check("触发器脏值被拦", !valid("MesTriggers", "Complete,Bad"));
+                Check("映射合法过", valid("MesFieldMap", "eqId=device"));
+                Check("映射脏值被拦", !valid("MesFieldMap", "eqId=bogus"));
+                Check("静态合法过", valid("MesStaticFields", "line=L5"));
+                Check("静态坏组被拦", !valid("MesStaticFields", "=v"));
+                Check("MES布尔过", valid("MesEnabled", "true"));
+                Check("MES布尔脏值被拦", !valid("MesEnabled", "YES"));
+                Check("MES超时整数过", valid("MesTimeoutMs", "5000"));
+                Check("MES超时脏值被拦", !valid("MesTimeoutMs", "abc"));
+                Check("自定义头合法过", valid("MesCustomHeaders", "X-Line=L5"));
+                Check("自定义头脏值被拦", !valid("MesCustomHeaders", "中文头=v"));
+                Check("分地址合法过", valid("MesEndpointMap", "Alarm=http://x/a"));
+                Check("分地址脏值被拦", !valid("MesEndpointMap", "Alarm=ftp://x/"));
+            }
+            else
+            {
+                Check("反射找到 ValidateValue", false);
+            }
+
+            // ── NormalizeMesAuthType（反射：脏值兜底 None） ──
+            var miAuth = typeof(SettingsForm).GetMethod("NormalizeMesAuthType", Flags);
+            Check("反射找到 NormalizeMesAuthType", miAuth != null);
+            if (miAuth != null)
+            {
+                Check("小写归一Bearer",
+                    (string)miAuth.Invoke(null, new object[] { "bearer" }) == "Bearer");
+                Check("脏值兜底None",
+                    (string)miAuth.Invoke(null, new object[] { "xxx" }) == "None");
+            }
+
+            // ── MesReporter + Fake 传输：上报/开关/触发器/Mock/离线缓存 ──
+            EnterCleanDir();
+            var captured = new List<Tuple<string, string, Dictionary<string, string>>>();
+            var capLock = new object();
+            bool transportOk = true;
+            MesReporter.Transport = (url, json, headers, timeout) =>
+            {
+                lock (capLock) { captured.Add(Tuple.Create(url, json, headers)); }
+                return transportOk;
+            };
+            try
+            {
+                var cfg = new DeviceConfig
+                {
+                    MesEnabled = true,
+                    MesEndpoint = "http://fake-mes:8080/api",
+                    MesRetryCount = 0,
+                    MesFieldMap = "eqId=device",
+                    MesStaticFields = "line=L5"
+                };
+                var fields = new Dictionary<string, string>
+                {
+                    { "time", "2026-09-11 10:00:00" }, { "lot", "LOT1" },
+                    { "device", "7" }, { "event", "Complete" }, { "result", "PASS" }
+                };
+                using (var rep = new MesReporter(cfg))
+                {
+                    rep.Report("Complete", fields);
+                    bool got = WaitFor(() =>
+                    {
+                        lock (capLock) { return captured.Count >= 1; }
+                    }, 5000);
+                    Check("启用后上报发出", got);
+                    string json = "";
+                    lock (capLock) { if (captured.Count > 0) json = captured[0].Item2; }
+                    Check("映射改名生效(eqId)",
+                        json.Contains("\"eqId\":\"7\""));
+                    Check("静态字段并入(line)",
+                        json.Contains("\"line\":\"L5\""));
+                    Check("发往配置地址",
+                        captured.Count > 0 && captured[0].Item1 == "http://fake-mes:8080/api");
+
+                    // 开关关闭：零发送
+                    lock (capLock) { captured.Clear(); }
+                    cfg.MesEnabled = false;
+                    rep.Report("Complete", fields);
+                    Thread.Sleep(400);
+                    lock (capLock) { Check("开关关闭零发送", captured.Count == 0); }
+                    cfg.MesEnabled = true;
+
+                    // 触发器未命中：零发送
+                    lock (capLock) { captured.Clear(); }
+                    cfg.MesTriggers = "Alarm";
+                    rep.Report("Complete", fields);
+                    Thread.Sleep(400);
+                    lock (capLock) { Check("触发器未命中零发送", captured.Count == 0); }
+                    cfg.MesTriggers = "";
+                }
+
+                // Mock：不走传输，只写 CSV
+                var mockCfg = new DeviceConfig
+                {
+                    MesEnabled = true,
+                    MesMockEnabled = true,
+                    MesEndpoint = "http://fake-mes:8080/api",
+                    MesRetryCount = 0
+                };
+                using (var mock = new MesReporter(mockCfg))
+                {
+                    lock (capLock) { captured.Clear(); }
+                    mock.Report("Complete", fields);
+                    Thread.Sleep(400);
+                    lock (capLock) { Check("Mock不发HTTP", captured.Count == 0); }
+                    Check("Mock写CSV事件", WaitFor(() => CountCsvLines("MES上报(Mock)") >= 1, 3000));
+                }
+
+                // 自定义头 + 鉴权优先 + 按事件分地址
+                var advCfg = new DeviceConfig
+                {
+                    MesEnabled = true,
+                    MesEndpoint = "http://fake-mes:8080/api",
+                    MesEndpointMap = "Alarm=http://fake-mes:8080/alarm",
+                    MesAuthType = "Bearer",
+                    MesAuthToken = "tok123",
+                    MesCustomHeaders = "X-Line=L5;Authorization=HACK",
+                    MesRetryCount = 0
+                };
+                using (var adv = new MesReporter(advCfg))
+                {
+                    lock (capLock) { captured.Clear(); }
+                    var fieldsAlarm = new Dictionary<string, string>(fields);
+                    fieldsAlarm["event"] = "Alarm";
+                    adv.Report("Complete", fields);
+                    adv.Report("Alarm", fieldsAlarm);
+                    bool advGot = WaitFor(() =>
+                    {
+                        lock (capLock) { return captured.Count >= 2; }
+                    }, 5000);
+                    Check("分地址两条都发出", advGot);
+                    string urlComplete = "";
+                    string urlAlarm = "";
+                    Dictionary<string, string> headers = null;
+                    lock (capLock)
+                    {
+                        foreach (var c in captured)
+                        {
+                            if (c.Item2.Contains("\"event\":\"Complete\"")) urlComplete = c.Item1;
+                            if (c.Item2.Contains("\"event\":\"Alarm\""))
+                            {
+                                urlAlarm = c.Item1;
+                                headers = c.Item3;
+                            }
+                        }
+                    }
+                    Check("未命中走默认地址", urlComplete == "http://fake-mes:8080/api");
+                    Check("命中走分地址", urlAlarm == "http://fake-mes:8080/alarm");
+                    Check("自定义头透传",
+                        headers != null && headers.ContainsKey("X-Line") && headers["X-Line"] == "L5");
+                    Check("鉴权优先顶掉伪造Authorization",
+                        headers != null && headers.ContainsKey("Authorization")
+                        && headers["Authorization"] == "Bearer tok123");
+                }
+
+                // 离线缓存：全灭→落盘；恢复→补发清盘
+                var failCfg = new DeviceConfig
+                {
+                    MesEnabled = true,
+                    MesEndpoint = "http://fake-mes:8080/api",
+                    MesRetryCount = 0
+                };
+                transportOk = false;
+                using (var repFail = new MesReporter(failCfg))
+                {
+                    repFail.Report("Complete", fields);
+                    Check("全灭后离线缓存落盘",
+                        WaitFor(() => File.Exists("MesQueue.json"), 5000));
+                }
+                transportOk = true;
+                using (var repBack = new MesReporter(failCfg))
+                {
+                    repBack.Report("Complete", fields);
+                    Check("恢复后补发并清盘",
+                        WaitFor(() => !File.Exists("MesQueue.json"), 8000));
+                }
+            }
+            finally
+            {
+                MesReporter.Transport = null;
+                try { if (File.Exists("MesQueue.json")) File.Delete("MesQueue.json"); } catch { }
+            }
+        }
+
+        /// <summary>轮询等待（MesTests 用：后台线程投递需等待；超时返回 false）</summary>
+        private static bool WaitFor(Func<bool> condition, int timeoutMs)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < timeoutMs)
+            {
+                try { if (condition()) return true; } catch { }
+                Thread.Sleep(50);
+            }
+            try { return condition(); } catch { return false; }
+        }
+
+        /// <summary>数当日事件 CSV 里含标记的行数（MesTests 的 Mock/边沿断言用）</summary>
+        private static int CountCsvLines(string marker)
+        {
+            try
+            {
+                string file = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs",
+                    "TestLog_" + DateTime.Now.ToString("yyyyMMdd") + ".csv");
+                if (!File.Exists(file)) return 0;
+                int n = 0;
+                foreach (string line in File.ReadAllLines(file))
+                {
+                    if (line.Contains(marker)) n++;
+                }
+                return n;
+            }
+            catch { return 0; }
         }
 
         // =====================================================================
@@ -1868,10 +2235,10 @@ namespace AgingTestSystem.Tests
                 Check("IP候选/映射表不强制校验",
                     ok("FanIpCandidates", "xxx") && ok("IoBackupChannelMappings", "xxx"));
 
-                // _boolKeys 11 项逐项过校验（防"只加一边"的配置漂移）
+                // _boolKeys 13 项逐项过校验（防"只加一边"的配置漂移；V1.68 +MesEnabled/MesMockEnabled）
                 var boolKeys = (HashSet<string>)typeof(SettingsForm).GetField("_boolKeys",
                     BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
-                Check("布尔键11项", boolKeys != null && boolKeys.Count == 11);
+                Check("布尔键13项", boolKeys != null && boolKeys.Count == 13);
                 if (boolKeys != null)
                 {
                     bool allBoolOk = boolKeys.All(k => ok(k, "true") && ok(k, "false") && !ok(k, "YES"));
@@ -1879,7 +2246,9 @@ namespace AgingTestSystem.Tests
                     Check("含关键布尔键",
                         boolKeys.Contains("AlarmWhenPressureHigherThanThreshold")
                         && boolKeys.Contains("ScannerDebugLog")
-                        && boolKeys.Contains("UseMockCommunication"));
+                        && boolKeys.Contains("UseMockCommunication")
+                        && boolKeys.Contains("MesEnabled")
+                        && boolKeys.Contains("MesMockEnabled"));
                 }
             }
 

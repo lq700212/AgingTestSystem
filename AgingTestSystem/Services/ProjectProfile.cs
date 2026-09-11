@@ -92,10 +92,10 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 启动时确保档案就绪（MainForm 读任何运行时文件之前调用）：
         /// 1) 无 ActiveProject → 指向 Default 并写回 exe.config（机器指针初始化）；
-        /// 2) 项目目录不存在 → 创建；
-        /// 3) 【一次性迁移】项目目录是空的、但程序目录下有老文件（V1.67 前的老用户），
-        ///    把老文件搬进 Default（搬家不是复制：原地留会造成"两份数据" Suspicion）。
-        ///    只有 ActiveProject == Default 时才搬（非 Default 说明用户已在用档案体，不碰）。
+        /// 2) 项目目录不存在 → 创建。
+        /// 【V1.68 改干净】删掉了"老文件搬家"：项目未上线，没有 V1.67 前的老用户，
+        /// 程序目录下的散文件一律视为垃圾不再认——要是启动后配方空了，去 Projects/Default
+        /// 里建，不要从根目录捡（两份数据源是 Suspicion 之源）。
         /// </summary>
         /// <returns>生效的项目名</returns>
         public static string EnsureActiveProfile()
@@ -120,34 +120,9 @@ namespace AgingTestSystem.Services
                 System.Diagnostics.Debug.WriteLine($"[项目档案] 初始化 ActiveProject 失败: {ex.Message}");
             }
 
-            // 2) 目录就绪
-            string dir = ActiveProfileDir;
-
-            // 3) 老文件搬家（仅 Default + 目录为空 + 根目录有老文件）
-            if (string.Equals(name, "Default", StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    bool dirEmpty = Directory.GetFiles(dir).Length == 0;
-                    if (dirEmpty)
-                    {
-                        string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                        foreach (string f in ProjectScopedFiles)
-                        {
-                            if (string.Equals(f, PolicyFileName, StringComparison.OrdinalIgnoreCase)) continue;
-                            string src = Path.Combine(baseDir, f);
-                            if (File.Exists(src))
-                            {
-                                File.Move(src, Path.Combine(dir, f));
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[项目档案] 老文件迁移失败: {ex.Message}");
-                }
-            }
+            // 2) 目录就绪（幂等：已存在即跳过；首次建目录的问题在启动时暴露，
+            //    而不是拖到第一次保存时才炸）
+            Directory.CreateDirectory(ActiveProfileDir);
 
             return name;
         }

@@ -148,6 +148,8 @@ namespace AgingTestSystem.Dialogs
             "FanTempShutdownEnabled",
             "ScannerEnabled",
             "ScannerDebugLog",
+            "MesEnabled",
+            "MesMockEnabled",
         };
 
         /// <summary>
@@ -321,6 +323,23 @@ namespace AgingTestSystem.Dialogs
             { "CompletionAction", "到时完成动作：只下电关阀（现状）/蜂鸣提醒/破空泄压（需配点位）/都要" },
             { "VentValveDoPoint", "破空阀DO输出点内部编号（如225），0=未配置（默认，选了泄压也只记日志不写DO）" },
 
+            // ===== MES 对接（V1.68 二期：映射层可配；连接跟机器，触发器/映射/静态跟项目存 Policy.json）=====
+            { "MesEnabled", "是否启用MES上报（false=完全不碰网络，默认false；true=按触发器POST到接收地址）" },
+            { "MesMockEnabled", "MES联调Mock（false/true；true=不发HTTP，只写CSV含完整JSON，MES没好也能验格式）" },
+            { "MesEndpoint", "MES接收地址（完整URL，单入口；留空=不发，即使开了开关也只记日志）" },
+            { "MesTimeoutMs", "HTTP超时（毫秒，后台线程发，不卡采集）" },
+            { "MesAuthType", "鉴权方式（None=无 / Bearer=Token / Basic=用户名密码）" },
+            { "MesAuthToken", "Bearer token（明文，现场工控机物理隔离；客户要求加密再做DPAPI二期）" },
+            { "MesAuthUser", "Basic用户名" },
+            { "MesAuthPassword", "Basic密码" },
+            { "MesRetryCount", "单条失败重试次数（0=只发一次；全灭进离线缓存，下次成功顺带补发）" },
+            { "MesRetryIntervalMs", "重试间隔（毫秒）" },
+            { "MesTriggers", "上报触发器（跟项目，逗号分隔：Start=启动/Complete=完成/Alarm=报警/UnloadJudge=下料判定；留空=四个全报）" },
+            { "MesFieldMap", "字段映射（跟项目，MES名=本站名，分号分隔；本站字段：time/lot/device/event/sn/recipe/result/detail/pressure/temp/duration/displayMode/project/disposition/defectCode；留空=直通。如 eqId=device;lotNo=lot）" },
+            { "MesStaticFields", "静态附加字段（跟项目，键=值，分号分隔，原样并入每次上报。如 line=L5;workshop=A3）" },
+            { "MesCustomHeaders", "自定义HTTP头（头名=头值，分号分隔。如 X-Line=L5;X-ApiVer=2；鉴权头同名时鉴权优先）" },
+            { "MesEndpointMap", "按事件分地址（触发器=URL，分号分隔。如 Alarm=http://x/api/alarm；没配的事件回退默认地址）" },
+
             // ===== 扫码枪 =====
             { "ScannerEnabled", "是否启用扫码枪（false/true）" },
             { "ScannerPort", "扫码枪固定串口（留空则按关键词自动识别）" },
@@ -399,6 +418,16 @@ namespace AgingTestSystem.Dialogs
                 "FanDisconnectPolicy", "VacuumFailKind",
                 "CompletionJudgePolicy", "PowerLossPolicy",
                 "AgingPressureLossPolicy", "CompletionAction", "VentValveDoPoint"
+            }),
+            // 【V1.68】MES 对接（连接跟机器；触发器/映射/静态跟项目但同表编辑，
+            // 保存时按 PolicyKeys 分流——名单以 ProjectPolicyStore.PolicyKeys 为准）
+            ("MES 对接", new string[]
+            {
+                "MesEnabled", "MesMockEnabled", "MesEndpoint", "MesTimeoutMs",
+                "MesAuthType", "MesAuthToken", "MesAuthUser", "MesAuthPassword",
+                "MesRetryCount", "MesRetryIntervalMs",
+                "MesTriggers", "MesFieldMap", "MesStaticFields",
+                "MesCustomHeaders", "MesEndpointMap"
             }),
             ("扫码枪", new string[]
             {
@@ -1235,7 +1264,16 @@ namespace AgingTestSystem.Dialogs
             }
 
             string raw = System.Configuration.ConfigurationManager.AppSettings[key];
-            if (raw != null) return raw;
+            if (raw != null)
+            {
+                // 【V1.68】密钥显示解密：文件里是 DPAPI 密文，界面给明文编辑；
+                // 非密文（手写明文/损坏）显示空，逼着重填——不明文兼容。
+                if (key == "MesAuthToken" || key == "MesAuthPassword")
+                {
+                    return MesCrypto.Unprotect(raw) ?? "";
+                }
+                return raw;
+            }
 
             var prop = _config.GetType().GetProperty(key);
             if (prop != null)
@@ -1323,8 +1361,7 @@ namespace AgingTestSystem.Dialogs
             }
 
             if (key == "Parity" || key == "ScannerParity")
-            {
-                // 界面显示中文，实际存值映射为标准枚举名（None/Odd/Even/Mark/Space），
+            {                // 界面显示中文，实际存值映射为标准枚举名（None/Odd/Even/Mark/Space），
                 // 保证配置文件里只有这 5 种合法值，杜绝非法字符导致下游解析失败
                 return CreateOptionComboCell(
                     new[]
@@ -1336,6 +1373,20 @@ namespace AgingTestSystem.Dialogs
                         new ComboOption("空格校验(SPACE)", "Space"),
                     },
                     NormalizeParity(value));
+            }
+
+            // 【V1.68】MES 鉴权下拉：中文显示、存英文名（None/Bearer/Basic），
+            // 脏值归一回 None（与校验位 NormalizeParity 同思路）
+            if (key == "MesAuthType")
+            {
+                return CreateOptionComboCell(
+                    new[]
+                    {
+                        new ComboOption("无鉴权(None)", "None"),
+                        new ComboOption("Bearer Token", "Bearer"),
+                        new ComboOption("用户名密码(Basic)", "Basic"),
+                    },
+                    NormalizeMesAuthType(value));
             }
 
             if (_numericKeys.TryGetValue(key, out var range))
@@ -1433,6 +1484,18 @@ namespace AgingTestSystem.Dialogs
                 while (lineStart < text.Length && text[lineStart] == ' ') lineStart++;
             }
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// 把 MES 鉴权配置值规整为合法存储值（【V1.68 新增】None/Bearer/Basic，
+        /// 大小写兼容；非法一律回 None——无鉴权是最安全的缺省）。
+        /// </summary>
+        private static string NormalizeMesAuthType(string value)
+        {
+            string v = (value ?? "").Trim();
+            if (string.Equals(v, "Bearer", StringComparison.OrdinalIgnoreCase)) return "Bearer";
+            if (string.Equals(v, "Basic", StringComparison.OrdinalIgnoreCase)) return "Basic";
+            return "None";
         }
 
         /// <summary>把停止位配置值规整为下拉项实际保存的值（1.5 或 15 都统一为 15）</summary>
@@ -1599,6 +1662,42 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
+        /// 校验 MES 映射类文本（【V1.68 新增】供 ValidateValue 调用；本体是
+        /// MesMapping 纯函数，回归可单测，这里只做分发）。
+        /// </summary>
+        /// <returns>错误描述列表；空=合法</returns>
+        private static List<string> ValidateMesMappingText(string key, string value)
+        {
+            List<string> errors;
+            if (key == "MesTriggers")
+            {
+                List<string> triggers;
+                MesMapping.ParseTriggers(value, out triggers, out errors);
+            }
+            else if (key == "MesFieldMap")
+            {
+                Dictionary<string, string> map;
+                MesMapping.ParseFieldMap(value, out map, out errors);
+            }
+            else if (key == "MesStaticFields")
+            {
+                Dictionary<string, string> fields;
+                MesMapping.ParseStaticFields(value, out fields, out errors);
+            }
+            else if (key == "MesCustomHeaders")
+            {
+                Dictionary<string, string> headers;
+                MesMapping.ParseCustomHeaders(value, out headers, out errors);
+            }
+            else
+            {
+                Dictionary<string, string> epMap;
+                MesMapping.ParseEndpointMap(value, out epMap, out errors);
+            }
+            return errors;
+        }
+
+        /// <summary>
         /// 按配置项类型校验用户输入的值是否合法
         /// </summary>
         /// <param name="key">配置项名称</param>
@@ -1637,6 +1736,30 @@ namespace AgingTestSystem.Dialogs
                 return false;
             }
 
+            // MES 映射类（【V1.68】）：鉴权白名单 + 触发器/映射/静态走 MesMapping 纯函数校验。
+            // 脏输入在这里拦截并报出具体哪一组错了，不带病保存（上报线程只跳过不报错，
+            // 所以保存时拦是最后一道看得见的门）。
+            if (key == "MesAuthType")
+            {
+                string v = (value ?? "").Trim();
+                if (string.Equals(v, "None", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(v, "Bearer", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(v, "Basic", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+                error = "应为 None / Bearer / Basic 之一";
+                return false;
+            }
+            if (key == "MesTriggers" || key == "MesFieldMap" || key == "MesStaticFields"
+                || key == "MesCustomHeaders" || key == "MesEndpointMap")
+            {
+                List<string> errors = ValidateMesMappingText(key, value);
+                if (errors.Count == 0) return true;
+                error = string.Join("；", errors.ToArray());
+                return false;
+            }
+
             switch (key)
             {
                 // 整数
@@ -1663,6 +1786,9 @@ namespace AgingTestSystem.Dialogs
                 case "ScannerBaudRate":
                 case "ScannerDataBits":
                 case "ScannerStopBits":
+                case "MesTimeoutMs":
+                case "MesRetryCount":
+                case "MesRetryIntervalMs":
                     if (!int.TryParse(value, out _)) { error = "应为整数"; return false; }
                     return true;
 
@@ -1700,6 +1826,8 @@ namespace AgingTestSystem.Dialogs
                 case "FanTempShutdownEnabled":
                 case "ScannerEnabled":
                 case "ScannerDebugLog":
+                case "MesEnabled":
+                case "MesMockEnabled":
                     if (!bool.TryParse(value, out _)) { error = "应为 true 或 false"; return false; }
                     return true;
 
@@ -1853,6 +1981,23 @@ namespace AgingTestSystem.Dialogs
                 return;
             }
 
+            // 【V1.68】MES 就绪校验：开了上报开关但接收地址为空 = 配了等于没配，
+            // 还会在后台空转（Report 每次都因无地址跳过）。先填 MesEndpoint 或关掉开关。
+            // 生效值同样用"内存现值 + 本次修改叠加"（上周填的地址、今天开的开关，照样拦）。
+            bool mesOn = ResolveEffectiveBool(changes, "MesEnabled", _config.MesEnabled);
+            string mesUrl;
+            if (!changes.TryGetValue("MesEndpoint", out mesUrl) || mesUrl == null)
+            {
+                mesUrl = _config.MesEndpoint;
+            }
+            if (mesOn && string.IsNullOrWhiteSpace(mesUrl))
+            {
+                MessageBox.Show("MES 上报已开，但接收地址（MesEndpoint）为空：\n\n" +
+                    "请先填 MesEndpoint（MES 接收 URL），或把 MesEnabled 改回 false。",
+                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             // 【V1.67】分流写回：策略 key → 项目 Policy.json（跟项目走）；
             // 其余 → exe.config 的 appSettings（跟机器走）。
             var policyChanges = new Dictionary<string, string>();
@@ -1864,6 +2009,7 @@ namespace AgingTestSystem.Dialogs
             }
 
             // 写回配置文件（程序运行目录下的 exe.config，与 App.config 同源）
+            bool secretFallbackPlain = false;
             try
             {
                 var config = System.Configuration.ConfigurationManager.OpenExeConfiguration(
@@ -1871,14 +2017,25 @@ namespace AgingTestSystem.Dialogs
 
                 foreach (var kv in machineChanges)
                 {
+                    string toFile = kv.Value;
+                    // 【V1.68】密钥加密落盘：MesAuthToken/Password 写文件前转 DPAPI 密文；
+                    // 内存 _config 保持明文（上报线程用内存值，由下面的 ApplyChangesToConfig 回写，
+                    // 用的是 changes 原值，不受这里影响）。加密失败 fallback 明文 + 保存后明示。
+                    if ((kv.Key == "MesAuthToken" || kv.Key == "MesAuthPassword")
+                        && !string.IsNullOrEmpty(toFile) && !MesCrypto.IsProtected(toFile))
+                    {
+                        string enc = MesCrypto.Protect(toFile);
+                        if (enc != null) toFile = enc;
+                        else secretFallbackPlain = true;
+                    }
                     var setting = config.AppSettings.Settings[kv.Key];
                     if (setting == null)
                     {
-                        config.AppSettings.Settings.Add(kv.Key, kv.Value);
+                        config.AppSettings.Settings.Add(kv.Key, toFile);
                     }
                     else
                     {
-                        setting.Value = kv.Value;
+                        setting.Value = toFile;
                     }
                 }
 
@@ -1928,6 +2085,11 @@ namespace AgingTestSystem.Dialogs
             else
             {
                 saveMessage = "设置已保存并即时生效。";
+            }
+            // 【V1.68】密钥加密失败时明示（fallback 明文保存了，不能让用户以为已加密）
+            if (secretFallbackPlain)
+            {
+                saveMessage += "\r\n\r\n注：MES 密钥加密失败，已按明文保存（上报不受影响），请检查后重新保存。";
             }
 
             MessageBox.Show(saveMessage, "提示",
