@@ -474,6 +474,113 @@ namespace AgingTestSystem.Models
         public int VentValveDoPoint { get; set; } = 0;
 
         // =====================================================================
+        // MES 对接（【V1.68 新增】二期：映射层可配，传输层走 HTTP POST JSON）
+        // 说明：
+        // - 能配的是"报什么/什么时候报/字段叫什么"（触发器 + 字段映射 + 静态字段）；
+        //   协议栈（HTTP/重试/离线缓存）是代码，见 Services/MesReporter.cs。
+        //   MES 全可视化是伪命题——每家 MES 的握手/事务都不同，映射层可配已覆盖 90% 差异。
+        // - 跟机器还是跟项目：连接（开关/URL/超时/鉴权/重试/Mock）跟机器（这条产线的 MES 地址）；
+        //   触发器/字段映射/静态字段跟项目（客户 A 与 B 的 MES 字段名不同），存 Policy.json。
+        // - 总开关 MesEnabled 默认 false = 零行为变化；MesMockEnabled=true 时只记日志不发 HTTP，
+        //   用于没 MES 环境时的联调验证。
+        // =====================================================================
+
+        /// <summary>
+        /// 是否启用 MES 上报（默认 false = 完全不碰网络，零行为变化）。
+        /// true 时按 MesTriggers 把事件 POST 到 MesEndpoint。
+        /// </summary>
+        public bool MesEnabled { get; set; } = false;
+
+        /// <summary>
+        /// MES 联调 Mock 开关（默认 false）。true 时不发 HTTP，只写一条
+        /// "MES上报(Mock)"事件到 CSV（含完整 JSON），用于 MES 还没准备好时的端到端验证。
+        /// </summary>
+        public bool MesMockEnabled { get; set; } = false;
+
+        /// <summary>
+        /// MES 接收地址（完整 URL，如 http://192.168.1.50:8080/api/aging）。
+        /// 单一入口：所有事件都 POST 到这里，事件类型在 JSON 的 event 字段区分。
+        /// 留空 = 不发（即使 MesEnabled=true 也只记日志，防配了开关忘配地址空转）。
+        /// </summary>
+        public string MesEndpoint { get; set; } = "";
+
+        /// <summary>
+        /// HTTP 超时（毫秒，默认 5000）。上报走后台线程，超时只影响本条重试，不卡采集。
+        /// </summary>
+        public int MesTimeoutMs { get; set; } = 5000;
+
+        /// <summary>
+        /// 鉴权方式（None=无 / Bearer=Authorization: Bearer token / Basic=用户名密码）。
+        /// 存英文名，大小写兼容，非法兜底 None。
+        /// </summary>
+        public string MesAuthType { get; set; } = "None";
+
+        /// <summary>
+        /// Bearer token（【V1.68】保存时自动 DPAPI 加密落盘，内存里是明文。
+        /// 见 <see cref="Services.MesCrypto"/>）。
+        /// </summary>
+        public string MesAuthToken { get; set; } = "";
+
+        /// <summary>
+        /// Basic 鉴权用户名（MesAuthType=Basic 时用，明文）。
+        /// </summary>
+        public string MesAuthUser { get; set; } = "";
+
+        /// <summary>
+        /// Basic 鉴权密码（【V1.68】同 token 自动加密落盘，内存明文）。
+        /// </summary>
+        public string MesAuthPassword { get; set; } = "";
+
+        /// <summary>
+        /// 单条上报失败后的重试次数（默认 3；0=只发一次）。重试间隔见 MesRetryIntervalMs。
+        /// 全部失败后进离线缓存（MesQueue.json），下次上报成功时顺带补发。
+        /// </summary>
+        public int MesRetryCount { get; set; } = 3;
+
+        /// <summary>
+        /// 重试间隔（毫秒，默认 2000）。
+        /// </summary>
+        public int MesRetryIntervalMs { get; set; } = 2000;
+
+        /// <summary>
+        /// 上报触发器（跟项目，逗号分隔，大小写无所谓）：
+        /// Start=启动 / Complete=完成 / Alarm=报警 / UnloadJudge=下料判定。
+        /// 留空 = 四个全报（缺省全开，开关 MesEnabled 才是总闸）。
+        /// </summary>
+        public string MesTriggers { get; set; } = "";
+
+        /// <summary>
+        /// 字段映射表（跟项目）："MES字段名=本站字段名"，多组用分号分隔。
+        /// 本站字段 vocabulary：time/lot/device/event/sn/recipe/result/detail/pressure/
+        /// temp/duration/displayMode/project/disposition/defectCode。
+        /// 示例：eqId=device;lotNo=lot;opTime=time —— 发出去的 JSON 键就是 eqId/lotNo/opTime。
+        /// 留空 = 直通（用本站原名，联调抓包看字段最方便）。
+        /// </summary>
+        public string MesFieldMap { get; set; } = "";
+
+        /// <summary>
+        /// 静态附加字段（跟项目）："键=值"，多组用分号分隔，原样并入每次上报。
+        /// 示例：line=L5;workshop=A3 —— 产线/车间/班次这类"每次都一样"的常量放这里，
+        /// 不用每个事件重复带。
+        /// </summary>
+        public string MesStaticFields { get; set; } = "";
+
+        /// <summary>
+        /// 自定义 HTTP 头（【V1.68 新增】跟机器）："头名=头值"，多组用分号分隔。
+        /// 示例：X-Line=L5;X-ApiVer=2 —— MES 厂要求的租户/版本/产线头放这里。
+        /// 与鉴权头同名时鉴权优先（Authorization 永远按 MesAuthType 生成，不会被覆盖，
+        /// 防配错头把鉴权顶掉）。
+        /// </summary>
+        public string MesCustomHeaders { get; set; } = "";
+
+        /// <summary>
+        /// 按事件分地址（【V1.68 新增】跟机器）："触发器=URL"，多组用分号分隔。
+        /// 示例：Alarm=http://192.168.1.50:8080/api/alarm —— 报警走专用接口，其余走 MesEndpoint。
+        /// 没配的事件回退 MesEndpoint；URL 必须 http(s):// 开头（保存时校验）。
+        /// </summary>
+        public string MesEndpointMap { get; set; } = "";
+
+        // =====================================================================
         // 扫码枪配置（V1.16 新增，参考 SerialScannerTest Demo 实现）
         // 说明：扫码枪（Honeywell Xenon 1902 等）通过虚拟串口接入，
         //       扫到的条码内容 + 回车/换行 结尾（一行一条码）。

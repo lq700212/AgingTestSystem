@@ -228,6 +228,11 @@ namespace AgingTestSystem.Services
         private readonly bool[] _lossNoted;
 
         /// <summary>
+        /// MES 上报器（【V1.68 新增】二期；构造时建、Dispose 时释放；开关关闭时零开销）。
+        /// </summary>
+        private readonly MesReporter _mes;
+
+        /// <summary>
         /// 每台是否正在老化测试
         /// 【V1.10 新增】由"启动运行/停止运行/报警/复位"控制
         /// </summary>
@@ -519,6 +524,10 @@ namespace AgingTestSystem.Services
                 _fanTimer.Elapsed += FanTimer_Elapsed;
                 _fanTimer.AutoReset = true;
             }
+
+            // 【V1.68】MES 上报器（持 _config 引用读最新配置；MesEnabled=false 时
+            // Report 直接返回、worker 懒建，零开销；Dispose 时释放后台线程）
+            _mes = new MesReporter(_config);
         }
 
         /// <summary>
@@ -1738,6 +1747,21 @@ namespace AgingTestSystem.Services
                 $"启动老化测试（开真空，待真空建立+延时开启到后自动上电）SN:{sn} 配方:{recipeName}" +
                 (string.IsNullOrEmpty(displayMode) ? "" : $" 显示模式:{displayMode}"));
 
+            // 【V1.68】MES 上报：启动事件（触发器 Start；字段按 MesFieldMap 改名；
+            // 开关关闭/触发器未命中时 Report 内部直接返回，零开销）
+            try
+            {
+                var startFields = MesCommonFields(deviceId);
+                startFields["event"] = "Start";
+                startFields["sn"] = sn;
+                startFields["recipe"] = recipeName;
+                startFields["displayMode"] = displayMode;
+                startFields["duration"] = durationSecs.ToString();
+                startFields["detail"] = "启动老化测试（开真空）";
+                _mes.Report("Start", startFields);
+            }
+            catch { /* 上报永不阻断启动 */ }
+
             // ---- 4) 任务快照落盘（断电/崩溃后可恢复重测）----
             SaveSessionSnapshot();
         }
@@ -1860,6 +1884,42 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
+        /// MES 通用字段（【V1.68 新增】time/lot/device/project；各事件再加自己的字段）。
+        /// </summary>
+        private Dictionary<string, string> MesCommonFields(int deviceId)
+        {
+            return new Dictionary<string, string>
+            {
+                { "time", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") },
+                { "lot", _currentLotNumber ?? "" },
+                { "device", deviceId.ToString() },
+                { "project", ProjectProfile.ActiveProfileName }
+            };
+        }
+
+        /// <summary>
+        /// 读工位 SN/配方（【V1.68 新增】MES 上报用；无则空串，不抛异常）。
+        /// </summary>
+        private void GetStationSnRecipe(int deviceId, out string sn, out string recipe)
+        {
+            sn = "";
+            recipe = "";
+            try
+            {
+                lock (_stationInfoLock)
+                {
+                    StationInfo info;
+                    if (_stationInfo.TryGetValue(deviceId, out info) && info != null)
+                    {
+                        sn = info.SerialNumber ?? "";
+                        recipe = info.RecipeName ?? "";
+                    }
+                }
+            }
+            catch { /* 上报辅助失败不影响主链路 */ }
+        }
+
+        /// <summary>
         /// 关闭破空阀（【V1.67 新增】完成泄压是"开着保持"，复位/启动/急停时统一关闭，
         /// 不残留输出。点位未配置（=0）直接跳过，绝不写未知通道）。
         /// </summary>
@@ -1926,6 +1986,21 @@ namespace AgingTestSystem.Services
                     string result = pass ? "PASS" : "FAIL";
                     TestEventLogger.Write(_currentLotNumber, deviceId, "下料判定",
                         $"判定={result} 不良代码:{defectCode} 处置:{disposition} SN:{sn}");
+                    // 【V1.68】MES 上报：下料判定事件（触发器 UnloadJudge）
+                    try
+                    {
+                        string ujRecipe, dummy;
+                        GetStationSnRecipe(deviceId, out dummy, out ujRecipe);
+                        var ujFields = MesCommonFields(deviceId);
+                        ujFields["event"] = "UnloadJudge";
+                        ujFields["sn"] = sn;
+                        ujFields["recipe"] = ujRecipe;
+                        ujFields["result"] = result;
+                        ujFields["defectCode"] = defectCode ?? "";
+                        ujFields["disposition"] = disposition ?? "";
+                        _mes.Report("UnloadJudge", ujFields);
+                    }
+                    catch { /* 上报永不阻断判定 */ }
                     judged.Add(deviceId);
                 }
             }
@@ -2702,6 +2777,12 @@ namespace AgingTestSystem.Services
         /// <param name="reason">完成原因描述</param>
         private void CompleteDeviceInternal(int deviceId, string reason)
         {
+            // 【V1.68】MES 上报先拍照：时长定格值在下面被清零，SN/配方与快照无关但统一快照口径
+            int doneDuration = 0;
+            string doneSn, doneRecipe;
+            lock (_stateLock) { doneDuration = _sessionDurationSecs[deviceId - 1]; }
+            GetStationSnRecipe(deviceId, out doneSn, out doneRecipe);
+
             // 断电 + 关阀
             _ioController.WriteOutput(_config.TotalInputs + deviceId, false);
             _ioController.WriteOutput(_config.TotalInputs + _config.TotalBarometers + deviceId, false);
@@ -2736,6 +2817,20 @@ namespace AgingTestSystem.Services
                     cached.LastTestResult = judgeResult;
                 }
             }
+
+            // 【V1.68】MES 上报：完成事件（触发器 Complete）
+            try
+            {
+                var doneFields = MesCommonFields(deviceId);
+                doneFields["event"] = "Complete";
+                doneFields["sn"] = doneSn;
+                doneFields["recipe"] = doneRecipe;
+                doneFields["result"] = judgeResult;
+                doneFields["duration"] = doneDuration.ToString();
+                doneFields["detail"] = reason;
+                _mes.Report("Complete", doneFields);
+            }
+            catch { /* 上报永不阻断完成 */ }
 
             // 【V1.67】完成动作策略（Q6/Q15）：蜂鸣提醒 / 破空泄压
             // - Beep：PC 蜂鸣一声（无硬件要求；无音频设备时静默跳过，不抛异常）；
@@ -2842,6 +2937,23 @@ namespace AgingTestSystem.Services
                     cached.LastTestResult = result;
                 }
             }
+
+            // 【V1.68】MES 上报：报警事件（触发器 Alarm；含压力值供 MES 侧漏气分析）
+            try
+            {
+                string almSn, almRecipe;
+                GetStationSnRecipe(deviceId, out almSn, out almRecipe);
+                var almFields = MesCommonFields(deviceId);
+                almFields["event"] = "Alarm";
+                almFields["sn"] = almSn;
+                almFields["recipe"] = almRecipe;
+                almFields["result"] = result;
+                almFields["detail"] = reason;
+                decimal? p = GetDeviceLastPressure(deviceId);
+                almFields["pressure"] = p.HasValue ? p.Value.ToString() : "";
+                _mes.Report("Alarm", almFields);
+            }
+            catch { /* 上报永不阻断报警 */ }
 
             // 在测任务清单变化 → 快照落盘
             SaveSessionSnapshot();
@@ -3041,6 +3153,9 @@ namespace AgingTestSystem.Services
                     _fanTimer?.Dispose();
                     _quickTrackTimer?.Stop();
                     _quickTrackTimer?.Dispose();
+
+                    // 【V1.68】停 MES 后台发送线程（最多等2秒，不拖退出）
+                    if (_mes != null) { try { _mes.Dispose(); } catch { } }
                 }
             }
         }

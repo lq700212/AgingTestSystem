@@ -3,6 +3,47 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.68 — 二期 MES 映射层可配：HTTP 上报 + 触发器/字段映射/离线缓存（2026-09-11）
+
+### 改动范围
+- **传输层（代码）**：`MesReporter` 后台线程串行 POST JSON（单入口 `MesEndpoint`，
+  事件类型在 event 字段区分）；鉴权 None/Bearer/Basic；失败按 `MesRetryCount`/
+  `MesRetryIntervalMs` 重试，全灭进离线缓存 `MesQueue.json`（上限 5000 丢最旧），
+  下次成功顺带补发。Report 组包+入队毫秒返回，失败永不阻断生产（只记日志+进缓存）。
+- **映射层（可配）**：触发器 `MesTriggers`（Start/Complete/Alarm/UnloadJudge，
+  留空=全开）+ 字段映射 `MesFieldMap`（MES名=本站名，如 eqId=device；留空=直通）+
+  静态字段 `MesStaticFields`（如 line=L5，原样并入每次）。本站 vocabulary 15 个
+  （time/lot/device/event/sn/recipe/result/detail/pressure/temp/duration/
+  displayMode/project/disposition/defectCode），解析纯函数 `MesMapping` 三方共用。
+- **跟机器还是跟项目**：开关/URL/超时/鉴权/重试/Mock 跟机器（App.config）；
+  触发器/映射/静态跟项目（Policy.json，`PolicyKeys` +3）。系统设置新增"MES 对接"分类，
+  脏映射保存即拦（报出哪一组错）；开了开关没配地址同样拦截。
+- **执行侧挂接**：启动/完成/报警/下料判定四处 `Report`（完成带时长+判定结果，
+  报警带压力值，下料带不良代码+处置）。`MesMockEnabled=true` 时不发 HTTP，
+  只写" MES上报(Mock)"事件到 CSV（含完整 JSON）——MES 没好也能端到端验格式。
+- **回归测试缝**：`MesReporter.Transport` 静态函数缝，Fake 抓包零外网。
+- **三件补齐（V1.68 同版追加，未推送前 fold 进来；项目未上线，不兼容，改干净）**：
+  - 密钥 DPAPI 加密：`MesCrypto`（LocalMachine scope + "DPAPI:" 前缀；无前缀的明文
+    一律拒收按空处理，不兼容——PasswordHasher 同先例；解密失败同样按空+记日志）。
+    SettingsForm 显示解密/保存加密/加密失败明示；MainForm 读取解密进内存。
+  - 自定义 HTTP 头 `MesCustomHeaders`（头名=头值；头名纯 ASCII token；
+    与鉴权头同名时鉴权优先，顶不掉）。
+  - 按事件分地址 `MesEndpointMap`（触发器=URL；没配的回退默认地址；URL 必须 http(s) 开头）。
+  - 三者全走"保存时校验 + 上报时跳过"双保险（MesMapping 纯函数）。
+
+### 为什么这么改
+- MES 全可视化是伪命题（每家握手/事务不同），映射层可配已覆盖 90% 现场差异；
+  出差带 Mock 先验格式，MES 一就绪填地址即上线。
+- 有意不做的：~~token/密码加密（明文存，工控机物理隔离；客户要求再做 DPAPI）~~、
+  自定义 HTTP 头、按事件分地址（单入口已够，MES 侧按 event 分流）。
+  （注：用户一句话推翻——"做了又怎么样，反正都是可配置的"，三件已补，见上。）
+
+### 验证
+- `build_and_test.ps1` 全绿（构建 + 冒烟 + **1013 回归**，0 失败；V1.67 的 918 + 新增 95：
+  MesV168 映射/组包/上报器 + DeviceManagerMes 端到端 + 三件补齐的加密/头/分地址）。
+- 回归红过两次，抓的都是真 bug："布尔键一致"锁（+2 key 后 11→13）；
+  中文头名误放行（`char.IsLetter` 认中文，HTTP 头名只认 ASCII，已收紧 + 锁用例）。
+
 ## V1.67 — 一期"万物可配"：7 个待确认点全部策略化 + 项目档案切换（2026-09-11）
 
 ### 改动范围

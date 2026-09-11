@@ -1098,5 +1098,111 @@ namespace AgingTestSystem.Tests
 
             try { TestSessionStore.Clear(); } catch { }
         }
+
+        // =====================================================================
+        // 15d. MES 上报端到端（V1.68 新增：二期映射层可配）
+        // Fake 传输抓包（MesReporter.Transport 静态缝），全程零外网：
+        // 启动/完成/报警/下料四个触发器各抓一条，断言映射改名+静态合并+关键字段。
+        // =====================================================================
+        private static void DeviceManagerMesTests()
+        {
+            EnterCleanDir();
+
+            var captured = new List<Tuple<string, string>>();
+            MesReporter.Transport = (url, json, headers, timeout) =>
+            {
+                lock (captured) { captured.Add(Tuple.Create(url, json)); }
+                return true;
+            };
+            try
+            {
+                FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+                DeviceManager dm = BuildTestManager(out reader, out io, out config);
+                try
+                {
+                    config.MesEnabled = true;
+                    config.MesEndpoint = "http://fake-mes:8080/api";
+                    config.MesRetryCount = 0;
+                    config.MesTriggers = "Start,Complete,Alarm,UnloadJudge";
+                    config.MesFieldMap = "eqId=device";
+                    config.MesStaticFields = "line=L5";
+
+                    // —— 启动 + 完成（工位1，短老化 1.5s）——
+                    dm.SetStationRecipe(1, "配方R1", -3m, null);
+                    dm.SetStationDelayTimes(1, TimeSpan.Zero, TimeSpan.FromSeconds(1.5));
+                    dm.SetStationSerialNumber(1, "SN-MES-001");
+                    dm.StartTesting(new[] { 1 });
+                    reader.SetPressure(1, -4m);
+                    Check("[MES端到端] 启动事件上报",
+                        WaitUntil(() =>
+                        {
+                            lock (captured)
+                            {
+                                return captured.Any(c => c.Item2.Contains("\"event\":\"Start\""));
+                            }
+                        }, 3000));
+                    Check("[MES端到端] 到时完成",
+                        WaitUntil(() =>
+                        {
+                            var d = dm.GetBarometerData(1);
+                            return d != null && d.Status == DeviceStatus.Completed;
+                        }, 4000));
+                    string completeJson = "";
+                    lock (captured)
+                    {
+                        var hit = captured.FirstOrDefault(c => c.Item2.Contains("\"event\":\"Complete\""));
+                        if (hit != null) completeJson = hit.Item2;
+                    }
+                    Check("[MES端到端] 完成含结果PASS",
+                        completeJson.Contains("\"result\":\"PASS\""));
+                    Check("[MES端到端] 完成映射改名(eqId)+静态(line)+SN",
+                        completeJson.Contains("\"eqId\":\"1\"")
+                        && completeJson.Contains("\"line\":\"L5\"")
+                        && completeJson.Contains("SN-MES-001"));
+
+                    // —— 下料判定（工位1，刚完成的台）——
+                    int[] judged; int[] skipped;
+                    dm.RecordUnloadJudge(new[] { 1 }, false, "黑点", "报废",
+                        out judged, out skipped);
+                    Check("[MES端到端] 下料判定事件上报",
+                        WaitUntil(() =>
+                        {
+                            lock (captured)
+                            {
+                                return captured.Any(c => c.Item2.Contains("\"event\":\"UnloadJudge\"")
+                                    && c.Item2.Contains("黑点"));
+                            }
+                        }, 3000));
+
+                    // —— 报警（工位2，真空建立失败）——
+                    dm.StartTesting(new[] { 2 });
+                    Check("[MES端到端] 报警事件上报",
+                        WaitUntil(() =>
+                        {
+                            lock (captured)
+                            {
+                                return captured.Any(c => c.Item2.Contains("\"event\":\"Alarm\"")
+                                    && c.Item2.Contains("\"result\":\"FAIL\""));
+                            }
+                        }, 4000));
+                    lock (captured)
+                    {
+                        Check("[MES端到端] 四个触发器各至少一条",
+                            captured.Any(c => c.Item2.Contains("\"event\":\"Start\""))
+                            && captured.Any(c => c.Item2.Contains("\"event\":\"Complete\""))
+                            && captured.Any(c => c.Item2.Contains("\"event\":\"Alarm\""))
+                            && captured.Any(c => c.Item2.Contains("\"event\":\"UnloadJudge\"")));
+                        Check("[MES端到端] 发往配置地址",
+                            captured.All(c => c.Item1 == "http://fake-mes:8080/api"));
+                    }
+                }
+                finally { try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
+            }
+            finally
+            {
+                MesReporter.Transport = null;
+                try { TestSessionStore.Clear(); } catch { }
+            }
+        }
     }
 }

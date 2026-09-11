@@ -200,7 +200,7 @@ namespace AgingTestSystem.Views
 
             // 【V1.67】项目档案就位（必须在 ApplyHomeLayout/LoadConfig/LoadRecipes 之前：
             // HomeLayout/配方/策略文件的路径都依赖当前项目目录）。
-            // 首跑自动建 Default 并把程序目录下的老文件搬进去，老用户无感迁移。
+            // 首跑自动建 Default；【V1.68 改干净】不认程序目录下的散文件（无老用户，不搬家）。
             string activeProject = ProjectProfile.EnsureActiveProfile();
             System.Diagnostics.Debug.WriteLine($"[项目档案] 当前项目: {activeProject}");
 
@@ -222,6 +222,14 @@ namespace AgingTestSystem.Views
 
             // 3. 初始化设备管理器（连接硬件、启动数据采集）
             _deviceManager = new DeviceManager(_config);
+
+            // 【V1.68】MES 状态首屏可见（出差联调第一眼：开没开、往哪发、Mock 还是真发）
+            if (_config.MesEnabled)
+            {
+                string mesWhere = string.IsNullOrWhiteSpace(_config.MesEndpoint)
+                    ? "（未配地址，只记日志不发）" : ("→ " + _config.MesEndpoint.Trim());
+                WriteLog("[MES] 上报已启用" + (_config.MesMockEnabled ? "（Mock：只记 CSV 不发 HTTP）" : mesWhere));
+            }
 
             // 4. 订阅设备管理器事件（批量数据更新、连接状态变更、送风机数据更新）
             // 【修复 M2】改为订阅批量数据更新事件，一次更新所有面板
@@ -881,6 +889,56 @@ namespace AgingTestSystem.Views
                 config.VentValveDoPoint = Math.Max(0, ventPoint);
             }
 
+            // 【V1.68】MES 对接（机器级：开关/URL/超时/鉴权/重试；触发器/映射/静态字段跟项目，
+            // 由下面的 ApplyOverlay 从 Policy.json 覆盖——非法字符串同样兜底缺省）。
+            if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["MesEnabled"], out bool mesEnabled))
+            {
+                config.MesEnabled = mesEnabled;
+            }
+            if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["MesMockEnabled"], out bool mesMock))
+            {
+                config.MesMockEnabled = mesMock;
+            }
+            string mesEndpoint = System.Configuration.ConfigurationManager.AppSettings["MesEndpoint"];
+            if (mesEndpoint != null) config.MesEndpoint = mesEndpoint.Trim();
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["MesTimeoutMs"], out int mesTimeout))
+            {
+                config.MesTimeoutMs = Math.Max(500, mesTimeout);
+            }
+            string mesAuth = System.Configuration.ConfigurationManager.AppSettings["MesAuthType"];
+            if (!string.IsNullOrWhiteSpace(mesAuth))
+            {
+                string a = mesAuth.Trim();
+                config.MesAuthType = (a.Equals("Bearer", StringComparison.OrdinalIgnoreCase)
+                    || a.Equals("Basic", StringComparison.OrdinalIgnoreCase)) ? a : "None";
+            }
+            string mesToken = System.Configuration.ConfigurationManager.AppSettings["MesAuthToken"];
+            if (mesToken != null) config.MesAuthToken = mesToken;
+            string mesUser = System.Configuration.ConfigurationManager.AppSettings["MesAuthUser"];
+            if (mesUser != null) config.MesAuthUser = mesUser;
+            string mesPass = System.Configuration.ConfigurationManager.AppSettings["MesAuthPassword"];
+            if (mesPass != null) config.MesAuthPassword = mesPass;
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["MesRetryCount"], out int mesRetry))
+            {
+                config.MesRetryCount = Math.Max(0, mesRetry);
+            }
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["MesRetryIntervalMs"], out int mesRetryIv))
+            {
+                config.MesRetryIntervalMs = Math.Max(0, mesRetryIv);
+            }
+            // 【V1.68】自定义头 + 按事件分地址（机器级，自由文本；格式错误保存时拦，
+            // 这里只做"读得到"，脏值上报时跳过——MesMapping 兜底）
+            string mesHeaders = System.Configuration.ConfigurationManager.AppSettings["MesCustomHeaders"];
+            if (mesHeaders != null) config.MesCustomHeaders = mesHeaders;
+            string mesEpMap = System.Configuration.ConfigurationManager.AppSettings["MesEndpointMap"];
+            if (mesEpMap != null) config.MesEndpointMap = mesEpMap;
+            // 【V1.68】密钥解密进内存（文件里必须是 DPAPI 密文；明文=配错了，
+            // 解密失败按空处理 + 记日志，绝不带着密文去当 token 发）
+            string rawToken = System.Configuration.ConfigurationManager.AppSettings["MesAuthToken"];
+            string rawPass = System.Configuration.ConfigurationManager.AppSettings["MesAuthPassword"];
+            config.MesAuthToken = DecryptMesSecret("MesAuthToken", rawToken);
+            config.MesAuthPassword = DecryptMesSecret("MesAuthPassword", rawPass);
+
             // 【V1.67】项目策略叠加（Projects/<当前项目>/Policy.json 覆盖同名机器缺省）
             ProjectPolicyStore.ApplyOverlay(config);
 
@@ -909,6 +967,33 @@ namespace AgingTestSystem.Views
             }
 
             return config;
+        }
+
+        /// <summary>
+        /// 解密 MES 密钥配置（【V1.68 新增】 MesAuthToken/MesAuthPassword 专用）：
+        /// DPAPI 密文（"DPAPI:" 前缀）→ 明文进内存；无前缀的明文=配错，按空处理
+        /// （项目未上线，不兼容明文——PasswordHasher 同先例）；
+        /// 解密失败 → "" + Debug 日志（带着密文当 token 发一定 401，不如空着让问题浮现）。
+        /// </summary>
+        private static string DecryptMesSecret(string key, string raw)
+        {
+            if (raw == null) return "";
+            if (!MesCrypto.IsProtected(raw))
+            {
+                if (raw.Length > 0)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[MES密钥] {key} 非密文格式（明文不兼容），已按空处理，请重填后保存");
+                }
+                return "";
+            }
+            string dec = MesCrypto.Unprotect(raw);
+            if (dec == null)
+            {
+                System.Diagnostics.Debug.WriteLine($"[MES密钥] {key} 解密失败，已按空处理（请重填后保存）");
+                return "";
+            }
+            return dec;
         }
 
         /// <summary>

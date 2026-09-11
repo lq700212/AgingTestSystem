@@ -58,6 +58,13 @@
 - **设置表 tooltip 全覆盖（V1.67 用户原则）**：配置项说明悬停可见，超 40 字按
   `WrapTooltip` 换行（断点优先标点，不断英文单词）；新增配置项的 `_descriptions`
   写清"现状是什么/改了会怎样"，别只写名字。
+- **MES 映射类配置约定（V1.68）**：触发器/字段映射/静态字段是自由文本，
+  校验走 `MesMapping` 纯函数（vocabulary 改只改它；SettingsForm/上报器/用例三方共用），
+  脏输入保存时拦（报出哪一组错）、上报时跳过（不带病全停）。`MesReporter.Transport`
+  静态缝只许测试赋值，生产走真实 HTTP；用例必须 try/finally 复位。
+  开关开了没配地址保存即拦（`MesEnabled` + 空 `MesEndpoint` 矛盾）。
+  密钥（token/密码）显示解密/保存加密走 `MesCrypto`（DPAPI + 前缀；内存明文、文件密文）；
+  自定义头名只认 ASCII（`IsAsciiLetter`，中文在 .NET 里算 Letter 的坑）。
 - **配方加字段三窗同步（V1.66）**：`RecipeConfig` 加字段 → 三个录入窗
   （`RecipeManagerForm`/`BatchRecipeForm`/`StationSettingsForm`：输入框 + 保存 + 回填 +
   自动检索回调 + 头部 ASCII 图）→ `SetStationRecipe` 下发 → `StationInfo`（+`Clone`）→
@@ -110,6 +117,9 @@
 | `AgingTestSystem/Services/ProjectPolicyStore.cs` | 项目策略存储（Policy.json 分流/叠加；PolicyKeys 唯一名单；EnumOptions 下拉） |
 | `AgingTestSystem/Dialogs/UnloadJudgeForm.cs` | 下料判定窗（V1.67；Q22 待判定配套，纯代码窗体） |
 | `AgingTestSystem/Dialogs/ProjectSwitchForm.cs` | 项目切换窗（V1.67；仅管理员，纯代码窗体） |
+| `AgingTestSystem/Services/MesMapping.cs` | MES 映射解析纯函数（V1.68；触发器/字段映射/静态字段/自定义头/分地址 vocabulary 唯一出处） |
+| `AgingTestSystem/Services/MesReporter.cs` | MES 上报器（V1.68；后台 POST+重试+离线缓存；Transport 测试缝） |
+| `AgingTestSystem/Services/MesCrypto.cs` | MES 密钥 DPAPI 加解密（V1.68；前缀+内存明文/文件密文） |
 | `AgingTestSystem/Services/TestSessionStore.cs` | 在测任务快照持久化（TestSession.json，断电恢复用，gitignore） |
 | `AgingTestSystem/Services/RecipeAutoCompleteProvider.cs` | 配方名称自动检索 |
 | `AgingTestSystem/Services/ThemeManager.cs` | 深色/浅色主题服务（V1.60；AppTheme 配置 + 双向映射表着色；新窗体打开前 ApplyTo） |
@@ -129,7 +139,7 @@
 - **新增 .cs 文件必须手工在 csproj 登记**（老式项目无通配，漏登记报 CS0246）：
   在 `<Compile Include="...">` 段按目录加一行（纯代码窗体加 `<SubType>Form</SubType>` 即可，
   无需 Designer/resx）。V1.67 实锤：5 个新文件漏登记编译全红。
-- **最终测试验证手段（V1.58.23 起）**：一键跑 `powershell -ExecutionPolicy Bypass -File .opencode\skills\agingtest-regression\scripts\build_and_test.ps1`，自动完成"构建 → 真机冒烟（exe 启动存活）→ 全量回归用例（918+ 断言，覆盖 PasswordHasher/UserManager/配置归一化/IO 映射/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案/编排扩展场景等核心逻辑类）"。也可单独跑同目录 `smoke_test.ps1`（只冒烟）/ `run_unit_tests.ps1`（只回归）。退出码 0 = 全绿。
+- **最终测试验证手段（V1.58.23 起）**：一键跑 `powershell -ExecutionPolicy Bypass -File .opencode\skills\agingtest-regression\scripts\build_and_test.ps1`，自动完成"构建 → 真机冒烟（exe 启动存活）→ 全量回归用例（1013+ 断言，覆盖 PasswordHasher/UserManager/配置归一化/IO 映射/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案/MES映射上报/编排扩展场景等核心逻辑类）"。也可单独跑同目录 `smoke_test.ps1`（只冒烟）/ `run_unit_tests.ps1`（只回归）。退出码 0 = 全绿。
 - **界面像素级 bug（竖线/横线/颜色/叠色/裁剪/滚动条）**：调用全局技能 `winforms-ui-debug`——编译独立 harness 直接 new 目标窗体（指哪打哪，绕过登录/主流程），用反射探私有字段 + PrintWindow 截图 + 像素扫描定位根因并验证修复。含可复用的 csc 编译命令、坐标映射、色值字典与踩坑清单。
 - **调试完自动沉淀技能**：每次用 `winforms-ui-debug` 排查成功（尤其是"一次性改对"的高光案例）后，**主动把可复用的新套路/新踩坑/新型探针代码回写到全局技能 `winforms-ui-debug` 的 SKILL.md**（新增/补充小节、追加踩坑条目），不用等用户提醒。价值标准：换个人靠这份 skill 能更快解决同类问题。
 - 改构建输出（csproj 路径/bin 目录/主 exe 名）时，同步改全局技能 `winforms-ui-debug` 附录 A 的 AgingTestSystem 行（防开工查表拿到旧值）。

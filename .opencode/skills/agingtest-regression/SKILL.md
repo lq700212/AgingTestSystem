@@ -1,6 +1,6 @@
 ---
 name: agingtest-regression
-description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案等全部核心逻辑类（918+ 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
+description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案/MES映射上报等全部核心逻辑类（1013+ 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
 ---
 
 # AgingTestSystem 回归测试套件（冒烟 + 用例一体）
@@ -41,7 +41,7 @@ agingtest-regression/
     └── TestRunner.cs         ← 全部测试用例源码（加用例就改这里）
 ```
 
-## 三、测试覆盖范围（30 个模块，918+ 断言）
+## 三、测试覆盖范围（32 个模块，1013+ 断言）
 
 | 模块 | 覆盖点 |
 | --- | --- |
@@ -75,6 +75,8 @@ agingtest-regression/
 | **DeviceManagerExtended(V1.62)** | 状态口/在线数/启动错误、批量 SN、配方名负压联动、副本隔离、非法电池、连接与间隔热生效、批量阈值+定时器恢复、反方向报警端到端、全局时长回退、定格隔离、清理回全局、不限时、2s 延时门、空闲容错、自愈计数、报警驻留、边沿单次(CSV 计数)、快照全字段+双台+批号、急停、停止再启动、风机生命周期(MockFan)、超长数组与错 id 防火墙、脏快照恢复、显示模式下发/保持/清空+叠加采集可见+GetTestingDeviceIds(V1.66) |
 | PolicyV167(V1.67) | BuildStartBlockText 阻断文案、MapAlarmResult 责任映射、ComputeResumeDuration 剩余/跑超/回拨、ValidatePolicyCombination 矛盾锁、ParseValue 大小写/非法、PolicyKeys↔DeviceConfig↔下拉选项三处同步锁、DeviceConfig 缺省=现状锁、快照新字段缺省锁、ValidateValue 策略分支+点位、NormalizePolicyValue 脏值兜底、WrapTooltip 40字换行、ProjectProfile 非法名/重复/切换拒绝/路径分流、Policy.json 存取往返 |
 | **DeviceManagerPolicy(V1.67)** | 治具责任端到端(装夹异常+CSV)、待判定完成+下料录入(收/跳过/null)+CSV明细、失压保持(不停机+边沿单条不刷屏)、续跑(快照阶段/上电时刻+剩余60s+重抽真空)、泄压(破空阀开+CSV+复位关阀不残留) |
+| MesV168(V1.68) | 触发器解析(空全开/中英文分隔/未知进错/去重/命中)、字段映射(合法/未知本站/坏组/坏MES名/重复覆盖/大小写)、静态字段(坏组/空值)、组包(直通/改名/静态合并覆盖)、ParseValue字符串直通、PolicyKeys含MES三key、MES缺省锁(零行为)、ValidateValue鉴权/触发/映射/静态/布尔/整数分支、NormalizeMesAuthType兜底None、上报器Fake传输(发出/映射/静态/地址/开关零发送/触发器零发送/Mock只写CSV/全灭落盘/恢复补发清盘)、DPAPI往返/前缀/明文兼容/篡改回null、自定义头解析与鉴权优先、分地址解析与命中回退 |
+| **DeviceManagerMes(V1.68)** | Fake抓包端到端：启动/完成(PASS+映射+静态+SN)/下料判定(不良代码)/报警(FAIL)四触发器各一条+发往配置地址 |
 
 **不在覆盖范围**（明确边界）：真串口/真设备通讯（ModbusRtuBarometerReader /
 ScannerService / FanControllerClient / ModbusTcpIoController，靠现场联调）、
@@ -176,3 +178,15 @@ UI 弹窗分支（如配方同名覆盖确认框，靠界面手工测试）、�
     修法是在 csproj 的 Compile Include 里补 5 行（纯代码窗体用 SubType Form 即可，
     无需 Designer/resx）。**教训：write 新 .cs 后先查 csproj 有没有通配，
     没有就地登记再编译。**
+21. **静态传输缝的测试必须 finally 复位**（V1.68：MesReporter.Transport 是进程级静态，
+    Fake 赋值后若不断言 finally 置 null，后续模块/下次运行会继续走 Fake 抓包，
+    表现为"生产代码不发包"的灵异失败）。**教训：进程级测试缝一律 try/finally 复位，
+    离线缓存文件同理删干净。**
+22. **后台线程的用例必须轮询等待**（V1.68：MesReporter 入队后后台线程 5s 内发送，
+    直接断言会抢跑）。修法是 WaitFor 轮询（50ms 步进）+ 宽超时；入队→signal 实时唤醒，
+    实际几百毫秒即到，宽超时只防 CI 抖动。**教训：凡涉后台线程/定时器的断言一律轮询，
+    不写 Sleep 硬等（硬等要么 flaky 要么慢）。**
+23. **char.IsLetter 认中文，HTTP 头名校验必须手写 ASCII 范围**（V1.68：自定义头名
+    "中文头"误放行，用例红）。修法是 IsAsciiLetter（A-Z/a-z/0-9/-/_/.）。
+    **教训：凡"协议层字符集"（HTTP 头、URL、串口关键词）一律按 ASCII 白名单写，
+    别用 .NET 的 Unicode 字符分类。**
