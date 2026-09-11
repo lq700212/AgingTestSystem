@@ -143,6 +143,7 @@ namespace AgingTestSystem.Dialogs
             "FanEnabled",
             "FanAutoDetectEnabled",
             "UseDiAlarmContact",
+            "FanTempShutdownEnabled",
             "ScannerEnabled",
             "ScannerDebugLog",
         };
@@ -305,6 +306,7 @@ namespace AgingTestSystem.Dialogs
             { "MaxTestDurationSeconds", "老化测试最大时长（秒，0=不限时手动停止）" },
             { "UseDiAlarmContact", "气压表报警触点(DI)是否并入报警判定（false/true）" },
             { "FanTempAlarmLimitC", "送风机温度告警上限（°C，0=不启用）" },
+            { "FanTempShutdownEnabled", "超温是否全线联停（false=只记日志；true=超温自动停全部在测工位，默认false）" },
 
             // ===== 扫码枪 =====
             { "ScannerEnabled", "是否启用扫码枪（false/true）" },
@@ -372,7 +374,8 @@ namespace AgingTestSystem.Dialogs
             ("老化测试业务", new string[]
             {
                 "VacuumConfirmTimeoutMs", "CommunicationLossAlarmCount",
-                "MaxTestDurationSeconds", "UseDiAlarmContact", "FanTempAlarmLimitC"
+                "MaxTestDurationSeconds", "UseDiAlarmContact", "FanTempAlarmLimitC",
+                "FanTempShutdownEnabled"
             }),
             ("扫码枪", new string[]
             {
@@ -1549,6 +1552,7 @@ namespace AgingTestSystem.Dialogs
                 case "FanEnabled":
                 case "FanAutoDetectEnabled":
                 case "UseDiAlarmContact":
+                case "FanTempShutdownEnabled":
                 case "ScannerEnabled":
                 case "ScannerDebugLog":
                     if (!bool.TryParse(value, out _)) { error = "应为 true 或 false"; return false; }

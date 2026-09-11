@@ -10,13 +10,15 @@ namespace AgingTestSystem.Dialogs
     /// 批量设置配方窗口（业务逻辑部分）
     ///
     /// 【功能说明】
-    /// 本窗口用于批量设置配方参数（配方名称、延时时间、启动时间、极限温度），
+    /// 本窗口用于批量设置配方参数（配方名称、延时时间、启动时间、极限温度、
+    /// 负压阈值、显示模式），
     /// 点击"加入队列"按钮：
     /// 1. 先把当前配置的配方保存到本地配方存储（Recipes.json，有同名则询问是否覆盖更新）；
     /// 2. 判断当前是否至少选中了一个工位面板（WorkstationPanelView）：
     ///    - 没有任何选中 → 提示"请先选择工位"，配方已保存，可在「参数设置 → 配方管理」中选用，
     ///      或关闭窗口、选中工位后再打开本窗口重新点击"加入队列"应用到选中工位；
-    ///    - 有选中 → 把该配方的名称 / 延时开启（延时时间）/ 延时到达（启动时间）应用到所有选中的工位面板。
+    ///    - 有选中 → 把该配方的名称 / 延时开启（延时时间）/ 延时到达（启动时间）/
+    ///      负压阈值 / 显示模式应用到所有选中的工位面板。
     /// "关闭窗口"按钮直接关闭本窗体。
     ///
     /// 【数据流转】
@@ -33,6 +35,8 @@ namespace AgingTestSystem.Dialogs
     /// │ 延时时间：[__]:[__]:[__]                    │  ← 延时时间（NumericUpDown，对应延时开启）
     /// │ 启动时间：[__]:[__]:[__]                    │  ← 启动时间（NumericUpDown，对应延时到达）
     /// │ 极限温度：[____] °C                         │  ← 极限温度输入框
+    /// │ 负压阈值：[____] kPa                        │  ← V1.66：配方真空工艺要求
+    /// │ 显示模式：[____________]                    │  ← V1.66：烧屏画面记录
     /// ├─────────────────────────────────────────────┤
     /// │         [加入队列]                          │  ← 保存配方 + 应用到选中工位
     /// │         [关闭窗口]                          │  ← 直接关闭
@@ -42,6 +46,8 @@ namespace AgingTestSystem.Dialogs
     /// - 延时时间 → RecipeConfig.DelayTime（工位面板"延时开启"）
     /// - 启动时间 → RecipeConfig.StartTime（工位面板"延时到达"）
     /// - 极限温度 → RecipeConfig.LimitTemperature
+    /// - 负压阈值 → RecipeConfig.NegativePressure（V1.66；必填实数，新建默认=全局阈值）
+    /// - 显示模式 → RecipeConfig.DisplayMode（V1.66；自由文本，只追溯不判定）
     ///
     /// 【注意事项】
     /// 1. 延时时间 / 启动时间均使用三个 NumericUpDown（时:分:秒，V1.28 由 TextBox 改）：
@@ -49,7 +55,7 @@ namespace AgingTestSystem.Dialogs
     /// 2. 温度输入框限制为3位数字，范围 0-999°C；
     /// 3. 配方名称不能为空。
     /// 4. 配方名称输入框支持自动检索：输入时弹出模糊匹配的已存在配方列表供选择，
-    ///    选中后自动填写配方名称、延时时间、启动时间、极限温度（V1.29 新增）。
+    ///    选中后自动填写配方名称、延时时间、启动时间、极限温度、负压阈值、显示模式（V1.29 新增，V1.66 补后两项）。
     /// </summary>
     public partial class BatchRecipeForm : Form
     {
@@ -94,6 +100,13 @@ namespace AgingTestSystem.Dialogs
                 txtRecipeName,
                 _recipes,
                 OnRecipeSelected);
+
+            // 【V1.66】负压阈值框新建默认值=全局阈值（项目未上线无老包袱，所见即所得）；
+            // _deviceManager 为 null（纯保存模式）时用 DeviceConfig 类默认值（-5kPa）。
+            decimal defaultPressure = _deviceManager != null
+                ? _deviceManager.Config.AlarmPressureThresholdKPa
+                : new DeviceConfig().AlarmPressureThresholdKPa;
+            txtNegativePressure.Text = defaultPressure.ToString("0.#");
         }
 
         /// <summary>
@@ -125,6 +138,10 @@ namespace AgingTestSystem.Dialogs
 
             // 回填极限温度
             txtLimitTemp.Text = recipe.LimitTemperature.ToString("0.#");
+
+            // 【V1.66】回填负压阈值 + 显示模式（配方一定有实数，直接显示；显示模式 null→空串）
+            txtNegativePressure.Text = recipe.NegativePressure.ToString("0.#");
+            txtDisplayMode.Text = recipe.DisplayMode ?? "";
         }
 
         /// <summary>
@@ -174,6 +191,24 @@ namespace AgingTestSystem.Dialogs
                 return null;
             }
 
+            // 【V1.66】解析负压阈值（kPa，必填实数）：与公共参数窗同口径 ±9999。
+            // 不搞"0=用全局"魔法——新建默认已填全局值，用户看到的就是存的。
+            decimal negativePressure;
+            if (!decimal.TryParse(txtNegativePressure.Text.Trim(), out negativePressure))
+            {
+                MessageBox.Show("负压阈值输入无效，请输入数字", "输入验证",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                txtNegativePressure.Focus();
+                return null;
+            }
+            if (negativePressure < -9999 || negativePressure > 9999)
+            {
+                MessageBox.Show("负压阈值超出范围（-9999~9999 kPa）", "输入验证",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                txtNegativePressure.Focus();
+                return null;
+            }
+
             // 创建配方配置对象
             // Id 由 RecipeStorage.SaveWithDuplicateCheck 在保存时统一分配，这里留 0。
             // 延时时间 → DelayTime（延时开启），启动时间 → StartTime（延时到达），
@@ -184,6 +219,8 @@ namespace AgingTestSystem.Dialogs
                 DelayTime = delayTime,
                 StartTime = delayArriveTime,
                 LimitTemperature = limitTemp,
+                NegativePressure = negativePressure,
+                DisplayMode = txtDisplayMode.Text.Trim(),
                 CreateTime = DateTime.Now,
                 IsEnabled = true
             };
@@ -241,7 +278,8 @@ namespace AgingTestSystem.Dialogs
 
                 // 写入工位静态信息（采集线程叠加后，工位面板同步显示配方名称 / 延时开启 / 延时到达）
                 // 【V1.59】配方的负压值一并下发：启动测试时作为该工位的真空到位/报警阈值
-                _deviceManager.SetStationRecipe(deviceId, recipe.Name, recipe.NegativePressure);
+                // 【V1.66】显示模式一并下发：烧屏画面追溯（采集叠加到 BarometerData.DisplayMode）
+                _deviceManager.SetStationRecipe(deviceId, recipe.Name, recipe.NegativePressure, recipe.DisplayMode);
                 _deviceManager.SetStationDelayTimes(deviceId, recipe.DelayTime, recipe.StartTime);
                 appliedCount++;
             }

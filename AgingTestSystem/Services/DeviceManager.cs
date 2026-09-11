@@ -982,21 +982,24 @@ namespace AgingTestSystem.Services
         /// <param name="recipeName">配方名称（空白视为清空）</param>
         public void SetStationRecipeName(int deviceId, string recipeName)
         {
-            SetStationRecipe(deviceId, recipeName, null);
+            SetStationRecipe(deviceId, recipeName, null, null);
         }
 
         /// <summary>
-        /// 设置指定工位的配方名称 + 负压值设定（【V1.59 新增】）
+        /// 设置指定工位的配方名称 + 负压值 + 显示模式（【V1.59 新增，V1.66 加显示模式】）
         ///
         /// 【为什么要把负压值一起存】配方的 NegativePressure 是该产品的真空工艺要求，
         /// 启动测试时要用它做"到位判定/报警阈值"。原来只存配方名字符串，
         /// 编排层拿不到数值，导致配方参数与实际判定脱节。
         /// negativePressure 传 null = 不修改已有值（兼容只改名不改工艺的调用）。
+        /// 【V1.66】显示模式同理：配方 DisplayMode 是"这次烧什么画面"的追溯依据，
+        /// 与配方名同步下发、同步清空；displayMode 传 null = 不修改已有值。
         /// </summary>
         /// <param name="deviceId">工位编号（1 ~ TotalBarometers）</param>
         /// <param name="recipeName">配方名称（空白视为清空）</param>
         /// <param name="negativePressure">配方负压值（kPa）；null = 保持不变</param>
-        public void SetStationRecipe(int deviceId, string recipeName, decimal? negativePressure)
+        /// <param name="displayMode">配方显示模式；null = 保持不变</param>
+        public void SetStationRecipe(int deviceId, string recipeName, decimal? negativePressure, string displayMode)
         {
             if (deviceId < 1 || deviceId > _config.TotalBarometers) return;
             string name = recipeName?.Trim() ?? "";
@@ -1012,10 +1015,15 @@ namespace AgingTestSystem.Services
                 {
                     info.RecipeNegativePressure = negativePressure.Value;
                 }
-                // 清空配方名时把负压值一并清掉，避免残留旧工艺
+                if (displayMode != null)
+                {
+                    info.DisplayMode = displayMode.Trim();
+                }
+                // 清空配方名时把负压值与显示模式一并清掉，避免残留旧工艺
                 if (string.IsNullOrEmpty(name))
                 {
                     info.RecipeNegativePressure = null;
+                    info.DisplayMode = null;
                 }
             }
         }
@@ -1124,6 +1132,11 @@ namespace AgingTestSystem.Services
             if (!string.IsNullOrEmpty(info.RecipeName))
             {
                 data.RecipeName = info.RecipeName;
+            }
+            // 【V1.66】显示模式与配方名同步叠加：配了才写，空=没配不过来
+            if (!string.IsNullOrEmpty(info.DisplayMode))
+            {
+                data.DisplayMode = info.DisplayMode;
             }
             if (info.DelayTime.HasValue)
             {
@@ -1653,7 +1666,7 @@ namespace AgingTestSystem.Services
             if (deviceId < 1 || deviceId > _config.TotalBarometers) return;
 
             // ---- 1) 读取工位配方并定格本次任务参数 ----
-            string sn = "", recipeName = "";
+            string sn = "", recipeName = "", displayMode = "";
             TimeSpan delayTime = TimeSpan.Zero, startTime = TimeSpan.Zero;
             decimal? recipePressure = null;
             lock (_stationInfoLock)
@@ -1662,6 +1675,7 @@ namespace AgingTestSystem.Services
                 {
                     sn = info.SerialNumber ?? "";
                     recipeName = info.RecipeName ?? "";
+                    displayMode = info.DisplayMode ?? "";
                     if (info.DelayTime.HasValue) delayTime = info.DelayTime.Value;
                     if (info.StartTime.HasValue) startTime = info.StartTime.Value;
                     recipePressure = info.RecipeNegativePressure;
@@ -1674,7 +1688,10 @@ namespace AgingTestSystem.Services
             {
                 durationSecs = _config.MaxTestDurationSeconds;
             }
-            // 报警/到位阈值：配方负压值优先，未配置回退全局 AlarmPressureThresholdKPa
+            // 报警/到位阈值：配方负压值优先（null=没下发，如手输配方名未命中），
+            // 否则回退全局 AlarmPressureThresholdKPa。
+            // 【V1.66】不做"0=回全局"魔法：项目未上线、无老配方包袱，三个录入窗现在必填实数
+            // （新建默认=全局值），存什么用什么，所见即所得。
             decimal thresholdKPa = recipePressure ?? _config.AlarmPressureThresholdKPa;
 
             // 断电恢复：以快照参数为准（中断前的工艺不能被中途改动污染）
@@ -1708,7 +1725,8 @@ namespace AgingTestSystem.Services
             }
 
             TestEventLogger.Write(_currentLotNumber, deviceId, "启动",
-                $"启动老化测试（开真空，待真空建立+延时开启到后自动上电）SN:{sn} 配方:{recipeName}");
+                $"启动老化测试（开真空，待真空建立+延时开启到后自动上电）SN:{sn} 配方:{recipeName}" +
+                (string.IsNullOrEmpty(displayMode) ? "" : $" 显示模式:{displayMode}"));
 
             // ---- 4) 任务快照落盘（断电/崩溃后可恢复重测）----
             SaveSessionSnapshot();
@@ -1902,6 +1920,28 @@ namespace AgingTestSystem.Services
                     if (_testingStates[i]) count++;
                 }
                 return count;
+            }
+        }
+
+        /// <summary>
+        /// 获取当前正在测试的工位号列表（【V1.66 新增】超温全线联停用）。
+        ///
+        /// 【为什么单开一个方法】调用方（MainForm 超温联停）要的是"id 列表"而不是
+        /// bool 向量，用 GetTestingStates 再自己转一遍也行，但"在测 id"是个稳定业务概念，
+        /// 值得一个名字。返回副本，调用方随便改不影响内部状态。
+        /// </summary>
+        /// <returns>在测工位号数组；无在测返回空数组（不返回 null，调用方免判空）</returns>
+        public int[] GetTestingDeviceIds()
+        {
+            lock (_stateLock)
+            {
+                System.Collections.Generic.List<int> ids =
+                    new System.Collections.Generic.List<int>();
+                for (int i = 0; i < _testingStates.Length; i++)
+                {
+                    if (_testingStates[i]) ids.Add(i + 1);
+                }
+                return ids.ToArray();
             }
         }
 

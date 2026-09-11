@@ -861,6 +861,7 @@ namespace AgingTestSystem.Tests
                     DelayTime = TimeSpan.FromSeconds(90),
                     StartTime = new TimeSpan(8, 30, 0),
                     LimitTemperature = 75.5m,
+                    DisplayMode = "白场24h",
                     CreateTime = new DateTime(2026, 8, 25, 10, 0, 0),
                     IsEnabled = true
                 },
@@ -884,6 +885,8 @@ namespace AgingTestSystem.Tests
                 Check("DelayTime 往返一致", loaded[0].DelayTime == TimeSpan.FromSeconds(90));
                 Check("StartTime 往返一致", loaded[0].StartTime == new TimeSpan(8, 30, 0));
                 Check("LimitTemperature 往返一致", loaded[0].LimitTemperature == 75.5m);
+                Check("DisplayMode 往返一致", loaded[0].DisplayMode == "白场24h");
+                Check("DisplayMode 缺值往返为 null", loaded[1].DisplayMode == null);
                 Check("CreateTime 往返一致", loaded[0].CreateTime == new DateTime(2026, 8, 25, 10, 0, 0));
                 Check("IsEnabled 往返一致(false)", loaded[1].IsEnabled == false);
             }
@@ -1446,6 +1449,31 @@ namespace AgingTestSystem.Tests
                 !AgingSequencer.ShouldPowerOn(true, TimeSpan.FromSeconds(-1), 0));
             Check("计时为负不完成",
                 !AgingSequencer.ShouldComplete(TimeSpan.FromSeconds(-1), 3600));
+
+            // ── V1.66：启动风险提示文案（烧屏：0时长=无限点亮只能手动停/空SN=断链，只警告不拦截） ──
+            Check("两类都空返回空串",
+                AgingSequencer.BuildStartWarningText(new int[0], new int[0]) == "");
+            Check("null输入返回空串",
+                AgingSequencer.BuildStartWarningText(null, null) == "");
+            string warnZero = AgingSequencer.BuildStartWarningText(new[] { 3, 5 }, new int[0]);
+            Check("0时长警告含工位号",
+                warnZero.Contains("3") && warnZero.Contains("5"));
+            string warnSn = AgingSequencer.BuildStartWarningText(new int[0], new[] { 7 });
+            Check("空SN警告含工位号",
+                warnSn.Contains("7") && warnSn.Contains("SN"));
+            string warnBoth = AgingSequencer.BuildStartWarningText(new[] { 1 }, new[] { 2 });
+            Check("两类并存拼两段",
+                warnBoth.Contains("1") && warnBoth.Contains("2"));
+
+            // ── V1.66：超温全线联停判定（默认关=现状只记日志；全机单探头只能全线停） ──
+            Check("开关关闭永不停",
+                !AgingSequencer.IsFanOverTempShutdown(999f, 60f, false));
+            Check("上限0=不启用",
+                !AgingSequencer.IsFanOverTempShutdown(999f, 0f, true));
+            Check("恰等上限不停(边界>)",
+                !AgingSequencer.IsFanOverTempShutdown(60f, 60f, true));
+            Check("超限+开关开+上限>0才停",
+                AgingSequencer.IsFanOverTempShutdown(60.1f, 60f, true));
         }
 
         // =====================================================================
@@ -1558,6 +1586,7 @@ namespace AgingTestSystem.Tests
                 DeviceId = 2,
                 RecipeName = "R",
                 RecipeNegativePressure = -60m,
+                DisplayMode = "白场",
                 DelayTime = TimeSpan.FromSeconds(30),
                 StartTime = TimeSpan.FromHours(4)
             };
@@ -1565,6 +1594,8 @@ namespace AgingTestSystem.Tests
             ic.RecipeNegativePressure = 0m;
             Check("StationInfo.Clone 复制负压值且深拷贝互不影响",
                 info.RecipeNegativePressure == -60m && ic.DelayTime == TimeSpan.FromSeconds(30));
+            Check("StationInfo.Clone 复制显示模式",
+                ic.DisplayMode == "白场");
             Check("RecipeNegativePressure 可为 null(未配置=全局兜底)",
                 new StationInfo().RecipeNegativePressure == null);
         }
@@ -1610,10 +1641,10 @@ namespace AgingTestSystem.Tests
                 Check("IP候选/映射表不强制校验",
                     ok("FanIpCandidates", "xxx") && ok("IoBackupChannelMappings", "xxx"));
 
-                // _boolKeys 10 项逐项过校验（防"只加一边"的配置漂移）
+                // _boolKeys 11 项逐项过校验（防"只加一边"的配置漂移）
                 var boolKeys = (HashSet<string>)typeof(SettingsForm).GetField("_boolKeys",
                     BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
-                Check("布尔键10项", boolKeys != null && boolKeys.Count == 10);
+                Check("布尔键11项", boolKeys != null && boolKeys.Count == 11);
                 if (boolKeys != null)
                 {
                     bool allBoolOk = boolKeys.All(k => ok(k, "true") && ok(k, "false") && !ok(k, "YES"));
@@ -1996,9 +2027,16 @@ namespace AgingTestSystem.Tests
                 new RecipeConfig { Id = 1, Name = "高温配方" },
                 new RecipeConfig { Id = 2, Name = "r2-abc" }
             };
-            var rmForm = new RecipeManagerForm(recipes);
+            var rmForm = new RecipeManagerForm(recipes, -5m);
             try
             {
+                // V1.66：负压/显示模式框回填（存什么显什么：配方0→框0，null→空串，无魔法值）
+                var nudP = typeof(RecipeManagerForm).GetField("nudNegativePressure",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(rmForm) as NumericUpDown;
+                var txtM = typeof(RecipeManagerForm).GetField("txtDisplayMode",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(rmForm) as TextBox;
+                Check("负压框回填配方值", nudP != null && nudP.Value == 0m);
+                Check("显示模式框null回填空串", txtM != null && txtM.Text == "");
                 var find = typeof(RecipeManagerForm).GetMethod("FindRecipeIndex",
                     BindingFlags.NonPublic | BindingFlags.Instance);
                 Check("反射找到 FindRecipeIndex", find != null);

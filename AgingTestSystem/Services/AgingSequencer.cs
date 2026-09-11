@@ -100,5 +100,54 @@ namespace AgingTestSystem.Services
             }
             return elapsedSinceValveOpen.TotalMilliseconds >= confirmTimeoutMs;
         }
+
+        /// <summary>
+        /// 启动前风险提示文案（【V1.66 新增】纯函数，烧屏场景专用）。
+        ///
+        /// 【为什么是"警告"不是"拦截"】0 时长（不限时长永不自动完成）和空 SN（追溯断链）
+        /// 在烧屏工艺里都是高风险，但是否允许仍是现场工艺权——软件只负责把丑话说在前面，
+        /// 不替现场做主。调用方（MainForm 启动确认框）把返回的文本直接拼进确认框，
+        /// 用户点"是"照跑、点"否"取消，无新弹窗、不改流程。
+        /// </summary>
+        /// <param name="zeroDurationIds">有效时长为 0 的工位号（配方与全局都为 0 → 不限时长）</param>
+        /// <param name="emptySnIds">未绑定 SN 的工位号</param>
+        /// <returns>警告文本块；两类都为空返回 ""（调用方直接拼，不用判空）</returns>
+        public static string BuildStartWarningText(int[] zeroDurationIds, int[] emptySnIds)
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+            if (zeroDurationIds != null && zeroDurationIds.Length > 0)
+            {
+                sb.Append("\r\n⚠ 以下工位老化时长为 0（不限时长、永不到时完成，只能手动停止）：");
+                sb.Append(string.Join("、", zeroDurationIds));
+            }
+            if (emptySnIds != null && emptySnIds.Length > 0)
+            {
+                sb.Append("\r\n⚠ 以下工位未绑定 SN（完成后无法追溯到单体）：");
+                sb.Append(string.Join("、", emptySnIds));
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// 送风机超温是否应全线联停（【V1.66 新增】纯函数）。
+        ///
+        /// 【为什么是全线不是单台】全机只有一个温度探头（送风机控制屏 0x0002），
+        /// 没有分工位温度，做不到单台联停。超温停单台还是全线（问题清单 Q16）等现场拍板，
+        /// 在此之前只提供"全线联停"一种动作，且默认关闭（enabled=false=现状：只记日志）。
+        /// 边沿触发（只停一次、回温后自动复位允许再停）由调用方 MainForm 持状态实现，
+        /// 本函数只判"此刻应不应该停"，无状态、可单测。
+        /// </summary>
+        /// <param name="temperatureC">送风机当前温度（°C）</param>
+        /// <param name="limitC">告警上限（配置 FanTempAlarmLimitC；≤0=不启用）</param>
+        /// <param name="shutdownEnabled">联停开关（配置 FanTempShutdownEnabled；默认 false）</param>
+        /// <returns>true=此刻应执行全线联停</returns>
+        public static bool IsFanOverTempShutdown(float temperatureC, float limitC, bool shutdownEnabled)
+        {
+            if (!shutdownEnabled || limitC <= 0f)
+            {
+                return false;
+            }
+            return temperatureC > limitC;
+        }
     }
 }

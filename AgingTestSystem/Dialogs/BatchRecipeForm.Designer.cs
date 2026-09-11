@@ -84,6 +84,12 @@ namespace AgingTestSystem.Dialogs
             this.tableLayoutPanelTemp = new System.Windows.Forms.TableLayoutPanel();
             this.txtLimitTemp = new System.Windows.Forms.TextBox();
             this.lblTempUnit = new System.Windows.Forms.Label();
+            this.lblNegativePressureLabel = new System.Windows.Forms.Label();
+            this.tableLayoutPanelPressure = new System.Windows.Forms.TableLayoutPanel();
+            this.txtNegativePressure = new System.Windows.Forms.TextBox();
+            this.lblPressureUnit = new System.Windows.Forms.Label();
+            this.lblDisplayModeLabel = new System.Windows.Forms.Label();
+            this.txtDisplayMode = new System.Windows.Forms.TextBox();
             this.panelButtons = new System.Windows.Forms.Panel();
             this.btnAddToQueue = new System.Windows.Forms.Button();
             this.btnClose = new System.Windows.Forms.Button();
@@ -98,6 +104,7 @@ namespace AgingTestSystem.Dialogs
             ((System.ComponentModel.ISupportInitialize)(this.nudStartMinutes)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudStartSeconds)).BeginInit();
             this.tableLayoutPanelTemp.SuspendLayout();
+            this.tableLayoutPanelPressure.SuspendLayout();
             this.panelButtons.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -113,7 +120,7 @@ namespace AgingTestSystem.Dialogs
             this.tableLayoutPanelMain.RowCount = 2;
             this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 80F));
-            this.tableLayoutPanelMain.Size = new System.Drawing.Size(480, 320);
+            this.tableLayoutPanelMain.Size = new System.Drawing.Size(480, 400);
             this.tableLayoutPanelMain.TabIndex = 0;
             // 
             // tableLayoutPanelInput
@@ -129,16 +136,22 @@ namespace AgingTestSystem.Dialogs
             this.tableLayoutPanelInput.Controls.Add(this.tableLayoutPanelStart, 1, 2);
             this.tableLayoutPanelInput.Controls.Add(this.lblLimitTempLabel, 0, 3);
             this.tableLayoutPanelInput.Controls.Add(this.tableLayoutPanelTemp, 1, 3);
+            this.tableLayoutPanelInput.Controls.Add(this.lblNegativePressureLabel, 0, 4);
+            this.tableLayoutPanelInput.Controls.Add(this.tableLayoutPanelPressure, 1, 4);
+            this.tableLayoutPanelInput.Controls.Add(this.lblDisplayModeLabel, 0, 5);
+            this.tableLayoutPanelInput.Controls.Add(this.txtDisplayMode, 1, 5);
             this.tableLayoutPanelInput.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tableLayoutPanelInput.Location = new System.Drawing.Point(3, 3);
             this.tableLayoutPanelInput.Margin = new System.Windows.Forms.Padding(3, 3, 3, 0);
             this.tableLayoutPanelInput.Name = "tableLayoutPanelInput";
-            this.tableLayoutPanelInput.RowCount = 4;
+            this.tableLayoutPanelInput.RowCount = 6;
+            this.tableLayoutPanelInput.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 40F));
+            this.tableLayoutPanelInput.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 40F));
             this.tableLayoutPanelInput.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 40F));
             this.tableLayoutPanelInput.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 40F));
             this.tableLayoutPanelInput.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 40F));
             this.tableLayoutPanelInput.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelInput.Size = new System.Drawing.Size(474, 237);
+            this.tableLayoutPanelInput.Size = new System.Drawing.Size(474, 317);
             this.tableLayoutPanelInput.TabIndex = 0;
             // 
             // lblRecipeNameLabel
@@ -350,7 +363,7 @@ namespace AgingTestSystem.Dialogs
             this.lblLimitTempLabel.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblLimitTempLabel.Location = new System.Drawing.Point(3, 120);
             this.lblLimitTempLabel.Name = "lblLimitTempLabel";
-            this.lblLimitTempLabel.Size = new System.Drawing.Size(94, 117);
+            this.lblLimitTempLabel.Size = new System.Drawing.Size(94, 40);
             this.lblLimitTempLabel.TabIndex = 8;
             this.lblLimitTempLabel.Text = "极限温度：";
             this.lblLimitTempLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
@@ -363,7 +376,7 @@ namespace AgingTestSystem.Dialogs
             this.tableLayoutPanelTemp.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 40F));
             this.tableLayoutPanelTemp.Controls.Add(this.txtLimitTemp, 0, 0);
             this.tableLayoutPanelTemp.Controls.Add(this.lblTempUnit, 1, 0);
-            this.tableLayoutPanelTemp.Location = new System.Drawing.Point(103, 165);
+            this.tableLayoutPanelTemp.Location = new System.Drawing.Point(103, 127);
             this.tableLayoutPanelTemp.Name = "tableLayoutPanelTemp";
             this.tableLayoutPanelTemp.RowCount = 1;
             this.tableLayoutPanelTemp.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
@@ -389,6 +402,76 @@ namespace AgingTestSystem.Dialogs
             this.lblTempUnit.Size = new System.Drawing.Size(23, 12);
             this.lblTempUnit.TabIndex = 1;
             this.lblTempUnit.Text = "°C";
+            // 
+            // lblNegativePressureLabel
+            // 
+            // 【V1.66】配方负压阈值（kPa）：以前本窗没有这个框，新建配方 NegativePressure 恒 0，
+            // 下发后阈值≈0（负压域里≈永远到位），等于悄悄关掉真空保护。现在必填实数，
+            // 新建默认=全局 AlarmPressureThresholdKPa，存什么定格什么，无魔法值。
+            // 
+            this.lblNegativePressureLabel.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblNegativePressureLabel.Location = new System.Drawing.Point(3, 160);
+            this.lblNegativePressureLabel.Name = "lblNegativePressureLabel";
+            this.lblNegativePressureLabel.Size = new System.Drawing.Size(94, 40);
+            this.lblNegativePressureLabel.TabIndex = 10;
+            this.lblNegativePressureLabel.Text = "负压阈值：";
+            this.lblNegativePressureLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
+            // tableLayoutPanelPressure
+            // 
+            this.tableLayoutPanelPressure.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
+            this.tableLayoutPanelPressure.ColumnCount = 2;
+            this.tableLayoutPanelPressure.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 60F));
+            this.tableLayoutPanelPressure.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 40F));
+            this.tableLayoutPanelPressure.Controls.Add(this.txtNegativePressure, 0, 0);
+            this.tableLayoutPanelPressure.Controls.Add(this.lblPressureUnit, 1, 0);
+            this.tableLayoutPanelPressure.Location = new System.Drawing.Point(103, 167);
+            this.tableLayoutPanelPressure.Name = "tableLayoutPanelPressure";
+            this.tableLayoutPanelPressure.RowCount = 1;
+            this.tableLayoutPanelPressure.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            this.tableLayoutPanelPressure.Size = new System.Drawing.Size(368, 26);
+            this.tableLayoutPanelPressure.TabIndex = 11;
+            // 
+            // txtNegativePressure
+            // 
+            this.txtNegativePressure.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.txtNegativePressure.Location = new System.Drawing.Point(3, 3);
+            this.txtNegativePressure.MaxLength = 7;
+            this.txtNegativePressure.Name = "txtNegativePressure";
+            this.txtNegativePressure.Size = new System.Drawing.Size(214, 21);
+            this.txtNegativePressure.TabIndex = 0;
+            // 
+            // lblPressureUnit
+            // 
+            this.lblPressureUnit.Anchor = System.Windows.Forms.AnchorStyles.Left;
+            this.lblPressureUnit.AutoSize = true;
+            this.lblPressureUnit.Location = new System.Drawing.Point(223, 7);
+            this.lblPressureUnit.Name = "lblPressureUnit";
+            this.lblPressureUnit.Size = new System.Drawing.Size(23, 12);
+            this.lblPressureUnit.TabIndex = 1;
+            this.lblPressureUnit.Text = "kPa";
+            // 
+            // lblDisplayModeLabel
+            // 
+            // 【V1.66】烧屏画面记录（自由文本如"白场/RGB循环/棋盘格"）：只存配方追溯，
+            // 不参与任何判定；下发工位走 SetStationRecipe（见 DeviceManager）。
+            // 
+            this.lblDisplayModeLabel.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblDisplayModeLabel.Location = new System.Drawing.Point(3, 200);
+            this.lblDisplayModeLabel.Name = "lblDisplayModeLabel";
+            this.lblDisplayModeLabel.Size = new System.Drawing.Size(94, 40);
+            this.lblDisplayModeLabel.TabIndex = 12;
+            this.lblDisplayModeLabel.Text = "显示模式：";
+            this.lblDisplayModeLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
+            // txtDisplayMode
+            // 
+            this.txtDisplayMode.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
+            this.txtDisplayMode.Location = new System.Drawing.Point(103, 207);
+            this.txtDisplayMode.MaxLength = 50;
+            this.txtDisplayMode.Name = "txtDisplayMode";
+            this.txtDisplayMode.Size = new System.Drawing.Size(368, 21);
+            this.txtDisplayMode.TabIndex = 13;
             // 
             // panelButtons
             // 
@@ -443,6 +526,8 @@ namespace AgingTestSystem.Dialogs
             ((System.ComponentModel.ISupportInitialize)(this.nudStartSeconds)).EndInit();
             this.tableLayoutPanelTemp.ResumeLayout(false);
             this.tableLayoutPanelTemp.PerformLayout();
+            this.tableLayoutPanelPressure.ResumeLayout(false);
+            this.tableLayoutPanelPressure.PerformLayout();
             this.panelButtons.ResumeLayout(false);
             this.ResumeLayout(false);
 
@@ -455,7 +540,7 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>主布局容器（2行：输入区域/按钮区域）</summary>
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelMain;
-        /// <summary>输入区域布局容器（4行：配方名称/延时时间/启动时间/极限温度）</summary>
+        /// <summary>输入区域布局容器（6行：配方名称/延时时间/启动时间/极限温度/负压阈值/显示模式）</summary>
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelInput;
         /// <summary>"配方名称"标签</summary>
         private System.Windows.Forms.Label lblRecipeNameLabel;
@@ -497,6 +582,18 @@ namespace AgingTestSystem.Dialogs
         private System.Windows.Forms.TextBox txtLimitTemp;
         /// <summary>温度单位标签（°C）</summary>
         private System.Windows.Forms.Label lblTempUnit;
+        /// <summary>"负压阈值"标签（【V1.66】配方真空工艺要求，kPa）</summary>
+        private System.Windows.Forms.Label lblNegativePressureLabel;
+        /// <summary>负压阈值输入布局（数值 + 单位）</summary>
+        private System.Windows.Forms.TableLayoutPanel tableLayoutPanelPressure;
+        /// <summary>负压阈值输入框（【V1.66】文本解析，范围±9999，新建默认=全局阈值）</summary>
+        private System.Windows.Forms.TextBox txtNegativePressure;
+        /// <summary>负压单位标签（kPa）</summary>
+        private System.Windows.Forms.Label lblPressureUnit;
+        /// <summary>"显示模式"标签（【V1.66】烧屏画面记录）</summary>
+        private System.Windows.Forms.Label lblDisplayModeLabel;
+        /// <summary>显示模式输入框（【V1.66】自由文本，最长50）</summary>
+        private System.Windows.Forms.TextBox txtDisplayMode;
         /// <summary>底部按钮面板（2个按钮：加入队列/关闭窗口）</summary>
         private System.Windows.Forms.Panel panelButtons;
         /// <summary>加入队列按钮</summary>

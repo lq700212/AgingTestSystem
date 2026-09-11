@@ -331,18 +331,24 @@ namespace AgingTestSystem.Tests
                 dm.SetStationSerialNumbers(new Dictionary<int, string>());
 
                 // ---------- E8 配方名/负压联动 ----------
-                dm.SetStationRecipe(1, "R", -3m);
+                dm.SetStationRecipe(1, "R", -3m, "白场");
                 Check("[扩展] 配方名+负压同存",
                     dm.GetStationInfo(1).RecipeName == "R"
                     && dm.GetStationInfo(1).RecipeNegativePressure == -3m);
+                Check("[扩展] 显示模式同存",
+                    dm.GetStationInfo(1).DisplayMode == "白场");
                 dm.SetStationRecipeName(1, "R2");
                 Check("[扩展] 只改名不改负压",
                     dm.GetStationInfo(1).RecipeName == "R2"
                     && dm.GetStationInfo(1).RecipeNegativePressure == -3m);
+                Check("[扩展] 只改名不改显示模式",
+                    dm.GetStationInfo(1).DisplayMode == "白场");
                 dm.SetStationRecipeName(1, "  ");
                 Check("[扩展] 清空名联动清负压",
                     dm.GetStationInfo(1).RecipeName == ""
                     && dm.GetStationInfo(1).RecipeNegativePressure == null);
+                Check("[扩展] 清空名联动清显示模式",
+                    dm.GetStationInfo(1).DisplayMode == null);
                 var cloneGuard = dm.GetStationInfo(1);
                 cloneGuard.RecipeName = "HACK";
                 Check("[扩展] 工位信息返回副本", dm.GetStationInfo(1).RecipeName == "");
@@ -373,7 +379,7 @@ namespace AgingTestSystem.Tests
                 dm.RecoverSession(null); dm.DiscardSession(null);
                 dm.RecoverSession(new TestSession { Stations = new List<TestSessionStation>() });
                 dm.DiscardSession(new TestSession { Stations = new List<TestSessionStation>() });
-                dm.SetStationRecipe(99, "x", 1m); dm.SetStationSerialNumber(0, "x");
+                dm.SetStationRecipe(99, "x", 1m, null); dm.SetStationSerialNumber(0, "x");
                 dm.SetStationDelayTimes(99, TimeSpan.Zero, TimeSpan.Zero);
                 Check("[扩展] 非法输入全静默", dm.GetTestingCount() == 0);
 
@@ -441,7 +447,7 @@ namespace AgingTestSystem.Tests
                     dm.GetBarometerData(1).LastTestResult == "");
 
                 // ---------- E4 中途改全局不影响在测台（定格隔离） ----------
-                dm.SetStationRecipe(1, "RX", -3m);
+                dm.SetStationRecipe(1, "RX", -3m, null);
                 dm.SetStationDelayTimes(1, TimeSpan.Zero, TimeSpan.FromSeconds(1.5));
                 reader.SetPressure(1, -4m);
                 dm.StartTesting(new[] { 1 });
@@ -460,14 +466,30 @@ namespace AgingTestSystem.Tests
 
                 // ---------- E30 定格清理回全局（反射卫生锁） ----------
                 config.AlarmPressureThresholdKPa = -7m;
-                dm.SetStationRecipe(2, "RZ", -3m);
+                dm.SetStationRecipe(2, "RZ", -3m, null);
                 dm.StartTesting(new[] { 2 });
                 Thread.Sleep(150);
                 dm.StopTesting(new[] { 2 });
                 Check("[扩展][清理] 停止后阈值回全局",
                     ((decimal[])GetDmField(dm, "_sessionThresholdKPa"))[1] == -7m);
                 config.AlarmPressureThresholdKPa = -5m;
-                dm.SetStationRecipe(2, "RZ", -3m); // 恢复后续场景用的配方
+                dm.SetStationRecipe(2, "RZ", -3m, null); // 恢复后续场景用的配方
+
+                // ---------- E66 显示模式叠加 + 在测id（V1.66） ----------
+                reader.SetPressure(1, -6m);
+                dm.SetStationRecipe(1, "RM66", -3m, "棋盘格");
+                dm.SetStationDelayTimes(1, TimeSpan.Zero, TimeSpan.FromSeconds(60));
+                dm.StartTesting(new[] { 1 });
+                Check("[扩展][显示模式] 叠加后采集可见",
+                    WaitUntil(() =>
+                    {
+                        var d = dm.GetBarometerData(1);
+                        return d != null && d.DisplayMode == "棋盘格";
+                    }, 3000));
+                Check("[扩展][在测id] 仅1号在测",
+                    dm.GetTestingDeviceIds().Length == 1 && dm.GetTestingDeviceIds()[0] == 1);
+                dm.StopTesting(new[] { 1 });
+                Check("[扩展][在测id] 停止后为空", dm.GetTestingDeviceIds().Length == 0);
 
                 // ---------- E17 不限时长永不完成 ----------
                 reader.SetPressure(2, -6m);
@@ -534,8 +556,8 @@ namespace AgingTestSystem.Tests
                 // ---------- E2/E6/E11/E12/E23 快照全字段 + 多台 + 批号 ----------
                 dm.CurrentLotNumber = "LOT-E2E";
                 dm.SetStationSerialNumber(1, "SN-E");
-                dm.SetStationRecipe(1, "RE", -3m);
-                dm.SetStationRecipe(2, "", null); // E30 留下的 RZ/-3 清掉：2 号测全局兜底必须无配方
+                dm.SetStationRecipe(1, "RE", -3m, null);
+                dm.SetStationRecipe(2, "", null, null); // E30 留下的 RZ/-3 清掉：2 号测全局兜底必须无配方
                 dm.SetStationDelayTimes(1, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(30));
                 reader.SetPressure(1, -6m);
                 reader.SetPressure(2, -6m);
@@ -719,7 +741,7 @@ namespace AgingTestSystem.Tests
             {
                 // ================= 场景7+1：正常全流程（工位1）=================
                 // 配方：负压值 -3（到位/报警阈值）、延时开启 0.5s、老化 1.5s
-                dm.SetStationRecipe(1, "配方R1", -3m);
+                dm.SetStationRecipe(1, "配方R1", -3m, null);
                 dm.SetStationDelayTimes(1, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1.5));
 
                 dm.StartTesting(new[] { 1 });
@@ -800,7 +822,7 @@ namespace AgingTestSystem.Tests
 
                 // ================= 场景4：手动中止（工位2 复位后再启停）=================
                 dm.ResetDevices(new[] { 2 }); // 清掉场景2的故障态
-                dm.SetStationRecipe(2, "R2", -5m);
+                dm.SetStationRecipe(2, "R2", -5m, null);
                 dm.SetStationDelayTimes(2, TimeSpan.Zero, TimeSpan.FromSeconds(60)); // 长老化
                 dm.StartTesting(new[] { 2 });
                 reader.SetPressure(2, -6m); // -6 ≤ -5 到位 → 应自动上电
@@ -819,7 +841,7 @@ namespace AgingTestSystem.Tests
                 Check("[中止] 全部停止后快照清空", TestSessionStore.Load() == null);
 
                 // ================= 场景5：断电恢复（工位4，放最后——本场景会 Dispose dm）=================
-                dm.SetStationRecipe(4, "配方R4", -90m);
+                dm.SetStationRecipe(4, "配方R4", -90m, null);
                 dm.SetStationDelayTimes(4, TimeSpan.Zero, TimeSpan.FromSeconds(30)); // 长老化不会自己完成
                 dm.StartTesting(new[] { 4 });
                 reader.SetPressure(4, -92m); // -92 ≤ -90 到位 → 会自动上电进入 Aging
