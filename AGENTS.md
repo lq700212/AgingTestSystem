@@ -35,7 +35,21 @@
   - 备用通道号只认 `0x00`~`0x0F`（单个寄存器 16 个 bit；V1.62 血泪：文档曾写 0x1F，0x10+ 在执行侧静默失效）。解析层直接拒绝 0x10+ 并进 error；编辑弹窗微调框最大值同步 0x0F；执行侧 `MapOutputChannel` 对非法目标保持原通道（绝不写坏掩码）。
   - 界面可显示中文/友好文案，但**存到 App.config 的值必须经过归一化映射**（见 `SettingsForm.NormalizeParity` / `NormalizeStopBits`），禁止把非规范字符写进配置。
 - 配置项编辑控件统一在 `SettingsForm.CreateValueCell` 按 key 分发（布尔/串口/波特率/数据位/停止位/校验位/数字/文本）。新增串口类配置项时，**气压表与扫码枪两套 key（如 `PortName`+`ScannerPort`）都要覆盖**，共用同一套映射逻辑。
-- **深色/浅色主题约定（V1.60 起）**：主题状态只认 `Services/ThemeManager`（App.config 存 `AppTheme`=Light/Dark，大小写兼容、写错兜底浅色）。新增窗体/弹窗必须在打开前调一次 `ThemeManager.ApplyTo(form)`（打开点与窗体构造解耦，动态内容在 Show 时已建完才刷得全）；切换入口只有主窗体"关于"右侧按钮（`Toggle`+`ApplyToAllOpenForms`）。**按钮颜色一律不动**（全是业务语义色）；自绘控件自己管换肤（如 `WorkstationGridView.SetDarkMode`），禁止在 ThemeManager 里硬改自绘颜色；运行时状态色（红/绿/蓝）靠"双向映射表查不到就保留"自动豁免，不要另写白名单。**例外（用户指定的深灰底白字）**：主窗体"停止运行/报警复位"（V1.60.1，`MainForm.GetOperationButtonThemeColors`）、公共参数"保存设置"（V1.60.4，`CommonParameterForm.GetSaveButtonThemeColors`，浅色保持原生样式）、版本说明"确定"——浅色无语义默认灰的按钮深色才动；布局预览画布深色走纯黑（V1.60.4，`HomeLayoutEditorForm.GetPreviewBackColor`，色块自带底所以安全）；系统 `MessageBox` 跟不了主题，要换肤必须换自定义窗（V1.60.4 版本说明先例）。
+- **SunnyUI 页签挂接红线（V1.63.2 血泪）**：`UITabControl` + `UIPage` 必须用
+  `tabControl.AddPage(page)` 挂接（内部建 TabPage + Dock=Fill + 绑定 + Show()），
+  禁止手写 `TabPage` 包裹 + `Controls.Add`——漏掉 `Show()` 会导致页面 `Visible=false`、
+  控件全建好但整页空白（现场实锤：通讯测试页 72 灯全有但看不见，连接测试还正常）。
+  判据：`tabControl.GetPage(page.PageGuid) != null` 且 `page.Visible == true`；
+  验证走 `winforms-ui-debug` harness 直启 + 反射 + 截图，不要靠肉眼。
+- **dev 最高权限账号约定（V1.64 起）**：`UserManager.DevUsername = "dev"`（种子密码 dev123，
+  归属 Administrator 角色，走管理员登录框进入，界面无提示=隐藏入口）。
+  规则：dev 可删改业务管理员；普通管理员只管操作员/技术员；dev 名注册/改名
+  （大小写变体同样）一律"该账号名不可用"；dev 自身禁改名/禁删除；
+  老 Users.json 自愈补 dev（不碰已存密码）；手改文件保留"dev + 第一个业务管理员"。
+  登录下拉/记住登录永不出现 dev；用户管理窗"管理员"角色项只给 dev 加；
+  关于下拉的深浅切换项只给 dev 看。Users.json 含 dev 哈希（PBKDF2，非明文）但仍属
+  运行时数据，gitignore 绝不入库（已有红线，dev 不例外）。
+- **深色/浅色主题约定（V1.60 起，V1.64 改入口）**：主题状态只认 `Services/ThemeManager`（App.config 存 `AppTheme`=Light/Dark，大小写兼容、写错兜底浅色）。新增窗体/弹窗必须在打开前调一次 `ThemeManager.ApplyTo(form)`（打开点与窗体构造解耦，动态内容在 Show 时已建完才刷得全）；切换入口只有"关于"下拉内的深浅项（`MenuThemeToggle_Click`+`ApplyToAllOpenForms`），**仅 dev 登录可见**。**按钮颜色一律不动**（全是业务语义色）；自绘控件自己管换肤（如 `WorkstationGridView.SetDarkMode`），禁止在 ThemeManager 里硬改自绘颜色；运行时状态色（红/绿/蓝）靠"双向映射表查不到就保留"自动豁免，不要另写白名单。**例外（用户指定的深灰底白字）**：主窗体"停止运行/报警复位"（V1.60.1，`MainForm.GetOperationButtonThemeColors`）、公共参数"保存设置"（V1.60.4，`CommonParameterForm.GetSaveButtonThemeColors`，浅色保持原生样式）、版本说明"确定"——浅色无语义默认灰的按钮深色才动；布局预览画布深色走纯黑（V1.60.4，`HomeLayoutEditorForm.GetPreviewBackColor`，色块自带底所以安全）；系统 `MessageBox` 跟不了主题，要换肤必须换自定义窗（V1.60.4 版本说明先例）。
 - **界面文件头注释必须带 ASCII 布局图**：所有 View/Dialog（`Views/*.cs`、`Dialogs/*.cs`）的类 XML 注释里都要有一段用 `┌─┐│└┘` 画出的界面布局图（参考 `RecipeManagerForm.cs` / `WorkstationGridView.cs` 头部注释），框内标注控件名与关键交互点。AI 无法看图，改界面全靠这段文本图，故**每次新增/修改界面文件都补画或同步更新该图**，且要和实际控件布局一致（坐标、控件名、按钮文字都对上）。
 - **自绘控件（WorkstationGridView 等）的坐标类常量一律外部化**：不写死像素常量，放到布局配置模型（如 `Models/PanelLayoutConfig.cs`，可被 `PanelLayout.json` 覆盖），并把坐标标注进头部注释的 ASCII 图里，便于现场改配置微调间距/颜色/字号。
 - **自绘控件坐标一律用锚定，禁止"孤岛绝对坐标"（V1.58.13~1.58.17 沉淀）**：面板内元素通过锚定字段声明与"面板边缘"或"其他元素"的相对关系，加载时统一解析，改面板尺寸/基准元素时自动联动，不用手改一串坐标。字段：矩形 `RightMargin/TopMargin/RightAlignTo/VerticalAlignTo/LeftAlignTo/RightToLeftAlignTo`（双端锚定=LeftAlignTo+RightToLeftAlignTo 自动定宽）、标签 `LeftMargin/TopMargin/Width/RightToLeftAlignTo/LeftAlignTo`。**三步解析顺序铁律**（`ResolveAnchors`）：①面板边缘锚定 → ②元素间锚定（设置按钮→右对齐组→压力框→下电）→ ③标签锚定，顺序错会取到目标旧值致错位。**全表/依赖链/调整指南/坑（标签 Width 依赖字体、字段互斥、json 与代码默认一致）都在 `PanelLayoutConfig.cs` 类头注释**，改坐标前必读；改完同步 `bin/Debug/PanelLayout.json` 与 WorkstationGridView 头部 ASCII 图。

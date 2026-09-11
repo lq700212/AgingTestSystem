@@ -17,10 +17,20 @@ namespace AgingTestSystem.Services
     /// 5. 用户数据持久化到 JSON 文件（程序重启后数据不丢失）
     ///
     /// 【默认账号】
-    /// - 管理员: admin / 123456（仅一个账号）
+    /// - 管理员: admin / 123456（仅一个业务管理员）
     /// - 技术员: technician / 123456（支持多账号）
     /// - 操作员: operator / 123456（支持多账号）
+    /// - 最高权限: dev / dev123（V1.64，见下方【dev 最高权限账号】）
     ///
+    /// 【dev 最高权限账号（V1.64）】
+    /// - dev 是真正的最高权限，归属 Administrator 角色：走"用户权限→管理员"登录框
+    ///   输入 dev / dev123 即可登录，界面上没有任何入口提示（隐藏入口）。
+    /// - dev 专属能力：删除/改名/重置业务管理员（admin）账号；普通管理员只能管
+    ///   操作员/技术员，碰管理员账号一律被拒。
+    /// - dev 自身受保护：不允许改名、不允许删除、不允许被注册/改名占用
+    ///   （AddAccount/UpdateUsername 遇到 dev 名直接回"该账号名不可用"）。
+    /// - 自愈：新装自动种子 dev；老 Users.json（没有 dev）加载时自动补上，
+    ///   且绝不重置任何已存账号的密码；手改文件时保留"dev + 第一个业务管理员"。/// 
     /// 【数据存储说明】
     /// 用户数据持久化到 JSON 文件：Users.json（程序运行目录下）
     /// - 程序启动时自动加载用户数据
@@ -59,7 +69,7 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 用户列表（按角色索引方便查找）
         /// Key: 用户角色，Value: 该角色下的账号列表
-        /// 操作员/技术员支持多账号；管理员仅保留一个账号
+        /// 操作员/技术员支持多账号；管理员仅保留一个业务账号（另有 dev 最高权限账号，见 DevUsername）
         /// </summary>
         private readonly Dictionary<UserRole, List<UserAccount>> _users;
 
@@ -72,6 +82,40 @@ namespace AgingTestSystem.Services
         /// 当前已登录的用户（未登录时为 null）
         /// </summary>
         public UserAccount CurrentUser { get; private set; }
+
+        /// <summary>
+        /// dev 最高权限账号名（V1.64）。
+        /// 归属 Administrator 角色，走管理员登录框进入（隐藏入口，无界面提示）。
+        /// 该名字被系统保留：任何人注册/改名成它都会收到"该账号名不可用"。
+        /// </summary>
+        public const string DevUsername = "dev";
+
+        /// <summary>dev 账号的初始默认密码（仅用于新装种子与老文件自愈补种）</summary>
+        private const string DevDefaultPassword = "dev123";
+
+        /// <summary>
+        /// 是否为 dev 保留名（大小写不敏感：dev / DEV / Dev 一律视为占用，
+        /// 防止用大小写变体混淆视听）。
+        /// </summary>
+        /// <param name="username">待检查的用户名（可带首尾空格）</param>
+        public static bool IsDevUsername(string username)
+        {
+            return string.Equals(username == null ? null : username.Trim(),
+                DevUsername, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// 当前登录的是否为 dev 最高权限（V1.64）。
+        /// 判据只看用户名（dev 归属 Administrator 角色，能登录进来本身已验过密码）。
+        /// </summary>
+        public bool IsDevLoggedIn
+        {
+            get
+            {
+                return CurrentUser != null &&
+                    string.Equals(CurrentUser.Username, DevUsername, StringComparison.OrdinalIgnoreCase);
+            }
+        }
 
         /// <summary>
         /// 构造函数 - 初始化用户账号
@@ -115,6 +159,8 @@ namespace AgingTestSystem.Services
             _users[UserRole.Operator].Add(new UserAccount("operator", PasswordHasher.Hash("123456"), UserRole.Operator));
             _users[UserRole.Technician].Add(new UserAccount("technician", PasswordHasher.Hash("123456"), UserRole.Technician));
             _users[UserRole.Administrator].Add(new UserAccount("admin", PasswordHasher.Hash("123456"), UserRole.Administrator));
+            // 【V1.64】种子 dev 最高权限账号（归属管理员角色，走管理员登录框进入）
+            _users[UserRole.Administrator].Add(new UserAccount(DevUsername, PasswordHasher.Hash(DevDefaultPassword), UserRole.Administrator));
         }
 
         /// <summary>
@@ -144,12 +190,17 @@ namespace AgingTestSystem.Services
                     return false;
                 }
 
-                // 将用户列表按角色分组（管理员仅保留第一个账号，防止手改出多个）
+                // 将用户列表按角色分组。
+                // 管理员组保留规则（V1.64）：保留 dev + 第一个业务管理员。
+                // 为什么不断舍离：dev 是最高权限入口，丢了就进不来；业务管理员只留一个
+                // （历史约定，防手改出多个）。只读文件不写回，下次存盘自然收敛。
                 _users.Clear();
                 foreach (UserRole role in Enum.GetValues(typeof(UserRole)))
                 {
                     _users.Add(role, new List<UserAccount>());
                 }
+                bool keptDevAdmin = false;
+                bool keptBizAdmin = false;
                 foreach (var user in userList)
                 {
                     if (!_users.ContainsKey(user.Role))
@@ -158,9 +209,18 @@ namespace AgingTestSystem.Services
                     }
                     if (user.Role == UserRole.Administrator)
                     {
-                        if (_users[user.Role].Count == 0)
+                        if (IsDevUsername(user.Username))
+                        {
+                            if (!keptDevAdmin)
+                            {
+                                _users[user.Role].Add(user);
+                                keptDevAdmin = true;
+                            }
+                        }
+                        else if (!keptBizAdmin)
                         {
                             _users[user.Role].Add(user);
+                            keptBizAdmin = true;
                         }
                     }
                     else
@@ -223,6 +283,23 @@ namespace AgingTestSystem.Services
             if (_users[UserRole.Administrator].Count == 0)
             {
                 _users[UserRole.Administrator].Add(new UserAccount("admin", PasswordHasher.Hash("123456"), UserRole.Administrator));
+            }
+
+            // 【V1.64】老文件自愈：管理员组里没有 dev 就补一个（默认密码 dev123）。
+            // 只补缺席、不碰已存账号：老 admin 密码是什么还是什么，dev 自改过的密码也不会被重置。
+            // （dev 在内存里不存在才会补；文件里有 dev 时上面分组已保留，走不到这里。）
+            bool hasDev = false;
+            foreach (var admin in _users[UserRole.Administrator])
+            {
+                if (IsDevUsername(admin.Username))
+                {
+                    hasDev = true;
+                    break;
+                }
+            }
+            if (!hasDev)
+            {
+                _users[UserRole.Administrator].Add(new UserAccount(DevUsername, PasswordHasher.Hash(DevDefaultPassword), UserRole.Administrator));
             }
         }
 
@@ -335,7 +412,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 修改指定账号的用户名（仅管理员可调用）
+        /// 修改指定账号的用户名（仅管理员可调用；V1.64 起操作管理员组账号须 dev 在场）。
         /// </summary>
         /// <param name="account">要修改的账号</param>
         /// <param name="newUsername">新用户名</param>
@@ -353,6 +430,12 @@ namespace AgingTestSystem.Services
                 return (false, "未找到目标账号");
             }
 
+            // 【V1.64】dev 账号不允许改名：改了名隐藏入口就对不上了，且自愈会再种一个 dev 出来造成混乱
+            if (IsDevUsername(account.Username))
+            {
+                return (false, "dev 账号不允许改名");
+            }
+
             // 新用户名校验
             if (string.IsNullOrWhiteSpace(newUsername))
             {
@@ -363,6 +446,19 @@ namespace AgingTestSystem.Services
             if (trimmed.Length < 2)
             {
                 return (false, "用户名至少需要2个字符");
+            }
+
+            // 【V1.64】新名字不允许占用 dev（大小写变体也不行，防混淆）
+            if (IsDevUsername(trimmed))
+            {
+                return (false, "该账号名不可用");
+            }
+
+            // 【V1.64】业务管理员的改名只有 dev 能动：普通管理员管操作员/技术员，
+            // 管理员组的人事权收归 dev（防管理员之间互相改名捣乱）
+            if (account.Role == UserRole.Administrator && !IsDevLoggedIn)
+            {
+                return (false, "只有 dev 最高权限可以修改管理员账号");
             }
 
             // 用户名在全部角色账号内保持唯一（排除账号自身）
@@ -395,7 +491,8 @@ namespace AgingTestSystem.Services
         /// 【场景】
         /// 操作员/技术员/管理员修改自己的密码，必须验证旧密码，
         /// 防止他人在无人值守时篡改账号密码。
-        /// 管理员修改其他账号（操作员/技术员）密码请使用 UpdatePassword。
+        /// 管理员修改其他账号（操作员/技术员）密码请使用 UpdatePassword；
+        /// 管理员组账号的密码重置请找 dev（UpdatePassword，V1.64）。
         /// </summary>
         /// <param name="oldPassword">当前密码</param>
         /// <param name="newPassword">新密码</param>
@@ -450,7 +547,8 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 修改指定账号的密码（仅管理员可调用）
+        /// 修改指定账号的密码（仅管理员可调用；V1.64 起操作管理员组账号须 dev 在场。
+        /// dev 自己的密码建议走 ChangeOwnPassword 自改；dev 调本方法改自己也放行）。
         /// </summary>
         /// <param name="account">要修改的账号</param>
         /// <param name="newPassword">新密码</param>
@@ -466,6 +564,12 @@ namespace AgingTestSystem.Services
             if (account == null)
             {
                 return (false, "未找到目标账号");
+            }
+
+            // 【V1.64】管理员组密码重置权收归 dev（含 dev 自身：普通管理员连 dev 的边都碰不到）
+            if (account.Role == UserRole.Administrator && !IsDevLoggedIn)
+            {
+                return (false, "只有 dev 最高权限可以修改管理员账号");
             }
 
             // 新密码校验
@@ -504,7 +608,8 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 添加新账号（仅管理员可调用）
-        /// 操作员/技术员支持多账号；管理员账号最多一个。
+        /// 操作员/技术员支持多账号；业务管理员账号最多一个（dev 不占这个名额）。
+        /// dev 名被系统保留，任何人注册都回"该账号名不可用"。
         /// </summary>
         /// <param name="role">目标角色</param>
         /// <param name="username">用户名</param>
@@ -530,6 +635,12 @@ namespace AgingTestSystem.Services
                 return (false, "用户名至少需要2个字符");
             }
 
+            // 【V1.64】dev 名系统保留：注册/添加时直接提示不可用（大小写变体同样拦截）
+            if (IsDevUsername(trimmedUsername))
+            {
+                return (false, "该账号名不可用");
+            }
+
             // 密码校验
             if (string.IsNullOrWhiteSpace(password))
             {
@@ -541,10 +652,21 @@ namespace AgingTestSystem.Services
                 return (false, "密码至少需要4个字符");
             }
 
-            // 管理员账号最多一个
+            // 业务管理员账号最多一个（dev 是系统账号，不占这个名额、不参与计数）
             if (role == UserRole.Administrator)
             {
-                if (_users.TryGetValue(role, out List<UserAccount> admins) && admins.Count >= 1)
+                int bizAdminCount = 0;
+                if (_users.TryGetValue(role, out List<UserAccount> admins))
+                {
+                    foreach (var a in admins)
+                    {
+                        if (!IsDevUsername(a.Username))
+                        {
+                            bizAdminCount++;
+                        }
+                    }
+                }
+                if (bizAdminCount >= 1)
                 {
                     return (false, "管理员账号只能有一个");
                 }
@@ -578,8 +700,8 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 删除指定角色下的账号（仅管理员可调用）
-        /// 每角色至少保留一个账号；管理员账号不允许删除。
+        /// 删除指定角色下的账号（仅管理员可调用；V1.64 起删除管理员组账号须 dev 在场）。
+        /// 每角色至少保留一个账号；dev 账号任何人都不允许删除。
         /// </summary>
         /// <param name="role">目标角色</param>
         /// <param name="username">要删除的用户名</param>
@@ -592,10 +714,18 @@ namespace AgingTestSystem.Services
                 return (false, "权限不足：只有管理员可以删除账号");
             }
 
-            // 管理员账号不允许删除（只能有一个，删除后无法恢复默认管理）
-            if (role == UserRole.Administrator)
+            // 【V1.64】dev 账号是最高权限入口，任何人（含 dev 自己）都不允许删除：
+            // 删了就再也进不来，只能去服务器上改 Users.json 救火
+            if (IsDevUsername(username))
             {
-                return (false, "管理员账号不允许删除");
+                return (false, "dev 账号不允许删除");
+            }
+
+            // 【V1.64】业务管理员的删除权收归 dev：普通管理员删不动管理员组，
+            // dev 可删业务管理员（如 admin 离职交接、密码丢失且自改通道失效时兜底）
+            if (role == UserRole.Administrator && !IsDevLoggedIn)
+            {
+                return (false, "只有 dev 最高权限可以删除管理员账号");
             }
 
             if (!_users.TryGetValue(role, out List<UserAccount> accounts))

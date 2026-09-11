@@ -35,7 +35,7 @@ namespace AgingTestSystem.Views
     /// ┌─────────────────────────────────────────────────────────┐
     /// │ 老化测试系统V1.00  │ 当前操作权限: 操作员 │ PLC连接状态: 已连接 │
     /// ├─────────────────────────────────────────────────────────┤
-        /// │ [用户权限] [参数设置] [日志记录] [关于] [深色模式] │（V1.60：关于右侧加主题切换按钮）
+        /// │ [用户权限] [参数设置] [日志记录] [关于] │（V1.64：深色按钮从关于右侧收进关于下拉，仅 dev 可见）
     /// ├──────────────────────────────┬──────────────────────────┤
     /// │                              │ 运行状态                 │
     /// │                              │ ┌────────────────────┐   │
@@ -104,6 +104,7 @@ namespace AgingTestSystem.Views
         /// - 管理员: admin / 123456
         /// - 技术员: technician / 123456
         /// - 操作员: operator / 123456
+        /// - 最高权限: dev / dev123（V1.64：走"用户权限→管理员"登录框进入，界面无提示，隐藏入口）
         /// </summary>
         private readonly UserManager _userManager = new UserManager();
 
@@ -173,7 +174,6 @@ namespace AgingTestSystem.Views
             // 各子窗体在每次打开前 ApplyTo（见各 ShowDialog/Show 调用处），切换时 ApplyToAllOpenForms 全刷。
             ThemeManager.LoadFromConfig();
             ThemeManager.ApplyTo(this);
-            UpdateThemeButtonText();
             ApplyOperationButtonsTheme();
 
             // 【V1.49】主窗体开启双缓冲，与工位面板/网格双缓冲配合，消除滚动撕裂
@@ -1697,6 +1697,7 @@ namespace AgingTestSystem.Views
         /// 菜单项：
         /// - 设置：仅管理员可见（V1.17 权限控制，非管理员自动隐藏）
         /// - 版本说明：所有权限可见（V1.19.12 更名：关于 → 版本说明）
+        /// - 深浅模式切换：仅 dev 最高权限可见（V1.64 起从顶部独立按钮收进这里）
         /// </summary>
         private void btnAbout_Click(object sender, EventArgs e)
         {
@@ -1727,37 +1728,32 @@ namespace AgingTestSystem.Views
 
             items.Add(("版本说明", MenuHelpVersionInfo_Click));
 
+            // 【V1.64】深浅模式切换收进"关于"下拉，只给 dev 看：
+            // 普通用户菜单里根本没这一项（隐藏效果）；文字永远表示"下一次去哪"，
+            // 菜单每次打开现拼，天然就是最新状态，不用像以前的顶部按钮那样同步文字
+            if (_userManager.IsDevLoggedIn)
+            {
+                items.Add((ThemeManager.IsDark ? "浅色模式" : "深色模式", MenuThemeToggle_Click));
+            }
+
             ShowDropdownPopup(btnAbout, items.ToArray());
         }
 
         /// <summary>
-        /// 深色/浅色主题切换按钮点击（【V1.60 新增】，按钮在"关于"右侧）。
+        /// 深色/浅色主题切换（【V1.64】入口从顶部独立按钮收进"关于"下拉，仅 dev 可见）。
         ///
         /// 【流程】ThemeManager.Toggle（内存切换 + 写 App.config 下次启动接着用）
         /// → ApplyToAllOpenForms（主窗体 + 所有已打开的子窗体/自绘画布当场换肤）
-        /// → 按钮文字同步 → 写 LOG。
+        /// → 停止/复位按钮配色跟上 → 写 LOG。
         /// 注意：各子窗体打开前本来就 ApplyTo 过（见各 ShowDialog/Show 处），
         /// 这里全刷一次是为了"非模态窗（通讯测试/送风机测试）开着时切换也能即时跟上"。
         /// </summary>
-        private void btnTheme_Click(object sender, EventArgs e)
+        private void MenuThemeToggle_Click(object sender, EventArgs e)
         {
             AppThemeMode mode = ThemeManager.Toggle();
             ThemeManager.ApplyToAllOpenForms();
-            UpdateThemeButtonText();
             ApplyOperationButtonsTheme();
             WriteLog(mode == AppThemeMode.Dark ? "已切换为深色模式" : "已切换为浅色模式");
-        }
-
-        /// <summary>
-        /// 同步主题按钮文字：文字永远表示"下一次点击会去哪"——
-        /// 当前浅色显示"深色模式"，当前深色显示"浅色模式"。启动与每次切换后调用。
-        /// </summary>
-        private void UpdateThemeButtonText()
-        {
-            if (btnTheme != null)
-            {
-                btnTheme.Text = ThemeManager.IsDark ? "浅色模式" : "深色模式";
-            }
         }
 
         /// <summary>
@@ -1779,7 +1775,7 @@ namespace AgingTestSystem.Views
         /// 把主题配色应用到"停止运行/报警复位"两按钮（【V1.60.1】）。
         /// 为什么只有它俩特殊：ThemeManager 对按钮一律不动（语义色保护），
         /// 但它俩浅色是"无语义的默认灰"，深色下黑字偏弱，才单独提出来处理。
-        /// 启动与每次主题切换后调用（切换入口只有 btnTheme_Click 一处，不会漏）。
+        /// 启动与每次主题切换后调用（切换入口只有 MenuThemeToggle_Click 一处，不会漏）。
         /// </summary>
         private void ApplyOperationButtonsTheme()
         {
@@ -1888,6 +1884,11 @@ namespace AgingTestSystem.Views
                 {
                     // 登录成功，更新权限显示
                     string roleName = GetRoleDisplayName(targetRole);
+                    // 【V1.64】dev 登录成功后顶栏明示最高身份（红色），和普通管理员一眼区分
+                    if (_userManager.IsDevLoggedIn)
+                    {
+                        roleName = "最高权限(dev)";
+                    }
                     _currentPermission = roleName;
                     // V1.19.7：角色名着色（管理员=红/技术员=蓝/操作员=绿；V1.47 技术员蓝色加深）
                     UpdatePermissionDisplay(roleName);
@@ -1931,17 +1932,19 @@ namespace AgingTestSystem.Views
         /// 拆为"前缀 + 角色名"两个标签（panelPermission 内 FlowLayoutPanel 水平排列）：
         /// 前缀 lblPermissionPrefix 固定默认黑字；角色名 lblPermissionRole 按权限设置 ForeColor：
         /// - 管理员 → 红色（Red）
+        /// - 最高权限(dev) → 红色（Red，V1.64：dev 登录后的顶栏身份，和普通管理员区分）
         /// - 技术员 → 深蓝色（RoyalBlue，V1.47 起由天蓝加深，更醒目）
         /// - 操作员 → 绿色（Green）
         /// - 未知角色 → 默认文字色
         /// </summary>
-        /// <param name="roleName">角色中文名（操作员/技术员/管理员）</param>
+        /// <param name="roleName">角色中文名（操作员/技术员/管理员/最高权限(dev)）</param>
         private void UpdatePermissionDisplay(string roleName)
         {
             Color roleColor;
             switch (roleName)
             {
                 case "管理员":
+                case "最高权限(dev)":
                     roleColor = Color.Red;
                     break;
                 case "技术员":

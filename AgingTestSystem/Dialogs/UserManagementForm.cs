@@ -12,9 +12,11 @@ namespace AgingTestSystem.Dialogs
     ///
     /// 【功能说明】
     /// 仅供管理员使用，管理操作员和技术员的账号（每个角色支持多个账号）。
+    /// 【V1.64】dev 最高权限登录时，角色下拉框多出"管理员"，可删改业务管理员
+    /// （dev 自身仍受保护：改名/删除会被 UserManager 拒绝并提示原因）。
     ///
     /// 【操作流程】
-    /// 1. 从角色下拉框选择要管理的角色（操作员/技术员）
+    /// 1. 从角色下拉框选择要管理的角色（操作员/技术员；dev 登录时还有管理员）
     /// 2. 从用户名下拉框选择要操作的账号（下拉列表自动列出该角色下所有已有账号）
     /// 3. "应用修改"：修改选中账号的密码；如需改用户名，直接在用户名框输入新名字后点应用
     /// 4. "添加账号"：为当前角色新增一个账号（弹出输入窗口）
@@ -29,14 +31,14 @@ namespace AgingTestSystem.Dialogs
     /// 【校验规则】
     /// - 新密码和确认密码必须一致
     /// - 用户名至少2个字符，密码至少4个字符
-    /// - 用户名在全部角色内唯一
-    /// - 管理员账号不在此管理（仅一个）
+    /// - 用户名在全部角色内唯一；dev 名系统保留，注册/改名一律回"该账号名不可用"
+    /// - 业务管理员账号的增删改只有 dev 能动（普通管理员点管理员工单会被拦）
     ///
     /// 【界面布局】
     /// ┌──────────────────────────────────────────┐
     /// │             用户账号管理                  │ ← 窗体标题
     /// ├──────────────────────────────────────────┤
-    /// │ 角色:        [操作员 ▼]                  │ ← cmbRole（操作员/技术员）
+    /// │ 角色:        [操作员 ▼]                  │ ← cmbRole（操作员/技术员；dev 登录时多"管理员"）
     /// │ 当前角色:    操作员                       │ ← lblRole（显示当前选择角色）
     /// │ 用户名:      [operator ▼ (可编辑)]       │ ← cboUsername（可编辑下拉框）
     /// │ 新密码:      [____________________]     │ ← txtNewPassword（密码框）
@@ -73,6 +75,13 @@ namespace AgingTestSystem.Dialogs
         /// </summary>
         private void UserManagementForm_Load(object sender, EventArgs e)
         {
+            // 【V1.64】dev 登录时追加"管理员"角色：dev 要删改业务管理员，
+            // 得先有个入口选到管理员组；普通管理员看不到这一项（UserManager 里同样拦一道）
+            if (_userManager.IsDevLoggedIn && cboRole.Items.Count == 2)
+            {
+                cboRole.Items.Add("管理员");
+            }
+
             // 默认选中"操作员"
             if (cboRole.Items.Count > 0)
             {
@@ -231,13 +240,15 @@ namespace AgingTestSystem.Dialogs
         private UserRole GetSelectedRole()
         {
             // 根据下拉框索引返回对应角色
-            // 0 = 操作员, 1 = 技术员
+            // 0 = 操作员, 1 = 技术员, 2 = 管理员（仅 dev 登录时存在，见 Load）
             switch (cboRole.SelectedIndex)
             {
                 case 0:
                     return UserRole.Operator;
                 case 1:
                     return UserRole.Technician;
+                case 2:
+                    return UserRole.Administrator;
                 default:
                     return UserRole.Operator;
             }
@@ -251,8 +262,8 @@ namespace AgingTestSystem.Dialogs
         {
             UserRole targetRole = GetSelectedRole();
 
-            // 防御性校验：不允许修改管理员账号
-            if (targetRole == UserRole.Administrator)
+            // 防御性校验：管理员组只有 dev 能动（dev 碰 dev 自身时由 UserManager 给具体原因）
+            if (targetRole == UserRole.Administrator && !_userManager.IsDevLoggedIn)
             {
                 MessageBox.Show("不允许修改管理员账号", "提示",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -368,8 +379,8 @@ namespace AgingTestSystem.Dialogs
         {
             UserRole targetRole = GetSelectedRole();
 
-            // 防御性校验：不允许添加管理员账号（管理员仅一个）
-            if (targetRole == UserRole.Administrator)
+            // 防御性校验：管理员组只有 dev 能加（业务管理员只能有一个，UserManager 里还有第二道）
+            if (targetRole == UserRole.Administrator && !_userManager.IsDevLoggedIn)
             {
                 MessageBox.Show("不允许添加管理员账号（管理员账号只能有一个）", "提示",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -406,8 +417,8 @@ namespace AgingTestSystem.Dialogs
         {
             UserRole targetRole = GetSelectedRole();
 
-            // 防御性校验：不允许删除管理员账号
-            if (targetRole == UserRole.Administrator)
+            // 防御性校验：管理员组只有 dev 能删（dev 自身删不掉，UserManager 里拦）
+            if (targetRole == UserRole.Administrator && !_userManager.IsDevLoggedIn)
             {
                 MessageBox.Show("不允许删除管理员账号", "提示",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);

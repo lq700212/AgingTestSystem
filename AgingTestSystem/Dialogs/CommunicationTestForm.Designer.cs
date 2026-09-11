@@ -26,6 +26,10 @@ namespace AgingTestSystem.Dialogs
     ///   连接成功/断开时由 CommunicationTestForm.cs 的 SetConnected 更新。
     /// - 两个 Tab 页内的 9×8 = 72 个圆形灯按钮由 CommunicationTestForm 的
     ///   ChannelGrid.BuildButtonGrid() 动态生成（每个 ChannelGrid 持有一个 UIPanel）。
+    /// - 挂接方式红线（V1.63.2 血泪）：两个 UIPage 页必须用 tabControl.AddPage(page)
+    ///   挂接（SunnyUI 专用：内部建 TabPage + Dock=Fill + TabPage 绑定 + Show()）。
+    ///   禁止手写 TabPage 包裹 + Controls.Add（漏掉 Show() 会导致 Visible=false，
+    ///   按钮全建好但页面一片空白，现场实锤）。
     /// - 底部按钮全部为 Sunny.UI.UIButton，日志框为 Sunny.UI.UITextBox（只读多行）。
     /// </summary>
     partial class CommunicationTestForm
@@ -58,10 +62,8 @@ namespace AgingTestSystem.Dialogs
             this.tabControl = new Sunny.UI.UITabControl();
             this.pageVacuum = new Sunny.UI.UIPage();
             this.panelGridVacuum = new Sunny.UI.UIPanel();
-            this.tabPage1 = new System.Windows.Forms.TabPage();
             this.pagePowerOn = new Sunny.UI.UIPage();
             this.panelGridPowerOn = new Sunny.UI.UIPanel();
-            this.tabPage2 = new System.Windows.Forms.TabPage();
             this.pnlBottom = new Sunny.UI.UIPanel();
             this.txtLog = new Sunny.UI.UITextBox();
             this.btnClose = new Sunny.UI.UIButton();
@@ -72,9 +74,7 @@ namespace AgingTestSystem.Dialogs
             this.pnlHeader.SuspendLayout();
             this.tabControl.SuspendLayout();
             this.pageVacuum.SuspendLayout();
-            this.tabPage1.SuspendLayout();
             this.pagePowerOn.SuspendLayout();
-            this.tabPage2.SuspendLayout();
             this.pnlBottom.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -131,9 +131,6 @@ namespace AgingTestSystem.Dialogs
             // 
             // tabControl
             // 
-            this.tabControl.Controls.Add(this.tabPage1);
-            this.tabControl.Controls.Add(this.tabPage2);
-            this.tabControl.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tabControl.DrawMode = System.Windows.Forms.TabDrawMode.OwnerDrawFixed;
             this.tabControl.Font = new System.Drawing.Font("微软雅黑", 10.5F, System.Drawing.FontStyle.Bold);
             this.tabControl.ItemSize = new System.Drawing.Size(150, 40);
@@ -174,10 +171,8 @@ namespace AgingTestSystem.Dialogs
             this.pageVacuum.SizeGripStyle = System.Windows.Forms.SizeGripStyle.Hide;
             this.pageVacuum.StartPosition = System.Windows.Forms.FormStartPosition.Manual;
             this.pageVacuum.Style = Sunny.UI.UIStyle.Custom;
-            this.pageVacuum.TabPage = this.tabPage1;
             this.pageVacuum.Text = "负压开关测试";
             this.pageVacuum.TitleFont = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
-            this.pageVacuum.Visible = false;
             // 
             // panelGridVacuum
             // 
@@ -193,16 +188,6 @@ namespace AgingTestSystem.Dialogs
             this.panelGridVacuum.TabIndex = 0;
             this.panelGridVacuum.Text = null;
             this.panelGridVacuum.TextAlignment = System.Drawing.ContentAlignment.MiddleCenter;
-            // 
-            // tabPage1
-            // 
-            this.tabPage1.Controls.Add(this.pageVacuum);
-            this.tabPage1.Location = new System.Drawing.Point(0, 40);
-            this.tabPage1.Name = "tabPage1";
-            this.tabPage1.Size = new System.Drawing.Size(780, 624);
-            this.tabPage1.TabIndex = 0;
-            this.tabPage1.Text = "负压开关测试";
-            this.tabPage1.Visible = false;
             // 
             // pagePowerOn
             // 
@@ -228,10 +213,8 @@ namespace AgingTestSystem.Dialogs
             this.pagePowerOn.SizeGripStyle = System.Windows.Forms.SizeGripStyle.Hide;
             this.pagePowerOn.StartPosition = System.Windows.Forms.FormStartPosition.Manual;
             this.pagePowerOn.Style = Sunny.UI.UIStyle.Custom;
-            this.pagePowerOn.TabPage = this.tabPage2;
             this.pagePowerOn.Text = "载台上电测试";
             this.pagePowerOn.TitleFont = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
-            this.pagePowerOn.Visible = false;
             // 
             // panelGridPowerOn
             // 
@@ -248,15 +231,13 @@ namespace AgingTestSystem.Dialogs
             this.panelGridPowerOn.Text = null;
             this.panelGridPowerOn.TextAlignment = System.Drawing.ContentAlignment.MiddleCenter;
             // 
-            // tabPage2
+            // tabControl 页签
             // 
-            this.tabPage2.Controls.Add(this.pagePowerOn);
-            this.tabPage2.Location = new System.Drawing.Point(0, 40);
-            this.tabPage2.Name = "tabPage2";
-            this.tabPage2.Size = new System.Drawing.Size(780, 673);
-            this.tabPage2.TabIndex = 1;
-            this.tabPage2.Text = "载台上电测试";
-            this.tabPage2.Visible = false;
+            // 把两个 UIPage 页加入 UITabControl（SunnyUI 专用 AddPage，普通 TabPages.Add /
+            // Controls.Add 不支持 UIPage：AddPage 内部建 TabPage + Dock=Fill + 绑定 + Show()，
+            // 手写包裹漏 Show() 会导致页面 Visible=false、一片空白，见本文件头部红线）。
+            this.tabControl.AddPage(this.pageVacuum);
+            this.tabControl.AddPage(this.pagePowerOn);
             // 
             // pnlBottom
             // 
@@ -432,9 +413,7 @@ namespace AgingTestSystem.Dialogs
             this.pnlHeader.ResumeLayout(false);
             this.tabControl.ResumeLayout(false);
             this.pageVacuum.ResumeLayout(false);
-            this.tabPage1.ResumeLayout(false);
             this.pagePowerOn.ResumeLayout(false);
-            this.tabPage2.ResumeLayout(false);
             this.pnlBottom.ResumeLayout(false);
             this.ResumeLayout(false);
 
@@ -458,7 +437,5 @@ namespace AgingTestSystem.Dialogs
         private Sunny.UI.UIButton btnSweep;
         private Sunny.UI.UIButton btnClose;
         private Sunny.UI.UITextBox txtLog;
-        private System.Windows.Forms.TabPage tabPage1;
-        private System.Windows.Forms.TabPage tabPage2;
     }
 }
