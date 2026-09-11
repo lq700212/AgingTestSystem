@@ -2211,6 +2211,46 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
+        /// 各阶段实时台数（【V1.70 新增】流程驾驶舱节点计数用）。
+        /// 在测按子阶段拆抽真空/老化计时；完成/故障/空闲读缓存状态（与面板显示一致口径）。
+        /// 两把锁分开取（先状态后缓存），1 秒级刷新 wink 一下不同步无所谓，不持双锁防死锁。
+        /// </summary>
+        /// <param name="vacuuming">抽真空阶段台数</param>
+        /// <param name="aging">老化计时阶段台数</param>
+        /// <param name="completed">已完成·待取料台数</param>
+        /// <param name="fault">故障台数</param>
+        /// <param name="idle">空闲台数（含从未投料）</param>
+        public void GetPhaseCounts(out int vacuuming, out int aging,
+            out int completed, out int fault, out int idle)
+        {
+            vacuuming = 0;
+            aging = 0;
+            lock (_stateLock)
+            {
+                for (int i = 0; i < _testingStates.Length; i++)
+                {
+                    if (!_testingStates[i]) continue;
+                    if (_testPhases[i] == AgingPhase.Aging) aging++;
+                    else vacuuming++;   // Vacuuming（含刚启动、None 中间态都算"抽真空侧"）
+                }
+            }
+            completed = 0;
+            fault = 0;
+            idle = 0;
+            lock (_cacheLock)
+            {
+                foreach (var kv in _barometerDataCache)
+                {
+                    if (kv.Value == null) continue;
+                    if (kv.Value.Status == DeviceStatus.Completed) completed++;
+                    else if (kv.Value.Status == DeviceStatus.Fault) fault++;
+                    else if (kv.Value.Status == DeviceStatus.Idle) idle++;
+                    // Testing 状态的台已在上面按阶段计数，这里跳过（不重复算）
+                }
+            }
+        }
+
+        /// <summary>
         /// 获取当前"通讯在线"的台数
         /// 【判断规则】最近 <see cref="OnlineFreshnessSeconds"/> 秒内成功读到过数据的视为在线。
         /// </summary>

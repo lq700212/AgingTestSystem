@@ -1754,12 +1754,13 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 按配置项类型校验用户输入的值是否合法
+        /// 【V1.70】private → internal：流程驾驶舱保存前复用同一套校验（落盘语义只有一份）。
         /// </summary>
         /// <param name="key">配置项名称</param>
         /// <param name="value">用户输入值（已 Trim）</param>
         /// <param name="error">校验失败时的中文提示</param>
         /// <returns>true=合法，false=不合法</returns>
-        private static bool ValidateValue(string key, string value, out string error)
+        internal static bool ValidateValue(string key, string value, out string error)
         {
             error = null;
 
@@ -1951,20 +1952,22 @@ namespace AgingTestSystem.Dialogs
         /// 策略组合校验（【V1.67 新增】供保存按钮调用；校验逻辑本体在
         /// AgingSequencer.ValidatePolicyCombination（纯函数，回归可单测），
         /// 这里只负责拼出"内存现值 + 本次修改叠加后"的生效值）。
+        /// 【V1.70】改为静态（入参 config），供流程驾驶舱复用同一条保存路。
         /// </summary>
+        /// <param name="config">内存中的设备配置（读现值用）</param>
         /// <param name="changes">本次收集到的全部修改（key → 界面值）</param>
         /// <returns>矛盾描述；null=组合合法</returns>
-        private string CheckPolicyCombination(Dictionary<string, string> changes)
+        private static string CheckPolicyCombination(DeviceConfig config, Dictionary<string, string> changes)
         {
-            bool shutdown = ResolveEffectiveBool(changes, "FanTempShutdownEnabled", _config.FanTempShutdownEnabled);
-            float limitC = ResolveEffectiveFloat(changes, "FanTempAlarmLimitC", _config.FanTempAlarmLimitC);
-            CompletionAction action = ResolveEffectiveEnum(changes, "CompletionAction", _config.CompletionAction);
-            int ventPoint = ResolveEffectiveInt(changes, "VentValveDoPoint", _config.VentValveDoPoint);
+            bool shutdown = ResolveEffectiveBool(changes, "FanTempShutdownEnabled", config.FanTempShutdownEnabled);
+            float limitC = ResolveEffectiveFloat(changes, "FanTempAlarmLimitC", config.FanTempAlarmLimitC);
+            CompletionAction action = ResolveEffectiveEnum(changes, "CompletionAction", config.CompletionAction);
+            int ventPoint = ResolveEffectiveInt(changes, "VentValveDoPoint", config.VentValveDoPoint);
             return AgingSequencer.ValidatePolicyCombination(shutdown, limitC, action, ventPoint);
         }
 
         /// <summary>取某项的生效值：本次改了用本次的，否则用内存现值（下同三个）。</summary>
-        private bool ResolveEffectiveBool(Dictionary<string, string> changes, string key, bool current)
+        private static bool ResolveEffectiveBool(Dictionary<string, string> changes, string key, bool current)
         {
             string v;
             if (changes.TryGetValue(key, out v) && bool.TryParse((v ?? "").Trim(), out bool b)) return b;
@@ -1972,7 +1975,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>取某项的生效值（float 版）。</summary>
-        private float ResolveEffectiveFloat(Dictionary<string, string> changes, string key, float current)
+        private static float ResolveEffectiveFloat(Dictionary<string, string> changes, string key, float current)
         {
             string v;
             if (changes.TryGetValue(key, out v) && float.TryParse((v ?? "").Trim(), out float f)) return f;
@@ -1980,7 +1983,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>取某项的生效值（int 版）。</summary>
-        private int ResolveEffectiveInt(Dictionary<string, string> changes, string key, int current)
+        private static int ResolveEffectiveInt(Dictionary<string, string> changes, string key, int current)
         {
             string v;
             if (changes.TryGetValue(key, out v) && int.TryParse((v ?? "").Trim(), out int i)) return i;
@@ -1988,7 +1991,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>取某项的生效值（枚举版，非法回现值——单项校验已拦过脏值，这里只求不炸）。</summary>
-        private CompletionAction ResolveEffectiveEnum(Dictionary<string, string> changes, string key, CompletionAction current)
+        private static CompletionAction ResolveEffectiveEnum(Dictionary<string, string> changes, string key, CompletionAction current)
         {
             string v;
             object parsed;
@@ -2001,6 +2004,138 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
+        /// 持久化结果（【V1.70 新增】PersistChanges 的输出，调用方按需提示/分发）。
+        /// </summary>
+        internal class PersistResult
+        {
+            /// <summary>本次成功写入的 key（主窗体按需触发重连/热生效）</summary>
+            public HashSet<string> SavedKeys = new HashSet<string>();
+            /// <summary>其中需重启生效的结构型 key（调用方提示用户）</summary>
+            public List<string> StructuralChanged = new List<string>();
+            /// <summary>MES 密钥加密失败 fallback 明文（调用方必须明示用户）</summary>
+            public bool SecretFallbackPlain;
+        }
+
+        /// <summary>
+        /// 保存配置统一入口（【V1.70 新增】从 btnSave_Click 抽出，流程驾驶舱共用同一条路）：
+        /// 组合校验 → MES 就绪校验 → 分流写文件（策略→Policy.json，其余→exe.config，
+        /// 密钥加密落盘）→ 内存热回写。调用方只负责"收集 changes + 弹提示"，
+        /// 落盘语义只有一份，改了这里两边一起变。
+        /// </summary>
+        /// <param name="config">内存中的设备配置（读现值 + 热回写目标）</param>
+        /// <param name="changes">已过 ValidateValue 单项校验的修改（key → 值）</param>
+        /// <param name="result">成功时的明细（失败为 null）</param>
+        /// <param name="error">失败原因（成功为 null，调用方直接弹框展示）</param>
+        /// <returns>true=保存成功，false=被拦截（error 有内容）</returns>
+        internal static bool PersistChanges(DeviceConfig config,
+            Dictionary<string, string> changes, out PersistResult result, out string error)
+        {
+            result = null;
+            error = null;
+            if (config == null || changes == null)
+            {
+                error = "内部错误：配置为空";
+                return false;
+            }
+
+            // 1) 策略组合校验（联停开但上限0 / 泄压选但点位0，直接拦截并指明先填哪个）
+            string comboError = CheckPolicyCombination(config, changes);
+            if (comboError != null)
+            {
+                error = "策略组合矛盾，保存已拦截：\r\n\r\n" + comboError;
+                return false;
+            }
+
+            // 2) MES 就绪校验（开了开关没配地址 = 配了等于没配，还后台空转）
+            bool mesOn = ResolveEffectiveBool(changes, "MesEnabled", config.MesEnabled);
+            string mesUrl;
+            if (!changes.TryGetValue("MesEndpoint", out mesUrl) || mesUrl == null)
+            {
+                mesUrl = config.MesEndpoint;
+            }
+            if (mesOn && string.IsNullOrWhiteSpace(mesUrl))
+            {
+                error = "MES 上报已开，但接收地址（MesEndpoint）为空：\n\n" +
+                    "请先填 MesEndpoint（MES 接收 URL），或把 MesEnabled 改回 false。";
+                return false;
+            }
+
+            // 3) 分流：策略 key → 项目 Policy.json；其余 → exe.config（跟机器走）
+            var policyChanges = new Dictionary<string, string>();
+            var machineChanges = new Dictionary<string, string>();
+            foreach (var kv in changes)
+            {
+                if (ProjectPolicyStore.PolicyKeys.Contains(kv.Key)) policyChanges[kv.Key] = kv.Value;
+                else machineChanges[kv.Key] = kv.Value;
+            }
+
+            bool secretFallbackPlain = false;
+            try
+            {
+                var cfgFile = System.Configuration.ConfigurationManager.OpenExeConfiguration(
+                    System.Configuration.ConfigurationUserLevel.None);
+
+                foreach (var kv in machineChanges)
+                {
+                    string toFile = kv.Value;
+                    // 密钥加密落盘（内存保持明文，上报线程用内存值；加密失败 fallback 明文+上报调用方明示）
+                    if ((kv.Key == "MesAuthToken" || kv.Key == "MesAuthPassword")
+                        && !string.IsNullOrEmpty(toFile) && !MesCrypto.IsProtected(toFile))
+                    {
+                        string enc = MesCrypto.Protect(toFile);
+                        if (enc != null) toFile = enc;
+                        else secretFallbackPlain = true;
+                    }
+                    var setting = cfgFile.AppSettings.Settings[kv.Key];
+                    if (setting == null)
+                    {
+                        cfgFile.AppSettings.Settings.Add(kv.Key, toFile);
+                    }
+                    else
+                    {
+                        setting.Value = toFile;
+                    }
+                }
+
+                cfgFile.Save(System.Configuration.ConfigurationSaveMode.Modified);
+                System.Configuration.ConfigurationManager.RefreshSection("appSettings");
+            }
+            catch (Exception ex)
+            {
+                error = "保存配置失败：" + ex.Message;
+                return false;
+            }
+
+            // 4) 策略写项目文件（失败同样拦截，不走到热回写，避免内存与文件不一致）
+            if (policyChanges.Count > 0)
+            {
+                try
+                {
+                    ProjectPolicyStore.Save(policyChanges);
+                }
+                catch (Exception ex)
+                {
+                    error = "保存项目策略失败：" + ex.Message;
+                    return false;
+                }
+            }
+
+            // 5) 热回写内存（结构型不回写，需重启）
+            ApplyChangesToConfig(config, changes);
+
+            result = new PersistResult
+            {
+                SavedKeys = new HashSet<string>(changes.Keys),
+                SecretFallbackPlain = secretFallbackPlain
+            };
+            foreach (string k in changes.Keys)
+            {
+                if (StructuralKeys.Contains(k)) result.StructuralChanged.Add(k);
+            }
+            return true;
+        }
+
+        /// <summary>
         /// "保存设置"按钮点击事件
         ///
         /// 【流程】
@@ -2009,6 +2144,7 @@ namespace AgingTestSystem.Dialogs
         /// 2.5 【V1.67】策略组合校验（联停开但上限0 / 泄压选但点位0 直接拦截并指明先填哪个）
         /// 3. 分流写回：策略 key → 项目 Policy.json；其余 → exe.config 的 appSettings
         /// 4. 刷新 appSettings 缓存，提示重启生效
+        /// 【V1.70】2.5 之后全收拢进 PersistChanges（流程驾驶舱共用），这里只剩收集+提示。
         /// </summary>
         private void btnSave_Click(object sender, EventArgs e)
         {
@@ -2046,116 +2182,24 @@ namespace AgingTestSystem.Dialogs
                 return;
             }
 
-            // 【V1.67】策略组合校验（"配置即代码"：联停开但上限0、泄压选但点位0这类
-            // 自相矛盾的组合在这里整批拦截，报错信息直接告诉用户先填哪个）。
-            // 校验用"内存现值 + 本次修改叠加后"的生效值，不是只看本次改了哪几项
-            // （比如上限上周填的0、今天只开了联停，同样要拦）。
-            string comboError = CheckPolicyCombination(changes);
-            if (comboError != null)
+            // 【V1.70】落盘走统一入口（组合/MES校验 + 分流写文件 + 热回写全在里面）
+            PersistResult presult;
+            string perror;
+            if (!PersistChanges(_config, changes, out presult, out perror))
             {
-                MessageBox.Show("策略组合矛盾，保存已拦截：\r\n\r\n" + comboError,
-                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(perror, "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-
-            // 【V1.68】MES 就绪校验：开了上报开关但接收地址为空 = 配了等于没配，
-            // 还会在后台空转（Report 每次都因无地址跳过）。先填 MesEndpoint 或关掉开关。
-            // 生效值同样用"内存现值 + 本次修改叠加"（上周填的地址、今天开的开关，照样拦）。
-            bool mesOn = ResolveEffectiveBool(changes, "MesEnabled", _config.MesEnabled);
-            string mesUrl;
-            if (!changes.TryGetValue("MesEndpoint", out mesUrl) || mesUrl == null)
-            {
-                mesUrl = _config.MesEndpoint;
-            }
-            if (mesOn && string.IsNullOrWhiteSpace(mesUrl))
-            {
-                MessageBox.Show("MES 上报已开，但接收地址（MesEndpoint）为空：\n\n" +
-                    "请先填 MesEndpoint（MES 接收 URL），或把 MesEnabled 改回 false。",
-                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            // 【V1.67】分流写回：策略 key → 项目 Policy.json（跟项目走）；
-            // 其余 → exe.config 的 appSettings（跟机器走）。
-            var policyChanges = new Dictionary<string, string>();
-            var machineChanges = new Dictionary<string, string>();
-            foreach (var kv in changes)
-            {
-                if (ProjectPolicyStore.PolicyKeys.Contains(kv.Key)) policyChanges[kv.Key] = kv.Value;
-                else machineChanges[kv.Key] = kv.Value;
-            }
-
-            // 写回配置文件（程序运行目录下的 exe.config，与 App.config 同源）
-            bool secretFallbackPlain = false;
-            try
-            {
-                var config = System.Configuration.ConfigurationManager.OpenExeConfiguration(
-                    System.Configuration.ConfigurationUserLevel.None);
-
-                foreach (var kv in machineChanges)
-                {
-                    string toFile = kv.Value;
-                    // 【V1.68】密钥加密落盘：MesAuthToken/Password 写文件前转 DPAPI 密文；
-                    // 内存 _config 保持明文（上报线程用内存值，由下面的 ApplyChangesToConfig 回写，
-                    // 用的是 changes 原值，不受这里影响）。加密失败 fallback 明文 + 保存后明示。
-                    if ((kv.Key == "MesAuthToken" || kv.Key == "MesAuthPassword")
-                        && !string.IsNullOrEmpty(toFile) && !MesCrypto.IsProtected(toFile))
-                    {
-                        string enc = MesCrypto.Protect(toFile);
-                        if (enc != null) toFile = enc;
-                        else secretFallbackPlain = true;
-                    }
-                    var setting = config.AppSettings.Settings[kv.Key];
-                    if (setting == null)
-                    {
-                        config.AppSettings.Settings.Add(kv.Key, toFile);
-                    }
-                    else
-                    {
-                        setting.Value = toFile;
-                    }
-                }
-
-                config.Save(System.Configuration.ConfigurationSaveMode.Modified);
-                System.Configuration.ConfigurationManager.RefreshSection("appSettings");
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("保存配置失败：" + ex.Message, "错误",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-
-            // 策略写项目文件（失败同样拦截，不走到热回写，避免"内存与文件不一致"）
-            if (policyChanges.Count > 0)
-            {
-                try
-                {
-                    ProjectPolicyStore.Save(policyChanges);
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show("保存项目策略失败：" + ex.Message, "错误",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
-            }
-
-            // 【热生效】保存成功后就地回写内存中的 DeviceConfig 实例（主窗体传入的同一引用）：
-            // 各服务每次读写实时访问 _config.xxx，回写后业务逻辑类配置立即生效；
-            // 结构型配置不回写（避免运行期结构不一致），需重启后生效。
-            ApplyChangesToConfig(changes);
 
             // 本次保存的配置项 key 交给主窗体，由主窗体按需触发重连（串口/耦合器/送风机/扫码枪）
-            SavedKeys = new HashSet<string>(changes.Keys);
+            SavedKeys = presult.SavedKeys;
 
             // 弹窗提示：是否包含需重启生效的结构型配置
-            var structuralChanged = changes.Keys.Where(k => StructuralKeys.Contains(k)).ToList();
             string saveMessage;
-            if (structuralChanged.Count > 0)
+            if (presult.StructuralChanged.Count > 0)
             {
                 saveMessage = "设置已保存。以下配置项需重启程序后生效：\r\n\r\n" +
-                    string.Join("、", structuralChanged.Select(k =>
+                    string.Join("、", presult.StructuralChanged.Select(k =>
                         _descriptions.TryGetValue(k, out string d) ? d : k)) +
                     "\r\n\r\n其余配置项已即时生效。";
             }
@@ -2164,7 +2208,7 @@ namespace AgingTestSystem.Dialogs
                 saveMessage = "设置已保存并即时生效。";
             }
             // 【V1.68】密钥加密失败时明示（fallback 明文保存了，不能让用户以为已加密）
-            if (secretFallbackPlain)
+            if (presult.SecretFallbackPlain)
             {
                 saveMessage += "\r\n\r\n注：MES 密钥加密失败，已按明文保存（上报不受影响），请检查后重新保存。";
             }
@@ -2181,8 +2225,9 @@ namespace AgingTestSystem.Dialogs
         /// 回写后业务逻辑类配置（寄存器地址 / IO 映射 / 取反 / 小数位 / 阈值等）立即生效，
         /// 无需重启；连接参数类由主窗体另触发重连。
         /// 结构型配置（<see cref="StructuralKeys"/>）不回写，需重启后生效。
+        /// 【V1.70】改为静态（入参 config），供流程驾驶舱复用。
         /// </summary>
-        private void ApplyChangesToConfig(Dictionary<string, string> changes)
+        private static void ApplyChangesToConfig(DeviceConfig config, Dictionary<string, string> changes)
         {
             foreach (var kv in changes)
             {
@@ -2192,7 +2237,7 @@ namespace AgingTestSystem.Dialogs
                 try
                 {
                     object converted = ConvertConfigValue(prop.PropertyType, kv.Value);
-                    if (converted != null) prop.SetValue(_config, converted);
+                    if (converted != null) prop.SetValue(config, converted);
                 }
                 catch
                 {

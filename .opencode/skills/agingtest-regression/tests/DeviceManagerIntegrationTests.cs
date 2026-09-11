@@ -1285,6 +1285,27 @@ namespace AgingTestSystem.Tests
             }
             finally { try { dm3.StopAll(); } catch { } try { dm3.Dispose(); } catch { } }
 
+            // ---------- R4 各阶段台数（V1.70 驾驶舱计数口径） ----------
+            FakeBarometerReader r4; FakeIoController io4; DeviceConfig c4;
+            DeviceManager dm4 = BuildTestManager(out r4, out io4, out c4);
+            try
+            {
+                dm4.SetStationDelayTimes(1, TimeSpan.Zero, TimeSpan.FromSeconds(60));
+                dm4.SetStationDelayTimes(2, TimeSpan.Zero, TimeSpan.FromSeconds(60));
+                dm4.StartTesting(new[] { 1, 2 });
+                r4.SetPressure(1, -6m); // 1号到位上电进老化；2号常压0留抽真空
+                Check("[规则R4] 1号上电",
+                    WaitUntil(() => io4.ReadOutput(PowerOut(c4, 1)), 2500));
+                Thread.Sleep(200); // 等一轮采集把缓存状态刷齐
+                int vac, age, done, fault, idle;
+                dm4.GetPhaseCounts(out vac, out age, out done, out fault, out idle);
+                Check("[规则R4] 抽真空1/老化1",
+                    vac == 1 && age == 1);
+                Check("[规则R4] 完成0/故障0/空闲2",
+                    done == 0 && fault == 0 && idle == 2);
+            }
+            finally { try { dm4.StopAll(); } catch { } try { dm4.Dispose(); } catch { } }
+
             try { TestSessionStore.Clear(); } catch { }
         }
 
