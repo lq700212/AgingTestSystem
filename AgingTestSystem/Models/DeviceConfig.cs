@@ -482,6 +482,16 @@ namespace AgingTestSystem.Models
         /// </summary>
         public bool VentValveEnabled { get; set; } = false;
 
+        /// <summary>
+        /// 是否启用载台电流回采（【V1.74 新增】Q2 通用骨架总开关）。
+        /// false（默认，当前项目现状）：不建电表连接、不读数，BarometerData.LoadCurrentA
+        /// 恒为 NaN（面板悬停显示"--"，CSV 记空，规则变量恒 false），零行为变化；
+        /// true：按 UseMockCommunication 二选一（Mock 有数 / 真实桩连不上读 NaN），
+        /// 电表到货实现 PowerMeterClient 真驱动后即插即用。
+        /// 跟机器（App.config，结构型：改后重启生效，与 FanEnabled 同口径）。
+        /// </summary>
+        public bool UsePowerMeter { get; set; } = false;
+
         // =====================================================================
         // MES 对接（【V1.68 新增】二期：映射层可配，传输层走 HTTP POST JSON）
         // 说明：
@@ -616,6 +626,37 @@ namespace AgingTestSystem.Models
         /// 配错在真空架上开=真空保护全丢（启动日志会大写警告）。
         /// </summary>
         public bool SkipVacuum { get; set; } = false;
+
+        // =====================================================================
+        // 报表导出（【V1.74 新增】Q8 报表可配：列编排跟项目走 Policy.json）
+        // 说明：
+        // - 配的是"导出的列有哪些/叫什么/什么顺序"（显示名=字段），不是报表格式本身；
+        //   格式固定 xlsx（表头加粗居中 + 数据行），由历史窗导出按钮生成；
+        // - 留空 = 缺省预设（ReportColumns.DefaultPreset，烧屏追溯惯例列序），
+        //   客户改列才填；脏组保存时拦、导出时跳过（与 MES 映射同规矩）。
+        // =====================================================================
+
+        /// <summary>
+        /// 报表列配置（跟项目，"显示名=字段"，分号分隔，如 "时间=time;批号=lot"）。
+        /// 可用字段见 <see cref="Services.ReportColumns.AvailableFields"/>
+        /// （历史 CSV 真实有的 8 列）；留空 = 缺省预设。
+        /// </summary>
+        public string ReportColumns { get; set; } = "";
+
+        // =====================================================================
+        // 显示模式字典（【V1.74 新增】Q20 记录层可配：烧屏画面选项名单，跟项目）
+        // 说明：
+        // - 录入窗（配方管理/批量/工位设置）的显示模式输入框保存时按此校验：
+        //   空=清空允许，字典内=存规范写法，字典外=拦并报出全部选项；
+        // - 留空 = 缺省预设（DisplayModeOptions.DefaultPreset）；
+        // - 只管记录层（存/报什么），不管 PG 控制（没协议）。
+        // =====================================================================
+
+        /// <summary>
+        /// 显示模式字典（跟项目，逗号分隔，如 "白场,红场,绿场"）。
+        /// 可用性见 <see cref="Services.DisplayModeOptions"/>；留空 = 缺省预设 8 项。
+        /// </summary>
+        public string DisplayModes { get; set; } = "";
 
         /// <summary>
         /// 按事件分地址（【V1.68 新增】跟机器）："触发器=URL"，多组用分号分隔。

@@ -147,7 +147,9 @@ namespace AgingTestSystem.Dialogs
             SetTip(new Control[] { lblPressure, nudPressure },
                 "负压阈值：该工位真空到位判定阈值（kPa）。回填优先级：上次保存>配方>全局；保存即下发，启动时定格。");
             SetTip(new Control[] { lblDisplayMode, txtDisplayMode },
-                "显示模式：本次烧屏跑的显示画面（如红绿蓝纯色、灰阶）。只做生产追溯，不参与PASS/FAIL判定，会写入启动与报警日志。");
+                "显示模式：本次烧屏跑的显示画面，只追溯不判定。可选：" +
+                string.Join("/", DisplayModeOptions.Resolve(_config).ToArray()) +
+                "（字典在系统设置→工艺策略里改；保存时按字典校验）。");
             SetTip(new Control[] { btnBreakVacuum },
                 "破空：手动释放负压方便取料。本机未装破空阀时按钮自动隐藏（VentValveEnabled开关）。");
             SetTip(new Control[] { btnPowerOff },
@@ -435,6 +437,19 @@ namespace AgingTestSystem.Dialogs
                 return false;
             }
 
+            // 【V1.74】显示模式字典校验（Q20：空=清空允许，字典内=存规范写法并回写框，
+            // 字典外拦；一次校验管住下面三处写入：下发/缓存/配方）。
+            string canonicalMode, modeErr;
+            if (!DisplayModeOptions.ValidateInput(txtDisplayMode.Text,
+                DisplayModeOptions.Resolve(_config), out canonicalMode, out modeErr))
+            {
+                MessageBox.Show(modeErr, "输入验证",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                txtDisplayMode.Focus();
+                return false;
+            }
+            txtDisplayMode.Text = canonicalMode;
+
             // ---- 1) 组合延时开启 / 延时到达（各三个 NumericUpDown，V1.28；控件已限范围无需校验） ----
             TimeSpan delayStart = GetTimeSpan(nudDelayHours, nudDelayMinutes, nudDelaySeconds);
             TimeSpan delayArrive = GetTimeSpan(nudStartHours, nudStartMinutes, nudStartSeconds);
@@ -469,6 +484,26 @@ namespace AgingTestSystem.Dialogs
             }
 
             // ---- 5) 提示 ----
+            // 【V1.74】定格护栏（Q18）：本工位在测时，本次下发仅对新启动生效——
+            // 判定口径与项目切换禁切一致（GetTestingDeviceIds 含本工位）。
+            string testingNote = "";
+            try
+            {
+                int[] testing = _deviceManager.GetTestingDeviceIds();
+                if (testing != null)
+                {
+                    foreach (int t in testing)
+                    {
+                        if (t == _deviceId)
+                        {
+                            testingNote = "\r\n注意：该工位正在测试，按启动时定格参数跑完，" +
+                                "本次修改仅对新启动生效。";
+                            break;
+                        }
+                    }
+                }
+            }
+            catch { /* 在测查询失败按无在测处理，不阻断保存 */ }
             MessageBox.Show(
                 $"工位 {_deviceId} {actionName}成功！\r\n" +
                 $"SN: {(string.IsNullOrWhiteSpace(txtSN.Text) ? "（空）" : txtSN.Text.Trim())}\r\n" +
@@ -477,7 +512,8 @@ namespace AgingTestSystem.Dialogs
                 $"延时到达: {GetTimeText(delayArrive)}\r\n" +
                 $"极限温度: {nudTemp.Value:0.#}°C\r\n" +
                 $"负压阈值: {nudPressure.Value:0.#}kPa\r\n" +
-                $"显示模式: {(string.IsNullOrWhiteSpace(txtDisplayMode.Text) ? "（空）" : txtDisplayMode.Text.Trim())}",
+                $"显示模式: {(string.IsNullOrWhiteSpace(txtDisplayMode.Text) ? "（空）" : txtDisplayMode.Text.Trim())}" +
+                testingNote,
                 $"{actionName}成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
             return true;

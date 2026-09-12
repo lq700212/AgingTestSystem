@@ -15,7 +15,8 @@ namespace AgingTestSystem.Services
     /// 【语言】（冻结，只做加法不做改法）
     /// - 字面量：数字（1 / 2.5 / .5）、true / false（大小写无所谓）；
     /// - 变量（大小写无所谓，见 Vocabulary）：pressure / temp / tempset / hum /
-    ///   device / delaysecs / vacsecs / agesecs / duration / threshold / di0 / hour；
+    ///   device / delaysecs / vacsecs / agesecs / duration / threshold / di0 / hour /
+    ///   current（V1.74：本工位载台电流A，无表=NaN）；
     /// - 运算符（优先级从低到高）：||  &&  == !=  > < >= <=  + -  * / %  !（非） -（负号）；
     /// - 括号改变优先级。单 & 单 | 非法（防把位运算错当逻辑运算）。
     ///
@@ -29,18 +30,20 @@ namespace AgingTestSystem.Services
     public static class RuleExpr
     {
         /// <summary>
-        /// 变量 vocabulary（冻结 12 个：加变量要同步改 DeviceManager 组变量、
+        /// 变量 vocabulary（冻结 13 个：加变量要同步改 DeviceManager 组变量、
         /// 类注释、SettingsForm 说明、回归用例，四处）。
         /// pressure=kPa实时压力 / temp=风机当前温度°C（离线=NaN）/
         /// tempset=温度设定值°C（离线=NaN）/ hum=湿度%RH（离线=NaN）/
         /// device=工位号 / delaysecs=延时开启定格秒 / vacsecs=距开阀秒 /
         /// agesecs=距上电秒（未上电=0）/ duration=定格时长秒 / threshold=定格阈值kPa /
-        /// di0=DI触点0/1 / hour=当前小时0-23
+        /// di0=DI触点0/1 / hour=当前小时0-23 /
+        /// current=本工位载台电流A（【V1.74】无表=NaN，不参与判定只追溯）
         /// </summary>
         public static readonly string[] Vocabulary = new string[]
         {
             "pressure", "temp", "tempset", "hum", "device", "delaysecs",
-            "vacsecs", "agesecs", "duration", "threshold", "di0", "hour"
+            "vacsecs", "agesecs", "duration", "threshold", "di0", "hour",
+            "current"
         };
 
         /// <summary>编译后的表达式（不透明句柄：只能由 TryParse 产生，只能由 TryEval 求值）。</summary>
@@ -191,7 +194,7 @@ namespace AgingTestSystem.Services
                 error = "表达式未编译";
                 return false;
             }
-            // 大小写不敏感拷贝（变量就 12 个，拷贝开销忽略不计）
+            // 大小写不敏感拷贝（变量就 13 个，拷贝开销忽略不计）
             var lookup = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
             if (vars != null)
             {

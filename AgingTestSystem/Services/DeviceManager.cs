@@ -94,6 +94,14 @@ namespace AgingTestSystem.Services
         private readonly IFanController _fanController;
 
         /// <summary>
+        /// 载台电流表（接口，【V1.74 新增】Q2 通用骨架）。
+        /// - UsePowerMeter=true：Mock 实现 MockPowerMeter 或真实桩 PowerMeterClient
+        ///   （电表到货后把桩换成真驱动，上层不动）；
+        /// - UsePowerMeter=false：null（不接电表，所有读数方法做 null 判空，电流恒 NaN）。
+        /// </summary>
+        private readonly IPowerMeter _powerMeter;
+
+        /// <summary>
         /// 设备配置
         /// </summary>
         private readonly DeviceConfig _config;
@@ -492,6 +500,20 @@ namespace AgingTestSystem.Services
                 _fanController = _config.FanEnabled ? new FanControllerClient() : null;
             }
 
+            // 【V1.74】载台电流表（Q2 通用骨架）：只有启用回采时才创建；
+            // Mock 有数 / 真实端是占位桩（连不上、读 NaN，绝不拖垮采集）。
+            // 测试注入：本构造不设 override（现状回归用 Mock 即可覆盖骨架；真驱动到货再补注入口）。
+            if (_config.UsePowerMeter)
+            {
+                _powerMeter = _config.UseMockCommunication
+                    ? (IPowerMeter)new MockPowerMeter()
+                    : (IPowerMeter)new PowerMeterClient();
+            }
+            else
+            {
+                _powerMeter = null;
+            }
+
             // 初始化状态数组（按气压表总数）
             _lastAlarmStates = new bool[_config.TotalBarometers];
             _lossNoted = new bool[_config.TotalBarometers];
@@ -515,6 +537,10 @@ namespace AgingTestSystem.Services
             if (_fanController != null)
             {
                 _fanController.OnError += FanController_OnError;
+            }
+            if (_powerMeter != null)
+            {
+                _powerMeter.OnError += PowerMeter_OnError;
             }
 
             // 主采集定时器（72 台气压表 + IO）
@@ -569,6 +595,15 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
+        /// 电表错误回调（【V1.74 新增】Q2 骨架：只记 Debug，不弹框不记 CSV，
+        /// 电表是记录型外设，报错不能干扰老化主流程）。
+        /// </summary>
+        private void PowerMeter_OnError(object sender, string message)
+        {
+            System.Diagnostics.Debug.WriteLine($"电表错误: {message}");
+        }
+
+        /// <summary>
         /// 启动设备管理器
         /// 连接设备并开始数据采集
         ///
@@ -618,6 +653,10 @@ namespace AgingTestSystem.Services
 
                 // 尝试连接送风机（独立 try/catch 隔离，失败只记诊断）
                 TryConnectFan();
+
+                // 【V1.74】尝试连接电表（可选外设，与送风机同口径：失败只记诊断；
+                // Mock 秒连，真桩连不上——两种都不影响整机启动）
+                TryConnectPowerMeter();
 
                 // 汇总启动失败原因（若都成功则保持空字符串）
                 LastStartupError = string.Join("；", startupErrors);
@@ -681,6 +720,29 @@ namespace AgingTestSystem.Services
             catch (Exception ex)
             {
                 Diagnostic($"冷却送风机连接异常：{ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 尝试连接电表（【V1.74 新增】可选外设，与 TryConnectFan 同口径）。
+        /// 独立 try/catch：连接失败只记诊断，不影响整机启动；采集循环里读数前
+        /// 同样判 IsConnected（见 CollectData 3.6），中途掉线自动按 NaN 处理。
+        /// </summary>
+        private void TryConnectPowerMeter()
+        {
+            try
+            {
+                if (_powerMeter != null && !_powerMeter.IsConnected)
+                {
+                    bool ok = _powerMeter.Connect(_config);
+                    Diagnostic(ok
+                        ? "载台电表已连接，电流回采开始"
+                        : "载台电表未连接（Mock 关或真实桩待电表选型），电流按无数据处理");
+                }
+            }
+            catch (Exception ex)
+            {
+                Diagnostic($"载台电表连接异常：{ex.Message}");
             }
         }
 
@@ -1592,6 +1654,12 @@ namespace AgingTestSystem.Services
         public bool IsFanConnected => _fanController != null && _fanController.IsConnected;
 
         /// <summary>
+        /// 电表是否已连接（【V1.74 新增】Q2 骨架：供面板/诊断显示"电流有没有数"；
+        /// false = 未启用或未连上，电流恒 NaN）。
+        /// </summary>
+        public bool IsPowerMeterConnected => _powerMeter != null && _powerMeter.IsConnected;
+
+        /// <summary>
         /// 送风机按需重连（【V1.16.1 新增】）
         /// 用户操作需要送风机时调用：已连接直接返回 true，未连接立即重连一次。
         /// </summary>
@@ -2044,7 +2112,9 @@ namespace AgingTestSystem.Services
                 { "duration", (double)duration },
                 { "threshold", threshold },
                 { "di0", di0 },
-                { "hour", (double)now.Hour }
+                { "hour", (double)now.Hour },
+                // 【V1.74】current=本工位载台电流A（无表=NaN，比较恒 false，不误报）
+                { "current", (data != null && !float.IsNaN(data.LoadCurrentA)) ? (double)data.LoadCurrentA : double.NaN }
             };
         }
 
@@ -2687,6 +2757,35 @@ namespace AgingTestSystem.Services
                         }
                     }
 
+                    // ===== 3.6) 回填载台电流（【V1.74 新增】Q2 通用骨架） =====
+                    // 与 2)/3) 同位置：真实气压表不上报电流，由上位机电表回填。
+                    // - 未启用/未连接/读失败 → NaN（无数据，不参与任何判定，追溯不断）；
+                    // - 越界防御：电表实现返回短数组时只填能对上的路（防火墙同思路）。
+                    // 注意 data==null（通讯失败）分支走缓存延续，不进这里（见本方法 1)）。
+                    if (_config.UsePowerMeter && _powerMeter != null && _powerMeter.IsConnected)
+                    {
+                        try
+                        {
+                            float[] currents = _powerMeter.ReadAllCurrents(_config.TotalBarometers);
+                            if (currents != null && i < currents.Length)
+                            {
+                                data.LoadCurrentA = currents[i];
+                            }
+                            else
+                            {
+                                data.LoadCurrentA = float.NaN;
+                            }
+                        }
+                        catch
+                        {
+                            data.LoadCurrentA = float.NaN;
+                        }
+                    }
+                    else
+                    {
+                        data.LoadCurrentA = float.NaN;
+                    }
+
                     // ===== 3.5) 叠加工位静态信息（【V1.19.11 新增】） =====
                     // 真实气压表只上报压力，SN / 配方 / 延时需由上位机维护
                     // （ID 绑定扫码/手动录入 SN、工位设置窗口录入配方/延时）。
@@ -2753,7 +2852,8 @@ namespace AgingTestSystem.Services
                                     _lossNoted[deviceId - 1] = true;
                                     TestEventLogger.Write(_currentLotNumber, deviceId, "失压保持运行",
                                         $"老化中压力越限（{data.VacuumPressure} kPa），策略=只记不停，继续老化",
-                                        pressureKPa: data.VacuumPressure);
+                                        pressureKPa: data.VacuumPressure,
+                                        currentA: float.IsNaN(data.LoadCurrentA) ? (float?)null : data.LoadCurrentA);
                                 }
                             }
                         }
@@ -2927,7 +3027,9 @@ namespace AgingTestSystem.Services
                         {
                             _vacuumConfirmTimes[idx] = DateTime.MinValue;
                             TestEventLogger.Write(_currentLotNumber, deviceId, "真空建立",
-                                $"真空已到位: {data.VacuumPressure} kPa（阈值 {threshold} kPa），等待上电");
+                                $"真空已到位: {data.VacuumPressure} kPa（阈值 {threshold} kPa），等待上电",
+                                pressureKPa: data.VacuumPressure,
+                                currentA: float.IsNaN(data.LoadCurrentA) ? (float?)null : data.LoadCurrentA);
                         }
 
                         // ---- 到位 且 延时开启已到 → 上电进入老化计时 ----
@@ -2988,7 +3090,8 @@ namespace AgingTestSystem.Services
                 _ioController.WriteOutput(_config.TotalInputs + _config.TotalBarometers + deviceId, true);
                 string durationText = (_sessionDurationSecs[idx] <= 0) ? "不限" : (_sessionDurationSecs[idx] + "秒");
                 TestEventLogger.Write(_currentLotNumber, deviceId, "上电",
-                    $"真空确认+延时开启完成，载台上电开始老化（时长 {durationText}）");
+                    $"真空确认+延时开启完成，载台上电开始老化（时长 {durationText}）",
+                    currentA: float.IsNaN(data.LoadCurrentA) ? (float?)null : data.LoadCurrentA);
                 // 【V1.67】上电=计时起点落定：快照一次（含 Phase=Aging + 上电时刻，
                 // 断电续跑就靠这份快照算剩余时长；边沿一次，非每轮写盘）
                 SaveSessionSnapshot();
@@ -3049,7 +3152,7 @@ namespace AgingTestSystem.Services
             // PendingReview=标"待判定"，下料时人工录 PASS/FAIL+不良代码+处置）
             string judgeResult = GetCompletionJudgeResult();
             TestEventLogger.Write(_currentLotNumber, deviceId, "完成",
-                $"{reason}·待取料({judgeResult})");
+                $"{reason}·待取料({judgeResult})", currentA: GetDeviceLastCurrent(deviceId));
 
             // 缓存置为"已完成·待取料"+ 判定结果（不覆盖 Fault——报警台的结果另行标记）
             lock (_cacheLock)
@@ -3171,9 +3274,9 @@ namespace AgingTestSystem.Services
             string result = AgingSequencer.MapAlarmResult(
                 productRelated, vacuumCause, _config.VacuumFailKind);
 
-            // 记录报警事件（供追溯；压力值用于漏气分析）
+            // 记录报警事件（供追溯；压力值用于漏气分析；电流值用于负载分析，无表记空）
             TestEventLogger.Write(_currentLotNumber, deviceId, $"报警({result})", reason,
-                pressureKPa: GetDeviceLastPressure(deviceId));
+                pressureKPa: GetDeviceLastPressure(deviceId), currentA: GetDeviceLastCurrent(deviceId));
 
             // 缓存里标结果（Status 由调用方置 Fault）
             lock (_cacheLock)
@@ -3217,6 +3320,23 @@ namespace AgingTestSystem.Services
                 if (_barometerDataCache.TryGetValue(deviceId, out BarometerData cached) && cached != null)
                 {
                     return cached.VacuumPressure;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 获取某台最近一次的电流值（【V1.74 新增】用于报警/完成日志；无缓存或无数据返回 null，
+        /// CSV 记空。NaN 在这里转 null——CSV 里不写"NaN"字样，见 TestEventLogger 注释）。
+        /// </summary>
+        private float? GetDeviceLastCurrent(int deviceId)
+        {
+            lock (_cacheLock)
+            {
+                if (_barometerDataCache.TryGetValue(deviceId, out BarometerData cached) && cached != null
+                    && !float.IsNaN(cached.LoadCurrentA))
+                {
+                    return cached.LoadCurrentA;
                 }
             }
             return null;
@@ -3396,6 +3516,12 @@ namespace AgingTestSystem.Services
                     {
                         _fanController.OnError -= FanController_OnError;
                         _fanController.Disconnect();
+                    }
+                    if (_powerMeter != null)
+                    {
+                        _powerMeter.OnError -= PowerMeter_OnError;
+                        _powerMeter.Disconnect();
+                        _powerMeter.Dispose();
                     }
 
                     // 释放定时器

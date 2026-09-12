@@ -94,6 +94,7 @@
     <Compile Include="Interfaces\IBarometerReader.cs" />
     <Compile Include="Interfaces\IIoController.cs" />
     <Compile Include="Interfaces\IFanController.cs" />
+    <Compile Include="Interfaces\IPowerMeter.cs" />
     <Compile Include="Properties\Resources.Designer.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
@@ -102,10 +103,12 @@
     <Compile Include="Services\MockBarometerReader.cs" />
     <Compile Include="Services\MockIoController.cs" />
     <Compile Include="Services\MockFanController.cs" />
+    <Compile Include="Services\MockPowerMeter.cs" />
     <Compile Include="Services\ModbusRtuBarometerReader.cs" />
     <Compile Include="Services\ModbusTcpIoController.cs" />
     <Compile Include="Services\ScannerService.cs" />
     <Compile Include="Services\FanControllerClient.cs" />
+    <Compile Include="Services\PowerMeterClient.cs" />
     <Compile Include="Services\IoMapBuilder.cs" />
     <Compile Include="Services\SerialPortHelper.cs" />
     <Compile Include="Services\AppLogFileWriter.cs" />
@@ -120,6 +123,8 @@
     <Compile Include="Services\RuleExpr.cs" />
     <Compile Include="Services\RuleEngine.cs" />
     <Compile Include="Services\ControlDisposeHelper.cs" />
+    <Compile Include="Services\ReportColumns.cs" />
+    <Compile Include="Services\DisplayModeOptions.cs" />
     <Compile Include="Services\DeviceManager.cs" />
     <Compile Include="Services\UserManager.cs" />
     <Compile Include="Services\PasswordHasher.cs" />

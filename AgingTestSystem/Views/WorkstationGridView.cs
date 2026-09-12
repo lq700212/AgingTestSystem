@@ -687,6 +687,10 @@ namespace AgingTestSystem.Views
         private void ApplyData(GridItem item, BarometerData data)
         {
             item.PressureText = $"{data.VacuumPressure} kPa";
+            // 【V1.74】电流文本：有数显示（如 0.42 A），无数据（NaN）记空串；
+            // 只进悬停提示（见 GetTooltipText），不占面板布局（新矩形要走 PanelLayoutConfig
+            // 锚定全套，72 面板重排风险大；悬停已满足"看得到电流"的追溯需求）。
+            item.CurrentText = float.IsNaN(data.LoadCurrentA) ? "" : $"{data.LoadCurrentA:0.00} A";
             item.SnText = data.SerialNumber ?? "";
             item.RecipeText = data.RecipeName ?? "";
             item.DelayStartText = data.DelayTime.ToString(@"hh\:mm\:ss");
@@ -1274,6 +1278,14 @@ namespace AgingTestSystem.Views
             if (Scaled(_layout.RcPower.ToRectangle()).Contains(local)) return "上电状态：绿=上电，浅灰=下电";
             if (Scaled(_layout.RcWorkState.ToRectangle()).Contains(local)) return "工作状态：空闲=绿 / 选中(已上电待测试)=橙 / 繁忙(测试中)=黄 / 故障=红";
             if (Scaled(_layout.RcVacuumOpen.ToRectangle()).Contains(local)) return "真空开启状态：真空开=绿底，真空关=浅灰底";
+            // 【V1.74】压力框悬停：电表启用且有数时追加电流（无数据不打扰，保持原来无提示）；
+            // 用现成矩形 RcPressureValue，不新增命中区（命中检测/DPI/重绘零改动）。
+            if (Scaled(_layout.RcPressureValue.ToRectangle()).Contains(local)
+                && _items.TryGetValue(deviceId, out GridItem item)
+                && !string.IsNullOrEmpty(item.CurrentText))
+            {
+                return $"压力：{item.PressureText} / 电流：{item.CurrentText}";
+            }
             return null;
         }
 
@@ -1308,6 +1320,11 @@ namespace AgingTestSystem.Views
             public bool CarrierPower;
             public bool VacuumOpen;
             public string PressureText = "---";
+            /// <summary>
+            /// 载台电流文本（【V1.74 新增】Q2 骨架：ApplyData 随采集刷新，有数如"0.42 A"，
+            /// 无数据记空串；只用于压力框悬停提示，不参与绘制布局）。
+            /// </summary>
+            public string CurrentText = "";
             public string SnText = "";
             public string RecipeText = "";
             public string DelayStartText = "00:00:00";

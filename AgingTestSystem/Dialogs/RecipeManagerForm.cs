@@ -96,6 +96,20 @@ namespace AgingTestSystem.Dialogs
                 dgvRecipes.Rows[0].Selected = true;
                 UpdateRecipeSettings(_recipes[0]);
             }
+
+            // 【V1.74】显示模式悬停说明（标签+输入框两边都挂；选项走字典，
+            // 本窗无配置对象，Resolve(null) 读当前项目文件，再没有走缺省预设。
+            // ToolTip 进 components 容器随窗体自动释放；本窗 Designer 从未放过组件类控件，
+            // components 为 null 时补建（与 BatchRecipeForm 同口径，回归 UiPureHelpers 锁）。
+            if (this.components == null) this.components = new System.ComponentModel.Container();
+            var modeTipText = SettingsForm.WrapTooltip(
+                "显示模式：本次烧屏跑的显示画面，只追溯不判定。可选：" +
+                string.Join("/", DisplayModeOptions.Resolve(null).ToArray()) +
+                "（字典在系统设置→工艺策略里改）。");
+            var modeTip = new ToolTip(this.components);
+            modeTip.ShowAlways = true;
+            modeTip.SetToolTip(lblDisplayMode, modeTipText);
+            modeTip.SetToolTip(txtDisplayMode, modeTipText);
         }
 
         /// <summary>
@@ -203,7 +217,18 @@ namespace AgingTestSystem.Dialogs
             // 【V1.66】负压阈值与显示模式一并写入：以前这里漏写 NegativePressure，
             // 新建配方该值恒 0，下发后真空保护≈关闭。现在存什么定格什么。
             recipe.NegativePressure = nudNegativePressure.Value;
-            recipe.DisplayMode = txtDisplayMode.Text.Trim();
+            // 【V1.74】显示模式字典校验（Q20：空=清空允许，字典内=存规范写法，
+            // 字典外拦并报出全部选项；本窗无配置对象，读项目文件字典）
+            string canonicalMode, modeErr;
+            if (!DisplayModeOptions.ValidateInput(txtDisplayMode.Text,
+                DisplayModeOptions.Resolve(null), out canonicalMode, out modeErr))
+            {
+                MessageBox.Show(modeErr, "输入验证",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                txtDisplayMode.Focus();
+                return false;
+            }
+            recipe.DisplayMode = canonicalMode;
             return true;
         }
 
@@ -351,7 +376,9 @@ namespace AgingTestSystem.Dialogs
             PersistRecipes();
             LoadRecipesToGrid();
             SelectRecipeRow(index);
-            MessageBox.Show($"配方 \"{target.Name}\" 已更新", "提示",
+            // 【V1.74】定格说明（Q18）：配方库更新只影响新启动，在测按旧参数跑完——
+            // 本窗无 deviceManager 查不了在测，写死静态说明（不弹窗分支、不打扰）。
+            MessageBox.Show($"配方 \"{target.Name}\" 已更新\r\n（在测工位按启动时定格参数跑完，仅对新启动生效）", "提示",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 

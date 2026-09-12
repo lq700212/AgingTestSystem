@@ -1,8 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Windows.Forms;
+using DocumentFormat.OpenXml;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Spreadsheet;
+using AgingTestSystem.Services;
 
 namespace AgingTestSystem.Dialogs
 {
@@ -15,11 +20,15 @@ namespace AgingTestSystem.Dialogs
     /// 【数据来源（V1.10 改为读取真实日志文件）】
     /// - 日志文件：程序运行目录\Logs\TestLog_yyyyMMdd.csv（每天一个文件）
     /// - 写入方：<see cref="AgingTestSystem.Services.TestEventLogger"/>
-    /// - 列格式：时间,批号,设备编号,事件,详情,压力(kPa),温度(°C)
+    /// - 列格式：时间,批号,设备编号,事件,详情,压力(kPa),温度(°C),电流(A)
+    ///   （V1.74 追加电流列；老文件无此列，解析按"有则取、无则空"，前后兼容）
     /// - 历史记录窗体按选择的日期范围读取对应日期的 CSV 文件并展示
     ///
-    /// 【导出（预留）】
-    /// 当前导出功能为占位，后续可把查询结果导出为 Excel / CSV。
+    /// 【导出（V1.74 落地）】
+    /// 导出按钮把"当前查询结果"按 ReportColumns 列配置生成 xlsx：
+    /// 留空=缺省预设8列（时间/批号/工位/事件/详情/压力/温度/电流），客户在系统设置→
+    /// 报表导出分类里改列（跟项目走，切项目即换模板）。写盘套路与 ID 绑定窗同源
+    /// （OpenXml，表头加粗居中 + 数据行普通样式，零新依赖）。
     ///
     /// 【界面布局】
     /// ┌────────────────────────────────────────────────┐
@@ -40,7 +49,8 @@ namespace AgingTestSystem.Dialogs
     public partial class HistoryRecordForm : Sunny.UI.UIForm
     {
         /// <summary>
-        /// 日志条目数据结构（与 CSV 列对应）
+        /// 日志条目数据结构（与 CSV 列对应；V1.74 加压力/温度/电流，供报表导出用，
+        /// 老文件缺列按空串处理——显示不受影响）。
         /// </summary>
         private class LogEntry
         {
@@ -54,12 +64,24 @@ namespace AgingTestSystem.Dialogs
             public string Event { get; set; }
             /// <summary>事件详情</summary>
             public string Detail { get; set; }
+            /// <summary>压力值原文（kPa，老文件无此列则空）</summary>
+            public string Pressure { get; set; }
+            /// <summary>温度值原文（°C，老文件无此列则空）</summary>
+            public string Temperature { get; set; }
+            /// <summary>电流值原文（A，V1.74 列；老文件无则空）</summary>
+            public string Current { get; set; }
         }
 
         /// <summary>
         /// 日志数据列表（从 CSV 文件加载）
         /// </summary>
         private readonly List<LogEntry> _logs = new List<LogEntry>();
+
+        /// <summary>
+        /// 当前查询结果（【V1.74 新增】导出按钮的数据源：与表格显示同序同内容，
+        /// 上限 500 条与显示一致——报表明细一次导 500 条可读性最好，要全量直接拷 CSV）。
+        /// </summary>
+        private readonly List<LogEntry> _shown = new List<LogEntry>();
 
         /// <summary>
         /// 构造函数
@@ -84,6 +106,7 @@ namespace AgingTestSystem.Dialogs
         {
             dgvHistory.Rows.Clear();
             _logs.Clear();
+            _shown.Clear();
 
             // 日期范围：开始日期的 00:00:00 到结束日期的 23:59:59
             DateTime startTime = dtpStart.Value.Date;
@@ -122,6 +145,7 @@ namespace AgingTestSystem.Dialogs
                         log.Event,
                         log.Detail
                     );
+                    _shown.Add(log);
                     matchCount++;
 
                     // 限制最大显示条数，避免界面卡顿
@@ -165,7 +189,8 @@ namespace AgingTestSystem.Dialogs
                         if (fields.Length < 5) continue; // 列数不足跳过
 
                         // 列含义（与 TestEventLogger 写入顺序一致）：
-                        // 0=时间, 1=批号, 2=设备编号, 3=事件, 4=详情, 5=压力, 6=温度
+                        // 0=时间, 1=批号, 2=设备编号, 3=事件, 4=详情, 5=压力, 6=温度, 7=电流(V1.74)
+                        // 老文件列少：按"有则取、无则空"，缺列不丢行（追溯链不断）。
                         if (!DateTime.TryParse(fields[0], out DateTime time)) continue;
 
                         _logs.Add(new LogEntry
@@ -174,7 +199,10 @@ namespace AgingTestSystem.Dialogs
                             Lot = fields[1],
                             Device = fields[2].StartsWith("NO.") ? fields[2] : $"NO.{fields[2]}",
                             Event = fields[3],
-                            Detail = fields[4]
+                            Detail = fields[4],
+                            Pressure = fields.Length > 5 ? fields[5] : "",
+                            Temperature = fields.Length > 6 ? fields[6] : "",
+                            Current = fields.Length > 7 ? fields[7] : ""
                         });
                     }
                 }
@@ -265,39 +293,260 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 导出按钮点击事件（预留功能）
-        /// 【V1.10 说明】数据已存储在 Logs\TestLog_*.csv，
-        /// 如需导出可直接打开/拷贝该目录，或后续实现按查询结果导出 Excel。
+        /// 导出按钮点击事件（【V1.74 落地】按 ReportColumns 列配置导出 xlsx）。
+        /// 数据源 = 当前查询结果（_shown，与表格同序同内容，上限 500 条）；
+        /// 列配置留空走缺省预设 8 列，手改文件写错走预设兜底（Resolve 保证永远有列）。
         /// </summary>
         private void btnExport_Click(object sender, EventArgs e)
         {
-            if (dgvHistory.Rows.Count == 0)
+            if (_shown.Count == 0)
             {
                 MessageBox.Show("当前没有可导出的数据，请先查询", "提示",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
-            // 打开日志目录（让用户直接查看/拷贝 CSV 文件）
-            string logDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
-            if (Directory.Exists(logDir))
+            // 列配置跟项目走：当前项目的 Policy.json（没配=缺省预设；脏值走预设兜底）
+            string rawColumns = ProjectPolicyStore.GetRaw("ReportColumns");
+            List<ReportColumns.Column> columns = ReportColumns.Resolve(rawColumns);
+
+            DateTime now = DateTime.Now;
+            using (SaveFileDialog saveDialog = new SaveFileDialog())
             {
+                saveDialog.Filter = "Excel文件 (*.xlsx)|*.xlsx";
+                saveDialog.FileName = $"老化报表_{now:yyyyMMdd}_{now:HHmmss}.xlsx";
+                saveDialog.Title = "保存老化报表";
+                saveDialog.DefaultExt = "xlsx";
+                saveDialog.AddExtension = true;
+                if (saveDialog.ShowDialog(this) != DialogResult.OK) return;
+
                 try
                 {
-                    System.Diagnostics.Process.Start("explorer.exe", logDir);
-                    return;
+                    WriteReportXlsx(saveDialog.FileName, columns, _shown);
+                    MessageBox.Show($"报表已生成：{_shown.Count} 条，{columns.Count} 列。\n{saveDialog.FileName}",
+                        "导出成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // 打开失败则提示路径
+                    MessageBox.Show($"生成报表失败：\n{ex.Message}", "错误",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
+        }
 
-            MessageBox.Show(
-                $"当前查询结果共 {dgvHistory.Rows.Count} 条日志。\n\n" +
-                $"日志目录：{logDir}\n" +
-                "已为你打开该目录，可直接查看 / 拷贝 CSV 日志文件。",
-                "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        /// <summary>
+        /// 取某条日志在指定报表字段下的单元格文本（字段只可能是 AvailableFields 里的 8 个，
+        /// 未知字段（理论上到不了，Resolve 已洗过）返回空串，绝不抛异常）。
+        /// </summary>
+        private static string GetReportCellText(LogEntry log, string field)
+        {
+            if (log == null || string.IsNullOrEmpty(field)) return "";
+            switch (field)
+            {
+                case "time": return log.Time.ToString("yyyy-MM-dd HH:mm:ss");
+                case "lot": return log.Lot ?? "";
+                case "device": return log.Device ?? "";
+                case "event": return log.Event ?? "";
+                case "detail": return log.Detail ?? "";
+                case "pressure": return log.Pressure ?? "";
+                case "temp": return log.Temperature ?? "";
+                case "current": return log.Current ?? "";
+                default: return "";
+            }
+        }
+
+        /// <summary>
+        /// 写报表 xlsx（OpenXml，套路与 ID 绑定窗同源：工作簿→工作表→表头加粗居中→数据行）。
+        /// </summary>
+        /// <param name="filePath">保存路径</param>
+        /// <param name="columns">生效列（显示名做列头）</param>
+        /// <param name="rows">数据行（调用方已按查询结果备好）</param>
+        private static void WriteReportXlsx(string filePath, List<ReportColumns.Column> columns,
+            List<LogEntry> rows)
+        {
+            using (SpreadsheetDocument document = SpreadsheetDocument.Create(
+                filePath, SpreadsheetDocumentType.Workbook))
+            {
+                WorkbookPart workbookPart = document.AddWorkbookPart();
+                workbookPart.Workbook = new Workbook();
+
+                WorksheetPart worksheetPart = workbookPart.AddNewPart<WorksheetPart>();
+                worksheetPart.Worksheet = new Worksheet(new SheetData());
+
+                Sheets sheets = workbookPart.Workbook.AppendChild(new Sheets());
+                Sheet sheet = new Sheet();
+                sheet.Id = workbookPart.GetIdOfPart(worksheetPart);
+                sheet.SheetId = 1;
+                sheet.Name = "老化报表";
+                sheets.Append(sheet);
+
+                SheetData sheetData = worksheetPart.Worksheet.GetFirstChild<SheetData>();
+                uint headerStyleIndex = CreateReportHeaderFormat(document);
+
+                // 表头行（显示名）
+                string[] headers = new string[columns.Count];
+                for (int i = 0; i < columns.Count; i++) headers[i] = columns[i].Display;
+                sheetData.Append(CreateReportRow(0, headers, headerStyleIndex));
+
+                // 数据行（样式 0=普通）
+                int rowIndex = 1;
+                foreach (var log in rows)
+                {
+                    string[] values = new string[columns.Count];
+                    for (int i = 0; i < columns.Count; i++)
+                    {
+                        values[i] = GetReportCellText(log, columns[i].Field);
+                    }
+                    sheetData.Append(CreateReportRow(rowIndex, values, 0));
+                    rowIndex++;
+                }
+
+                workbookPart.Workbook.Save();
+            }
+        }
+
+        /// <summary>
+        /// 报表样式表（与 ID 绑定窗同规范：格式 0=普通数据行，格式 1=表头加粗居中换行；
+        /// count 必须与实际元素数一致，否则 Excel 报"文件损坏"）。
+        /// </summary>
+        /// <returns>表头样式索引（固定为 1）</returns>
+        private static uint CreateReportHeaderFormat(SpreadsheetDocument document)
+        {
+            WorkbookStylesPart stylesPart = null;
+            foreach (var part in document.WorkbookPart.GetPartsOfType<WorkbookStylesPart>())
+            {
+                stylesPart = part;
+                break;
+            }
+            if (stylesPart == null)
+            {
+                stylesPart = document.WorkbookPart.AddNewPart<WorkbookStylesPart>();
+                stylesPart.Stylesheet = new Stylesheet();
+            }
+            Stylesheet stylesheet = stylesPart.Stylesheet;
+
+            Fonts fonts = FirstOf<Fonts>(stylesheet);
+            if (fonts == null)
+            {
+                fonts = new Fonts();
+                stylesheet.Append(fonts);
+            }
+            Font normalFont = new Font();
+            normalFont.FontSize = new FontSize { Val = 11 };
+            normalFont.FontName = new FontName { Val = "微软雅黑" };
+            fonts.Append(normalFont);
+            Font headerFont = new Font();
+            headerFont.Bold = new Bold();
+            headerFont.FontSize = new FontSize { Val = 11 };
+            headerFont.Color = new Color { Rgb = "000000" };
+            headerFont.FontName = new FontName { Val = "微软雅黑" };
+            fonts.Append(headerFont);
+
+            Fills fills = FirstOf<Fills>(stylesheet);
+            if (fills == null)
+            {
+                fills = new Fills();
+                stylesheet.Append(fills);
+            }
+            Fill noneFill = new Fill();
+            noneFill.PatternFill = new PatternFill { PatternType = PatternValues.None };
+            fills.Append(noneFill);
+
+            Borders borders = FirstOf<Borders>(stylesheet);
+            if (borders == null)
+            {
+                borders = new Borders();
+                stylesheet.Append(borders);
+            }
+            borders.Append(new Border());
+
+            CellStyleFormats cellStyleFormats = FirstOf<CellStyleFormats>(stylesheet);
+            if (cellStyleFormats == null)
+            {
+                cellStyleFormats = new CellStyleFormats();
+                stylesheet.Append(cellStyleFormats);
+            }
+            cellStyleFormats.Append(new CellFormat());
+
+            CellFormats cellFormats = FirstOf<CellFormats>(stylesheet);
+            if (cellFormats == null)
+            {
+                cellFormats = new CellFormats();
+                stylesheet.Append(cellFormats);
+            }
+            CellFormat normalFormat = new CellFormat();
+            normalFormat.FontId = UInt32Value.FromUInt32(0);
+            normalFormat.FillId = UInt32Value.FromUInt32(0);
+            normalFormat.ApplyFont = BooleanValue.FromBoolean(true);
+            normalFormat.ApplyFill = BooleanValue.FromBoolean(true);
+            cellFormats.Append(normalFormat);
+            CellFormat headerFormat = new CellFormat();
+            headerFormat.FontId = UInt32Value.FromUInt32(1);
+            headerFormat.FillId = UInt32Value.FromUInt32(0);
+            headerFormat.ApplyFont = BooleanValue.FromBoolean(true);
+            headerFormat.ApplyFill = BooleanValue.FromBoolean(true);
+            headerFormat.ApplyAlignment = BooleanValue.FromBoolean(true);
+            Alignment headerAlignment = new Alignment();
+            headerAlignment.Horizontal = HorizontalAlignmentValues.Center;
+            headerAlignment.Vertical = VerticalAlignmentValues.Center;
+            headerAlignment.WrapText = BooleanValue.FromBoolean(true);
+            headerFormat.Alignment = headerAlignment;
+            cellFormats.Append(headerFormat);
+
+            fonts.Count = UInt32Value.FromUInt32((uint)fonts.Elements<Font>().Count());
+            fills.Count = UInt32Value.FromUInt32((uint)fills.Elements<Fill>().Count());
+            borders.Count = UInt32Value.FromUInt32((uint)borders.Elements<Border>().Count());
+            cellStyleFormats.Count = UInt32Value.FromUInt32((uint)cellStyleFormats.Elements<CellFormat>().Count());
+            cellFormats.Count = UInt32Value.FromUInt32((uint)cellFormats.Elements<CellFormat>().Count());
+
+            stylesheet.Save();
+            return 1;
+        }
+
+        /// <summary>取样式表里第一个指定类型的元素（没有返回 null；不用 Linq，保持零新依赖习惯）。</summary>
+        private static T FirstOf<T>(Stylesheet stylesheet) where T : OpenXmlElement
+        {
+            foreach (var el in stylesheet.Elements<T>())
+            {
+                return el;
+            }
+            return null;
+        }
+
+        /// <summary>创建报表行（单元格全按字符串写，时间/数字不转 Excel 原生类型——追溯报表文本即够用）。</summary>
+        private static Row CreateReportRow(int rowIndex, string[] values, uint? styleIndex)
+        {
+            Row row = new Row();
+            row.RowIndex = UInt32Value.FromUInt32((uint)(rowIndex + 1));
+            for (int i = 0; i < values.Length; i++)
+            {
+                Cell cell = new Cell
+                {
+                    CellReference = $"{GetReportColumnName(i)}{rowIndex + 1}",
+                    CellValue = new CellValue(values[i] ?? ""),
+                    DataType = CellValues.String
+                };
+                if (styleIndex.HasValue)
+                {
+                    cell.StyleIndex = UInt32Value.FromUInt32(styleIndex.Value);
+                }
+                row.Append(cell);
+            }
+            return row;
+        }
+
+        /// <summary>列索引转 Excel 列名（A~Z, AA…，与 ID 绑定窗同函数）。</summary>
+        private static string GetReportColumnName(int index)
+        {
+            string columnName = string.Empty;
+            int currentIndex = index;
+            while (currentIndex >= 0)
+            {
+                char c = (char)('A' + (currentIndex % 26));
+                columnName = c + columnName;
+                currentIndex = currentIndex / 26 - 1;
+            }
+            return columnName;
         }
 
         /// <summary>
