@@ -54,9 +54,9 @@ namespace AgingTestSystem.Dialogs
             // 
             // txtLot
             // 
-            this.txtLot.Location = new System.Drawing.Point(90, 92);
+            this.txtLot.Location = new System.Drawing.Point(90, 87);
             this.txtLot.Name = "txtLot";
-            this.txtLot.Size = new System.Drawing.Size(280, 21);
+            this.txtLot.Size = new System.Drawing.Size(280, 29);
             this.txtLot.TabIndex = 2;
             this.txtLot.KeyDown += new System.Windows.Forms.KeyEventHandler(this.txtLot_KeyDown);
             // 

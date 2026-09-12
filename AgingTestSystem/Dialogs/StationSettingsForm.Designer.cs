@@ -102,10 +102,10 @@ namespace AgingTestSystem.Dialogs
             //
             // txtState - 状态显示输入框（只读，V1.18 显示中文状态：空闲/选中/繁忙/故障）
             //
-            this.txtState.Location = new System.Drawing.Point(150, 60);
+            this.txtState.Location = new System.Drawing.Point(150, 55);
             this.txtState.Name = "txtState";
             this.txtState.ReadOnly = true;
-            this.txtState.Size = new System.Drawing.Size(180, 21);
+            this.txtState.Size = new System.Drawing.Size(180, 29);
             this.txtState.TabIndex = 1;
             this.txtState.Text = "空闲";
             //
@@ -120,9 +120,9 @@ namespace AgingTestSystem.Dialogs
             //
             // txtSN - SN输入框
             //
-            this.txtSN.Location = new System.Drawing.Point(150, 98);
+            this.txtSN.Location = new System.Drawing.Point(150, 93);
             this.txtSN.Name = "txtSN";
-            this.txtSN.Size = new System.Drawing.Size(180, 21);
+            this.txtSN.Size = new System.Drawing.Size(180, 29);
             this.txtSN.TabIndex = 3;
             //
             // lblRecipe - "配方"设置项名称（左对齐）
@@ -136,9 +136,9 @@ namespace AgingTestSystem.Dialogs
             //
             // txtRecipe - 配方输入框
             //
-            this.txtRecipe.Location = new System.Drawing.Point(150, 136);
+            this.txtRecipe.Location = new System.Drawing.Point(150, 131);
             this.txtRecipe.Name = "txtRecipe";
-            this.txtRecipe.Size = new System.Drawing.Size(180, 21);
+            this.txtRecipe.Size = new System.Drawing.Size(180, 29);
             this.txtRecipe.TabIndex = 5;
             //
             // lblDelay - "延时时间"设置项名称（左对齐）
@@ -305,7 +305,7 @@ namespace AgingTestSystem.Dialogs
             // 下发=框里是什么就是什么（存什么定格什么，无魔法值）。项目未上线无老包袱。
             //
             this.lblPressure.AutoSize = true;
-            this.lblPressure.Location = new System.Drawing.Point(30, 285);
+            this.lblPressure.Location = new System.Drawing.Point(30, 291);
             this.lblPressure.Name = "lblPressure";
             this.lblPressure.Size = new System.Drawing.Size(65, 12);
             this.lblPressure.TabIndex = 10;
@@ -316,7 +316,7 @@ namespace AgingTestSystem.Dialogs
             //
             this.nudPressure.DecimalPlaces = 1;
             this.nudPressure.Increment = 0.5M;
-            this.nudPressure.Location = new System.Drawing.Point(150, 282);
+            this.nudPressure.Location = new System.Drawing.Point(150, 288);
             this.nudPressure.Maximum = new decimal(new int[] {
             9999,
             0,
@@ -335,7 +335,7 @@ namespace AgingTestSystem.Dialogs
             // lblPressureUnit - 负压单位
             //
             this.lblPressureUnit.AutoSize = true;
-            this.lblPressureUnit.Location = new System.Drawing.Point(275, 285);
+            this.lblPressureUnit.Location = new System.Drawing.Point(275, 291);
             this.lblPressureUnit.Name = "lblPressureUnit";
             this.lblPressureUnit.Size = new System.Drawing.Size(23, 12);
             this.lblPressureUnit.TabIndex = 10;
@@ -346,7 +346,7 @@ namespace AgingTestSystem.Dialogs
             // 【V1.66】烧屏画面记录（自由文本）：回填优先级同负压；下发走 SetStationRecipe。
             //
             this.lblDisplayMode.AutoSize = true;
-            this.lblDisplayMode.Location = new System.Drawing.Point(30, 317);
+            this.lblDisplayMode.Location = new System.Drawing.Point(30, 334);
             this.lblDisplayMode.Name = "lblDisplayMode";
             this.lblDisplayMode.Size = new System.Drawing.Size(65, 12);
             this.lblDisplayMode.TabIndex = 10;
@@ -354,10 +354,10 @@ namespace AgingTestSystem.Dialogs
             //
             // txtDisplayMode - 显示模式输入框
             //
-            this.txtDisplayMode.Location = new System.Drawing.Point(150, 314);
+            this.txtDisplayMode.Location = new System.Drawing.Point(150, 326);
             this.txtDisplayMode.MaxLength = 50;
             this.txtDisplayMode.Name = "txtDisplayMode";
-            this.txtDisplayMode.Size = new System.Drawing.Size(180, 21);
+            this.txtDisplayMode.Size = new System.Drawing.Size(180, 29);
             this.txtDisplayMode.TabIndex = 18;
             //
             // btnBreakVacuum - 破空按钮（功能待确认）
@@ -429,9 +429,11 @@ namespace AgingTestSystem.Dialogs
             //
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(490, 350);
+            this.ClientSize = new System.Drawing.Size(490, 370);
             // 【V1.71】绝对布局：禁缩小（MinimumSize=ClientSize），防缩坏布局；可放大。
-            this.MinimumSize = new System.Drawing.Size(490, 350);
+            // 【V1.72.6】输入框 21→29 后末两行间距只剩 6px，窗加高 20（350→370），
+            // 负压行下移 6、显示行下移 17，行隙回到 15+。
+            this.MinimumSize = new System.Drawing.Size(490, 370);
             // 【V1.71】UIForm 自绘蓝标题：删 FormBorderStyle，内容整体上移 35px 已逐项下移。
             this.Controls.Add(this.btnClose);
             this.Controls.Add(this.btnAddToQueue);
