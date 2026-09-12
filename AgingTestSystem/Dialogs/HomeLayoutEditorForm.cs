@@ -58,6 +58,15 @@ namespace AgingTestSystem.Dialogs
         /// <summary>当前编辑的布局配置（引用外部传入的实例，保存时由外部写盘）</summary>
         private readonly HomeLayoutConfig _layout;
 
+        /// <summary>
+        /// 自绘预览控件（【V1.72.16】在构造里代码创建，不进 Designer：
+        /// HomeLayoutPreviewControl 是内部自定义控件（还用 new 藏了基类 Layout 事件），
+        /// Designer 里 new 它/挂它的 LayoutChanged 事件，每次打开预览都标脏、存盘又零 diff，
+        /// 纯幽灵脏，删 Layout=null 行都去不掉，只能整机搬出来，Designer 里只留空 Panel 占位。
+        /// 以后新增"内部自绘控件"一律走这个姿势：Designer 只放标准控件占位，本体代码创建。
+        /// </summary>
+        private readonly HomeLayoutPreviewControl _preview;
+
         /// <summary>防止输入框与拖动互相触发造成死循环的标志位</summary>
         private bool _syncing;
 
@@ -71,9 +80,17 @@ namespace AgingTestSystem.Dialogs
 
             // 【V1.72.12 Designer 化】静态边框搬进 HomeLayoutEditorForm.Designer.cs
             // （含 SuspendLayout 包裹 + AutoScale 三要素 + Dock 挂接，都在里面）。
-            // 这里只回填"要吃构造参数"的两项：预览控件的 Layout 引用 + 四个输入框初值。
+            // 这里只回填"要吃构造参数"的三项：预览控件创建 + Layout 引用 + 四个输入框初值。
             InitializeComponent();
-            _preview.Layout = _layout;
+            _preview = new HomeLayoutPreviewControl
+            {
+                Name = "_preview",
+                Dock = DockStyle.Fill,
+                Layout = _layout,
+                BackColor = GetPreviewBackColor(false),
+            };
+            _preview.LayoutChanged += Preview_LayoutChanged;
+            _pnlPreviewHost.Controls.Add(_preview);
             _syncing = true;
             _nudTop.Value = ClampNud(_nudTop, _layout.TopBarHeight);
             _nudMenu.Value = ClampNud(_nudMenu, _layout.MenuHeight);

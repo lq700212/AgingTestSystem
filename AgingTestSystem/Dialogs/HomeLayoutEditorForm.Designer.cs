@@ -7,7 +7,12 @@ namespace AgingTestSystem.Dialogs
     /// 主页区域调整可视化编辑器 — 设计器部分（【V1.72.12 新增】纯代码拆分：静态边框进 Designer）。
     /// 这里只装"静态边框"：窗体属性 + 预览占位 + 数值面板（4 标签 + 4 输入框）
     /// + 底部三按钮 + 顶部说明条。以下三样仍在 HomeLayoutEditorForm.cs 里用代码做：
-    /// ①_preview.Layout 赋值（吃构造传进的 layout 真参数，Designer 给不了）；
+    /// ①_preview 自绘预览控件的创建/Layout 赋值/事件挂接（吃构造传进的 layout 真参数，
+    /// Designer 给不了；【V1.72.16】_preview 的本体原先也在 Designer 里 new，
+    /// 但 HomeLayoutPreviewControl 是内部自定义控件（还 hide 了基类 Layout 事件），
+    /// 设计器对它的实例化/事件绑定每次打开都标脏、存盘又零 diff，纯幽灵脏，
+    /// 删 Layout=null 行也去不掉，只能整机搬出 Designer，留空 Panel 占位）；
+    /// ②四个 nud 初值回填（同上，依赖 layout；范围 Minimum/Maximum 在这里按
     /// ②四个 nud 初值回填（同上，依赖 layout；范围 Minimum/Maximum 在这里按
     /// HomeLayoutConfig.Range 常量设，初值 Value 在代码里设）；
     /// ③自绘预览控件本体 HomeLayoutPreviewControl（GDI 自绘类，留 .cs 不进 Designer）。
@@ -16,6 +21,10 @@ namespace AgingTestSystem.Dialogs
     /// 元组成员表达式——设计器序列化器认不出，打开预览就标脏，存盘时整行删掉，
     /// 输入框变回 0~100，拖预览边缘给 240/340 直接 ArgumentOutOfRangeException，
     /// 整个可视调尺寸功能全坏（本次实锤）。改 Range 常量必须同步改这里四个数；
+    /// 例外：菜单栏上限 100 就是 NumericUpDown 的默认值，写了 VS 存盘也会删，
+    /// 所以 _nudMenu 只有 Minimum 没有 Maximum，不是不小心漏了，别"补"回去，
+    /// 补了下次预览又脏；Value=下限四行是 VS 自动补的（活值被 Minimum 顶上去，
+    /// 与默认 0 对不上，不写也脏），留着别删；
     /// ②InitializeComponent 方法体里禁止写任何 // 注释——VS 重写时整段再生，
     /// 注释全删（BatchRecipe 的中文说明就是这么没的），说明一律写文件头/对应 .cs；
     /// ③本窗的 .resx 是 VS 预览自动建的空模板（无真实资源），别手删，
@@ -27,8 +36,8 @@ namespace AgingTestSystem.Dialogs
     /// </summary>
     partial class HomeLayoutEditorForm
     {
-        /// <summary>预览自绘控件（占位；Layout 在代码里赋值）</summary>
-        private HomeLayoutPreviewControl _preview;
+        /// <summary>预览区占位面板（空壳；自绘预览控件在代码里创建后 Dock=Fill 填进来）</summary>
+        private Panel _pnlPreviewHost;
 
         /// <summary>数值输入面板（2 列 × 4 行 Percent 等分）</summary>
         private TableLayoutPanel _pnlValues;
@@ -66,7 +75,7 @@ namespace AgingTestSystem.Dialogs
 
         private void InitializeComponent()
         {
-            this._preview = new AgingTestSystem.Dialogs.HomeLayoutPreviewControl();
+            this._pnlPreviewHost = new System.Windows.Forms.Panel();
             this._pnlValues = new System.Windows.Forms.TableLayoutPanel();
             this._lblTop = new Sunny.UI.UILabel();
             this._nudTop = new System.Windows.Forms.NumericUpDown();
@@ -88,17 +97,15 @@ namespace AgingTestSystem.Dialogs
             ((System.ComponentModel.ISupportInitialize)(this._nudStatus)).BeginInit();
             this._pnlBottom.SuspendLayout();
             this.SuspendLayout();
-            // 
-            // _preview
-            // 
-            this._preview.BackColor = System.Drawing.Color.White;
-            this._preview.Dock = System.Windows.Forms.DockStyle.Fill;
-            this._preview.Layout = null;
-            this._preview.Location = new System.Drawing.Point(2, 212);
-            this._preview.Name = "_preview";
-            this._preview.Size = new System.Drawing.Size(636, 254);
-            this._preview.TabIndex = 0;
-            this._preview.LayoutChanged += new System.EventHandler(this.Preview_LayoutChanged);
+            //
+            // _pnlPreviewHost（空壳占位；设计时显示白底空框，运行时由构造填入自绘预览）
+            //
+            this._pnlPreviewHost.BackColor = System.Drawing.Color.White;
+            this._pnlPreviewHost.Dock = System.Windows.Forms.DockStyle.Fill;
+            this._pnlPreviewHost.Location = new System.Drawing.Point(2, 212);
+            this._pnlPreviewHost.Name = "_pnlPreviewHost";
+            this._pnlPreviewHost.Size = new System.Drawing.Size(636, 254);
+            this._pnlPreviewHost.TabIndex = 0;
             // 
             // _pnlValues
             // 
@@ -157,6 +164,11 @@ namespace AgingTestSystem.Dialogs
             this._nudTop.Name = "_nudTop";
             this._nudTop.Size = new System.Drawing.Size(120, 26);
             this._nudTop.TabIndex = 1;
+            this._nudTop.Value = new decimal(new int[] {
+            15,
+            0,
+            0,
+            0});
             this._nudTop.ValueChanged += new System.EventHandler(this.Nud_ValueChanged);
             // 
             // _lblMenu
@@ -178,11 +190,6 @@ namespace AgingTestSystem.Dialogs
             this._nudMenu.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Left)));
             this._nudMenu.Location = new System.Drawing.Point(321, 43);
-            this._nudMenu.Maximum = new decimal(new int[] {
-            100,
-            0,
-            0,
-            0});
             this._nudMenu.Minimum = new decimal(new int[] {
             25,
             0,
@@ -191,6 +198,11 @@ namespace AgingTestSystem.Dialogs
             this._nudMenu.Name = "_nudMenu";
             this._nudMenu.Size = new System.Drawing.Size(120, 26);
             this._nudMenu.TabIndex = 3;
+            this._nudMenu.Value = new decimal(new int[] {
+            25,
+            0,
+            0,
+            0});
             this._nudMenu.ValueChanged += new System.EventHandler(this.Nud_ValueChanged);
             // 
             // _lblRight
@@ -225,6 +237,11 @@ namespace AgingTestSystem.Dialogs
             this._nudRight.Name = "_nudRight";
             this._nudRight.Size = new System.Drawing.Size(120, 26);
             this._nudRight.TabIndex = 5;
+            this._nudRight.Value = new decimal(new int[] {
+            180,
+            0,
+            0,
+            0});
             this._nudRight.ValueChanged += new System.EventHandler(this.Nud_ValueChanged);
             // 
             // _lblStatus
@@ -259,6 +276,11 @@ namespace AgingTestSystem.Dialogs
             this._nudStatus.Name = "_nudStatus";
             this._nudStatus.Size = new System.Drawing.Size(120, 26);
             this._nudStatus.TabIndex = 7;
+            this._nudStatus.Value = new decimal(new int[] {
+            15,
+            0,
+            0,
+            0});
             this._nudStatus.ValueChanged += new System.EventHandler(this.Nud_ValueChanged);
             // 
             // _pnlBottom
@@ -338,7 +360,7 @@ namespace AgingTestSystem.Dialogs
             // 
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
             this.ClientSize = new System.Drawing.Size(640, 520);
-            this.Controls.Add(this._preview);
+            this.Controls.Add(this._pnlPreviewHost);
             this.Controls.Add(this._pnlValues);
             this.Controls.Add(this._lblTip);
             this.Controls.Add(this._pnlBottom);
