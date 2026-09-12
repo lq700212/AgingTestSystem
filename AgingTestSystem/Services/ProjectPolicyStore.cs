@@ -39,6 +39,7 @@ namespace AgingTestSystem.Services
             "PowerLossPolicy",
             "AgingPressureLossPolicy",
             "CompletionAction",
+            "EventIdentityMode",
             "VentValveDoPoint",
             "FanTempShutdownEnabled",
             "MesTriggers",
@@ -49,6 +50,7 @@ namespace AgingTestSystem.Services
             "SkipVacuum",
             "ReportColumns",
             "DisplayModes",
+            "DisplayModeEnabled",
         };
 
         /// <summary>当前项目的策略文件路径（Projects/&lt;项目&gt;/Policy.json）。</summary>
@@ -218,6 +220,11 @@ namespace AgingTestSystem.Services
                             Tuple.Create("下电关阀+蜂鸣提醒", "PowerOffAndBeep"),
                             Tuple.Create("下电+开破空阀泄压（需配点位）", "PowerOffAndVent"),
                             Tuple.Create("蜂鸣+泄压都要", "PowerOffVentAndBeep"),
+                        } },
+                    { "EventIdentityMode", new Tuple<string, string>[]
+                        {
+                            Tuple.Create("记录现值（现状）：事件瞬间绑定的SN/配方", "RecordTime"),
+                            Tuple.Create("启动定格：该轮启动时的SN/配方，中途重绑不污染", "StartSnapshot"),
                         } },
                 };
             }

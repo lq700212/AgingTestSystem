@@ -902,6 +902,9 @@ namespace AgingTestSystem.Views
                 System.Configuration.ConfigurationManager.AppSettings["AgingPressureLossPolicy"], AgingPressureLossPolicy.StopOnLoss);
             config.CompletionAction = ParsePolicyEnum(
                 System.Configuration.ConfigurationManager.AppSettings["CompletionAction"], CompletionAction.PowerOffOnly);
+            // 【V1.76】事件行SN/配方取值（Q8 追溯口径；随后 Policy.json 可按项目覆盖）
+            config.EventIdentityMode = ParsePolicyEnum(
+                System.Configuration.ConfigurationManager.AppSettings["EventIdentityMode"], EventIdentityMode.RecordTime);
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["VentValveDoPoint"], out int ventPoint))
             {
                 config.VentValveDoPoint = Math.Max(0, ventPoint);
@@ -972,6 +975,13 @@ namespace AgingTestSystem.Views
             if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["SkipVacuum"], out bool skipVacuum))
             {
                 config.SkipVacuum = skipVacuum;
+            }
+
+            // 【V1.75】显示模式维度开关（机器缺省 false=三窗隐藏；项目 Policy.json 随后叠加）。
+            // DisplayModes 字典本身无机器读取（与 MesTriggers 同口径：缺省空+叠加）。
+            if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["DisplayModeEnabled"], out bool dmEnabled))
+            {
+                config.DisplayModeEnabled = dmEnabled;
             }
 
             // 【V1.67】项目策略叠加（Projects/<当前项目>/Policy.json 覆盖同名机器缺省）
@@ -2460,10 +2470,11 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 配方管理 → 弹出配方管理窗体
+        /// 【V1.75】把生效配置传进去：显示模式开关与字典走它（开关关=该行隐藏）
         /// </summary>
         private void MenuParamRecipe_Click(object sender, EventArgs e)
         {
-            using (var form = new RecipeManagerForm(_recipes, _config.AlarmPressureThresholdKPa))
+            using (var form = new RecipeManagerForm(_recipes, _config.AlarmPressureThresholdKPa, _config))
             {
                 ThemeManager.ApplyTo(form);
                 form.ShowDialog(this);
@@ -2504,10 +2515,14 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 历史记录 → 弹出历史记录查询窗体
+        /// 【V1.75】报表列按钮按管理员权限传入（与系统设置同口径：操作员看不见按钮）
         /// </summary>
         private void MenuLogHistory_Click(object sender, EventArgs e)
         {
-            using (var form = new HistoryRecordForm())
+            bool canConfigure = false;
+            try { canConfigure = _userManager.HasPermission(UserRole.Administrator); }
+            catch { canConfigure = false; }
+            using (var form = new HistoryRecordForm(canConfigure))
             {
                 ThemeManager.ApplyTo(form);
                 form.ShowDialog(this);

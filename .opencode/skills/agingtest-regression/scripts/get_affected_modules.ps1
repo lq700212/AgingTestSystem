@@ -51,8 +51,8 @@ $Map = @(
     @{ Pat = @("*ProcessPolicyForm*", "*PolicyGraph*"); Mods = @("ProcessPolicyV170", "PolicyV167", "UiFinalizerV172_14", "DesignerStabilityV172_16") },
     @{ Pat = @("*MainForm*");                       Mods = @("UiPureHelpers", "UiStyleV172_1", "ThemeManager", "SettingsValidate", "UiFinalizerV172_14", "DesignerStabilityV172_16") },
     @{ Pat = @("*WorkstationGridView*");            Mods = @("PanelLayoutConfig", "UiPureHelpers") },
-    @{ Pat = @("*RuleListEditorPopup*");            Mods = @("RuleExprV169", "SettingsValidate") },
-    @{ Pat = @("*IoMappingEditorPopup*", "*IpListEditorPopup*", "*DataGridViewNumericUpDownCell*"); Mods = @("SettingsValidate", "IoOutputChannelRemap") },
+    @{ Pat = @("*RuleListEditorPopup*");            Mods = @("RuleExprV169", "SettingsValidate", "PowerReportV174") },
+    @{ Pat = @("*IoMappingEditorPopup*", "*IpListEditorPopup*", "*ReportColumnsEditorPopup*", "*DisplayModesEditorPopup*", "*DataGridViewNumericUpDownCell*"); Mods = @("SettingsValidate", "IoOutputChannelRemap", "PowerReportV174") },
     # --- Services (logic) ---
     @{ Pat = @("*PasswordHasher*");                 Mods = @("PasswordHasher") },
     @{ Pat = @("*UserManager*");                    Mods = @("UserManager") },

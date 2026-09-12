@@ -20,19 +20,20 @@ namespace AgingTestSystem.Dialogs
     /// 【数据来源（V1.10 改为读取真实日志文件）】
     /// - 日志文件：程序运行目录\Logs\TestLog_yyyyMMdd.csv（每天一个文件）
     /// - 写入方：<see cref="AgingTestSystem.Services.TestEventLogger"/>
-    /// - 列格式：时间,批号,设备编号,事件,详情,压力(kPa),温度(°C),电流(A)
-    ///   （V1.74 追加电流列；老文件无此列，解析按"有则取、无则空"，前后兼容）
+    /// - 列格式：时间,批号,SN,配方,设备编号,事件,结果,详情,压力(kPa),温度(°C),电流(A)
+    ///   （V1.76 结构化 11 列；行列不足 11 的脏行直接跳过——项目未上线，无老文件包袱）
     /// - 历史记录窗体按选择的日期范围读取对应日期的 CSV 文件并展示
     ///
     /// 【导出（V1.74 落地）】
     /// 导出按钮把"当前查询结果"按 ReportColumns 列配置生成 xlsx：
-    /// 留空=缺省预设8列（时间/批号/工位/事件/详情/压力/温度/电流），客户在系统设置→
+    /// 留空=缺省预设11列（时间/批号/SN/配方/工位/事件/结果/详情/压力/温度/电流），客户在系统设置→
     /// 报表导出分类里改列（跟项目走，切项目即换模板）。写盘套路与 ID 绑定窗同源
     /// （OpenXml，表头加粗居中 + 数据行普通样式，零新依赖）。
     ///
     /// 【界面布局】
     /// ┌────────────────────────────────────────────────┐
-    /// │ 开始时间:[▣]  结束时间:[▣]  [查询] [导出]      │ ← panelTop 顶部查询条
+    /// │ 开始时间:[▣]  结束时间:[▣]  [查询] [导出] [报表列]│ ← panelTop 顶部查询条
+    /// │ （报表列按钮仅管理员可见，点出列配置表格弹窗）    │
     /// ├────────────────────────────────────────────────┤
     /// │ dgvHistory（DataGridView，Dock Fill）           │
     /// │ ┌──────────┬──────────┬────────┬────────────┐  │
@@ -49,8 +50,7 @@ namespace AgingTestSystem.Dialogs
     public partial class HistoryRecordForm : Sunny.UI.UIForm
     {
         /// <summary>
-        /// 日志条目数据结构（与 CSV 列对应；V1.74 加压力/温度/电流，供报表导出用，
-        /// 老文件缺列按空串处理——显示不受影响）。
+        /// 日志条目数据结构（与 CSV 列对应；V1.76 加 SN/配方/结果，供报表导出用）。
         /// </summary>
         private class LogEntry
         {
@@ -58,10 +58,16 @@ namespace AgingTestSystem.Dialogs
             public DateTime Time { get; set; }
             /// <summary>批号</summary>
             public string Lot { get; set; }
+            /// <summary>产品 SN（V1.76 列；整机事件记空）</summary>
+            public string Sn { get; set; }
+            /// <summary>配方名称（V1.76 列；整机事件记空）</summary>
+            public string Recipe { get; set; }
             /// <summary>设备编号（如 NO.1）</summary>
             public string Device { get; set; }
             /// <summary>事件类型（如 测试开始/报警/复位）</summary>
             public string Event { get; set; }
+            /// <summary>判定结果（V1.76 列；完成/下料判定/报警才有，其余记空）</summary>
+            public string Result { get; set; }
             /// <summary>事件详情</summary>
             public string Detail { get; set; }
             /// <summary>压力值原文（kPa，老文件无此列则空）</summary>
@@ -84,11 +90,35 @@ namespace AgingTestSystem.Dialogs
         private readonly List<LogEntry> _shown = new List<LogEntry>();
 
         /// <summary>
+        /// 列配置权限（【V1.75 新增】构造传入：true=显示"报表列"按钮。
+        /// 主窗体按管理员权限传入（与系统设置同口径）；操作员看不见按钮，
+        /// 配置改不了——权限破洞比没入口更严重）。
+        /// </summary>
+        private readonly bool _canConfigureColumns;
+
+        /// <summary>
         /// 构造函数
         /// </summary>
-        public HistoryRecordForm()
+        /// <param name="canConfigureColumns">是否有列配置权限（主窗体按管理员权限传入，默认 false）</param>
+        public HistoryRecordForm(bool canConfigureColumns = false)
         {
             InitializeComponent();
+            _canConfigureColumns = canConfigureColumns;
+
+            // 非管理员隐藏"报表列"按钮（破空按钮先例：没有权限的功能不显示，不占地方）
+            btnColumns.Visible = canConfigureColumns;
+            if (canConfigureColumns)
+            {
+                // 本窗 Designer 声明了 components 但从未赋值（从没放过组件类控件，
+                // 与 Batch/RecipeManagerForm 同病，回归 HistoryCsv 锁）：先补建容器，
+                // 后续 Dispose 走容器自动释放。
+                if (this.components == null) this.components = new System.ComponentModel.Container();
+                var tip = new ToolTip(this.components);
+                tip.ShowAlways = true;
+                tip.SetToolTip(btnColumns, SettingsForm.WrapTooltip(
+                    "报表列设置：点出表格，一行一列（显示名文本+字段下拉），可增删/上下移；" +
+                    "确定后即存当前项目，导出按钮按新列出 xlsx。"));
+            }
 
             // 默认查询当天的记录（让用户打开窗体就能看到数据）
             dtpStart.Value = DateTime.Today;
@@ -178,7 +208,7 @@ namespace AgingTestSystem.Dialogs
                     {
                         if (firstLine)
                         {
-                            // 跳过表头：时间,批号,设备编号,事件,详情,压力(kPa),温度(°C)
+                            // 跳过表头：时间,批号,SN,配方,设备编号,事件,结果,详情,压力(kPa),温度(°C),电流(A)
                             firstLine = false;
                             continue;
                         }
@@ -186,23 +216,26 @@ namespace AgingTestSystem.Dialogs
 
                         // 解析 CSV 行（支持带双引号的字段）
                         string[] fields = ParseCsvLine(line);
-                        if (fields.Length < 5) continue; // 列数不足跳过
+                        if (fields.Length < 11) continue; // 列数不足=脏行跳过（无老文件包袱，不兼容缺列）
 
                         // 列含义（与 TestEventLogger 写入顺序一致）：
-                        // 0=时间, 1=批号, 2=设备编号, 3=事件, 4=详情, 5=压力, 6=温度, 7=电流(V1.74)
-                        // 老文件列少：按"有则取、无则空"，缺列不丢行（追溯链不断）。
+                        // 0=时间, 1=批号, 2=SN, 3=配方, 4=设备编号, 5=事件,
+                        // 6=结果, 7=详情, 8=压力, 9=温度, 10=电流(V1.74)
                         if (!DateTime.TryParse(fields[0], out DateTime time)) continue;
 
                         _logs.Add(new LogEntry
                         {
                             Time = time,
                             Lot = fields[1],
-                            Device = fields[2].StartsWith("NO.") ? fields[2] : $"NO.{fields[2]}",
-                            Event = fields[3],
-                            Detail = fields[4],
-                            Pressure = fields.Length > 5 ? fields[5] : "",
-                            Temperature = fields.Length > 6 ? fields[6] : "",
-                            Current = fields.Length > 7 ? fields[7] : ""
+                            Sn = fields[2],
+                            Recipe = fields[3],
+                            Device = fields[4].StartsWith("NO.") ? fields[4] : $"NO.{fields[4]}",
+                            Event = fields[5],
+                            Result = fields[6],
+                            Detail = fields[7],
+                            Pressure = fields[8],
+                            Temperature = fields[9],
+                            Current = fields[10]
                         });
                     }
                 }
@@ -335,7 +368,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 取某条日志在指定报表字段下的单元格文本（字段只可能是 AvailableFields 里的 8 个，
+        /// 取某条日志在指定报表字段下的单元格文本（字段只可能是 AvailableFields 里的 11 个，
         /// 未知字段（理论上到不了，Resolve 已洗过）返回空串，绝不抛异常）。
         /// </summary>
         private static string GetReportCellText(LogEntry log, string field)
@@ -345,8 +378,11 @@ namespace AgingTestSystem.Dialogs
             {
                 case "time": return log.Time.ToString("yyyy-MM-dd HH:mm:ss");
                 case "lot": return log.Lot ?? "";
+                case "sn": return log.Sn ?? "";
+                case "recipe": return log.Recipe ?? "";
                 case "device": return log.Device ?? "";
                 case "event": return log.Event ?? "";
+                case "result": return log.Result ?? "";
                 case "detail": return log.Detail ?? "";
                 case "pressure": return log.Pressure ?? "";
                 case "temp": return log.Temperature ?? "";
@@ -547,6 +583,56 @@ namespace AgingTestSystem.Dialogs
                 currentIndex = currentIndex / 26 - 1;
             }
             return columnName;
+        }
+
+        /// <summary>
+        /// 报表列按钮点击事件（【V1.75 新增】历史窗里的列配置入口：与设置表同一份配置、
+        /// 同一条保存路，客户在"要导出的地方"配列，不用去设置表翻 50 行）。
+        /// 模态弹窗（using 包住，关闭即释放，无终结器风险）；确定后经 ValidateValue
+        /// 校验进当前项目 Policy.json（跟项目走），导出按钮当场按新列出表。
+        /// </summary>
+        private void btnColumns_Click(object sender, EventArgs e)
+        {
+            if (!_canConfigureColumns) return;   // 双保险：按钮隐藏后仍防反射/误调
+            string current = ProjectPolicyStore.GetRaw("ReportColumns") ?? "";
+            using (var popup = new Controls.ReportColumnsEditorPopup(current))
+            {
+                Services.ThemeManager.ApplyTo(popup);
+                // 【V1.75】弹窗落到"报表列"按钮正下方（与设置表弹窗同算法）：
+                // 模态 ShowDialog + Manual 定位同样生效；底部越界改落上方。
+                // 全名写法：本文件同时引了 OpenXml.Spreadsheet（Font/Color 同名），
+                // 不加 using System.Drawing（与 ID 绑定窗同口径，防 CS0104 歧义）。
+                System.Drawing.Rectangle btnRect = btnColumns.RectangleToScreen(btnColumns.ClientRectangle);
+                popup.Location = new System.Drawing.Point(btnRect.Left, btnRect.Bottom + 2);
+                var workArea = Screen.FromControl(btnColumns).WorkingArea;
+                if (popup.Bottom > workArea.Bottom)
+                {
+                    popup.Location = new System.Drawing.Point(btnRect.Left, btnRect.Top - popup.Height - 2);
+                }
+                popup.ShowDialog(this);
+                if (popup.ResultValue == null) return;   // 取消/点外部：不写盘
+                string err;
+                if (!SettingsForm.ValidateValue("ReportColumns", popup.ResultValue, out err))
+                {
+                    MessageBox.Show("列配置有误，已放弃保存：\n" + err, "提示",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                try
+                {
+                    ProjectPolicyStore.Save(new Dictionary<string, string>
+                    {
+                        { "ReportColumns", popup.ResultValue }
+                    });
+                    MessageBox.Show("报表列已保存到当前项目，导出按钮按新列出表。",
+                        "保存成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("保存列配置失败：\n" + ex.Message, "错误",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
         }
 
         /// <summary>

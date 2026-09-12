@@ -89,7 +89,7 @@ namespace AgingTestSystem.Dialogs
             this.txtNegativePressure = new Sunny.UI.UITextBox();
             this.lblPressureUnit = new Sunny.UI.UILabel();
             this.lblDisplayModeLabel = new Sunny.UI.UILabel();
-            this.txtDisplayMode = new Sunny.UI.UITextBox();
+            this.cmbDisplayMode = new Sunny.UI.UIComboBox();
             this.panelButtons = new System.Windows.Forms.Panel();
             this.btnAddToQueue = new Sunny.UI.UIButton();
             this.btnClose = new Sunny.UI.UIButton();
@@ -139,7 +139,7 @@ namespace AgingTestSystem.Dialogs
             this.tableLayoutPanelInput.Controls.Add(this.lblNegativePressureLabel, 0, 4);
             this.tableLayoutPanelInput.Controls.Add(this.tableLayoutPanelPressure, 1, 4);
             this.tableLayoutPanelInput.Controls.Add(this.lblDisplayModeLabel, 0, 5);
-            this.tableLayoutPanelInput.Controls.Add(this.txtDisplayMode, 1, 5);
+            this.tableLayoutPanelInput.Controls.Add(this.cmbDisplayMode, 1, 5);
             this.tableLayoutPanelInput.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tableLayoutPanelInput.Location = new System.Drawing.Point(3, 3);
             this.tableLayoutPanelInput.Margin = new System.Windows.Forms.Padding(3, 3, 3, 0);
@@ -507,22 +507,17 @@ namespace AgingTestSystem.Dialogs
             this.lblDisplayModeLabel.Text = "显示模式：";
             this.lblDisplayModeLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
-            // txtDisplayMode
+            // cmbDisplayMode
             // 
-            this.txtDisplayMode.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtDisplayMode.Cursor = System.Windows.Forms.Cursors.IBeam;
-            this.txtDisplayMode.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
-            this.txtDisplayMode.Location = new System.Drawing.Point(104, 205);
-            this.txtDisplayMode.Margin = new System.Windows.Forms.Padding(4, 5, 4, 5);
-            this.txtDisplayMode.MaxLength = 50;
-            this.txtDisplayMode.MinimumSize = new System.Drawing.Size(1, 16);
-            this.txtDisplayMode.Name = "txtDisplayMode";
-            this.txtDisplayMode.Padding = new System.Windows.Forms.Padding(5);
-            this.txtDisplayMode.ShowText = false;
-            this.txtDisplayMode.Size = new System.Drawing.Size(362, 27);
-            this.txtDisplayMode.TabIndex = 13;
-            this.txtDisplayMode.TextAlignment = System.Drawing.ContentAlignment.MiddleLeft;
-            this.txtDisplayMode.Watermark = "";
+            this.cmbDisplayMode.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
+            this.cmbDisplayMode.DropDownStyle = Sunny.UI.UIDropDownStyle.DropDownList;
+            this.cmbDisplayMode.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.cmbDisplayMode.Location = new System.Drawing.Point(104, 205);
+            this.cmbDisplayMode.Margin = new System.Windows.Forms.Padding(4, 5, 4, 5);
+            this.cmbDisplayMode.MinimumSize = new System.Drawing.Size(1, 16);
+            this.cmbDisplayMode.Name = "cmbDisplayMode";
+            this.cmbDisplayMode.Size = new System.Drawing.Size(362, 27);
+            this.cmbDisplayMode.TabIndex = 13;
             // 
             // panelButtons
             // 
@@ -659,7 +654,7 @@ namespace AgingTestSystem.Dialogs
         /// <summary>"显示模式"标签（【V1.66】烧屏画面记录）</summary>
         private Sunny.UI.UILabel lblDisplayModeLabel;
         /// <summary>显示模式输入框（【V1.66】自由文本，最长50）</summary>
-        private Sunny.UI.UITextBox txtDisplayMode;
+        private Sunny.UI.UIComboBox cmbDisplayMode;
         /// <summary>底部按钮面板（2个按钮：加入队列/关闭窗口）</summary>
         private System.Windows.Forms.Panel panelButtons;
         /// <summary>加入队列按钮</summary>

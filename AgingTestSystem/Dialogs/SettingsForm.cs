@@ -158,6 +158,7 @@ namespace AgingTestSystem.Dialogs
             "SkipVacuum",
             "VentValveEnabled",
             "UsePowerMeter",
+            "DisplayModeEnabled",
         };
 
         /// <summary>
@@ -333,6 +334,7 @@ namespace AgingTestSystem.Dialogs
             { "PowerLossPolicy", "断电恢复策略：整台重测=满时长重跑（现状）/续跑剩余时长=重抽真空+补足剩余" },
             { "AgingPressureLossPolicy", "老化中失压策略：停机报警=关阀断电（现状）/只记不停=记事件继续老化" },
             { "CompletionAction", "到时完成动作：只下电关阀（现状）/蜂鸣提醒/破空泄压（需开破空阀开关+配点位）/都要" },
+            { "EventIdentityMode", "事件行SN/配方取值：记录现值=事件瞬间绑定的（现状）/启动定格=该轮启动时的（中途重绑不污染已跑任务，无快照回退现值）" },
             { "VentValveDoPoint", "破空阀DO输出点内部编号（如225），0=未配置（默认，选了泄压也只记日志不写DO）" },
             { "VentValveEnabled", "本机是否装破空阀（false=无阀现状：手动破空按钮隐藏+泄压选项保存即拦；true=有阀项目才开）" },
 
@@ -359,10 +361,11 @@ namespace AgingTestSystem.Dialogs
             { "CustomAlarmRules", "自定义报警规则（点击编辑，多行，一行一条：名称 | 表达式 | 持续秒。触发=关阀断电记FAIL。变量同上）" },
 
             // ===== 报表导出（V1.74：Q8 列可配，跟项目走 Policy.json）=====
-            { "ReportColumns", "报表列（跟项目，显示名=字段，分号分隔；可用字段：time/lot/device/event/detail/pressure/temp/current；留空=缺省预设8列。如 时间=time;批号=lot）" },
+            { "ReportColumns", "报表列（跟项目，点击编辑：一行一列，显示名文本+字段下拉，可增删/上下移；留空=缺省预设8列）" },
 
             // ===== 显示模式字典（V1.74：Q20 记录层可配，跟项目走 Policy.json）=====
-            { "DisplayModes", "显示模式字典（跟项目，逗号分隔；录入窗保存时按此校验，字典外拦；留空=缺省预设 白场,红场,绿场,蓝场,灰阶,RGB循环,棋盘格,视频）" },
+            { "DisplayModes", "显示模式字典（跟项目，点击编辑：一行一个选项，可改/增/删；留空=缺省预设8项）" },
+            { "DisplayModeEnabled", "是否启用显示模式维度（跟项目；false=三窗隐藏该行，当前项目零打扰；true=显示下拉+字典生效）" },
 
             // ===== 扫码枪 =====
             { "ScannerEnabled", "是否启用扫码枪（false/true）" },
@@ -447,7 +450,7 @@ namespace AgingTestSystem.Dialogs
                 "FanDisconnectPolicy", "VacuumFailKind",
                 "CompletionJudgePolicy", "PowerLossPolicy",
                 "AgingPressureLossPolicy", "CompletionAction", "VentValveDoPoint", "VentValveEnabled",
-                "DisplayModes"
+                "EventIdentityMode", "DisplayModeEnabled", "DisplayModes"
             }),
             // 【V1.69】规则流程（表达式 + 阶段流，全部跟项目；同表编辑，保存按 PolicyKeys 分流）
             ("规则流程", new string[]
@@ -1063,6 +1066,20 @@ namespace AgingTestSystem.Dialogs
                 string currentValue = grid.Rows[e.RowIndex].Cells["colValue"].Value?.ToString() ?? "";
                 ShowRuleListPopup(grid, e.RowIndex, currentValue);
             }
+            else if (key == "ReportColumns")
+            {
+                // 【V1.74】报表列：表格弹窗编辑（一行一列：显示名文本 + 字段下拉，
+                // 增删/上下移），结果写回单元格
+                string currentValue = grid.Rows[e.RowIndex].Cells["colValue"].Value?.ToString() ?? "";
+                ShowReportColumnsPopup(grid, e.RowIndex, currentValue);
+            }
+            else if (key == "DisplayModes")
+            {
+                // 【V1.75】显示模式字典：列表弹窗编辑（一行一个选项，可改/增/删），
+                // 结果写回单元格（录入窗下拉读的就是这份名单）
+                string currentValue = grid.Rows[e.RowIndex].Cells["colValue"].Value?.ToString() ?? "";
+                ShowDisplayModesPopup(grid, e.RowIndex, currentValue);
+            }
             else if (key == "HomeLayout")
             {
                 // 【V1.58】主页区域调整：弹出可视化编辑器，保存后刷新该行显示。
@@ -1384,6 +1401,96 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
+        /// 弹出报表列编辑器，并把编辑结果写回单元格。
+        /// 表格（一行一列：显示名文本 + 字段下拉 + 增删/上下移），确定时逐行校验
+        /// （与 ShowRuleListPopup 同一套定位/越界保护/主题/释放流程）。
+        /// </summary>
+        private void ShowReportColumnsPopup(DataGridView grid, int rowIndex, string currentValue)
+        {
+            var popup = new Controls.ReportColumnsEditorPopup(currentValue);
+
+            // 定位到该单元格正下方
+            Rectangle cellRect = grid.GetCellDisplayRectangle(grid.Columns["colValue"].Index, rowIndex, true);
+            Rectangle screenRect = grid.RectangleToScreen(cellRect);
+            popup.Location = new Point(screenRect.Left, screenRect.Bottom + 2);
+
+            // 越界保护：弹窗底部超出屏幕时改为显示在单元格上方
+            var workArea = Screen.FromControl(grid).WorkingArea;
+            if (popup.Bottom > workArea.Bottom)
+            {
+                popup.Location = new Point(screenRect.Left, screenRect.Top - popup.Height - 2);
+            }
+
+            popup.FormClosed += (s, args) =>
+            {
+                try
+                {
+                    if (popup.ResultValue != null)
+                    {
+                        grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
+                        // 值可能变化，重新按内容算行高
+                        LayoutSections();
+                    }
+                }
+                finally
+                {
+                    // 【V1.72.13】同上：非模态关闭后释放，防孤儿控件终结器跨线程崩溃。
+                    popup.Dispose();
+                }
+            };
+
+            // 【V1.60】弹窗打开前按当前主题着色（与 IP/IO/规则弹窗一致）
+            AgingTestSystem.Services.ThemeManager.ApplyTo(popup);
+            popup.Show(this);
+            popup.Activate();
+        }
+
+        /// <summary>
+        /// 弹出显示模式字典编辑器，并把编辑结果写回单元格。
+        /// 列表（一行一个选项，可改/增/删），确定时逐行校验
+        /// （与 ShowReportColumnsPopup 同一套定位/越界保护/主题/释放流程）。
+        /// </summary>
+        private void ShowDisplayModesPopup(DataGridView grid, int rowIndex, string currentValue)
+        {
+            var popup = new Controls.DisplayModesEditorPopup(currentValue);
+
+            // 定位到该单元格正下方
+            Rectangle cellRect = grid.GetCellDisplayRectangle(grid.Columns["colValue"].Index, rowIndex, true);
+            Rectangle screenRect = grid.RectangleToScreen(cellRect);
+            popup.Location = new Point(screenRect.Left, screenRect.Bottom + 2);
+
+            // 越界保护：弹窗底部超出屏幕时改为显示在单元格上方
+            var workArea = Screen.FromControl(grid).WorkingArea;
+            if (popup.Bottom > workArea.Bottom)
+            {
+                popup.Location = new Point(screenRect.Left, screenRect.Top - popup.Height - 2);
+            }
+
+            popup.FormClosed += (s, args) =>
+            {
+                try
+                {
+                    if (popup.ResultValue != null)
+                    {
+                        grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
+                        // 值可能变化，重新按内容算行高
+                        LayoutSections();
+                    }
+                }
+                finally
+                {
+                    // 【V1.72.13】同上：非模态关闭后释放，防孤儿控件终结器跨线程崩溃。
+                    popup.Dispose();
+                }
+            };
+
+            // 【V1.60】弹窗打开前按当前主题着色（与 IP/IO/规则/报表列弹窗一致）
+            AgingTestSystem.Services.ThemeManager.ApplyTo(popup);
+            popup.Show(this);
+            popup.Activate();
+        }
+
+        /// <summary>
         /// 获取配置项的当前值
         /// 【V1.67】取值优先级：项目策略文件 Policy.json（策略 key）→ AppSettings →
         /// 内存 DeviceConfig 属性兜底。策略 key 优先读项目文件，保证界面显示的是
@@ -1463,9 +1570,11 @@ namespace AgingTestSystem.Dialogs
                 return CreatePortComboCell(value);
             }
 
-            // 送风机候选 IP 列表 / IO 备用通道映射 / 自定义报警规则：只读单元格 + 点击弹出编辑器
+            // 送风机候选 IP 列表 / IO 备用通道映射 / 自定义报警规则 / 报表列 / 显示字典：
+            // 只读单元格 + 点击弹出编辑器
             if (key == "FanIpCandidates" || key == "IoBackupChannelMappings"
-                || key == "CustomAlarmRules")
+                || key == "CustomAlarmRules" || key == "ReportColumns"
+                || key == "DisplayModes")
             {
                 var cell = new DataGridViewPopupEditCell();
                 cell.Value = value;
@@ -2027,6 +2136,7 @@ namespace AgingTestSystem.Dialogs
                 case "SkipVacuum":
                 case "VentValveEnabled":
                 case "UsePowerMeter":
+                case "DisplayModeEnabled":
                     if (!bool.TryParse(value, out _)) { error = "应为 true 或 false"; return false; }
                     return true;
 

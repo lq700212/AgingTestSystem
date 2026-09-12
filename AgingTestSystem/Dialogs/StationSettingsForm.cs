@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Windows.Forms;
 using AgingTestSystem.Models;
 using AgingTestSystem.Services;
@@ -73,6 +74,12 @@ namespace AgingTestSystem.Dialogs
         private RecipeAutoCompleteProvider _recipeAutoComplete;
 
         /// <summary>
+        /// 显示模式行是否显示（【V1.75 新增】构造时按开关定死，Fill/回填认它。
+        /// 不读 cmb.Visible——窗体没 Show 时 Visible 读恒 false，读它下拉永远是空的）。
+        /// </summary>
+        private readonly bool _displayModeShown;
+
+        /// <summary>
         /// 悬停说明（【V1.73 新增】每个设置项+动作按钮都挂 tooltip，超 40 字走
         /// SettingsForm.WrapTooltip 换行，全仓统一口径；随 components 自动释放）。
         /// </summary>
@@ -105,6 +112,21 @@ namespace AgingTestSystem.Dialogs
 
             // 从缓存 / 采集缓存读取当前工位数据并回显到输入框
             LoadStationData();
+
+            // 【V1.74】显示模式下拉先填字典（LoadStationData 的回填分支会按需重填+选中；
+            // 无缓存无数据直接返回时靠这一行保证下拉不空）。
+            // 【V1.75】开关关时整行隐藏 + 布局收缩（显示行是左列末行 Y=326，
+            // 右侧按钮止于 Y=254，窗高缩 40（370→330）边距原样保留）。
+            _displayModeShown = DisplayModeOptions.ShouldShowDisplayMode(_config);
+            lblDisplayMode.Visible = _displayModeShown;
+            cmbDisplayMode.Visible = _displayModeShown;
+            if (!_displayModeShown)
+            {
+                cmbDisplayMode.Text = "";
+                this.ClientSize = new Size(this.ClientSize.Width, this.ClientSize.Height - 40);
+                this.MinimumSize = this.ClientSize;
+            }
+            else if (cmbDisplayMode.Items.Count == 0) FillDisplayModes(null);
 
             // 初始化配方名称自动检索（V1.29 新增）
             _recipeAutoComplete = new RecipeAutoCompleteProvider(
@@ -146,8 +168,8 @@ namespace AgingTestSystem.Dialogs
                 "极限温度：该工位温度上限（0~300°C）。只记录追溯，不参与自动判定。");
             SetTip(new Control[] { lblPressure, nudPressure },
                 "负压阈值：该工位真空到位判定阈值（kPa）。回填优先级：上次保存>配方>全局；保存即下发，启动时定格。");
-            SetTip(new Control[] { lblDisplayMode, txtDisplayMode },
-                "显示模式：本次烧屏跑的显示画面，只追溯不判定。可选：" +
+            SetTip(new Control[] { lblDisplayMode, cmbDisplayMode },
+                "显示模式：下拉选择本次烧屏跑的显示画面，只追溯不判定。可选：" +
                 string.Join("/", DisplayModeOptions.Resolve(_config).ToArray()) +
                 "（字典在系统设置→工艺策略里改；保存时按字典校验）。");
             SetTip(new Control[] { btnBreakVacuum },
@@ -201,7 +223,32 @@ namespace AgingTestSystem.Dialogs
             // 【V1.66】回填负压阈值 + 显示模式（配方一定有实数，直接显示；显示模式 null→空串）
             nudPressure.Value = Math.Max(nudPressure.Minimum,
                 Math.Min(nudPressure.Maximum, recipe.NegativePressure));
-            txtDisplayMode.Text = recipe.DisplayMode ?? "";
+            // 【V1.74】下拉回填（字典 + 遗留值追加）
+            FillDisplayModes(recipe.DisplayMode, true);
+        }
+
+        /// <summary>
+        /// 显示模式下拉填项（【V1.74 新增】字典驱动，字典走本窗生效配置。
+        /// selectIt=true 时选中给定值，遗留值追加末尾保证看得见）。
+        /// </summary>
+        private void FillDisplayModes(string selectedAfterFill, bool selectIt = false)
+        {
+            // 【V1.75】隐藏态守卫：开关关时回填（选配方/缓存）不得写值，
+            // 否则遗留值进框→保存校验拦→隐藏功能反而堵死保存。隐藏=恒空。
+            // 认 _displayModeShown 字段（不读 Visible，见字段注释）。
+            if (!_displayModeShown)
+            {
+                cmbDisplayMode.Text = "";
+                return;
+            }
+            var options = DisplayModeOptions.Resolve(_config);
+            if (selectIt)
+            {
+                options = DisplayModeOptions.WithLegacy(options, selectedAfterFill);
+            }
+            cmbDisplayMode.Items.Clear();
+            foreach (string o in options) cmbDisplayMode.Items.Add(o);
+            if (selectIt) cmbDisplayMode.Text = (selectedAfterFill ?? "").Trim();
         }
 
         /// <summary>
@@ -237,7 +284,8 @@ namespace AgingTestSystem.Dialogs
                 // 【V1.66】负压/显示模式回填优先级：缓存（非0/非空）> 配方（按缓存配方名命中）> 全局/空
                 nudPressure.Value = Math.Max(nudPressure.Minimum,
                     Math.Min(nudPressure.Maximum, ResolveCachedPressure(cached)));
-                txtDisplayMode.Text = ResolveCachedDisplayMode(cached);
+                // 【V1.74】下拉回填（字典 + 遗留值追加）
+                FillDisplayModes(ResolveCachedDisplayMode(cached), true);
                 return;
             }
 
@@ -255,7 +303,8 @@ namespace AgingTestSystem.Dialogs
                 : (_config != null ? _config.AlarmPressureThresholdKPa : 0m);
             nudPressure.Value = Math.Max(nudPressure.Minimum,
                 Math.Min(nudPressure.Maximum, fallbackPressure));
-            txtDisplayMode.Text = recipeHit?.DisplayMode ?? "";
+            // 【V1.74】下拉回填（字典 + 遗留值追加）
+            FillDisplayModes(recipeHit?.DisplayMode, true);
         }
 
         /// <summary>
@@ -440,15 +489,15 @@ namespace AgingTestSystem.Dialogs
             // 【V1.74】显示模式字典校验（Q20：空=清空允许，字典内=存规范写法并回写框，
             // 字典外拦；一次校验管住下面三处写入：下发/缓存/配方）。
             string canonicalMode, modeErr;
-            if (!DisplayModeOptions.ValidateInput(txtDisplayMode.Text,
+            if (!DisplayModeOptions.ValidateInput(cmbDisplayMode.Text,
                 DisplayModeOptions.Resolve(_config), out canonicalMode, out modeErr))
             {
                 MessageBox.Show(modeErr, "输入验证",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                txtDisplayMode.Focus();
+                cmbDisplayMode.Focus();
                 return false;
             }
-            txtDisplayMode.Text = canonicalMode;
+            cmbDisplayMode.Text = canonicalMode;
 
             // ---- 1) 组合延时开启 / 延时到达（各三个 NumericUpDown，V1.28；控件已限范围无需校验） ----
             TimeSpan delayStart = GetTimeSpan(nudDelayHours, nudDelayMinutes, nudDelaySeconds);
@@ -461,7 +510,7 @@ namespace AgingTestSystem.Dialogs
             // （优先级 缓存 > 配方 > 全局），不再按配方名二次检索。空配方名=清空（含负压/显示模式）。
             // 启动测试时负压值定格为该工位的真空到位判定/报警阈值（配方优先、全局兜底指"没下发时"，
             // 下发了就以框值为准——框里永远有数，不存在"没下发"）。
-            _deviceManager.SetStationRecipe(_deviceId, txtRecipe.Text, nudPressure.Value, txtDisplayMode.Text);
+            _deviceManager.SetStationRecipe(_deviceId, txtRecipe.Text, nudPressure.Value, cmbDisplayMode.Text);
             _deviceManager.SetStationDelayTimes(_deviceId, delayStart, delayArrive);
 
             // ---- 3) 缓存配置（下次打开该工位设置窗口自动回填） ----
@@ -474,7 +523,7 @@ namespace AgingTestSystem.Dialogs
                 StartTime = delayArrive,
                 LimitTemperature = ParseTemperature(),
                 NegativePressure = nudPressure.Value,
-                DisplayMode = txtDisplayMode.Text.Trim()
+                DisplayMode = cmbDisplayMode.Text.Trim()
             });
 
             // ---- 4) 保存配方到本地配方列表（同名询问覆盖更新；配方名称为空则跳过） ----
@@ -512,7 +561,7 @@ namespace AgingTestSystem.Dialogs
                 $"延时到达: {GetTimeText(delayArrive)}\r\n" +
                 $"极限温度: {nudTemp.Value:0.#}°C\r\n" +
                 $"负压阈值: {nudPressure.Value:0.#}kPa\r\n" +
-                $"显示模式: {(string.IsNullOrWhiteSpace(txtDisplayMode.Text) ? "（空）" : txtDisplayMode.Text.Trim())}" +
+                $"显示模式: {(string.IsNullOrWhiteSpace(cmbDisplayMode.Text) ? "（空）" : cmbDisplayMode.Text.Trim())}" +
                 testingNote,
                 $"{actionName}成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
@@ -534,7 +583,7 @@ namespace AgingTestSystem.Dialogs
                 StartTime = delayArrive,
                 LimitTemperature = ParseTemperature(),
                 NegativePressure = nudPressure.Value,
-                DisplayMode = txtDisplayMode.Text.Trim(),
+                DisplayMode = cmbDisplayMode.Text.Trim(),
                 CreateTime = DateTime.Now,
                 IsEnabled = true
             };

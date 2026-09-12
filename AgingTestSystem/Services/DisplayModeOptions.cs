@@ -10,14 +10,11 @@ namespace AgingTestSystem.Services
     ///
     /// 【为什么是字典而不是自由文本】V1.66 起 DisplayMode 是自由文本框，
     /// 手滑写"白场 "（尾空格）/"白色"（别名）就会造出两条追溯口径，
-    /// 后道按画面分组统计时对不上。字典把选项收敛到一份名单：
-    /// 录入窗保存时校验（空或字典内才让存，存规范大小写），脏输入进不了配方文件。
+    /// 后道按画面分组统计时对不上。字典把选项收敛到一份名单。
     ///
-    /// 【为什么不是下拉控件】三窗的输入框是 Designer 里的 UITextBox，
-    /// 换控件类型要动三套 Designer（VS 重写风险 + 三窗截图目检，见 AGENTS R8）。
-    /// 约束靠"保存校验"保证（与 MES 映射"保存拦"同哲学），选项靠 tooltip + 报错文案
-    /// 展示给客户——同一个约束，零 Designer 风险。若以后客户坚持要下拉，
-    /// 把三处 ValidateInput 调用点换成下拉数据源即可，字典与校验逻辑不用动。
+    /// 【V1.74】三窗输入框已换成下拉（UIComboBox + DropDownList，只能选字典，
+    /// 手打进不来）；保存校验是第二道门（防老配方遗留值 + 代码回填绕过），
+    /// 脏输入进不了配方文件。选项由各窗构造按字典代码填（R8a 禁 Designer 写 AddRange）。
     ///
     /// 【PG 控制】本字典只管"记录层"（配方存什么、日志带什么、MES 报什么）；
     /// 上位机不控 PG 切画面（没 PG 协议）。画面分段/视频走二期。
@@ -112,6 +109,15 @@ namespace AgingTestSystem.Services
             return Preset();
         }
 
+        /// <summary>
+        /// 显示模式维度是否启用（【V1.75 新增】三窗显隐总开关，纯函数回归可单测）。
+        /// false/空配置=隐藏（三窗不显示该行，配方存空串）；true=显示下拉+字典生效。
+        /// </summary>
+        public static bool ShouldShowDisplayMode(DeviceConfig config)
+        {
+            return config != null && config.DisplayModeEnabled;
+        }
+
         /// <summary>缺省预设解析结果（常量解析必成功）。</summary>
         public static List<string> Preset()
         {
@@ -119,6 +125,28 @@ namespace AgingTestSystem.Services
             List<string> errors;
             Parse(DefaultPreset, out options, out errors);
             return options;
+        }
+
+        /// <summary>
+        /// 下拉框数据源（含历史遗留值兜底，【V1.74】三窗下拉共用）。
+        /// 字典选项原序返回；遗留值（老配方文件里的字典外文本）追加在末尾，
+        /// 保证回填可见、保存时由 ValidateInput 拦下整改——看得见才改得掉。
+        /// 空/空白遗留值不追加（空=清空，合法状态）。
+        /// </summary>
+        /// <param name="options">生效字典（Resolve 结果）</param>
+        /// <param name="legacyValue">待回填的旧值（可空）</param>
+        public static List<string> WithLegacy(List<string> options, string legacyValue)
+        {
+            var result = new List<string>();
+            if (options != null) result.AddRange(options);
+            string t = (legacyValue ?? "").Trim();
+            if (t.Length == 0) return result;
+            foreach (string o in result)
+            {
+                if (string.Equals(o, t, StringComparison.OrdinalIgnoreCase)) return result;
+            }
+            result.Add(t);
+            return result;
         }
 
         /// <summary>

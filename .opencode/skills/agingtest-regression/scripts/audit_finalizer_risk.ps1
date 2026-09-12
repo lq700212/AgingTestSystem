@@ -69,6 +69,8 @@ $SafeShowKeys = @(
     "ShowIpListPopup|SettingsForm.cs",           # V1.72.13：finally Dispose
     "ShowIoMappingPopup|SettingsForm.cs",        # V1.72.13：finally Dispose
     "ShowRuleListPopup|SettingsForm.cs",         # V1.72.13：finally Dispose
+    "ShowReportColumnsPopup|SettingsForm.cs",    # V1.74：finally Dispose（与规则弹窗同套路）
+    "ShowDisplayModesPopup|SettingsForm.cs",     # V1.75：finally Dispose（与报表列弹窗同套路）
     "MenuHelpCommunicationTest_Click|MainForm.cs", # FormClosed→Dispose
     "MenuHelpFanTest_Click|MainForm.cs",           # FormClosed→Dispose
     "ShowConnecting|MainForm.cs|HideConnecting",   # Close+Dispose 配对在另一方法

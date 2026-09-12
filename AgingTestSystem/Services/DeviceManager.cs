@@ -303,10 +303,14 @@ namespace AgingTestSystem.Services
         /// 【V1.62 约定】无任务时三者恒为"清零态"（时长/延时=0、阈值=全局值）：
         /// 所有清理点（停止/复位/急停/完成/报警）清时长延时的同时必须把阈值同步回全局，
         /// 否则残留的旧阈值会让后人误以为"退出测试还有定格生效"。
+        /// 【V1.76】SN/配方快照同数组家族：启动采、五清理点同步清（空=无快照，
+        /// ResolveEventIdentity 自动回退现值，复位/下料判定行天然走现值）。
         /// </summary>
         private readonly int[] _sessionDurationSecs;
         private readonly int[] _sessionDelaySecs;
         private readonly decimal[] _sessionThresholdKPa;
+        private readonly string[] _sessionSn;
+        private readonly string[] _sessionRecipe;
 
         /// <summary>
         /// 每台连续读取失败次数
@@ -530,6 +534,8 @@ namespace AgingTestSystem.Services
             _sessionDurationSecs = new int[_config.TotalBarometers];
             _sessionDelaySecs = new int[_config.TotalBarometers];
             _sessionThresholdKPa = new decimal[_config.TotalBarometers];
+            _sessionSn = new string[_config.TotalBarometers];
+            _sessionRecipe = new string[_config.TotalBarometers];
 
             // 订阅错误事件（使用命名方法，便于 Dispose 时取消订阅）
             _barometerReader.OnError += BarometerReader_OnError;
@@ -1117,7 +1123,10 @@ namespace AgingTestSystem.Services
             if (rebindOnCompleted)
             {
                 ResetDevices(new[] { deviceId });
-                TestEventLogger.Write(_currentLotNumber, deviceId, "复位", "重新扫码绑定，完成态自动复位");
+                string rbSn, rbRecipe;
+                GetEventIdentity(deviceId, out rbSn, out rbRecipe);
+                TestEventLogger.Write(_currentLotNumber, deviceId, "复位", "重新扫码绑定，完成态自动复位",
+                    sn: rbSn, recipe: rbRecipe, result: "");
             }
         }
 
@@ -1882,6 +1891,10 @@ namespace AgingTestSystem.Services
                 _sessionDurationSecs[deviceId - 1] = durationSecs;
                 _sessionDelaySecs[deviceId - 1] = (int)Math.Round(delayTime.TotalSeconds);
                 _sessionThresholdKPa[deviceId - 1] = thresholdKPa;
+                // 【V1.76】SN/配方启动定格：sn/recipeName 已含断电恢复覆盖（overrideParams），
+                // 存谁=这轮任务归属谁；中途重绑只改 StationInfo 不动这里（现值/定格分叉点）。
+                _sessionSn[deviceId - 1] = sn ?? "";
+                _sessionRecipe[deviceId - 1] = recipeName ?? "";
                 _lastAlarmStates[deviceId - 1] = false;              // 清报警边沿，允许重新报警
                 _lossNoted[deviceId - 1] = false;                    // 【V1.67】清失压保持标记
                 _readFailCounts[deviceId - 1] = 0;                   // 清通讯失败计数
@@ -1894,14 +1907,16 @@ namespace AgingTestSystem.Services
                 _ioController.WriteOutput(
                     _config.TotalInputs + _config.TotalBarometers + deviceId, true);
                 TestEventLogger.Write(_currentLotNumber, deviceId, "跳过抽真空",
-                    "策略 SkipVacuum=true：未验证吸附即上电！已确认产品机械固定，压力报警同步豁免");
+                    "策略 SkipVacuum=true：未验证吸附即上电！已确认产品机械固定，压力报警同步豁免",
+                    sn: sn, recipe: recipeName, result: "");
             }
 
             TestEventLogger.Write(_currentLotNumber, deviceId, "启动",
                 (skipVacuum
-                    ? $"启动老化测试（跳过抽真空，直接上电计时）SN:{sn} 配方:{recipeName}"
-                    : $"启动老化测试（开真空，待真空建立+延时开启到后自动上电）SN:{sn} 配方:{recipeName}") +
-                (string.IsNullOrEmpty(displayMode) ? "" : $" 显示模式:{displayMode}"));
+                    ? "启动老化测试（跳过抽真空，直接上电计时）"
+                    : "启动老化测试（开真空，待真空建立+延时开启到后自动上电）") +
+                (string.IsNullOrEmpty(displayMode) ? "" : $" 显示模式:{displayMode}"),
+                sn: sn, recipe: recipeName, result: "");
 
             // 【V1.68】MES 上报：启动事件（触发器 Start；字段按 MesFieldMap 改名；
             // 开关关闭/触发器未命中时 Report 内部直接返回，零开销）
@@ -1957,10 +1972,15 @@ namespace AgingTestSystem.Services
                     _sessionDurationSecs[deviceId - 1] = 0;
                     _sessionDelaySecs[deviceId - 1] = 0;
                     _sessionThresholdKPa[deviceId - 1] = _config.AlarmPressureThresholdKPa;
+                    _sessionSn[deviceId - 1] = "";
+                    _sessionRecipe[deviceId - 1] = "";
                 }
                 _rules.ResetStation(deviceId);   // 【V1.69】清规则持续计时
 
-                TestEventLogger.Write(_currentLotNumber, deviceId, "中止", "手动停止（未到时中止，不计判定结果）");
+                string stopSn, stopRecipe;
+                GetEventIdentity(deviceId, out stopSn, out stopRecipe);
+                TestEventLogger.Write(_currentLotNumber, deviceId, "中止", "手动停止（未到时中止，不计判定结果）",
+                    sn: stopSn, recipe: stopRecipe, result: "");
             }
 
             _ioController.WriteOutputs(outputIds.ToArray(), states.ToArray());
@@ -2009,6 +2029,8 @@ namespace AgingTestSystem.Services
                     _sessionDurationSecs[deviceId - 1] = 0;
                     _sessionDelaySecs[deviceId - 1] = 0;
                     _sessionThresholdKPa[deviceId - 1] = _config.AlarmPressureThresholdKPa;
+                    _sessionSn[deviceId - 1] = "";
+                    _sessionRecipe[deviceId - 1] = "";
                     _readFailCounts[deviceId - 1] = 0;
                     _lastAlarmStates[deviceId - 1] = false;
                     _lossNoted[deviceId - 1] = false;   // 【V1.67】清失压保持标记
@@ -2021,7 +2043,10 @@ namespace AgingTestSystem.Services
                 // 【V1.67】破空阀同关（完成泄压后阀还开着，复位=确认取件，不残留输出）
                 TurnOffVentValve();
 
-                TestEventLogger.Write(_currentLotNumber, deviceId, "复位", "人工复位（报警解除/取件确认）");
+                string rstSn, rstRecipe;
+                GetEventIdentity(deviceId, out rstSn, out rstRecipe);
+                TestEventLogger.Write(_currentLotNumber, deviceId, "复位", "人工复位（报警解除/取件确认）",
+                    sn: rstSn, recipe: rstRecipe, result: "");
             }
 
             // 把缓存里这些台的状态改为空闲，并清掉上次测试结果标记
@@ -2141,6 +2166,64 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
+        /// 事件行 SN/配方口径决策（【V1.76 新增】纯函数：CSV/报表/MES 三处统一走它）。
+        ///
+        /// 【为什么要抽纯函数】"定格还是现值"是个分支，不抽出来就散落在 20 个调用点，
+        /// 改一次口径要改 20 处（家规：判定类分支先写纯函数，DeviceManager 只做执行）。
+        /// - RecordTime（现状）：永远取现值（事件瞬间绑定的 SN/配方）；
+        /// - StartSnapshot：有快照（该轮已启动）取启动值，中途重绑不污染；
+        ///   无快照（复位后/未启动/空启动）回退现值——复位/下料判定行天然走现值，
+        ///   调用方不用区分"在测还是复位后"，传进来就行。
+        /// 空串统一转 ""（调用方可能传 null，CSV 里不写"null"字样）。
+        /// </summary>
+        /// <param name="mode">口径开关（_config.EventIdentityMode，跟项目走）</param>
+        /// <param name="snapshotSn">启动定格 SN（_sessionSn，无快照=空串）</param>
+        /// <param name="snapshotRecipe">启动定格配方（_sessionRecipe，无快照=空串）</param>
+        /// <param name="currentSn">现值 SN（StationInfo 当前绑定）</param>
+        /// <param name="currentRecipe">现值配方（StationInfo 当前设置）</param>
+        /// <param name="sn">决策出的 SN</param>
+        /// <param name="recipe">决策出的配方</param>
+        public static void ResolveEventIdentity(EventIdentityMode mode,
+            string snapshotSn, string snapshotRecipe,
+            string currentSn, string currentRecipe,
+            out string sn, out string recipe)
+        {
+            if (mode == EventIdentityMode.StartSnapshot
+                && (!string.IsNullOrEmpty(snapshotSn) || !string.IsNullOrEmpty(snapshotRecipe)))
+            {
+                sn = snapshotSn ?? "";
+                recipe = snapshotRecipe ?? "";
+            }
+            else
+            {
+                sn = currentSn ?? "";
+                recipe = currentRecipe ?? "";
+            }
+        }
+
+        /// <summary>
+        /// 取某工位事件行的 SN/配方（【V1.76 新增】执行侧：快照读 + 现值读 + 纯函数决策三步）。
+        /// 锁顺序与 SaveSessionSnapshot 一致（先 _stateLock 后 _stationInfoLock），不死锁。
+        /// </summary>
+        private void GetEventIdentity(int deviceId, out string sn, out string recipe)
+        {
+            string snapSn = "", snapRecipe = "";
+            int idx = deviceId - 1;
+            if (idx >= 0 && idx < _sessionSn.Length)
+            {
+                lock (_stateLock)
+                {
+                    snapSn = _sessionSn[idx] ?? "";
+                    snapRecipe = _sessionRecipe[idx] ?? "";
+                }
+            }
+            string curSn, curRecipe;
+            GetStationSnRecipe(deviceId, out curSn, out curRecipe);
+            ResolveEventIdentity(_config.EventIdentityMode,
+                snapSn, snapRecipe, curSn, curRecipe, out sn, out recipe);
+        }
+
+        /// <summary>
         /// 关闭破空阀（【V1.67 新增】完成泄压是"开着保持"，复位/启动/急停时统一关闭，
         /// 不残留输出。点位未配置（=0）直接跳过，绝不写未知通道）。
         /// </summary>
@@ -2188,14 +2271,12 @@ namespace AgingTestSystem.Services
                         skipped.Add(deviceId);
                         continue;
                     }
-                    string sn = "";
                     bool completed = false;
                     lock (_cacheLock)
                     {
                         if (_barometerDataCache.TryGetValue(deviceId, out BarometerData cached)
                             && cached != null)
                         {
-                            sn = cached.SerialNumber ?? "";
                             completed = (cached.Status == DeviceStatus.Completed);
                         }
                     }
@@ -2205,16 +2286,19 @@ namespace AgingTestSystem.Services
                         continue;
                     }
                     string result = pass ? "PASS" : "FAIL";
+                    // 【V1.76】快照在完成时已清，这里天然回退现值（产品还在台上，值一致）；
+                    // 详情里的 SN 字串摘除（SN 列已结构化，详情只留判定三要素）。
+                    string ujSn, ujRecipe;
+                    GetEventIdentity(deviceId, out ujSn, out ujRecipe);
                     TestEventLogger.Write(_currentLotNumber, deviceId, "下料判定",
-                        $"判定={result} 不良代码:{defectCode} 处置:{disposition} SN:{sn}");
+                        $"判定={result} 不良代码:{defectCode} 处置:{disposition}",
+                        sn: ujSn, recipe: ujRecipe, result: result);
                     // 【V1.68】MES 上报：下料判定事件（触发器 UnloadJudge）
                     try
                     {
-                        string ujRecipe, dummy;
-                        GetStationSnRecipe(deviceId, out dummy, out ujRecipe);
                         var ujFields = MesCommonFields(deviceId);
                         ujFields["event"] = "UnloadJudge";
-                        ujFields["sn"] = sn;
+                        ujFields["sn"] = ujSn;
                         ujFields["recipe"] = ujRecipe;
                         ujFields["result"] = result;
                         ujFields["defectCode"] = defectCode ?? "";
@@ -2267,6 +2351,8 @@ namespace AgingTestSystem.Services
                     _sessionDurationSecs[i] = 0;
                     _sessionDelaySecs[i] = 0;
                     _sessionThresholdKPa[i] = _config.AlarmPressureThresholdKPa;
+                    _sessionSn[i] = "";
+                    _sessionRecipe[i] = "";
                     _lastAlarmStates[i] = false;
                     _lossNoted[i] = false;   // 【V1.67】清失压保持标记
                     _rules.ResetStation(i + 1);   // 【V1.69】清规则持续计时
@@ -2520,8 +2606,11 @@ namespace AgingTestSystem.Services
                         PowerOnTime = station.PowerOnTime
                     };
                     StartSingleTestCore(station.DeviceId, adjusted);
+                    string rsSn, rsRecipe;
+                    GetEventIdentity(station.DeviceId, out rsSn, out rsRecipe);
                     TestEventLogger.Write(_currentLotNumber, station.DeviceId, "断电恢复",
-                        $"续跑：已重抽真空，老化按剩余 {resumeSecs} 秒补足（断电期间不计入老化）");
+                        $"续跑：已重抽真空，老化按剩余 {resumeSecs} 秒补足（断电期间不计入老化）",
+                        sn: rsSn, recipe: rsRecipe, result: "");
                 }
                 else
                 {
@@ -2845,6 +2934,10 @@ namespace AgingTestSystem.Services
                         if (inAgingPhase)
                         {
                             isAlarm = false;
+                            // 【V1.76】身份先拍照再进锁（GetEventIdentity 自己取 _stateLock，
+                            // 锁内调虽不会死锁（同线程可重入），但先拍更干净）。
+                            string lossSn, lossRecipe;
+                            GetEventIdentity(deviceId, out lossSn, out lossRecipe);
                             lock (_stateLock)
                             {
                                 if (!_lossNoted[deviceId - 1])
@@ -2853,7 +2946,8 @@ namespace AgingTestSystem.Services
                                     TestEventLogger.Write(_currentLotNumber, deviceId, "失压保持运行",
                                         $"老化中压力越限（{data.VacuumPressure} kPa），策略=只记不停，继续老化",
                                         pressureKPa: data.VacuumPressure,
-                                        currentA: float.IsNaN(data.LoadCurrentA) ? (float?)null : data.LoadCurrentA);
+                                        currentA: float.IsNaN(data.LoadCurrentA) ? (float?)null : data.LoadCurrentA,
+                                        sn: lossSn, recipe: lossRecipe, result: "");
                                 }
                             }
                         }
@@ -2877,8 +2971,11 @@ namespace AgingTestSystem.Services
                                 if (ruleErr != null && ruleErr != _lastRuleErrorLogged)
                                 {
                                     _lastRuleErrorLogged = ruleErr;
+                                    string ruleSn, ruleRecipe;
+                                    GetEventIdentity(deviceId, out ruleSn, out ruleRecipe);
                                     TestEventLogger.Write(_currentLotNumber, deviceId,
-                                        "规则求值失败", ruleErr + "（已按不触发处理）");
+                                        "规则求值失败", ruleErr + "（已按不触发处理）",
+                                        sn: ruleSn, recipe: ruleRecipe, result: "");
                                 }
                             }
 
@@ -3026,10 +3123,13 @@ namespace AgingTestSystem.Services
                         if (_vacuumConfirmTimes[idx] != DateTime.MinValue && inRange)
                         {
                             _vacuumConfirmTimes[idx] = DateTime.MinValue;
+                            string vacSn, vacRecipe;
+                            GetEventIdentity(deviceId, out vacSn, out vacRecipe);
                             TestEventLogger.Write(_currentLotNumber, deviceId, "真空建立",
                                 $"真空已到位: {data.VacuumPressure} kPa（阈值 {threshold} kPa），等待上电",
                                 pressureKPa: data.VacuumPressure,
-                                currentA: float.IsNaN(data.LoadCurrentA) ? (float?)null : data.LoadCurrentA);
+                                currentA: float.IsNaN(data.LoadCurrentA) ? (float?)null : data.LoadCurrentA,
+                                sn: vacSn, recipe: vacRecipe, result: "");
                         }
 
                         // ---- 到位 且 延时开启已到 → 上电进入老化计时 ----
@@ -3089,9 +3189,12 @@ namespace AgingTestSystem.Services
                 // 载台上电（内部编号 = TotalInputs + TotalBarometers + deviceId）
                 _ioController.WriteOutput(_config.TotalInputs + _config.TotalBarometers + deviceId, true);
                 string durationText = (_sessionDurationSecs[idx] <= 0) ? "不限" : (_sessionDurationSecs[idx] + "秒");
+                string pwSn, pwRecipe;
+                GetEventIdentity(deviceId, out pwSn, out pwRecipe);
                 TestEventLogger.Write(_currentLotNumber, deviceId, "上电",
                     $"真空确认+延时开启完成，载台上电开始老化（时长 {durationText}）",
-                    currentA: float.IsNaN(data.LoadCurrentA) ? (float?)null : data.LoadCurrentA);
+                    currentA: float.IsNaN(data.LoadCurrentA) ? (float?)null : data.LoadCurrentA,
+                    sn: pwSn, recipe: pwRecipe, result: "");
                 // 【V1.67】上电=计时起点落定：快照一次（含 Phase=Aging + 上电时刻，
                 // 断电续跑就靠这份快照算剩余时长；边沿一次，非每轮写盘）
                 SaveSessionSnapshot();
@@ -3124,11 +3227,12 @@ namespace AgingTestSystem.Services
         /// <param name="reason">完成原因描述</param>
         private void CompleteDeviceInternal(int deviceId, string reason)
         {
-            // 【V1.68】MES 上报先拍照：时长定格值在下面被清零，SN/配方与快照无关但统一快照口径
+            // 【V1.68】MES 上报先拍照：时长定格值在下面被清零；
+            // 【V1.76】SN/配方同口径拍照（GetEventIdentity：定格/现值由开关定），CSV 与 MES 共用。
             int doneDuration = 0;
             string doneSn, doneRecipe;
             lock (_stateLock) { doneDuration = _sessionDurationSecs[deviceId - 1]; }
-            GetStationSnRecipe(deviceId, out doneSn, out doneRecipe);
+            GetEventIdentity(deviceId, out doneSn, out doneRecipe);
 
             // 断电 + 关阀
             _ioController.WriteOutput(_config.TotalInputs + deviceId, false);
@@ -3146,13 +3250,16 @@ namespace AgingTestSystem.Services
                 _sessionDurationSecs[deviceId - 1] = 0;
                 _sessionDelaySecs[deviceId - 1] = 0;
                 _sessionThresholdKPa[deviceId - 1] = _config.AlarmPressureThresholdKPa;
+                _sessionSn[deviceId - 1] = "";
+                _sessionRecipe[deviceId - 1] = "";
             }
 
             // 记录完成事件（【V1.67】Q22 策略化：AutoPass=标PASS（现状）；
             // PendingReview=标"待判定"，下料时人工录 PASS/FAIL+不良代码+处置）
             string judgeResult = GetCompletionJudgeResult();
             TestEventLogger.Write(_currentLotNumber, deviceId, "完成",
-                $"{reason}·待取料({judgeResult})", currentA: GetDeviceLastCurrent(deviceId));
+                $"{reason}·待取料({judgeResult})", currentA: GetDeviceLastCurrent(deviceId),
+                sn: doneSn, recipe: doneRecipe, result: judgeResult);
 
             // 缓存置为"已完成·待取料"+ 判定结果（不覆盖 Fault——报警台的结果另行标记）
             lock (_cacheLock)
@@ -3201,12 +3308,14 @@ namespace AgingTestSystem.Services
                     {
                         _ioController.WriteOutput(_config.VentValveDoPoint, true);
                         TestEventLogger.Write(_currentLotNumber, deviceId, "破空泄压",
-                            $"已开启破空阀（DO内部编号 {_config.VentValveDoPoint}），取料后复位/启动自动关闭");
+                            $"已开启破空阀（DO内部编号 {_config.VentValveDoPoint}），取料后复位/启动自动关闭",
+                            sn: doneSn, recipe: doneRecipe, result: "");
                     }
                     else
                     {
                         TestEventLogger.Write(_currentLotNumber, deviceId, "破空泄压",
-                            "完成动作要求泄压但本机未装破空阀或未配点位（VentValveEnabled=false 或 VentValveDoPoint=0），已跳过泄压只下电");
+                            "完成动作要求泄压但本机未装破空阀或未配点位（VentValveEnabled=false 或 VentValveDoPoint=0），已跳过泄压只下电",
+                            sn: doneSn, recipe: doneRecipe, result: "");
                     }
                 }
             }
@@ -3256,6 +3365,10 @@ namespace AgingTestSystem.Services
             _ioController.WriteOutput(valveOutputId, false);
             _ioController.WriteOutput(carrierOutputId, false);
 
+            // 【V1.76】身份先拍照：下面清掉快照，CSV 与 MES 共用同一份（定格/现值由开关定）
+            string almSn, almRecipe;
+            GetEventIdentity(deviceId, out almSn, out almRecipe);
+
             // 清理该台状态机（退出测试）
             lock (_stateLock)
             {
@@ -3267,6 +3380,8 @@ namespace AgingTestSystem.Services
                 _sessionDurationSecs[deviceId - 1] = 0;
                 _sessionDelaySecs[deviceId - 1] = 0;
                 _sessionThresholdKPa[deviceId - 1] = _config.AlarmPressureThresholdKPa;
+                _sessionSn[deviceId - 1] = "";
+                _sessionRecipe[deviceId - 1] = "";
             }
 
             // 结果标记（【V1.67】Q19 策略化：真空类报警按 VacuumFailKind 记 FAIL/装夹异常；
@@ -3276,7 +3391,8 @@ namespace AgingTestSystem.Services
 
             // 记录报警事件（供追溯；压力值用于漏气分析；电流值用于负载分析，无表记空）
             TestEventLogger.Write(_currentLotNumber, deviceId, $"报警({result})", reason,
-                pressureKPa: GetDeviceLastPressure(deviceId), currentA: GetDeviceLastCurrent(deviceId));
+                pressureKPa: GetDeviceLastPressure(deviceId), currentA: GetDeviceLastCurrent(deviceId),
+                sn: almSn, recipe: almRecipe, result: result);
 
             // 缓存里标结果（Status 由调用方置 Fault）
             lock (_cacheLock)
@@ -3290,8 +3406,6 @@ namespace AgingTestSystem.Services
             // 【V1.68】MES 上报：报警事件（触发器 Alarm；含压力值供 MES 侧漏气分析）
             try
             {
-                string almSn, almRecipe;
-                GetStationSnRecipe(deviceId, out almSn, out almRecipe);
                 var almFields = MesCommonFields(deviceId);
                 almFields["event"] = "Alarm";
                 almFields["sn"] = almSn;

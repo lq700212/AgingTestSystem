@@ -466,6 +466,14 @@ namespace AgingTestSystem.Models
         public CompletionAction CompletionAction { get; set; } = CompletionAction.PowerOffOnly;
 
         /// <summary>
+        /// 事件行 SN/配方取值（【V1.76 新增】Q8 追溯口径开关，跟项目走）。
+        /// RecordTime=记录现值（现状：事件瞬间绑定的 SN/配方）；
+        /// StartSnapshot=启动定格（该轮启动时的 SN/配方，中途重绑不污染已跑任务；
+        /// 无快照时回退现值）。CSV/报表/MES 三处统一走 DeviceManager.ResolveEventIdentity。
+        /// </summary>
+        public EventIdentityMode EventIdentityMode { get; set; } = EventIdentityMode.RecordTime;
+
+        /// <summary>
         /// 破空阀 DO 输出点编号（内部编号，与 TotalInputs/DeviceId 同口径，如 225）。
         /// 0 = 未配置（默认）：CompletionAction 选了泄压也只记日志跳过，不写坏任何通道。
         /// 配了点位才真写 DO；复位/启动/急停时自动关闭（不残留输出）。
@@ -657,6 +665,14 @@ namespace AgingTestSystem.Models
         /// 可用性见 <see cref="Services.DisplayModeOptions"/>；留空 = 缺省预设 8 项。
         /// </summary>
         public string DisplayModes { get; set; } = "";
+
+        /// <summary>
+        /// 是否启用显示模式维度（【V1.75 新增】Q20 收尾：当前项目没提画面，默认藏）。
+        /// false（默认）：三窗隐藏显示模式行（标签+下拉，布局同步收缩），配方存空串，
+        /// 上报/日志带空——当前项目零打扰；true：三窗显示下拉 + 字典生效。
+        /// 跟项目（App.config 只做机器缺省，`Projects/&lt;项目&gt;/Policy.json` 优先）。
+        /// </summary>
+        public bool DisplayModeEnabled { get; set; } = false;
 
         /// <summary>
         /// 按事件分地址（【V1.68 新增】跟机器）："触发器=URL"，多组用分号分隔。

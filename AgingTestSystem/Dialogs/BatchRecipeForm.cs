@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Windows.Forms;
 using AgingTestSystem.Models;
 using AgingTestSystem.Services;
@@ -87,6 +88,12 @@ namespace AgingTestSystem.Dialogs
         private ToolTip _tip;
 
         /// <summary>
+        /// 显示模式行是否显示（【V1.75 新增】构造时按开关定死，Fill 认它。
+        /// 不读 cmb.Visible——窗体没 Show 时 Visible 读恒 false，读它下拉永远是空的）。
+        /// </summary>
+        private readonly bool _displayModeShown;
+
+        /// <summary>
         /// 构造函数
         /// </summary>
         /// <param name="deviceManager">设备管理器（可 null，仅影响"应用到工位"）</param>
@@ -114,6 +121,26 @@ namespace AgingTestSystem.Dialogs
                 : new DeviceConfig().AlarmPressureThresholdKPa;
             txtNegativePressure.Text = defaultPressure.ToString("0.#");
 
+            // 【V1.74】显示模式下拉填项（构造时填字典；改字典重开本窗即换）
+            // 【V1.75】开关关时整行隐藏 + 布局收缩（显示行是输入表末 Percent 行：
+            // 行高改 Absolute 0 + 窗高缩 37，行隙/按钮区原样保留）。
+            DeviceConfig displayCfg = _deviceManager != null ? _deviceManager.Config : null;
+            _displayModeShown = DisplayModeOptions.ShouldShowDisplayMode(displayCfg);
+            lblDisplayModeLabel.Visible = _displayModeShown;
+            cmbDisplayMode.Visible = _displayModeShown;
+            if (_displayModeShown)
+            {
+                FillDisplayModes(null);
+            }
+            else
+            {
+                cmbDisplayMode.Text = "";
+                tableLayoutPanelInput.RowStyles[5].SizeType = SizeType.Absolute;
+                tableLayoutPanelInput.RowStyles[5].Height = 0;
+                this.ClientSize = new Size(this.ClientSize.Width, this.ClientSize.Height - 37);
+                this.MinimumSize = this.ClientSize;
+            }
+
             SetupTooltips();
         }
 
@@ -138,8 +165,8 @@ namespace AgingTestSystem.Dialogs
                 "极限温度：该配方的温度上限（0~999°C）。只记录追溯，不参与自动判定。");
             SetTip(new Control[] { lblNegativePressureLabel, txtNegativePressure },
                 "负压阈值：该配方的真空到位判定阈值（kPa）。新建默认填全局阈值，下发后启动时定格，存什么用什么。");
-            SetTip(new Control[] { lblDisplayModeLabel, txtDisplayMode },
-                "显示模式：本次烧屏跑的显示画面，只追溯不判定。可选：" +
+            SetTip(new Control[] { lblDisplayModeLabel, cmbDisplayMode },
+                "显示模式：下拉选择本次烧屏跑的显示画面，只追溯不判定。可选：" +
                 string.Join("/", DisplayModeOptions.Resolve(
                     _deviceManager != null ? _deviceManager.Config : null).ToArray()) +
                 "（字典在系统设置→工艺策略里改；保存时按字典校验）。");
@@ -187,7 +214,32 @@ namespace AgingTestSystem.Dialogs
 
             // 【V1.66】回填负压阈值 + 显示模式（配方一定有实数，直接显示；显示模式 null→空串）
             txtNegativePressure.Text = recipe.NegativePressure.ToString("0.#");
-            txtDisplayMode.Text = recipe.DisplayMode ?? "";
+            // 【V1.74】下拉回填（字典 + 遗留值追加，看得见存时拦）
+            FillDisplayModes(recipe.DisplayMode, true);
+        }
+
+        /// <summary>
+        /// 显示模式下拉填项（【V1.74 新增】字典驱动；字典走本机生效配置，
+        /// 无 manager（纯保存模式）时读项目文件。selectIt=true 时选中给定值。）
+        /// </summary>
+        private void FillDisplayModes(string selectedAfterFill, bool selectIt = false)
+        {
+            // 【V1.75】隐藏态守卫（同工位窗）：隐藏=恒空，防遗留值堵死保存。
+            // 认 _displayModeShown 字段（不读 Visible，见字段注释）。
+            if (!_displayModeShown)
+            {
+                cmbDisplayMode.Text = "";
+                return;
+            }
+            var options = DisplayModeOptions.Resolve(
+                _deviceManager != null ? _deviceManager.Config : null);
+            if (selectIt)
+            {
+                options = DisplayModeOptions.WithLegacy(options, selectedAfterFill);
+            }
+            cmbDisplayMode.Items.Clear();
+            foreach (string o in options) cmbDisplayMode.Items.Add(o);
+            if (selectIt) cmbDisplayMode.Text = (selectedAfterFill ?? "").Trim();
         }
 
         /// <summary>
@@ -258,13 +310,13 @@ namespace AgingTestSystem.Dialogs
             // 【V1.74】显示模式字典校验（Q20：空=清空允许，字典内=存规范写法，
             // 字典外拦并报出全部选项；字典走本机生效配置，无 manager 时读项目文件）
             string canonicalMode, modeErr;
-            if (!DisplayModeOptions.ValidateInput(txtDisplayMode.Text,
+            if (!DisplayModeOptions.ValidateInput(cmbDisplayMode.Text,
                 DisplayModeOptions.Resolve(_deviceManager != null ? _deviceManager.Config : null),
                 out canonicalMode, out modeErr))
             {
                 MessageBox.Show(modeErr, "输入验证",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                txtDisplayMode.Focus();
+                cmbDisplayMode.Focus();
                 return null;
             }
 

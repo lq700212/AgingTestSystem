@@ -83,7 +83,9 @@ namespace AgingTestSystem.Services
                 // Mock 联调：不发 HTTP，只把完整 JSON 写进 CSV（MES 没好也能端到端验证格式）
                 if (_config.MesMockEnabled)
                 {
-                    TestEventLogger.Write(lot, device, "MES上报(Mock)", json);
+                    TestEventLogger.Write(lot, device, "MES上报(Mock)", json,
+                        sn: GetField(ourFields, "sn"), recipe: GetField(ourFields, "recipe"),
+                        result: GetField(ourFields, "result"));
                     return;
                 }
 
