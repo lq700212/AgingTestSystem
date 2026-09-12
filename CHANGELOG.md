@@ -12,10 +12,10 @@
   `ProjectSwitchForm` 头部 ASCII 图。回归 +1 条"缺省项目名=烧屏测试"（全量 1187→1188）。
 - `Views/MainForm.Designer.cs` — `lblRunStatus` Y 30→44（Sunny 组框标题占顶部
   约 30px，原来贴着标题边；组框高 84，截图确认留白正常）。
-- 顶栏文本统一 9pt + 行内垂直居中：`lblPermissionPrefix`/`lblPermissionRole`/
-  `lblCommStatusLabel`/`lblCommStatus` 补 9F 字体（`lblProject` 本来就是 9F）；
-  通讯两标签改 `Dock=Fill` + 左中对齐（原来贴顶），权限两标签上边距 6px。
-  harness 断言五段全 9pt、中线互差 ≤1px，截图四段同高。
+- 顶栏行内垂直居中 + 字号回到默认：通讯两标签改 `Dock=Fill` + 左中对齐
+  （原来贴顶），权限两标签上边距 6px；五段字体设置全删（中途试过统一 9pt，
+  用户纠正要与加 lblProject 之前的默认大小一致），harness 断言五段全 12pt
+  默认、中线互差 ≤1px，截图四段同高。
 - 项目切换权限：中途按用户要求放开给操作员过一次，随后用户改主意恢复
   "仅管理员"原逻辑（`MenuParamProject_Click` 的 Administrator 检查原样回退，
   无行为变化，不单独记版本）。
