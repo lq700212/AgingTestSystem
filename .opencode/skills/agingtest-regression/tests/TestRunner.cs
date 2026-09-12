@@ -19,6 +19,7 @@
 //   12c. MesV168                —— MES 映射解析 + 组包 + 上报器（Fake 传输，零外网）
 //   12d. RuleExprV169            —— 规则表达式解析求值 + 规则表 + 执行器（假时钟）
 //   12e. ProcessPolicyV170          —— 流程图静态文本 + 布局存取（纯函数，零 UI）
+//   12f. PowerReportV174          —— 电流骨架(Mock/桩/接线/规则变量) + 报表列 + 显示字典
 //
 //  【怎么跑】
 //  不直接运行本文件。用本 skill 目录 scripts\run_unit_tests.ps1：
@@ -150,7 +151,7 @@ namespace AgingTestSystem.Tests
             Console.WriteLine("BaseDirectory = " + AppDomain.CurrentDomain.BaseDirectory);
             Console.WriteLine("起始工作目录   = " + Environment.CurrentDirectory);
 
-            // ── V1.72.4 分级回归：38 个模块全表（新增模块只加这里一行，
+            // ── V1.72.4 分级回归：39 个模块全表（新增模块只加这里一行，
             // 下面的选中逻辑与 SKILL.md 覆盖表自动跟随，无需再改别处）──
             var allModules = new Dictionary<string, Action>(StringComparer.OrdinalIgnoreCase)
             {
@@ -193,6 +194,7 @@ namespace AgingTestSystem.Tests
                 { "UiFinalizerV172_14", UiFinalizerV172_14Tests },
                 { "LegacyRecipeGuard", LegacyRecipeGuardTests },
                 { "DesignerStabilityV172_16", DesignerStabilityV172_16Tests },
+                { "PowerReportV174", PowerReportV174Tests },
             };
 
             // 参数约定：无参=全量；"模块A,模块B"=子集（大小写不敏感）；
@@ -1027,7 +1029,7 @@ namespace AgingTestSystem.Tests
 
             string[] lines = ReadAllLinesShared(file);
             Check("首行为固定表头", lines.Length > 0 &&
-                lines[0] == "时间,批号,设备编号,事件,详情,压力(kPa),温度(°C)");
+                lines[0] == "时间,批号,设备编号,事件,详情,压力(kPa),温度(°C),电流(A)");
             Check("两条事件均已落盘", lines.Length >= 3);
             if (lines.Length < 3) return;
 
@@ -1037,9 +1039,11 @@ namespace AgingTestSystem.Tests
             Check("设备编号列=3", lines[1].Contains(",LOT20260825,3,"));
             Check("含逗号详情被转义包裹", lines[1].Contains("\"压力超限,需关注\""));
             Check("压力列=-85.5", lines[1].Contains(",-85.5,"));
-            Check("温度列一位小数 66.6 结尾", lines[1].EndsWith("66.6"));
-            // 压力/温度都为空时，详情后的两个空字段让行尾必然是 ",,"（CSV 列留空）
-            Check("可选压力/温度缺省时留空(行尾,,)", lines[2].EndsWith(",急停,手动触发,,"));
+            Check("温度列一位小数 66.6", lines[1].Contains(",66.6,"));
+            // V1.74：电流列追加末尾，老调用无电流记空（行尾多一个逗号）
+            Check("无电流时电流列留空(行尾逗号)", lines[1].EndsWith("66.6,"));
+            // 压力/温度/电流都为空时，详情后三个空字段让行尾必然是 ",,,"（CSV 列留空）
+            Check("可选压力/温度/电流缺省时留空(行尾,,,)", lines[2].EndsWith(",急停,手动触发,,,"));
 
             // V1.62：回车转义 + 字段格式边角
             if (mi != null)
@@ -1051,10 +1055,20 @@ namespace AgingTestSystem.Tests
             TestEventLogger.Write(null, -1, null, null, 12m, 33.56f);
             string[] lines2 = ReadAllLinesShared(file);
             string last = lines2[lines2.Length - 1];
-            Check("全null字段仍7列不抛", last.Split(',').Length >= 7 && last.Contains(",-1,"));
-            Check("温度一位小数格式化33.6", last.EndsWith("33.6"));
+            Check("全null字段仍8列不抛", last.Split(',').Length >= 8 && last.Contains(",-1,"));
+            Check("温度一位小数格式化33.6", last.Contains(",33.6,"));
             Check("压力整数12原样写", last.Contains(",12,"));
             TestEventLogger.Write("LOTX", 1, "启动", "ok", null, null);
+
+            // V1.74：电流列（有数两位小数；NaN 按空处理，CSV 里不许出现"NaN"字样）
+            TestEventLogger.Write("LOTC", 7, "上电", "载台上电", null, null, 0.424f);
+            string[] linesC = ReadAllLinesShared(file);
+            string lastC = linesC[linesC.Length - 1];
+            Check("电流有数写两位小数", lastC.EndsWith(",0.42"));
+            Check("电流列有数不断列", lastC.Split(',').Length >= 8);
+            TestEventLogger.Write("LOTN", 8, "上电", "无表", null, null, float.NaN);
+            string lastN = ReadAllLinesShared(file)[ReadAllLinesShared(file).Length - 1];
+            Check("电流NaN记空不写NaN字样", lastN.EndsWith(",") && !lastN.Contains("NaN"));
 
             // 并发写零丢失（对标 AppLog 并发用例）
             int beforeCount = ReadAllLinesShared(file).Length;
@@ -1658,11 +1672,12 @@ namespace AgingTestSystem.Tests
             foreach (string k in ProjectPolicyStore.PolicyKeys)
             {
                 // VentValveDoPoint 是数字项、FanTempShutdownEnabled/SkipVacuum 是布尔项、
-                // MesTriggers/MesFieldMap/MesStaticFields/CustomAlarmRules/CompleteExpression
-                // 是自由文本（V1.68/V1.69），都无策略下拉
+                // MesTriggers/MesFieldMap/MesStaticFields/CustomAlarmRules/CompleteExpression/
+                // ReportColumns/DisplayModes 是自由文本（V1.68/V1.69/V1.74），都无策略下拉
                 if (k == "VentValveDoPoint" || k == "FanTempShutdownEnabled" || k == "SkipVacuum"
                     || k == "MesTriggers" || k == "MesFieldMap" || k == "MesStaticFields"
-                    || k == "CustomAlarmRules" || k == "CompleteExpression") continue;
+                    || k == "CustomAlarmRules" || k == "CompleteExpression"
+                    || k == "ReportColumns" || k == "DisplayModes") continue;
                 Tuple<string, string>[] opts;
                 if (!ProjectPolicyStore.EnumOptions.TryGetValue(k, out opts) || opts.Length < 2) { optsOk = false; break; }
                 var prop = typeof(DeviceConfig).GetProperty(k);
@@ -3040,10 +3055,10 @@ namespace AgingTestSystem.Tests
                 Check("IP候选/映射表不强制校验",
                     ok("FanIpCandidates", "xxx") && ok("IoBackupChannelMappings", "xxx"));
 
-                // _boolKeys 15 项逐项过校验（防"只加一边"的配置漂移；V1.68 +MesEnabled/MesMockEnabled；V1.69 +SkipVacuum；V1.73 +VentValveEnabled）
+                // _boolKeys 16 项逐项过校验（防"只加一边"的配置漂移；V1.68 +MesEnabled/MesMockEnabled；V1.69 +SkipVacuum；V1.73 +VentValveEnabled；V1.74 +UsePowerMeter）
                 var boolKeys = (HashSet<string>)typeof(SettingsForm).GetField("_boolKeys",
                     BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
-                Check("布尔键15项", boolKeys != null && boolKeys.Count == 15);
+                Check("布尔键16项", boolKeys != null && boolKeys.Count == 16);
                 if (boolKeys != null)
                 {
                     bool allBoolOk = boolKeys.All(k => ok(k, "true") && ok(k, "false") && !ok(k, "YES"));
@@ -3055,7 +3070,8 @@ namespace AgingTestSystem.Tests
                         && boolKeys.Contains("MesEnabled")
                         && boolKeys.Contains("MesMockEnabled")
                         && boolKeys.Contains("SkipVacuum")
-                        && boolKeys.Contains("VentValveEnabled"));
+                        && boolKeys.Contains("VentValveEnabled")
+                        && boolKeys.Contains("UsePowerMeter"));
                 }
             }
 
@@ -3541,19 +3557,20 @@ namespace AgingTestSystem.Tests
                 Check("尾逗号出空尾段", parse("a,").Length == 2 && parse("a,")[1] == "");
                 Check("空行出1空段", parse("").Length == 1 && parse("")[0] == "");
 
-                // 互逆：写入器转义 → 解析器还原（7 列对齐，详情含逗号引号）
+                // 互逆：写入器转义 → 解析器还原（8 列对齐，详情含逗号引号）
                 EnterCleanDir();
                 TestEventLogger.Write("INV", 5, "报警", "详情,有\"引号\"", -5.5m, 36.6f);
                 string file = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs",
                     "TestLog_" + DateTime.Now.ToString("yyyyMMdd") + ".csv");
                 string[] lines = ReadAllLinesShared(file);
                 string[] f = parse(lines[lines.Length - 1]);
-                Check("互逆7列", f.Length == 7);
-                if (f.Length == 7)
+                Check("互逆8列", f.Length == 8);
+                if (f.Length == 8)
                 {
                     Check("互逆批号/编号/事件", f[1] == "INV" && f[2] == "5" && f[3] == "报警");
                     Check("互逆详情还原", f[4] == "详情,有\"引号\"");
                     Check("互逆压力温度", f[5] == "-5.5" && f[6] == "36.6");
+                    Check("互逆电流空", f[7] == "");
                 }
             }
             finally { form.Dispose(); }
@@ -4796,10 +4813,185 @@ namespace AgingTestSystem.Tests
             var batchForm2 = new BatchRecipeForm(null, new List<RecipeConfig>(), new List<int>());
             try
             {
-                Check("批量窗AutoScale=None（VS canonical，预览不脏）",
+                Check("批量窗AutoScale=None（VS canonical，预览正常）",
                     batchForm2.AutoScaleMode == AutoScaleMode.None);
             }
             finally { try { batchForm2.Dispose(); } catch { } }
+        }
+
+        // =====================================================================
+        // PowerReportV174 —— V1.74 电流骨架 + 报表列可配 + 显示模式字典
+        // （Q2/Q8/Q20：纯函数与缺省锁全进回归；真电表/PG/报表样张等现场项不在此列）
+        // =====================================================================
+        private static void PowerReportV174Tests()
+        {
+            // —— 缺省锁：不配=和以前一模一样 ——
+            var dc = new DeviceConfig();
+            Check("缺省不用电表", dc.UsePowerMeter == false);
+            Check("缺省报表列空=预设", dc.ReportColumns == "");
+            Check("缺省显示字典空=预设", dc.DisplayModes == "");
+            Check("电流缺省NaN", float.IsNaN(new BarometerData().LoadCurrentA));
+            var bd = new BarometerData { DeviceId = 1, LoadCurrentA = 0.42f };
+            var bc = bd.Clone();
+            bc.LoadCurrentA = 0f;
+            Check("Clone带电流且独立", bc.LoadCurrentA == 0f && bd.LoadCurrentA == 0.42f);
+            Check("策略名单含报表与字典(跟项目)",
+                ProjectPolicyStore.PolicyKeys.Contains("ReportColumns")
+                && ProjectPolicyStore.PolicyKeys.Contains("DisplayModes"));
+
+            // —— Mock 电表：有数、范围、未连接返回null ——
+            var mock = new MockPowerMeter();
+            Check("Mock初态未连接", mock.IsConnected == false);
+            Check("Mock未连接读null", mock.ReadAllCurrents(72) == null);
+            Check("Mock连接成功", mock.Connect(new DeviceConfig()) && mock.IsConnected);
+            float[] currents = mock.ReadAllCurrents(72);
+            bool mockOk = currents != null && currents.Length == 72;
+            if (mockOk)
+            {
+                foreach (float c in currents)
+                {
+                    if (float.IsNaN(c) || c < 0.05f || c > 0.60f) { mockOk = false; break; }
+                }
+            }
+            Check("Mock72路有数且0.05~0.60A", mockOk);
+            Check("Mock重连幂等", mock.ReconnectNow() && mock.IsConnected);
+            mock.Disconnect();
+            Check("Mock断开后未连接", mock.IsConnected == false);
+            try { mock.Dispose(); } catch { }
+            Check("Mock释放不抛", true);
+
+            // —— 真实桩：连不上、读全NaN但不断追溯 ——
+            var stub = new PowerMeterClient();
+            bool stubErr = false;
+            stub.OnError += (s, m) => { stubErr = true; };
+            Check("桩连接失败", stub.Connect(new DeviceConfig()) == false && stub.IsConnected == false);
+            Check("桩失败发一次错误事件", stubErr);
+            float[] stubCur = stub.ReadAllCurrents(72);
+            bool stubNaN = stubCur != null && stubCur.Length == 72;
+            if (stubNaN)
+            {
+                foreach (float c in stubCur)
+                {
+                    if (!float.IsNaN(c)) { stubNaN = false; break; }
+                }
+            }
+            Check("桩读数全NaN不断追溯", stubNaN);
+            Check("桩重连仍失败", stub.ReconnectNow() == false);
+            try { stub.Dispose(); stub.Disconnect(); } catch { }
+            Check("桩释放断开不抛", true);
+
+            // —— 编排接线（不 Start：只验"开关管住创建"，采集时序由集成模块覆盖） ——
+            var dmOff = new DeviceManager(new DeviceConfig());
+            try
+            {
+                Check("开关关时对外不可见", dmOff.IsPowerMeterConnected == false);
+                var fOff = typeof(DeviceManager).GetField("_powerMeter",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Check("反射找到_powerMeter", fOff != null);
+                if (fOff != null) Check("开关关不建表", fOff.GetValue(dmOff) == null);
+            }
+            finally { try { dmOff.Dispose(); } catch { } }
+            var cfgOn = new DeviceConfig { UsePowerMeter = true };
+            var dmOn = new DeviceManager(cfgOn);
+            try
+            {
+                var fOn = typeof(DeviceManager).GetField("_powerMeter",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                object pm = fOn != null ? fOn.GetValue(dmOn) : null;
+                Check("开关开建Mock表", pm is MockPowerMeter);
+                Check("未Start前仍显示未连接", dmOn.IsPowerMeterConnected == false);
+            }
+            finally { try { dmOn.Dispose(); } catch { } }
+
+            // —— 规则变量 current：解析+求值+NaN恒false ——
+            bool hasCurrent = false;
+            foreach (string v in RuleExpr.Vocabulary)
+            {
+                if (string.Equals(v, "current", StringComparison.OrdinalIgnoreCase)) { hasCurrent = true; break; }
+            }
+            Check("词汇表含current", hasCurrent && RuleExpr.Vocabulary.Length == 13);
+            RuleExpr.RuleExpression exprCur;
+            string exprCurErr;
+            Check("current表达式解析过",
+                RuleExpr.TryParse("current > 0.5", out exprCur, out exprCurErr), exprCurErr);
+            if (exprCur != null)
+            {
+                var vars = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase) { { "current", 0.8 } };
+                double val;
+                string evalErr;
+                Check("current=0.8求值过",
+                    RuleExpr.TryEval(exprCur, vars, out val, out evalErr) && val != 0, evalErr);
+                vars["current"] = double.NaN;
+                string berr;
+                Check("current=NaN恒false",
+                    RuleExpr.TryEvalBool(exprCur, vars, out berr) == false);
+            }
+
+            // —— 报表列：预设8列/解析/兜底/校验 ——
+            List<ReportColumns.Column> presetCols;
+            List<string> presetErrs;
+            ReportColumns.Parse(ReportColumns.DefaultPreset, out presetCols, out presetErrs);
+            Check("预设解析8列零错", presetCols.Count == 8 && presetErrs.Count == 0);
+            Check("预设首列时间末列电流",
+                presetCols[0].Display == "时间" && presetCols[0].Field == "time"
+                && presetCols[7].Display == "电流(A)" && presetCols[7].Field == "current");
+            Check("空配置走预设", ReportColumns.Resolve("").Count == 8);
+            Check("全错配置走预设", ReportColumns.Resolve("xxx=yyy").Count == 8);
+            List<ReportColumns.Column> customCols;
+            List<string> customErrs;
+            ReportColumns.Parse("时间=time;批号=lot", out customCols, out customErrs);
+            Check("自定义2列保序", customCols.Count == 2 && customErrs.Count == 0
+                && customCols[1].Display == "批号" && customCols[1].Field == "lot");
+            List<ReportColumns.Column> badCols;
+            List<string> badErrs;
+            ReportColumns.Parse("时间=nosuchfield", out badCols, out badErrs);
+            Check("未知字段报错且丢弃", badCols.Count == 0 && badErrs.Count > 0);
+            const BindingFlags Flags = BindingFlags.NonPublic | BindingFlags.Static;
+            var miValidate = typeof(SettingsForm).GetMethod("ValidateValue", Flags);
+            if (miValidate != null)
+            {
+                Check("报表列空合法",
+                    (bool)miValidate.Invoke(null, new object[] { "ReportColumns", "", null }) == true);
+                Check("报表列合法过",
+                    (bool)miValidate.Invoke(null, new object[] { "ReportColumns", "时间=time", null }) == true);
+                Check("报表列脏拦截",
+                    (bool)miValidate.Invoke(null, new object[] { "ReportColumns", "时间=nosuch", null }) == false);
+            }
+            else Check("反射找到 ValidateValue", false);
+
+            // —— 显示模式字典：预设/校验/规范写法/兜底 ——
+            Check("缺省预设8项含白场与视频",
+                DisplayModeOptions.Preset().Count == 8
+                && DisplayModeOptions.Preset().Contains("白场")
+                && DisplayModeOptions.Preset().Contains("视频"));
+            List<string> dmOpts;
+            List<string> dmErrs;
+            DisplayModeOptions.Parse("", out dmOpts, out dmErrs);
+            Check("空字典解析零项零错", dmOpts.Count == 0 && dmErrs.Count == 0);
+            DisplayModeOptions.Parse("白场,红场,白场", out dmOpts, out dmErrs);
+            Check("重复提醒且保留首个", dmOpts.Count == 2 && dmErrs.Count > 0);
+            string canon, derr;
+            var dictOpts = DisplayModeOptions.Preset();
+            Check("空输入=清空通过",
+                DisplayModeOptions.ValidateInput("  ", dictOpts, out canon, out derr) && canon == "");
+            Check("字典内过且存规范写法",
+                DisplayModeOptions.ValidateInput("白场 ", dictOpts, out canon, out derr) && canon == "白场");
+            Check("字典外拦并报选项",
+                !DisplayModeOptions.ValidateInput("紫场", dictOpts, out canon, out derr)
+                && derr != null && derr.Contains("白场"));
+            Check("无配置对象走预设兜底", DisplayModeOptions.Resolve(null).Count == 8);
+            var cfgModes = new DeviceConfig { DisplayModes = "红场,绿场" };
+            var resolved = DisplayModeOptions.Resolve(cfgModes);
+            Check("配置字典优先", resolved.Count == 2 && resolved[0] == "红场");
+            if (miValidate != null)
+            {
+                Check("字典空合法",
+                    (bool)miValidate.Invoke(null, new object[] { "DisplayModes", "", null }) == true);
+                Check("字典合法过",
+                    (bool)miValidate.Invoke(null, new object[] { "DisplayModes", "白场,红场", null }) == true);
+                Check("字典全空拦截",
+                    (bool)miValidate.Invoke(null, new object[] { "DisplayModes", " , ", null }) == false);
+            }
         }
 
     }

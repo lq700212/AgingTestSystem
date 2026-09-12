@@ -157,6 +157,7 @@ namespace AgingTestSystem.Dialogs
             "MesMockEnabled",
             "SkipVacuum",
             "VentValveEnabled",
+            "UsePowerMeter",
         };
 
         /// <summary>
@@ -170,6 +171,7 @@ namespace AgingTestSystem.Dialogs
             "PanelColumns", "PanelRows",
             "UseMockCommunication",
             "FanEnabled",
+            "UsePowerMeter",
         };
 
         /// <summary>气压表串口连接参数：改动后需重连串口才生效</summary>
@@ -319,6 +321,9 @@ namespace AgingTestSystem.Dialogs
             { "FanTempAlarmLimitC", "送风机温度告警上限（°C，0=不启用）" },
             { "FanTempShutdownEnabled", "超温是否全线联停（false=只记日志；true=超温自动停全部在测工位，默认false）" },
 
+            // ===== 载台电流（V1.74：Q2 通用骨架总开关，跟机器，结构型改后重启生效）=====
+            { "UsePowerMeter", "是否启用载台电流回采（false=现状：不接电表，电流恒无数据；true=按Mock开关读数，电表到货即插即用）" },
+
             // ===== 工艺策略（V1.67：7 个待确认点全部可配，跟项目走存 Policy.json）=====
             { "ZeroDurationPolicy", "0时长启动策略：只警告=提示后可继续（现状）/硬拦截=含0时长工位直接阻断" },
             { "EmptySnPolicy", "空SN启动策略：只警告=提示后可继续（现状）/硬拦截=含空SN工位直接阻断" },
@@ -350,8 +355,14 @@ namespace AgingTestSystem.Dialogs
 
             // ===== 规则流程（V1.69 三期：规则表达式 + 阶段流，全部跟项目走 Policy.json）=====
             { "SkipVacuum", "跳过抽真空（false=现状三阶段；true=启动即上电+压力报警同步豁免，机械夹具专用。配错在真空架上开=真空保护全丢，开前确认产品已机械固定！）" },
-            { "CompleteExpression", "完成表达式（单行，空=禁用走内置时长；成立即完成，只能提前。如 temp > 85。变量12个：pressure/temp/tempset/hum/device/delaysecs/vacsecs/agesecs/duration/threshold/di0/hour）" },
+            { "CompleteExpression", "完成表达式（单行，空=禁用走内置时长；成立即完成，只能提前。如 temp > 85。变量13个：pressure/temp/tempset/hum/device/delaysecs/vacsecs/agesecs/duration/threshold/di0/hour/current）" },
             { "CustomAlarmRules", "自定义报警规则（点击编辑，多行，一行一条：名称 | 表达式 | 持续秒。触发=关阀断电记FAIL。变量同上）" },
+
+            // ===== 报表导出（V1.74：Q8 列可配，跟项目走 Policy.json）=====
+            { "ReportColumns", "报表列（跟项目，显示名=字段，分号分隔；可用字段：time/lot/device/event/detail/pressure/temp/current；留空=缺省预设8列。如 时间=time;批号=lot）" },
+
+            // ===== 显示模式字典（V1.74：Q20 记录层可配，跟项目走 Policy.json）=====
+            { "DisplayModes", "显示模式字典（跟项目，逗号分隔；录入窗保存时按此校验，字典外拦；留空=缺省预设 白场,红场,绿场,蓝场,灰阶,RGB循环,棋盘格,视频）" },
 
             // ===== 扫码枪 =====
             { "ScannerEnabled", "是否启用扫码枪（false/true）" },
@@ -422,6 +433,11 @@ namespace AgingTestSystem.Dialogs
                 "MaxTestDurationSeconds", "UseDiAlarmContact", "FanTempAlarmLimitC",
                 "FanTempShutdownEnabled"
             }),
+            // 【V1.74】载台电流独立分类（Q2 骨架总开关，跟机器；显示在业务区后面，找得着）
+            ("载台电流", new string[]
+            {
+                "UsePowerMeter"
+            }),
             // 【V1.67】工艺策略独立分类（7 个待确认点 + 完成动作 + 破空点位，共 10 项；
             // FanTempShutdownEnabled 同时是策略，显示在老化测试业务里，这里不再重复列，
             // 但它进 Policy.json——名单以 ProjectPolicyStore.PolicyKeys 为准，不以分类为准）
@@ -430,7 +446,8 @@ namespace AgingTestSystem.Dialogs
                 "ZeroDurationPolicy", "EmptySnPolicy",
                 "FanDisconnectPolicy", "VacuumFailKind",
                 "CompletionJudgePolicy", "PowerLossPolicy",
-                "AgingPressureLossPolicy", "CompletionAction", "VentValveDoPoint", "VentValveEnabled"
+                "AgingPressureLossPolicy", "CompletionAction", "VentValveDoPoint", "VentValveEnabled",
+                "DisplayModes"
             }),
             // 【V1.69】规则流程（表达式 + 阶段流，全部跟项目；同表编辑，保存按 PolicyKeys 分流）
             ("规则流程", new string[]
@@ -447,6 +464,14 @@ namespace AgingTestSystem.Dialogs
                 "MesTriggers", "MesFieldMap", "MesStaticFields",
                 "MesCustomHeaders", "MesEndpointMap"
             }),
+            // 【V1.74】报表导出独立分类（Q8 列可配，跟项目；与 MES 对接并列，找得着）
+            ("报表导出", new string[]
+            {
+                "ReportColumns"
+            }),
+            // 【V1.74】显示模式字典进工艺策略分类（Q20 记录层可配，跟项目；改画面选项来这里）
+            // 注：工艺策略分类名单 ≠ PolicyKeys 名单（后者以 ProjectPolicyStore 为准），
+            // 这里只是"显示位置"，分流/校验认 PolicyKeys（见 ValidateValue 与 PersistChanges）。
             ("扫码枪", new string[]
             {
                 "ScannerEnabled", "ScannerPort", "ScannerDeviceKeyword",
@@ -1880,6 +1905,36 @@ namespace AgingTestSystem.Dialogs
                 return false;
             }
 
+            // 报表列（【V1.74】）：脏组保存时拦并报出哪一组错了；导出时跳过脏列，
+            // 与 MES 映射"保存拦、上报跳"双保险同规矩。
+            if (key == "ReportColumns")
+            {
+                List<ReportColumns.Column> cols;
+                List<string> colErrs;
+                ReportColumns.Parse(value, out cols, out colErrs);
+                if (colErrs.Count == 0) return true;
+                error = string.Join("；", colErrs.ToArray());
+                return false;
+            }
+
+            // 显示模式字典（【V1.74】）：空=缺省预设合法；配了必须解析出 ≥1 个选项，
+            // 脏组（超长/重复/全空）保存时拦并报出原因。
+            if (key == "DisplayModes")
+            {
+                if (string.IsNullOrWhiteSpace(value)) return true;
+                List<string> dmOpts;
+                List<string> dmErrs;
+                DisplayModeOptions.Parse(value, out dmOpts, out dmErrs);
+                if (dmOpts.Count > 0 && dmErrs.Count == 0) return true;
+                if (dmOpts.Count == 0 && dmErrs.Count == 0)
+                {
+                    error = "未解析出任何选项（留空=缺省预设；要自定义请填如 白场,红场）";
+                    return false;
+                }
+                error = string.Join("；", dmErrs.ToArray());
+                return false;
+            }
+
             // 规则流程（【V1.69】）：完成表达式单行语法校验（空=禁用合法）；
             // 规则表逐行校验（错行带行号，报全不只报首条——保存拦截要一次看全）。
             if (key == "CompleteExpression")
@@ -1971,6 +2026,7 @@ namespace AgingTestSystem.Dialogs
                 case "MesMockEnabled":
                 case "SkipVacuum":
                 case "VentValveEnabled":
+                case "UsePowerMeter":
                     if (!bool.TryParse(value, out _)) { error = "应为 true 或 false"; return false; }
                     return true;
 

@@ -1,6 +1,6 @@
 ---
 name: agingtest-regression
-description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案热更删除/终结器释放/关窗竞态/MES映射上报/规则表达式/工艺策略窗等全部核心逻辑类（1318 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
+description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案热更删除/终结器释放/关窗竞态/MES映射上报/规则表达式/工艺策略窗/电流报表画面等全部核心逻辑类（1370 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
 ---
 
 # AgingTestSystem 回归测试套件（冒烟 + 用例一体）
@@ -57,7 +57,7 @@ agingtest-regression/
     └── TestRunner.cs         ← 全部测试用例源码（加用例就改这里）
 ```
 
-## 三、测试覆盖范围（39 个模块，1318 断言）
+## 三、测试覆盖范围（40 个模块，1370 断言）
 
 | 模块 | 覆盖点 |
 | --- | --- |
@@ -67,7 +67,7 @@ agingtest-regression/
 | IoOutputChannelRemap | 多组解析、中英文分号/箭头、0X 大小写、脏项跳过汇总 error、源=目标、通道 0x00~0x0F（V1.62 起 0x10+ 直接拒绝）、缺前缀 |
 | DeviceConfig.ParseFanIpCandidates | 中英文分隔符、非法过滤、去重保序、IPv6、空输入族 |
 | RecipeStorage | Load/Save 往返全字段、损坏 json 返 null、空数组、"null"字面量、SaveWithDuplicateCheck 新增分支、删中间配方后 Max+1 不撞号(V1.62)、DisplayMode 往返(V1.66) |
-| TestEventLogger | CsvEscape 转义（逗号/引号翻倍/换行/回车 V1.62）、表头、落盘字段格式、null 字段 7 列、温度一位小数、20×5 并发零丢失、删目录自重建 |
+| TestEventLogger | CsvEscape 转义（逗号/引号翻倍/换行/回车 V1.62）、表头（V1.74 加电流列共 8 列）、落盘字段格式、null 字段 8 列、温度一位小数、电流有数两位小数/NaN 记空不写字样、20×5 并发零丢失、删目录自重建 |
 | AppLogFileWriter | UTF-8 追加、空串忽略、8 线程×5 行并发一条不少（lock 生效） |
 | PanelLayoutConfig | 默认布局基准坐标、ResolveAnchors 幂等零漂移、高度+10 纵链全链跟随、宽度+10 右锚定组随动、颜色解析钳位/回退、SaveDefault→重载零差异 |
 | HomeLayoutConfig | 默认值、Save→Load 往返、范围约束、损坏文件回退默认 |
@@ -81,12 +81,12 @@ agingtest-regression/
 | MockDevices(V1.62) | 三 Mock 未连接约定/越界/副本隔离、气压两档区间千次采样、风机启停守卫与漂移界 |
 | StationCache(V1.62) | 往返全字段、覆盖语义、副本双向隔离、脏文件三态、非法编号过滤（反射重置静态缓存+隔离目录） |
 | ModelDefaults(V1.62) | DeviceConfig 全构造默认值、风机枚举寄存器值、FanData/BarometerData Clone 全字段与数组深拷贝、LoginResult 工厂、角色值、快照与配方构造默认 |
-| SettingsValidate(V1.62) | ValidateValue 全类型矩阵、TryParseUShort、范围表抽查+默认值落界、布尔键一致（V1.71：14 项含 SkipVacuum）、连接键契约、CreateValueCell 全分发、分类/说明键对齐（构造真窗体不断言弹窗）、PersistChanges 统一路（V1.71：矛盾/MES 拦截、策略落盘+热回写、机器键落盘、空改动、null 不抛，运行目录隔离+备份还原）、三非模态弹窗关闭即释放（V1.72.13：走生产挂接反射调 ShowXxxPopup→OpenForms 找窗→Close→IsDisposed） |
+| SettingsValidate(V1.62) | ValidateValue 全类型矩阵、TryParseUShort、范围表抽查+默认值落界、布尔键一致（V1.74：16 项含 UsePowerMeter）、连接键契约、CreateValueCell 全分发、分类/说明键对齐（构造真窗体不断言弹窗）、PersistChanges 统一路（V1.71：矛盾/MES 拦截、策略落盘+热回写、机器键落盘、空改动、null 不抛，运行目录隔离+备份还原）、三非模态弹窗关闭即释放（V1.72.13：走生产挂接反射调 ShowXxxPopup→OpenForms 找窗→Close→IsDisposed）、报表列/显示字典校验分支（V1.74） |
 | ScannerParse(V1.62) | JoinPorts、ParseParity/ParseStopBits、与设置窗 NormalizeStopBits 跨文件 15 口径 |
 | ModbusConvert(V1.62) | 气压/阈值换算纯函数、IsPortLevelFailure 中英文关键字、未连接约定、串口参数解析 |
 | FanParse(V1.62) | 寄存器解析(/100 全字段)、不足 6 个、非法枚举透传、未连接约定、Connect(null) |
 | StationTime(V1.62) | 时分秒组合、25 小时不截断(V1.62 修复锁)、超 99 钳制、文本格式、Clamp |
-| HistoryCsv(V1.62) | CSV 解析边角、与 TestEventLogger 互逆 7 列 |
+| HistoryCsv(V1.62) | CSV 解析边角、与 TestEventLogger 互逆 8 列（V1.74：电流空） |
 | UiPureHelpers(V1.62) | 批号去空格、配方查找(ignoreCase)+25h 不截断、工位温度读取(V1.63 数字框恒合法+回填钳制)、IP 合法、数字格钳制、网格命中/边界/四色、位值→通道、风机中文(V1.63 对齐主窗)、CH340 谓词/串口参数钳制(V1.63)、右侧宽度比例 ComputeRightPanelWidth(V1.65：0.234 常量/护栏/兜底/自定义优先 8 条)、配方窗负压/显示模式框回填(V1.66)、反射 as-cast 跟随控件换型（V1.71：TextBox→UITextBox 两处）、两窗tooltip+破空显隐纯函数（V1.73） |
 | **DeviceManagerExtended(V1.62)** | 状态口/在线数/启动错误、批量 SN、配方名负压联动、副本隔离、非法电池、连接与间隔热生效、批量阈值+定时器恢复、反方向报警端到端、全局时长回退、定格隔离、清理回全局、不限时、2s 延时门、空闲容错、自愈计数、报警驻留、边沿单次(CSV 计数)、快照全字段+双台+批号、急停、停止再启动、风机生命周期(MockFan)、超长数组与错 id 防火墙、脏快照恢复、显示模式下发/保持/清空+叠加采集可见+GetTestingDeviceIds(V1.66) |
 | PolicyV167(V1.67) | BuildStartBlockText 阻断文案、MapAlarmResult 责任映射、ComputeResumeDuration 剩余/跑超/回拨、ValidatePolicyCombination 矛盾锁、ParseValue 大小写/非法、PolicyKeys↔DeviceConfig↔下拉选项三处同步锁、DeviceConfig 缺省=现状锁、快照新字段缺省锁、ValidateValue 策略分支+点位、NormalizePolicyValue 脏值兜底、WrapTooltip 40字换行、ProjectProfile 非法名/重复/切换拒绝/路径分流、Policy.json 存取往返、热更往返12条(V1.72.10：切A/切B/切回指针路径缓存跟人走+finally恢复)、Default自愈3条(正主在删+补拷+重名不覆盖/正主不在整体改名)、DeviceConfig.CopyFrom引用不变全量拷脱钩、ClearProjectScopedState清指派+Pause/Resume不擅自启动、DeleteProfile删不存在空名被拒切入当前禁删切回删除列表干净指针不变(V1.72.11)、ApplyLoadedRecipes空null清空替换引用不变(V1.72.12)、ValidatePolicyCombination无阀分支+布尔键15项(V1.73) |
@@ -100,6 +100,7 @@ agingtest-regression/
 | UiFinalizerV172_14(V1.72.14) | 关窗竞态静默丢弃（Comm/Fan _closed+句柄双查+BeginInvoke；无句柄/关后日志不炸；RemapNoticeForm自释反射存在）、判定窗预览（无参构造+_lblCode/_lblDisp具名+处置选项数+空快照文案+两按钮）、关于SunnyUI（反射调internal static：UIForm+只读多行+Y≥35+版本版权文案+确认蓝+Accept）；V1.72.15 追加全仓锁 14 条（公共参数/ID绑定/设置/主窗 _closed/_mainClosing 标记、关后完成/扫码/写寄存器/控制命令/补全释放过滤静默丢弃）、切换窗tooltip+在测禁用轮询（V1.73） |
 | LegacyRecipeGuard(V1.72.2) | V1.59老配方0值语义锁：缺字段读出0/null、下发0=定格0(0≠全局)/null=保持/清空回全局、批量窗新建默认全局、老配方回填显示0待人工复核（只构造不启采集） |
 | DesignerStabilityV172_16(V1.72.16) | 快照释放（helper全释放/null安全/旧foreach红证据/驾驶舱真方法反射释放）、布局窗量程字面值（四量程=Range/340拖动同步/越界钳制/构造期越界）、三窗AutoScale=None锁（判定/批量/布局，防Font+Zoom混搭回潮） |
+| PowerReportV174(V1.74) | 缺省锁（不用电表/报表空/字典空/电流NaN/Clone带电流）、Mock电表（连接/72路0.05~0.60A/断开/释放）、真实桩（连不上/全NaN不断追溯/重连失败）、编排接线（开关管创建/未Start不连，反射验_powerMeter）、规则 current 变量（解析/求值/NaN恒false）、报表列（预设8列/自定义保序/未知丢弃/空合法/脏拦截/全错兜底预设）、显示字典（预设8项/重复提醒/空清空过/规范写法/字典外拦报选项/无配置走预设/配置优先/ValidateValue三态） |
 
 **不在覆盖范围**（明确边界）：真串口/真设备通讯（ModbusRtuBarometerReader /
 ScannerService / FanControllerClient / ModbusTcpIoController，靠现场联调）、
@@ -302,3 +303,19 @@ UI 弹窗分支（如配方同名覆盖确认框，靠界面手工测试）、�
     修法是 SetupTooltips 开头 `if (components == null) components = new Container()`，
     后续 Dispose 照走容器。**教训：用 `this.components` 前先看 Designer 有没有
     `new Container()` 那行，没有就自己补（StationSettingsForm 有，Batch 没有）。**
+    （V1.74 追认：RecipeManagerForm 同病，构造 tooltip 前同样补建容器。）
+32. **用例文件尾部追加新模块，大括号失衡先看插入点上下文**
+    （V1.74：新模块插到文件尾，编译报一串 CS1519/CS1022——尾部多了个孤儿
+    `finally+}`，原因是多行 edit 的 oldString 在尾部误匹配/复写）。
+    修法是插完先读尾部 30 行数括号，编译不过先看尾。**教训：文件尾是 edit
+    工具最容易吞行的地方（与 V1.71 的 Designer 27 行块吞 3 个 new 同类），
+    大块追加后必做"尾部复读 + 立即编译"。**
+33. **OpenXml 的 `Elements<T>().Count()` 要 `using System.Linq`**
+    （V1.74：照抄 ID 绑定窗样式表代码到历史窗，CS1061——源文件有 Linq，
+    目标文件没有）。**教训：跨文件抄套路时把 using 一起抄，编译第一个错
+    先看缺 using。**
+34. **CSV 加一列，表头/行尾/互逆三处断言必改**
+    （V1.74：TestLog 加电流列，TestEventLoggerTests 的表头断言、
+    两处 EndsWith 行尾断言、HistoryCsvTests 的互逆列数 7→8 全红）。
+    修法是改前 rg 全仓扫旧表头字面量（测试+注释里的列格式说明一起改）。
+    **教训：CSV 列是"写入器+解析器+断言"三方契约，加列=三方同步。**

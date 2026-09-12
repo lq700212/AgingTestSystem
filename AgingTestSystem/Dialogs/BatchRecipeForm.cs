@@ -139,7 +139,10 @@ namespace AgingTestSystem.Dialogs
             SetTip(new Control[] { lblNegativePressureLabel, txtNegativePressure },
                 "负压阈值：该配方的真空到位判定阈值（kPa）。新建默认填全局阈值，下发后启动时定格，存什么用什么。");
             SetTip(new Control[] { lblDisplayModeLabel, txtDisplayMode },
-                "显示模式：本次烧屏跑的显示画面（如红绿蓝纯色、灰阶）。只做生产追溯，不参与PASS/FAIL判定，会写入启动与报警日志。");
+                "显示模式：本次烧屏跑的显示画面，只追溯不判定。可选：" +
+                string.Join("/", DisplayModeOptions.Resolve(
+                    _deviceManager != null ? _deviceManager.Config : null).ToArray()) +
+                "（字典在系统设置→工艺策略里改；保存时按字典校验）。");
         }
 
         /// <summary>给一组控件挂同一条说明（超 40 字自动换行）。</summary>
@@ -252,6 +255,19 @@ namespace AgingTestSystem.Dialogs
                 return null;
             }
 
+            // 【V1.74】显示模式字典校验（Q20：空=清空允许，字典内=存规范写法，
+            // 字典外拦并报出全部选项；字典走本机生效配置，无 manager 时读项目文件）
+            string canonicalMode, modeErr;
+            if (!DisplayModeOptions.ValidateInput(txtDisplayMode.Text,
+                DisplayModeOptions.Resolve(_deviceManager != null ? _deviceManager.Config : null),
+                out canonicalMode, out modeErr))
+            {
+                MessageBox.Show(modeErr, "输入验证",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                txtDisplayMode.Focus();
+                return null;
+            }
+
             // 创建配方配置对象
             // Id 由 RecipeStorage.SaveWithDuplicateCheck 在保存时统一分配，这里留 0。
             // 延时时间 → DelayTime（延时开启），启动时间 → StartTime（延时到达），
@@ -263,7 +279,7 @@ namespace AgingTestSystem.Dialogs
                 StartTime = delayArriveTime,
                 LimitTemperature = limitTemp,
                 NegativePressure = negativePressure,
-                DisplayMode = txtDisplayMode.Text.Trim(),
+                DisplayMode = canonicalMode,
                 CreateTime = DateTime.Now,
                 IsEnabled = true
             };
@@ -328,12 +344,43 @@ namespace AgingTestSystem.Dialogs
             }
 
             // ---- 5) 成功提示 ----
+            // 【V1.74】定格护栏（Q18 接受定格语义后的小提示）：在测工位按启动瞬间定格的
+            // 旧参数跑完，本次下发只影响新启动——有交集才提示，无交集不打扰。
+            string testingNote = BuildTestingNote();
             MessageBox.Show(
                 $"配方 \"{recipe.Name}\" 已保存到本地配方列表，\r\n" +
-                $"并已应用到 {appliedCount} 个选中的工位面板！",
+                $"并已应用到 {appliedCount} 个选中的工位面板！" + testingNote,
                 "加入队列成功",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
+        }
+
+        /// <summary>
+        /// 定格提示文案（【V1.74 新增】纯逻辑可单测：选中工位与在测工位有交集才提示）。
+        /// 在测判定走 DeviceManager.GetTestingDeviceIds（与项目切换禁切同口径）；
+        /// manager 为 null/异常按"无在测"处理（纯保存模式不打扰）。
+        /// </summary>
+        private string BuildTestingNote()
+        {
+            try
+            {
+                if (_deviceManager == null || _selectedDeviceIds == null) return "";
+                int[] testing = _deviceManager.GetTestingDeviceIds();
+                if (testing == null || testing.Length == 0) return "";
+                foreach (int id in _selectedDeviceIds)
+                {
+                    foreach (int t in testing)
+                    {
+                        if (id == t)
+                        {
+                            return "\r\n\r\n注意：选中工位中有在测任务，在测按启动时定格参数跑完，" +
+                                "本次修改仅对新启动生效。";
+                        }
+                    }
+                }
+            }
+            catch { /* 在测查询失败按无在测处理，不阻断加入队列 */ }
+            return "";
         }
 
         /// <summary>

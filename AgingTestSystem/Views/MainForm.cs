@@ -911,6 +911,11 @@ namespace AgingTestSystem.Views
             {
                 config.VentValveEnabled = ventEnabled;
             }
+            // 【V1.74】载台电流总开关（无表=false 现状：不断任何线、不读数，电流恒 NaN）
+            if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["UsePowerMeter"], out bool usePower))
+            {
+                config.UsePowerMeter = usePower;
+            }
 
             // 【V1.68】MES 对接（机器级：开关/URL/超时/鉴权/重试；触发器/映射/静态字段跟项目，
             // 由下面的 ApplyOverlay 从 Policy.json 覆盖——非法字符串同样兜底缺省）。

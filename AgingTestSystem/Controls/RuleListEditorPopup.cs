@@ -62,10 +62,10 @@ namespace AgingTestSystem.Controls
             _txtRules.TextChanged += (s, e) => RefreshStatus();
             Controls.Add(_txtRules);
 
-            // 变量速查（灰字，12 个冻结变量 + 单位）
+            // 变量速查（灰字，13 个冻结变量 + 单位；V1.74 加 current=本工位电流A）
             var lblVars = new Label
             {
-                Text = "变量：pressure(kPa) temp(°C) tempset(°C) hum(%RH) device delaysecs vacsecs agesecs duration threshold di0 hour" +
+                Text = "变量：pressure(kPa) temp(°C) tempset(°C) hum(%RH) device delaysecs vacsecs agesecs duration threshold di0 hour current(A)" +
                     "\r\n示例：超温偏离 | temp - tempset > 10 | 30",
                 Location = new Point(12, 188),
                 Size = new Size(496, 36),

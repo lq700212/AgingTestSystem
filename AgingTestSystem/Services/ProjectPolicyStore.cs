@@ -47,6 +47,8 @@ namespace AgingTestSystem.Services
             "CustomAlarmRules",
             "CompleteExpression",
             "SkipVacuum",
+            "ReportColumns",
+            "DisplayModes",
         };
 
         /// <summary>当前项目的策略文件路径（Projects/&lt;项目&gt;/Policy.json）。</summary>

@@ -110,7 +110,9 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 [急停] 全部停止：全关阀+全断电+停送风机+清任务快照（带防误触确认）
 [断电恢复] 异常退出后再启动：检测到 TestSession.json 快照 → 弹窗选"恢复测试"或"放弃并安全关闭阀与电源"（V1.67：策略=整台重测现状，或重抽真空+补足剩余时长，断电期间不计）
 [MES上报] 启动/完成/报警/下料判定四事件按触发器后台 POST JSON 到 MesEndpoint（V1.68；映射/静态可配；Mock 只写 CSV；失败重试+离线缓存，永不阻断生产）
-[规则] 自定义报警规则成立即报警记FAIL（V1.69，与内置同一边沿）；完成表达式成立即提前完成（只能提前）；跳过抽真空=启动即上电+压力豁免（机械夹具，启动大写警告）
+[规则] 自定义报警规则成立即报警记FAIL（V1.69，与内置同一边沿）；完成表达式成立即提前完成（只能提前）；跳过抽真空=启动即上电+压力豁免（机械夹具，启动大写警告）；规则变量含电流 `current`（V1.74，无表=NaN恒false，只追溯不判定）
+[报表] 历史记录窗导出按钮按 `ReportColumns` 列配置生成 xlsx（V1.74；留空=缺省预设8列，跟项目走；SN/配方/结果三列尚未进CSV，后续加）
+[配方] 三窗显示模式输入框按 `DisplayModes` 字典校验保存（V1.74；字典外拦，空=清空；批量/工位窗在测下发提示"仅对新启动生效"——定格语义，启动瞬间定格）
 ```
 
 ### 4.2 报警来源（DeviceManager.IsAlarm）
@@ -185,6 +187,9 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `MesRetryCount` / `MesRetryIntervalMs` | 3 / 2000 | 失败重试次数/间隔（全灭进离线缓存，下次成功补发） |
 | `MesTriggers` / `MesFieldMap` / `MesStaticFields` | 空 / 空 / 空 | 触发器/字段映射/静态字段(V1.68：跟项目走 Policy.json；留空=全开/直通/无） |
 | `SkipVacuum` / `CompleteExpression` / `CustomAlarmRules` | false / 空 / 空 | 规则流程(V1.69：跳过抽真空/完成表达式/自定义报警规则；全空=零行为） |
+| `UsePowerMeter` | false | 载台电流回采总开关(V1.74：默认零行为；开=按Mock开关读数，面板悬停+CSV+规则变量current，电表到货即插即用） |
+| `ReportColumns` | 空 | 报表列配置(V1.74：跟项目走；留空=缺省预设8列，历史窗导出xlsx按此列） |
+| `DisplayModes` | 空 | 显示模式字典(V1.74：跟项目走；留空=缺省8项，三窗保存时按字典校验） |
 | `ScannerEnabled` / `ScannerPort` | false / 空 | 扫码枪开关 / 固定串口（空=WMI 自动识别） |
 | `ScannerDeviceKeyword` / `ScannerBaudRate` | Xenon 1902 / 115200 | 扫码枪识别关键词 / 波特率 |
 
@@ -222,6 +227,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 | 版本 | 要点 |
 | :--- | :--- |
+| V1.74 | 电流通用骨架（IPowerMeter+Mock/桩+开关+悬停+CSV列+规则current）+ 报表列可配（历史窗导出xlsx，缺省8列跟项目走）+ 显示模式字典（三窗校验+tooltip）+ 定格在测提示（仅对新启动生效） |
 | V1.71 | 全窗 SunnyUI 小清新：UIForm 蓝标题 + 语义色保留（绿确认/红急停经 Custom+FillColor）；标题禁区 35px（绝对下移/ Dock 加 Pad）；公共参数保存按钮改语义绿；配方检索框泛化通吃原生/Sunny 输入框 |
 | V1.70 | 工艺策略窗（建图时叫"流程驾驶舱"）：固定拓扑可视化（8 节点 8 连线，节点显示真实配置+实时台数，MES上报是无连线纯配置节点）+ 点节点改配置（与系统设置同一条保存路）+ 滚轮缩放/中键平移/节点拖拽（位置存 PolicyLayout.json） |
 | V1.69 | 三期规则表达式+阶段流：沙盒引擎（12 变量冻结，短路，NaN 恒 false）+ 自定义报警（持续计时，只多报）+ 完成表达式 OR（只能提前）+ 跳过抽真空（机械夹具，压力同步豁免）+ 规则编辑弹窗（实时校验） |

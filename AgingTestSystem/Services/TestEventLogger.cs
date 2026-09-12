@@ -14,7 +14,9 @@ namespace AgingTestSystem.Services
     /// 【文件格式】
     /// 目录：程序运行目录\Logs\
     /// 文件名：TestLog_yyyyMMdd.csv（每天一个文件）
-    /// 表头：时间,批号,设备编号,事件,详情,压力(kPa),温度(°C)
+    /// 表头：时间,批号,设备编号,事件,详情,压力(kPa),温度(°C),电流(A)
+    /// （【V1.74】电流列追加在末尾：老文件无此列，历史窗解析按索引取前 5 列，
+    /// 新列缺失按空处理，前后兼容，追溯链不断。NaN/无数据记空串，不写"NaN"字样。）
     ///
     /// 【给新手的说明】
     /// - 静态类不需要实例化，直接 TestEventLogger.Write(...) 调用即可
@@ -50,8 +52,11 @@ namespace AgingTestSystem.Services
         /// <param name="detail">事件详情描述</param>
         /// <param name="pressureKPa">关联的压力值（kPa，可选，用于报警/停止时记录）</param>
         /// <param name="temperature">关联的温度值（可选，用于送风机温度告警时记录）</param>
+        /// <param name="currentA">关联的载台电流（【V1.74 新增】可选，单位 A；
+        /// null/NaN 记空串。老调用保持 6 参，行为不变）。</param>
         public static void Write(string lotNumber, int deviceId, string eventType,
-            string detail, decimal? pressureKPa = null, float? temperature = null)
+            string detail, decimal? pressureKPa = null, float? temperature = null,
+            float? currentA = null)
         {
             try
             {
@@ -69,13 +74,16 @@ namespace AgingTestSystem.Services
                     sb.Append(CsvEscape(eventType)).Append(',');
                     sb.Append(CsvEscape(detail)).Append(',');
                     sb.Append(pressureKPa.HasValue ? pressureKPa.Value.ToString() : "").Append(',');
-                    sb.Append(temperature.HasValue ? temperature.Value.ToString("0.0") : "");
+                    sb.Append(temperature.HasValue ? temperature.Value.ToString("0.0") : "").Append(',');
+                    // 电流（V1.74）：有数写两位小数，无数（null/NaN）记空（历史窗与报表都按空处理）
+                    sb.Append((currentA.HasValue && !float.IsNaN(currentA.Value))
+                        ? currentA.Value.ToString("0.00") : "");
 
                     using (var writer = new StreamWriter(file, true, Encoding.UTF8))
                     {
                         if (needHeader)
                         {
-                            writer.WriteLine("时间,批号,设备编号,事件,详情,压力(kPa),温度(°C)");
+                            writer.WriteLine("时间,批号,设备编号,事件,详情,压力(kPa),温度(°C),电流(A)");
                         }
                         writer.WriteLine(sb.ToString());
                     }

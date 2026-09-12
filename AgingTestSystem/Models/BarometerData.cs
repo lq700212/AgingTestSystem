@@ -36,6 +36,16 @@ namespace AgingTestSystem.Models
         public string DisplayMode { get; set; }
 
         /// <summary>
+        /// 载台电流（【V1.74 新增】Q2 通用骨架：每工位一路，单位 A）。
+        /// 由 DeviceManager 采集循环从 IPowerMeter 回填（与 InputStatus/OutputStatus 同位置）：
+        /// - float.NaN = 无数据（电表未启用/未连接/该路无回采），面板悬停显示"--"，CSV 记空，
+        ///   规则变量取 NaN（比较恒 false，不误报，与 temp 离线同语义）；
+        /// - 正常值 = 该工位载台实时电流。注意它只是"记录+追溯"，不参与任何报警判定
+        ///   （电流判报警等电表到货、阈值策略定了之后再做，现在动手就是误报）。
+        /// </summary>
+        public float LoadCurrentA { get; set; } = float.NaN;
+
+        /// <summary>
         /// 设备状态枚举：空闲、测试中、故障
         /// </summary>
         public DeviceStatus Status { get; set; }
@@ -94,6 +104,7 @@ namespace AgingTestSystem.Models
                 SerialNumber = this.SerialNumber,
                 RecipeName = this.RecipeName,
                 DisplayMode = this.DisplayMode,
+                LoadCurrentA = this.LoadCurrentA,
                 Status = this.Status,
                 LastTestResult = this.LastTestResult,
                 DelayTime = this.DelayTime,
