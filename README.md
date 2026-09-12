@@ -187,7 +187,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `MesRetryCount` / `MesRetryIntervalMs` | 3 / 2000 | 失败重试次数/间隔（全灭进离线缓存，下次成功补发） |
 | `MesTriggers` / `MesFieldMap` / `MesStaticFields` | 空 / 空 / 空 | 触发器/字段映射/静态字段(V1.68：跟项目走 Policy.json；留空=全开/直通/无） |
 | `SkipVacuum` / `CompleteExpression` / `CustomAlarmRules` | false / 空 / 空 | 规则流程(V1.69：跳过抽真空/完成表达式/自定义报警规则；全空=零行为） |
-| `UsePowerMeter` | false | 载台电流回采总开关(V1.74：默认零行为；开=按Mock开关读数，面板悬停+CSV+规则变量current，电表到货即插即用） |
+| `UsePowerMeter` | false | 载台电流回采总开关(V1.74：默认零行为；开=按Mock开关读数，面板电流行直显（V1.77：压力框下方加"电流："行，无数据画--；关=原来布局）+CSV+规则变量current，电表到货即插即用） |
 | `ReportColumns` | 空 | 报表列配置(V1.74：跟项目走；留空=缺省预设11列（V1.76：+SN/配方/结果），历史窗导出xlsx按此列） |
 | `EventIdentityMode` | RecordTime | 事件行SN/配方取值(V1.76：跟项目走；RecordTime=记录现值/StartSnapshot=启动定格，中途重绑不污染） |
 | `DisplayModes` | 空 | 显示模式字典(V1.74：跟项目走；留空=缺省8项，三窗下拉单选；V1.75 起设置表该行点出列表弹窗编辑） |
@@ -230,7 +230,8 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | 版本 | 要点 |
 | :--- | :--- |
 | V1.75 | 报表列可视化表格（设置行点出弹窗：显示名文本+字段下拉+增删/上下移）+ 显示模式三窗真下拉（DropDownList字典单选，遗留值追加可见存时拦） |
-| V1.74 | 电流通用骨架（IPowerMeter+Mock/桩+开关+悬停+CSV列+规则current）+ 报表列可配（历史窗导出xlsx，缺省8列跟项目走）+ 显示模式字典（三窗校验+tooltip）+ 定格在测提示（仅对新启动生效） |
+| V1.74 | 电流通用骨架（IPowerMeter+Mock/桩+开关+面板电流行直显（V1.77 前为悬停）+CSV列+规则current）+ 报表列可配（历史窗导出xlsx，缺省8列跟项目走）+ 显示模式字典（三窗校验+tooltip）+ 定格在测提示（仅对新启动生效） |
+| V1.77 | 面板电流直显（UsePowerMeter开=压力框下方加"电流："行，面板205→226行225→246，关=原来逐像素一致；悬停回退无提示） |
 | V1.76 | SN/配方/结果进CSV（11列逻辑列序，不兼容旧8列）+ 身份口径开关EventIdentityMode（记录现值/启动定格，跟项目走）+ 启动SN/配方快照 + MES同口径 |
 | V1.71 | 全窗 SunnyUI 小清新：UIForm 蓝标题 + 语义色保留（绿确认/红急停经 Custom+FillColor）；标题禁区 35px（绝对下移/ Dock 加 Pad）；公共参数保存按钮改语义绿；配方检索框泛化通吃原生/Sunny 输入框 |
 | V1.70 | 工艺策略窗（建图时叫"流程驾驶舱"）：固定拓扑可视化（8 节点 8 连线，节点显示真实配置+实时台数，MES上报是无连线纯配置节点）+ 点节点改配置（与系统设置同一条保存路）+ 滚轮缩放/中键平移/节点拖拽（位置存 PolicyLayout.json） |

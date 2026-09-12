@@ -1,6 +1,6 @@
 ---
 name: agingtest-regression
-description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案热更删除/终结器释放/关窗竞态/MES映射上报/规则表达式/工艺策略窗/电流报表画面等全部核心逻辑类（1446 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
+description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案热更删除/终结器释放/关窗竞态/MES映射上报/规则表达式/工艺策略窗/电流报表画面等全部核心逻辑类（1462 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
 ---
 
 # AgingTestSystem 回归测试套件（冒烟 + 用例一体）
@@ -57,7 +57,7 @@ agingtest-regression/
     └── TestRunner.cs         ← 全部测试用例源码（加用例就改这里）
 ```
 
-## 三、测试覆盖范围（41 个模块，1446 断言）
+## 三、测试覆盖范围（41 个模块，1462 断言）
 
 | 模块 | 覆盖点 |
 | --- | --- |
@@ -69,7 +69,7 @@ agingtest-regression/
 | RecipeStorage | Load/Save 往返全字段、损坏 json 返 null、空数组、"null"字面量、SaveWithDuplicateCheck 新增分支、删中间配方后 Max+1 不撞号(V1.62)、DisplayMode 往返(V1.66) |
 | TestEventLogger | CsvEscape 转义（逗号/引号翻倍/换行/回车 V1.62）、表头（V1.76 共 11 列：时间/批号/SN/配方/设备/事件/结果/详情/压力/温度/电流）、落盘字段格式、null 字段 11 列、温度一位小数、电流有数两位小数/NaN 记空不写字样、结构化列序（SN001/R-A/PASS）、整机行身份结果记空、20×5 并发零丢失、删目录自重建 |
 | AppLogFileWriter | UTF-8 追加、空串忽略、8 线程×5 行并发一条不少（lock 生效） |
-| PanelLayoutConfig | 默认布局基准坐标、ResolveAnchors 幂等零漂移、高度+10 纵链全链跟随、宽度+10 右锚定组随动、颜色解析钳位/回退、SaveDefault→重载零差异 |
+| PanelLayoutConfig | 默认布局基准坐标、ResolveAnchors 幂等零漂移、高度+10 下链跟随+上链锁定+交接缝吸收（V1.77：SN/压力定高位）、宽度+10 右锚定组随动、颜色解析钳位/回退、SaveDefault→重载零差异、电流行几何（V1.77：缺省关/有效高226行高246/电流行65,90,85,21/SN114配方139按钮166/压力67不动/标签93/SN标签117/开关往返零漂移） |
 | HomeLayoutConfig | 默认值、Save→Load 往返、范围约束、损坏文件回退默认 |
 | ModelRoundtrip | RecipeConfig/UserAccount JSON 往返（含特殊字符）、StationInfo/FanData Clone 深拷贝互不影响 |
 | AgingSequencer | ShouldPowerOn(压力×延时双条件)、ShouldComplete(0=不限时长)、IsVacuumBuildFailed(到位即不失败) 边界族、IsPressureOutOfRange 双方向+恰等不越限(V1.62)、负时间语义锁、BuildStartWarningText 0时长/空SN 警告文案(V1.66)、IsFanOverTempShutdown 开关+上限+边界(V1.66) |
@@ -101,7 +101,7 @@ agingtest-regression/
 | UiFinalizerV172_14(V1.72.14) | 关窗竞态静默丢弃（Comm/Fan _closed+句柄双查+BeginInvoke；无句柄/关后日志不炸；RemapNoticeForm自释反射存在）、判定窗预览（无参构造+_lblCode/_lblDisp具名+处置选项数+空快照文案+两按钮）、关于SunnyUI（反射调internal static：UIForm+只读多行+Y≥35+版本版权文案+确认蓝+Accept）；V1.72.15 追加全仓锁 14 条（公共参数/ID绑定/设置/主窗 _closed/_mainClosing 标记、关后完成/扫码/写寄存器/控制命令/补全释放过滤静默丢弃）、切换窗tooltip+在测禁用轮询（V1.73） |
 | LegacyRecipeGuard(V1.72.2) | V1.59老配方0值语义锁：缺字段读出0/null、下发0=定格0(0≠全局)/null=保持/清空回全局、批量窗新建默认全局、老配方回填显示0待人工复核（只构造不启采集） |
 | DesignerStabilityV172_16(V1.72.16) | 快照释放（helper全释放/null安全/旧foreach红证据/驾驶舱真方法反射释放）、布局窗量程字面值（四量程=Range/340拖动同步/越界钳制/构造期越界）、三窗AutoScale=None锁（判定/批量/布局，防Font+Zoom混搭回潮） |
-| PowerReportV174(V1.74) | 缺省锁（不用电表/报表空/字典空/电流NaN/Clone带电流）、Mock电表（连接/72路0.05~0.60A/断开/释放）、真实桩（连不上/全NaN不断追溯/重连失败）、编排接线（开关管创建/未Start不连，反射验_powerMeter）、规则 current 变量（解析/求值/NaN恒false）、报表列（预设11列/身份事件列序/自定义保序/未知丢弃/空合法/脏拦截/全错兜底预设）、显示字典（预设8项/重复提醒/空清空过/规范写法/字典外拦报选项/无配置走预设/配置优先/遗留追加/ValidateValue三态）、三窗显示下拉（配方窗预设8项+工位/批量窗单选非空，DropDownList锁）、报表列弹窗（预设11行回写/自定义保序/生产路径弹出释放+弹窗格分发）、显示字典弹窗（预设8行回写/自定义保序/生产路径弹出释放+弹窗格分发）、维度开关（缺省关/真值显示/三窗收缩317/330/323与开态不变+隐藏恒空+布尔键17项） |
+| PowerReportV174(V1.74) | 缺省锁（不用电表/报表空/字典空/电流NaN/Clone带电流）、Mock电表（连接/72路0.05~0.60A/断开/释放）、真实桩（连不上/全NaN不断追溯/重连失败）、编排接线（开关管创建/未Start不连，反射验_powerMeter）、规则 current 变量（解析/求值/NaN恒false）、报表列（预设11列/身份事件列序/自定义保序/未知丢弃/空合法/脏拦截/全错兜底预设）、显示字典（预设8项/重复提醒/空清空过/规范写法/字典外拦报选项/无配置走预设/配置优先/遗留追加/ValidateValue三态）、三窗显示下拉（配方窗预设8项+工位/批量窗单选非空，DropDownList锁）、报表列弹窗（预设11行回写/自定义保序/生产路径弹出释放+弹窗格分发）、显示字典弹窗（预设8行回写/自定义保序/生产路径弹出释放+弹窗格分发）、维度开关（缺省关/真值显示/三窗收缩317/330/323与开态不变+隐藏恒空+布尔键17项）、电流行直显开关冒烟（V1.77：缺省关/置位关回） |
 
 **不在覆盖范围**（明确边界）：真串口/真设备通讯（ModbusRtuBarometerReader /
 ScannerService / FanControllerClient / ModbusTcpIoController，靠现场联调）、
@@ -343,3 +343,10 @@ UI 弹窗分支（如配方同名覆盖确认框，靠界面手工测试）、�
     与 #30 同根）。修法是构造时把开关结论存 `readonly bool` 字段，
     Fill/回填只认字段。**教训：#30 的"别读 Visible"不仅是用例，将生产代码
     也算上——运行时未 Show 前读 Visible 同样撒谎。**
+39. **锚定解析顺序错只在"改面板尺寸"时现形，缺省尺寸全绿是假安全**
+    （V1.77：SN 排在压力框后，压力框双端 X 读到 SN 旧 X——缺省宽 222 下
+    缺省值恰好正确，全部旧断言照绿，只有"宽度+10"红）。
+    修法是被依赖者先解（SN→压力框），手改间隙的场景再终解一次 SN 兜底。
+    **教训：改 ResolveElementAlign 顺序后，必须跑宽/高双向联动用例
+    （只看缺省坐标等于没测）；新链路形式的断言（如交接缝间距）要同步加，
+    否则下次调序又靠运气。**
