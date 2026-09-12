@@ -156,6 +156,7 @@ namespace AgingTestSystem.Dialogs
             "MesEnabled",
             "MesMockEnabled",
             "SkipVacuum",
+            "VentValveEnabled",
         };
 
         /// <summary>
@@ -326,8 +327,9 @@ namespace AgingTestSystem.Dialogs
             { "CompletionJudgePolicy", "完成判定口径：自动PASS=到时无报警即PASS（现状）/待判定=下料人工录PASS/FAIL" },
             { "PowerLossPolicy", "断电恢复策略：整台重测=满时长重跑（现状）/续跑剩余时长=重抽真空+补足剩余" },
             { "AgingPressureLossPolicy", "老化中失压策略：停机报警=关阀断电（现状）/只记不停=记事件继续老化" },
-            { "CompletionAction", "到时完成动作：只下电关阀（现状）/蜂鸣提醒/破空泄压（需配点位）/都要" },
+            { "CompletionAction", "到时完成动作：只下电关阀（现状）/蜂鸣提醒/破空泄压（需开破空阀开关+配点位）/都要" },
             { "VentValveDoPoint", "破空阀DO输出点内部编号（如225），0=未配置（默认，选了泄压也只记日志不写DO）" },
+            { "VentValveEnabled", "本机是否装破空阀（false=无阀现状：手动破空按钮隐藏+泄压选项保存即拦；true=有阀项目才开）" },
 
             // ===== MES 对接（V1.68 二期：映射层可配；连接跟机器，触发器/映射/静态跟项目存 Policy.json）=====
             { "MesEnabled", "是否启用MES上报（false=完全不碰网络，默认false；true=按触发器POST到接收地址）" },
@@ -428,7 +430,7 @@ namespace AgingTestSystem.Dialogs
                 "ZeroDurationPolicy", "EmptySnPolicy",
                 "FanDisconnectPolicy", "VacuumFailKind",
                 "CompletionJudgePolicy", "PowerLossPolicy",
-                "AgingPressureLossPolicy", "CompletionAction", "VentValveDoPoint"
+                "AgingPressureLossPolicy", "CompletionAction", "VentValveDoPoint", "VentValveEnabled"
             }),
             // 【V1.69】规则流程（表达式 + 阶段流，全部跟项目；同表编辑，保存按 PolicyKeys 分流）
             ("规则流程", new string[]
@@ -1816,7 +1818,7 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 按配置项类型校验用户输入的值是否合法
-        /// 【V1.70】private → internal：流程驾驶舱保存前复用同一套校验（落盘语义只有一份）。
+        /// 【V1.70】private → internal：工艺策略窗保存前复用同一套校验（落盘语义只有一份）。
         /// </summary>
         /// <param name="key">配置项名称</param>
         /// <param name="value">用户输入值（已 Trim）</param>
@@ -1968,6 +1970,7 @@ namespace AgingTestSystem.Dialogs
                 case "MesEnabled":
                 case "MesMockEnabled":
                 case "SkipVacuum":
+                case "VentValveEnabled":
                     if (!bool.TryParse(value, out _)) { error = "应为 true 或 false"; return false; }
                     return true;
 
@@ -2014,7 +2017,7 @@ namespace AgingTestSystem.Dialogs
         /// 策略组合校验（【V1.67 新增】供保存按钮调用；校验逻辑本体在
         /// AgingSequencer.ValidatePolicyCombination（纯函数，回归可单测），
         /// 这里只负责拼出"内存现值 + 本次修改叠加后"的生效值）。
-        /// 【V1.70】改为静态（入参 config），供流程驾驶舱复用同一条保存路。
+        /// 【V1.70】改为静态（入参 config），供工艺策略窗复用同一条保存路。
         /// </summary>
         /// <param name="config">内存中的设备配置（读现值用）</param>
         /// <param name="changes">本次收集到的全部修改（key → 界面值）</param>
@@ -2025,7 +2028,8 @@ namespace AgingTestSystem.Dialogs
             float limitC = ResolveEffectiveFloat(changes, "FanTempAlarmLimitC", config.FanTempAlarmLimitC);
             CompletionAction action = ResolveEffectiveEnum(changes, "CompletionAction", config.CompletionAction);
             int ventPoint = ResolveEffectiveInt(changes, "VentValveDoPoint", config.VentValveDoPoint);
-            return AgingSequencer.ValidatePolicyCombination(shutdown, limitC, action, ventPoint);
+            bool ventEnabled = ResolveEffectiveBool(changes, "VentValveEnabled", config.VentValveEnabled);
+            return AgingSequencer.ValidatePolicyCombination(shutdown, limitC, action, ventPoint, ventEnabled);
         }
 
         /// <summary>取某项的生效值：本次改了用本次的，否则用内存现值（下同三个）。</summary>
@@ -2079,7 +2083,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 保存配置统一入口（【V1.70 新增】从 btnSave_Click 抽出，流程驾驶舱共用同一条路）：
+        /// 保存配置统一入口（【V1.70 新增】从 btnSave_Click 抽出，工艺策略窗共用同一条路）：
         /// 组合校验 → MES 就绪校验 → 分流写文件（策略→Policy.json，其余→exe.config，
         /// 密钥加密落盘）→ 内存热回写。调用方只负责"收集 changes + 弹提示"，
         /// 落盘语义只有一份，改了这里两边一起变。
@@ -2206,7 +2210,7 @@ namespace AgingTestSystem.Dialogs
         /// 2.5 【V1.67】策略组合校验（联停开但上限0 / 泄压选但点位0 直接拦截并指明先填哪个）
         /// 3. 分流写回：策略 key → 项目 Policy.json；其余 → exe.config 的 appSettings
         /// 4. 刷新 appSettings 缓存，提示重启生效
-        /// 【V1.70】2.5 之后全收拢进 PersistChanges（流程驾驶舱共用），这里只剩收集+提示。
+        /// 【V1.70】2.5 之后全收拢进 PersistChanges（工艺策略窗共用），这里只剩收集+提示。
         /// </summary>
         private void btnSave_Click(object sender, EventArgs e)
         {
@@ -2287,7 +2291,7 @@ namespace AgingTestSystem.Dialogs
         /// 回写后业务逻辑类配置（寄存器地址 / IO 映射 / 取反 / 小数位 / 阈值等）立即生效，
         /// 无需重启；连接参数类由主窗体另触发重连。
         /// 结构型配置（<see cref="StructuralKeys"/>）不回写，需重启后生效。
-        /// 【V1.70】改为静态（入参 config），供流程驾驶舱复用。
+        /// 【V1.70】改为静态（入参 config），供工艺策略窗复用。
         /// </summary>
         private static void ApplyChangesToConfig(DeviceConfig config, Dictionary<string, string> changes)
         {

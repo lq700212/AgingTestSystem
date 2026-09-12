@@ -209,12 +209,14 @@ namespace AgingTestSystem.Services
         /// 【目前锁定的矛盾组合】
         /// 1) 超温联停开了，但上限 ≤ 0（= 温度告警都没启用）→ 联停永远触发不了，
         ///    配了等于没配，必须先填 FanTempAlarmLimitC；
-        /// 2) 完成动作选了泄压，但破空阀点位 = 0（未接硬件）→ 到时会"跳过泄压只记日志"，
+        /// 2) 完成动作选了泄压，但本机没装破空阀（VentValveEnabled=false）→ 到时不会泄压，
+        ///    必须先确认硬件并打开开关，或改回不泄压；
+        /// 3) 开关开了，但破空阀点位 = 0（未接通道）→ 到时会"跳过泄压只记日志"，
         ///    现场会误以为泄了，必须先填 VentValveDoPoint 或改回不泄压。
         /// </summary>
         /// <returns>矛盾描述；null=组合合法</returns>
         public static string ValidatePolicyCombination(bool fanShutdownEnabled, float fanLimitC,
-            CompletionAction action, int ventPoint)
+            CompletionAction action, int ventPoint, bool ventEnabled)
         {
             if (fanShutdownEnabled && fanLimitC <= 0f)
             {
@@ -223,6 +225,11 @@ namespace AgingTestSystem.Services
             }
             bool wantVent = (action == CompletionAction.PowerOffAndVent
                 || action == CompletionAction.PowerOffVentAndBeep);
+            if (wantVent && !ventEnabled)
+            {
+                return "完成动作选了泄压，但本机未装破空阀（VentValveEnabled=false）："
+                    + "请先确认硬件并打开破空阀开关，或改回不泄压。";
+            }
             if (wantVent && ventPoint <= 0)
             {
                 return "完成动作选了泄压，但破空阀点位为 0（=未接硬件）："

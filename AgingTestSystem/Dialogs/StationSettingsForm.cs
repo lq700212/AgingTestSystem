@@ -73,6 +73,12 @@ namespace AgingTestSystem.Dialogs
         private RecipeAutoCompleteProvider _recipeAutoComplete;
 
         /// <summary>
+        /// 悬停说明（【V1.73 新增】每个设置项+动作按钮都挂 tooltip，超 40 字走
+        /// SettingsForm.WrapTooltip 换行，全仓统一口径；随 components 自动释放）。
+        /// </summary>
+        private ToolTip _tip;
+
+        /// <summary>
         /// 构造函数
         /// 初始化界面，设置标题为"工位设置窗口 NO X"，并从缓存 / 采集缓存回显当前工位数据。
         /// </summary>
@@ -89,6 +95,11 @@ namespace AgingTestSystem.Dialogs
             _recipes = recipes;
             _deviceId = deviceId;
 
+            // 【V1.73】本机没装破空阀（VentValveEnabled=false，现状）时手动"破空"按钮
+            // 直接隐藏：点了也没硬件可写，留着只会让人误会功能可用。
+            // 有阀项目打开开关后按钮出现（手动破空具体动作等现场确认后实现，见 btnBreakVacuum_Click）。
+            btnBreakVacuum.Visible = ShouldShowBreakVacuum(_config);
+
             // 窗口标题带工位编号，如"工位设置窗口 NO 1"
             this.Text = $"工位设置窗口 NO {deviceId}";
 
@@ -100,6 +111,57 @@ namespace AgingTestSystem.Dialogs
                 txtRecipe,
                 _recipes,
                 OnRecipeSelected);
+
+            SetupTooltips();
+        }
+
+        /// <summary>
+        /// 破空按钮是否显示（【V1.73 新增】纯函数：有阀才显示，回归可单测。
+        /// 注：窗体没 Show 时 Control.Visible 读出来恒 false，所以用例测这个函数，
+        /// 不直接读按钮 Visible——否则"有阀显示"永远红，见 V1.73 回归注释）。
+        /// </summary>
+        internal static bool ShouldShowBreakVacuum(DeviceConfig config)
+        {
+            return config != null && config.VentValveEnabled;
+        }
+
+        /// <summary>
+        /// 给 8 个设置项 + 破空/下电按钮挂悬停说明（标签+输入框都挂，悬停哪边都看得到）。
+        /// </summary>
+        private void SetupTooltips()
+        {
+            _tip = new ToolTip(this.components);
+            _tip.ShowAlways = true;
+            SetTip(new Control[] { lblState, txtState },
+                "状态：只读，当前工位实时状态（空闲/选中/繁忙/故障/已完成）。");
+            SetTip(new Control[] { lblSN, txtSN },
+                "SN：该工位的产品序列号，空表示未绑定。0时长与空SN能不能启动，在工艺策略里配。");
+            SetTip(new Control[] { lblRecipe, txtRecipe },
+                "配方：该工位当前配方。输入时自动检索已有配方，选中后自动回填延时、温度、负压、显示模式。");
+            SetTip(new Control[] { lblDelay, nudDelayHours, nudDelayMinutes, nudDelaySeconds },
+                "延时时间：对应工位面板延时开启。上电后等这么久才开始计时老化（时:分:秒）。");
+            SetTip(new Control[] { lblStart, nudStartHours, nudStartMinutes, nudStartSeconds },
+                "启动时间：对应工位面板延时到达，与延时时间共同决定上电时序（时:分:秒）。");
+            SetTip(new Control[] { lblTemp, nudTemp },
+                "极限温度：该工位温度上限（0~300°C）。只记录追溯，不参与自动判定。");
+            SetTip(new Control[] { lblPressure, nudPressure },
+                "负压阈值：该工位真空到位判定阈值（kPa）。回填优先级：上次保存>配方>全局；保存即下发，启动时定格。");
+            SetTip(new Control[] { lblDisplayMode, txtDisplayMode },
+                "显示模式：本次烧屏跑的显示画面（如红绿蓝纯色、灰阶）。只做生产追溯，不参与PASS/FAIL判定，会写入启动与报警日志。");
+            SetTip(new Control[] { btnBreakVacuum },
+                "破空：手动释放负压方便取料。本机未装破空阀时按钮自动隐藏（VentValveEnabled开关）。");
+            SetTip(new Control[] { btnPowerOff },
+                "下电：关闭本工位载台上电输出。");
+        }
+
+        /// <summary>给一组控件挂同一条说明（超 40 字自动换行）。</summary>
+        private void SetTip(Control[] controls, string text)
+        {
+            string tip = SettingsForm.WrapTooltip(text);
+            foreach (Control c in controls)
+            {
+                if (c != null) _tip.SetToolTip(c, tip);
+            }
         }
 
         /// <summary>

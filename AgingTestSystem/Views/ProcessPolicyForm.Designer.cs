@@ -4,17 +4,20 @@ using System.Windows.Forms;
 namespace AgingTestSystem.Views
 {
     /// <summary>
-    /// 流程驾驶舱 — 设计器部分（【V1.72 新增】纯代码拆分：静态边框进 Designer）。
+    /// 工艺策略 — 设计器部分（【V1.72 新增】纯代码拆分：静态边框进 Designer；
+    /// 【V1.73】由流程驾驶舱改名，类/文件名全量同步）。
     /// 这里只装"静态边框"：窗体属性 + 右栏空壳（标题/编辑器容器/保存/复位/关闭）
-    /// + 底部状态条。以下三样仍在 FlowCockpitForm.cs 里用代码建：
+    /// + 底部状态条。以下三样仍在 ProcessPolicyForm.cs 里用代码建：
     /// ①自绘画布 FlowCanvas（构造要吃 DeviceConfig/DeviceManager 真参数，
     /// Designer 给不了，只能代码 new；且它是 GDI 自绘，Designer 也摆不了里面的节点）；
     /// ②右栏的动态编辑器（按选中节点现场生成，数据驱动）；
     /// ③秒级刷新定时器（OnShown 里启停）。
     /// 【Z 序铁律】右栏 Dock=Right 先加、状态条 Dock=Bottom 再加、
     /// 画布 Dock=Fill 最后加（代码里加）——顺序错画布会盖住右栏。
+    /// 【尺寸】1160×980：画布内容 730×885（8 节点，MES 在最下）默认整窗可见；
+    /// MinimumSize 只锁到 950×700（小屏走双滚动条，画布/编辑器都带 AutoScroll）。
     /// </summary>
-    partial class FlowCockpitForm
+    partial class ProcessPolicyForm
     {
         /// <summary>右栏（固定 320px，Dock=Right；动态编辑器运行时填进 _pnlEditors）</summary>
         private Panel _pnlRight;
@@ -52,14 +55,14 @@ namespace AgingTestSystem.Views
             this._pnlRight.SuspendLayout();
             this.SuspendLayout();
             //
-            // FlowCockpitForm（UIForm 蓝标题；Dock 布局加顶 Pad 避开 35px 标题区）
+            // ProcessPolicyForm（UIForm 蓝标题；Dock 布局加顶 Pad 避开 35px 标题区）
             //
             this.AutoScaleDimensions = new SizeF(6F, 12F);
             this.AutoScaleMode = AutoScaleMode.Font;
-            this.Text = "流程驾驶舱（点节点改配置）";
+            this.Text = "工艺策略（点节点改配置）";
             this.StartPosition = FormStartPosition.CenterParent;
-            this.Size = new Size(1080, 700);
-            this.MinimumSize = new Size(860, 560);
+            this.Size = new Size(1160, 980);
+            this.MinimumSize = new Size(950, 700);
             this.Padding = new Padding(2, 38, 2, 2);
             //
             // _pnlRight（先加；画布 Fill 在代码里最后加，Z 序不能反）
@@ -81,12 +84,12 @@ namespace AgingTestSystem.Views
             // _pnlEditors
             //
             this._pnlEditors.Location = new Point(12, 48);
-            this._pnlEditors.Size = new Size(296, 480);
+            this._pnlEditors.Size = new Size(296, 740);
             this._pnlEditors.AutoScroll = true;
             //
             // _btnSaveNode（Sunny 默认蓝，主操作）
             //
-            this._btnSaveNode.Location = new Point(12, 540);
+            this._btnSaveNode.Location = new Point(12, 800);
             this._btnSaveNode.Size = new Size(296, 32);
             this._btnSaveNode.Text = "保存本节点";
             this._btnSaveNode.Enabled = false;
@@ -94,14 +97,14 @@ namespace AgingTestSystem.Views
             //
             // _btnResetLayout（Sunny 默认蓝）
             //
-            this._btnResetLayout.Location = new Point(12, 578);
+            this._btnResetLayout.Location = new Point(12, 838);
             this._btnResetLayout.Size = new Size(144, 30);
             this._btnResetLayout.Text = "复位布局";
             this._btnResetLayout.Click += new System.EventHandler(this.BtnResetLayout_Click);
             //
             // _btnClose（Sunny 灰；语义=取消关闭，走灰）
             //
-            this._btnClose.Location = new Point(164, 578);
+            this._btnClose.Location = new Point(164, 838);
             this._btnClose.Size = new Size(144, 30);
             this._btnClose.Text = "关闭";
             this._btnClose.FillColor = Color.DimGray;

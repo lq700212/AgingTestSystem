@@ -1076,6 +1076,7 @@ namespace AgingTestSystem.Tests
             {
                 c5.CompletionAction = CompletionAction.PowerOffVentAndBeep;
                 c5.VentValveDoPoint = 200; // Fake 输出空间 240，200 合法
+                c5.VentValveEnabled = true; // V1.73：无阀不写 DO，e2e 必须先声明有阀
                 dm5.SetStationRecipe(1, "配方R1", -3m, null);
                 dm5.SetStationDelayTimes(1, TimeSpan.Zero, TimeSpan.FromSeconds(1.5));
                 dm5.StartTesting(new[] { 1 });

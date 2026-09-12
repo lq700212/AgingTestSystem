@@ -18,7 +18,7 @@
 //   12b. PolicyV167            —— 工艺策略纯函数 + 名单同步锁 + tooltip + 项目档案
 //   12c. MesV168                —— MES 映射解析 + 组包 + 上报器（Fake 传输，零外网）
 //   12d. RuleExprV169            —— 规则表达式解析求值 + 规则表 + 执行器（假时钟）
-//   12e. FlowCockpitV170          —— 流程图静态文本 + 布局存取（纯函数，零 UI）
+//   12e. ProcessPolicyV170          —— 流程图静态文本 + 布局存取（纯函数，零 UI）
 //
 //  【怎么跑】
 //  不直接运行本文件。用本 skill 目录 scripts\run_unit_tests.ps1：
@@ -188,7 +188,7 @@ namespace AgingTestSystem.Tests
                 { "DeviceManagerPolicy", DeviceManagerPolicyTests },
                 { "DeviceManagerMes", DeviceManagerMesTests },
                 { "DeviceManagerRules", DeviceManagerRulesTests },
-                { "FlowCockpitV170", FlowCockpitTests },
+                { "ProcessPolicyV170", ProcessPolicyTests },
                 { "UiStyleV172_1", UiStyleV172_1Tests },
                 { "UiFinalizerV172_14", UiFinalizerV172_14Tests },
                 { "LegacyRecipeGuard", LegacyRecipeGuardTests },
@@ -1352,6 +1352,8 @@ namespace AgingTestSystem.Tests
             Check("默认15000/3/0", cfg.VacuumConfirmTimeoutMs == 15000 && cfg.CommunicationLossAlarmCount == 3
                 && cfg.MaxTestDurationSeconds == 0);
             Check("默认DI不并入/温度告警关", cfg.UseDiAlarmContact == false && cfg.FanTempAlarmLimitC == 0f);
+            Check("默认未装破空阀（按钮隐藏+泄压拦）",
+                cfg.VentValveEnabled == false && cfg.VentValveDoPoint == 0);
             Check("默认扫码枪关闭全套", cfg.ScannerEnabled == false && cfg.ScannerPort == ""
                 && cfg.ScannerDeviceKeyword == "Xenon 1902" && cfg.ScannerBaudRate == 115200
                 && cfg.ScannerDataBits == 8 && cfg.ScannerStopBits == 1 && cfg.ScannerParity == "None"
@@ -1608,19 +1610,26 @@ namespace AgingTestSystem.Tests
 
             // ── ValidatePolicyCombination：矛盾组合锁 ──
             Check("全缺省组合合法",
-                AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffOnly, 0) == null);
+                AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffOnly, 0, false) == null);
             Check("联停开但上限0被拦",
-                AgingSequencer.ValidatePolicyCombination(true, 0f, CompletionAction.PowerOffOnly, 0) != null);
+                AgingSequencer.ValidatePolicyCombination(true, 0f, CompletionAction.PowerOffOnly, 0, false) != null);
             Check("联停开+上限>0放行",
-                AgingSequencer.ValidatePolicyCombination(true, 60f, CompletionAction.PowerOffOnly, 0) == null);
+                AgingSequencer.ValidatePolicyCombination(true, 60f, CompletionAction.PowerOffOnly, 0, false) == null);
             Check("泄压选但点位0被拦",
-                AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffAndVent, 0) != null);
+                AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffAndVent, 0, true) != null);
             Check("蜂鸣+泄压都要但点位0同样被拦",
-                AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffVentAndBeep, 0) != null);
+                AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffVentAndBeep, 0, true) != null);
             Check("泄压+有点位放行",
-                AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffAndVent, 225) == null);
+                AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffAndVent, 225, true) == null);
             Check("纯蜂鸣无点位放行(无硬件要求)",
-                AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffAndBeep, 0) == null);
+                AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffAndBeep, 0, false) == null);
+            // 【V1.73】破空阀开关：无阀时泄压组合直接拦（点位对了也没用，先开开关）
+            Check("无阀+泄压被拦（点位对了也没用）",
+                AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffAndVent, 225, false) != null);
+            Check("无阀+蜂鸣泄压被拦",
+                AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffVentAndBeep, 225, false) != null);
+            Check("无阀+纯蜂鸣放行（蜂鸣无硬件要求）",
+                AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffAndBeep, 0, false) == null);
 
             // ── ProjectPolicyStore.ParseValue：大小写兼容，非法回null ──
             Check("枚举正常解析",
@@ -2502,33 +2511,33 @@ namespace AgingTestSystem.Tests
         }
 
         // =====================================================================
-        // 12e. 流程驾驶舱静态图（V1.70：拓扑画死，文本按配置生成，纯函数零 UI）
+        // 12e. 工艺策略静态图（V1.70：拓扑画死，文本按配置生成，纯函数零 UI）
         // =====================================================================
-        private static void FlowCockpitTests()
+        private static void ProcessPolicyTests()
         {
-            // ── 拓扑完整性锁：7 节点 8 边，id 全可查 ──
-            Check("节点7个", Views.FlowGraph.Nodes.Count == 7);
-            Check("连线8条", Views.FlowGraph.Edges.Count == 8);
-            string[] ids = { "start", "vacuum", "power", "done", "alarm", "recover", "unload" };
+            // ── 拓扑完整性锁：8 节点 8 边，id 全可查 ──
+            Check("节点8个", Views.PolicyGraph.Nodes.Count == 8);
+            Check("连线8条", Views.PolicyGraph.Edges.Count == 8);
+            string[] ids = { "start", "vacuum", "power", "done", "alarm", "recover", "unload", "mes" };
             bool allFound = true;
             foreach (string id in ids)
             {
-                if (Views.FlowGraph.FindNode(id) == null) allFound = false;
+                if (Views.PolicyGraph.FindNode(id) == null) allFound = false;
             }
-            Check("7节点id全可查", allFound);
-            Check("未知节点返回null", Views.FlowGraph.FindNode("bogus") == null);
-            Check("未知连线返回null", Views.FlowGraph.FindEdge("bogus") == null);
+            Check("8节点id全可查", allFound);
+            Check("未知节点返回null", Views.PolicyGraph.FindNode("bogus") == null);
+            Check("未知连线返回null", Views.PolicyGraph.FindEdge("bogus") == null);
             // 边的端点必须都是已知节点（拓扑不断线）
             bool edgesOk = true;
-            foreach (var e in Views.FlowGraph.Edges)
+            foreach (var e in Views.PolicyGraph.Edges)
             {
-                if (Views.FlowGraph.FindNode(e.From) == null
-                    || Views.FlowGraph.FindNode(e.To) == null) edgesOk = false;
+                if (Views.PolicyGraph.FindNode(e.From) == null
+                    || Views.PolicyGraph.FindNode(e.To) == null) edgesOk = false;
             }
             Check("边端点全是已知节点", edgesOk);
             // 每个可编辑节点至少挂1个 key（点谁都有东西可改）；unload 是唯一纯展示节点
             bool keysOk = true;
-            foreach (var n in Views.FlowGraph.Nodes)
+            foreach (var n in Views.PolicyGraph.Nodes)
             {
                 if (n.Id == "unload")
                 {
@@ -2539,7 +2548,7 @@ namespace AgingTestSystem.Tests
             Check("可编辑节点全挂key（unload纯展示带说明）", keysOk);
             // 节点 key 必须全是 DeviceConfig 真属性（防挂错名存不上）
             bool propsOk = true;
-            foreach (var n in Views.FlowGraph.Nodes)
+            foreach (var n in Views.PolicyGraph.Nodes)
             {
                 foreach (var k in n.Keys)
                 {
@@ -2550,9 +2559,9 @@ namespace AgingTestSystem.Tests
 
             // ── 缺省文本锁（缺省配置画出来长什么样） ──
             var dc = new DeviceConfig();
-            var zero = new Views.FlowGraph.FlowCounts();
+            var zero = new Views.PolicyGraph.FlowCounts();
             Func<string, string> linesOf = id =>
-                string.Join("|", Views.FlowGraph.BuildNodeLines(id, dc, zero));
+                string.Join("|", Views.PolicyGraph.BuildNodeLines(id, dc, zero));
             Check("启动节点缺省（警告/警告/空闲0台）",
                 linesOf("start").Contains("警告") && linesOf("start").Contains("空闲 0 台"));
             Check("抽真空缺省（超时15000/失联3次）",
@@ -2567,47 +2576,62 @@ namespace AgingTestSystem.Tests
                 linesOf("recover").Contains("重测") && linesOf("recover").Contains("无待恢复"));
             Check("下料缺省（自动PASS）",
                 linesOf("unload").Contains("自动PASS"));
-            Check("未知节点空行", Views.FlowGraph.BuildNodeLines("bogus", dc, zero).Length == 0);
-            Check("配置null空行", Views.FlowGraph.BuildNodeLines("start", null, zero).Length == 0);
+            Check("MES缺省（关/全报/0组）",
+                linesOf("mes").Contains("关") && linesOf("mes").Contains("全报")
+                && linesOf("mes").Contains("0 组"));
+            Check("未知节点空行", Views.PolicyGraph.BuildNodeLines("bogus", dc, zero).Length == 0);
+            Check("配置null空行", Views.PolicyGraph.BuildNodeLines("start", null, zero).Length == 0);
 
             // ── 策略切换文本跟着变 ──
             dc.SkipVacuum = true;
             Check("跳过抽真空节点变文案",
                 linesOf("vacuum").Contains("跳过") && linesOf("vacuum").Contains("豁免"));
             Check("跳过抽真空边变文案",
-                Views.FlowGraph.BuildEdgeLabel("e_vacuum_power", dc).Contains("跳过"));
+                Views.PolicyGraph.BuildEdgeLabel("e_vacuum_power", dc).Contains("跳过"));
             dc.SkipVacuum = false;
             dc.CompletionJudgePolicy = CompletionJudgePolicy.PendingReview;
             Check("待判定边变文案",
-                Views.FlowGraph.BuildEdgeLabel("e_done_unload", dc).Contains("待判定"));
+                Views.PolicyGraph.BuildEdgeLabel("e_done_unload", dc).Contains("待判定"));
             Check("待判定节点变文案",
                 linesOf("unload").Contains("待判定"));
             dc.CompletionJudgePolicy = CompletionJudgePolicy.AutoPass;
             dc.CompleteExpression = "temp > 85";
             Check("完成表达式边变文案",
-                Views.FlowGraph.BuildEdgeLabel("e_power_done", dc).Contains("表达式"));
+                Views.PolicyGraph.BuildEdgeLabel("e_power_done", dc).Contains("表达式"));
             dc.CompleteExpression = "";
             dc.PowerLossPolicy = PowerLossPolicy.ResumeRemaining;
             Check("续跑边变文案",
-                Views.FlowGraph.BuildEdgeLabel("e_recover_vacuum", dc).Contains("续跑"));
-            Check("未知边空串", Views.FlowGraph.BuildEdgeLabel("bogus", dc) == "");
-            Check("配置null边空串", Views.FlowGraph.BuildEdgeLabel("e_start_vacuum", null) == "");
-            Check("固定边开阀", Views.FlowGraph.BuildEdgeLabel("e_start_vacuum", dc) == "开阀");
+                Views.PolicyGraph.BuildEdgeLabel("e_recover_vacuum", dc).Contains("续跑"));
+            // 【V1.73】MES节点文本跟着配置变
+            dc.MesEnabled = true;
+            dc.MesTriggers = "Complete,Alarm";
+            dc.MesFieldMap = "eqId=device;lotNo=lot";
+            dc.MesStaticFields = "line=L5";
+            Check("MES节点变文案（开/触发/组数）",
+                linesOf("mes").Contains("开") && linesOf("mes").Contains("Complete,Alarm")
+                && linesOf("mes").Contains("2 组") && linesOf("mes").Contains("1 组"));
+            dc.MesEnabled = false;
+            dc.MesTriggers = "";
+            dc.MesFieldMap = "";
+            dc.MesStaticFields = "";
+            Check("未知边空串", Views.PolicyGraph.BuildEdgeLabel("bogus", dc) == "");
+            Check("配置null边空串", Views.PolicyGraph.BuildEdgeLabel("e_start_vacuum", null) == "");
+            Check("固定边开阀", Views.PolicyGraph.BuildEdgeLabel("e_start_vacuum", dc) == "开阀");
             Check("复位边文案",
-                Views.FlowGraph.BuildEdgeLabel("e_alarm_unload", dc).Contains("复位"));
+                Views.PolicyGraph.BuildEdgeLabel("e_alarm_unload", dc).Contains("复位"));
             Check("连线说明含两端标题",
-                Views.FlowGraph.BuildEdgeInfo("e_vacuum_power", dc).Contains("抽真空")
-                && Views.FlowGraph.BuildEdgeInfo("e_vacuum_power", dc).Contains("上电老化"));
-            Check("未知连线说明", Views.FlowGraph.BuildEdgeInfo("bogus", dc).Contains("未知"));
+                Views.PolicyGraph.BuildEdgeInfo("e_vacuum_power", dc).Contains("抽真空")
+                && Views.PolicyGraph.BuildEdgeInfo("e_vacuum_power", dc).Contains("上电老化"));
+            Check("未知连线说明", Views.PolicyGraph.BuildEdgeInfo("bogus", dc).Contains("未知"));
 
             // ── 台数进文本 ──
-            var counts = new Views.FlowGraph.FlowCounts
+            var counts = new Views.PolicyGraph.FlowCounts
             {
                 Idle = 70, Vacuuming = 1, Aging = 1,
                 Completed = 0, Fault = 0, PendingJudge = 0, Snapshot = 0
             };
             Func<string, string> linesOf2 = id =>
-                string.Join("|", Views.FlowGraph.BuildNodeLines(id, dc, counts));
+                string.Join("|", Views.PolicyGraph.BuildNodeLines(id, dc, counts));
             Check("台数进节点文本",
                 linesOf2("start").Contains("空闲 70 台")
                 && linesOf2("vacuum").Contains("抽真空 1 台")
@@ -2615,7 +2639,7 @@ namespace AgingTestSystem.Tests
 
             // ── 布局存取往返（运行目录隔离；用完删干净不污染） ──
             string layoutPath = System.IO.Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory, "FlowLayout.json");
+                AppDomain.CurrentDomain.BaseDirectory, "PolicyLayout.json");
             bool hadLayout = File.Exists(layoutPath);
             string backup = hadLayout ? File.ReadAllText(layoutPath) : null;
             try
@@ -2623,9 +2647,9 @@ namespace AgingTestSystem.Tests
                 var pos = new Dictionary<string, System.Drawing.Point>();
                 pos["start"] = new System.Drawing.Point(11, 22);
                 pos["bogus-node"] = new System.Drawing.Point(1, 2);
-                Views.FlowGraph.LayoutStore.Save(pos);
+                Views.PolicyGraph.LayoutStore.Save(pos);
                 Check("布局文件落盘", File.Exists(layoutPath));
-                var loaded = Views.FlowGraph.LayoutStore.Load();
+                var loaded = Views.PolicyGraph.LayoutStore.Load();
                 Check("布局往返一致",
                     loaded.ContainsKey("start")
                     && loaded["start"].X == 11 && loaded["start"].Y == 22);
@@ -2634,17 +2658,17 @@ namespace AgingTestSystem.Tests
                 // 钳制：±5000 外的坐标被拉回
                 var wild = new Dictionary<string, System.Drawing.Point>();
                 wild["start"] = new System.Drawing.Point(99999, -99999);
-                Views.FlowGraph.LayoutStore.Save(wild);
-                var loaded2 = Views.FlowGraph.LayoutStore.Load();
+                Views.PolicyGraph.LayoutStore.Save(wild);
+                var loaded2 = Views.PolicyGraph.LayoutStore.Load();
                 Check("野坐标钳制±5000",
                     loaded2["start"].X == 5000 && loaded2["start"].Y == -5000);
                 File.WriteAllText(layoutPath, "{broken json");
                 Check("损坏布局按空处理",
-                    Views.FlowGraph.LayoutStore.Load().Count == 0);
+                    Views.PolicyGraph.LayoutStore.Load().Count == 0);
                 // V2 迁移：旧版本文件直接丢弃、回新缺省（V1 按旧挤列摆的，沿用会继续挤）
                 File.WriteAllText(layoutPath, "{\"version\":1,\"nodes\":{\"start\":[11,22]}}");
                 Check("旧版本布局按空处理（回新缺省）",
-                    Views.FlowGraph.LayoutStore.Load().Count == 0);
+                    Views.PolicyGraph.LayoutStore.Load().Count == 0);
             }
             finally
             {
@@ -2660,7 +2684,7 @@ namespace AgingTestSystem.Tests
             {
                 Func<string, System.Drawing.Rectangle> rectOf = id =>
                 {
-                    var n = Views.FlowGraph.FindNode(id);
+                    var n = Views.PolicyGraph.FindNode(id);
                     return n != null ? n.DefaultRect : System.Drawing.Rectangle.Empty;
                 };
                 var rStart = rectOf("start");
@@ -2670,11 +2694,12 @@ namespace AgingTestSystem.Tests
                 var rAlarm = rectOf("alarm");
                 var rRecover = rectOf("recover");
                 var rUnload = rectOf("unload");
+                var rMes = rectOf("mes");
                 // 左列同 X、右列同 X（两列式，防漂）
                 Check("缺省左列同X",
                     rStart.X == rVacuum.X && rVacuum.X == rPower.X && rPower.X == rDone.X);
                 Check("缺省右列同X",
-                    rAlarm.X == rRecover.X && rRecover.X == rUnload.X);
+                    rAlarm.X == rRecover.X && rRecover.X == rUnload.X && rUnload.X == rMes.X);
                 // 列间距≥130（之前 100 太挤，截图式 150）
                 Check("缺省列间距≥130",
                     rRecover.Left - rStart.Right >= 130);
@@ -2686,14 +2711,17 @@ namespace AgingTestSystem.Tests
                 // 报警底到下料顶留竖线位置≥40
                 Check("缺省报警到下料竖距≥40",
                     rUnload.Top - rAlarm.Bottom >= 40);
+                // MES 纯配置节点在右列最下，与下料留出行距
+                Check("缺省MES在右列最下且行距≥40",
+                    rMes.Top - rUnload.Bottom >= 40);
                 // 两两不重叠（挤了当场红）
                 var all = new System.Drawing.Rectangle[]
-                    { rStart, rVacuum, rPower, rDone, rAlarm, rRecover, rUnload };
+                    { rStart, rVacuum, rPower, rDone, rAlarm, rRecover, rUnload, rMes };
                 bool overlap = false;
                 for (int i = 0; i < all.Length && !overlap; i++)
                     for (int j = i + 1; j < all.Length && !overlap; j++)
                         if (all[i].IntersectsWith(all[j])) overlap = true;
-                Check("缺省7节点两两不重叠", !overlap);
+                Check("缺省8节点两两不重叠", !overlap);
                 // 横向边近水平：power↔alarm、done↔unload 中心Y差≤30（差多了线就斜得难看）
                 int pcY = rPower.Top + rPower.Height / 2;
                 int acY = rAlarm.Top + rAlarm.Height / 2;
@@ -2708,33 +2736,33 @@ namespace AgingTestSystem.Tests
                 Check("缺省节点最小210×100", sizeOk);
             }
 
-            // ── 驾驶舱窗体构造不断言弹窗（V1.71：构造即跑全部编辑器创建链，NRE 当场现形） ──
+            // ── 工艺策略窗窗体构造不断言弹窗（V1.71：构造即跑全部编辑器创建链，NRE 当场现形） ──
             {
                 var cfg = new DeviceConfig();
-                DeviceManager dmCockpit = null;
-                Views.FlowCockpitForm cockpit = null;
+                DeviceManager dmPolicy = null;
+                Views.ProcessPolicyForm policyForm = null;
                 try
                 {
-                    dmCockpit = new DeviceManager(cfg);
-                    cockpit = new Views.FlowCockpitForm(cfg, dmCockpit, true);
-                    Check("驾驶舱构造成功", cockpit != null);
+                    dmPolicy = new DeviceManager(cfg);
+                    policyForm = new Views.ProcessPolicyForm(cfg, dmPolicy, true);
+                    Check("工艺策略窗构造成功", policyForm != null);
                     Check("初态未选中无保存",
-                        cockpit.SavedKeys != null && cockpit.SavedKeys.Count == 0);
+                        policyForm.SavedKeys != null && policyForm.SavedKeys.Count == 0);
                 }
                 finally
                 {
-                    try { if (cockpit != null) cockpit.Dispose(); } catch { }
-                    try { if (dmCockpit != null) dmCockpit.Dispose(); } catch { }
+                    try { if (policyForm != null) policyForm.Dispose(); } catch { }
+                    try { if (dmPolicy != null) dmPolicy.Dispose(); } catch { }
                 }
             }
 
-            // ── 驾驶舱无参构造（V1.72 Designer 拆分：只装边框不建画布，构造永不抛） ──
+            // ── 工艺策略窗无参构造（V1.72 Designer 拆分：只装边框不建画布，构造永不抛） ──
             {
-                Views.FlowCockpitForm bare = null;
+                Views.ProcessPolicyForm bare = null;
                 bool bareOk = true;
-                try { bare = new Views.FlowCockpitForm(); }
+                try { bare = new Views.ProcessPolicyForm(); }
                 catch { bareOk = false; }
-                Check("驾驶舱无参构造不抛", bareOk && bare != null);
+                Check("工艺策略窗无参构造不抛", bareOk && bare != null);
                 if (bare != null)
                 {
                     var t = bare.GetType();
@@ -2756,10 +2784,10 @@ namespace AgingTestSystem.Tests
             // 进终结器线程Dispose，Sunny内部读原生TextBox.Handle即炸（堆栈终点
             // TextBox.ResetAutoComplete←Dispose←Finalize）。修后旧控件当场释放。
             {
-                Views.FlowCockpitForm bare2 = null;
+                Views.ProcessPolicyForm bare2 = null;
                 try
                 {
-                    bare2 = new Views.FlowCockpitForm();
+                    bare2 = new Views.ProcessPolicyForm();
                     var t2 = bare2.GetType();
                     var miRebuild = t2.GetMethod("RebuildEditors",
                         BindingFlags.NonPublic | BindingFlags.Instance);
@@ -3012,10 +3040,10 @@ namespace AgingTestSystem.Tests
                 Check("IP候选/映射表不强制校验",
                     ok("FanIpCandidates", "xxx") && ok("IoBackupChannelMappings", "xxx"));
 
-                // _boolKeys 14 项逐项过校验（防"只加一边"的配置漂移；V1.68 +MesEnabled/MesMockEnabled；V1.69 +SkipVacuum）
+                // _boolKeys 15 项逐项过校验（防"只加一边"的配置漂移；V1.68 +MesEnabled/MesMockEnabled；V1.69 +SkipVacuum；V1.73 +VentValveEnabled）
                 var boolKeys = (HashSet<string>)typeof(SettingsForm).GetField("_boolKeys",
                     BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
-                Check("布尔键14项", boolKeys != null && boolKeys.Count == 14);
+                Check("布尔键15项", boolKeys != null && boolKeys.Count == 15);
                 if (boolKeys != null)
                 {
                     bool allBoolOk = boolKeys.All(k => ok(k, "true") && ok(k, "false") && !ok(k, "YES"));
@@ -3026,7 +3054,8 @@ namespace AgingTestSystem.Tests
                         && boolKeys.Contains("UseMockCommunication")
                         && boolKeys.Contains("MesEnabled")
                         && boolKeys.Contains("MesMockEnabled")
-                        && boolKeys.Contains("SkipVacuum"));
+                        && boolKeys.Contains("SkipVacuum")
+                        && boolKeys.Contains("VentValveEnabled"));
                 }
             }
 
@@ -3251,7 +3280,7 @@ namespace AgingTestSystem.Tests
             // ── 非模态编辑弹窗关闭即释放（V1.72.13：终结器跨线程崩溃锁） ──
             // 复现：设置窗点映射/IP/规则格弹非模态窗，FormClosed 只回写不 Dispose，
             // 里面的 Sunny 输入框/表格成孤儿，GC 时终结器线程 Dispose 即炸
-            // （与驾驶舱右栏同病根；案发时机看 GC，报错时正在干什么都是巧合）。
+            // （与工艺策略窗右栏同病根；案发时机看 GC，报错时正在干什么都是巧合）。
             // 走生产挂接路径验证：反射调 ShowXxxPopup → OpenForms 按类型找窗 →
             // Close → IsDisposed 必须 true（修的是 handler，裸 Show/Close 测不到）。
             SettingsForm sfPop = null;
@@ -3631,6 +3660,66 @@ namespace AgingTestSystem.Tests
                     }
                 }
                 finally { stForm.Dispose(); }
+            }
+
+            // —— 破空按钮显隐 + 全项tooltip（V1.73：无阀隐藏；tooltip超40字换行） ——
+            {
+                StationSettingsForm stNoVent = null;
+                try { stNoVent = new StationSettingsForm(null, new DeviceConfig(), new List<RecipeConfig>(), 1); }
+                catch { }
+                Check("无阀工位窗可构造", stNoVent != null);
+                if (stNoVent != null)
+                {
+                    try
+                    {
+                        var btnBreak = typeof(StationSettingsForm).GetField("btnBreakVacuum",
+                            BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(stNoVent) as Control;
+                        Check("无阀破空按钮隐藏", btnBreak != null && btnBreak.Visible == false);
+                        var tip = typeof(StationSettingsForm).GetField("_tip",
+                            BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(stNoVent) as ToolTip;
+                        var lblDm = typeof(StationSettingsForm).GetField("lblDisplayMode",
+                            BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(stNoVent) as Control;
+                        Check("工位窗tooltip已挂（含显示模式追溯说明）",
+                            tip != null && lblDm != null && tip.GetToolTip(lblDm).Contains("追溯"));
+                    }
+                    finally { stNoVent.Dispose(); }
+                }
+                StationSettingsForm stVent = null;
+                try { stVent = new StationSettingsForm(null, new DeviceConfig { VentValveEnabled = true }, new List<RecipeConfig>(), 1); }
+                catch { }
+                Check("有阀工位窗可构造", stVent != null);
+                if (stVent != null)
+                {
+                    try
+                    {
+                        // Visible 在窗体未 Show 时读恒 false，测纯函数 ShouldShowBreakVacuum
+                        var showFn = typeof(StationSettingsForm).GetMethod("ShouldShowBreakVacuum",
+                            BindingFlags.NonPublic | BindingFlags.Static);
+                        Check("破空显隐纯函数（无阀/空/false，有阀true）",
+                            showFn != null
+                            && Equals(showFn.Invoke(null, new object[] { new DeviceConfig() }), false)
+                            && Equals(showFn.Invoke(null, new object[] { null }), false)
+                            && Equals(showFn.Invoke(null, new object[] { new DeviceConfig { VentValveEnabled = true } }), true));
+                    }
+                    finally { stVent.Dispose(); }
+                }
+                BatchRecipeForm bTipForm = null;
+                try { bTipForm = new BatchRecipeForm(null, new List<RecipeConfig>(), new List<int>()); }
+                catch { }
+                Check("批量窗可构造(tooltip)", bTipForm != null);
+                if (bTipForm != null)
+                {
+                    try
+                    {
+                        var tipB = typeof(BatchRecipeForm).GetField("_tip",
+                            BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(bTipForm) as ToolTip;
+                        var lblB = typeof(BatchRecipeForm).GetField("lblDisplayModeLabel",
+                            BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(bTipForm) as Control;
+                        Check("批量窗tooltip已挂（含显示模式追溯说明）",
+                            tipB != null && lblB != null && tipB.GetToolTip(lblB).Contains("追溯"));
+                    }
+                    finally { bTipForm.Dispose(); }
+                }
             }
 
             // —— IP 合法性（反射私有静态） ——
@@ -4429,6 +4518,46 @@ namespace AgingTestSystem.Tests
             {
                 Check("补全提供者构造释放链路（" + ex.GetType().Name + "）", false);
             }
+
+            // ── 项目切换窗tooltip+在测禁用（V1.73：_lblNote删了转tooltip，超40字换行） ──
+            {
+                ProjectSwitchForm ps0 = null;
+                try { ps0 = new ProjectSwitchForm(() => 0); }
+                catch { }
+                Check("切换窗可构造(0在测)", ps0 != null);
+                if (ps0 != null)
+                {
+                    try
+                    {
+                        var btnSw = typeof(ProjectSwitchForm).GetField("_btnSwitch",
+                            BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(ps0) as Control;
+                        var tipS = typeof(ProjectSwitchForm).GetField("_tip",
+                            BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(ps0) as ToolTip;
+                        Check("0在测切换可用+提示即时生效",
+                            btnSw != null && btnSw.Enabled
+                            && tipS != null && tipS.GetToolTip(btnSw).Contains("即时生效"));
+                    }
+                    finally { try { ps0.Dispose(); } catch { } }
+                }
+                ProjectSwitchForm ps2 = null;
+                try { ps2 = new ProjectSwitchForm(() => 2); }
+                catch { }
+                Check("切换窗可构造(2在测)", ps2 != null);
+                if (ps2 != null)
+                {
+                    try
+                    {
+                        var btnSw2 = typeof(ProjectSwitchForm).GetField("_btnSwitch",
+                            BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(ps2) as Control;
+                        var tipS2 = typeof(ProjectSwitchForm).GetField("_tip",
+                            BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(ps2) as ToolTip;
+                        Check("2在测切换禁用+提示原因",
+                            btnSw2 != null && !btnSw2.Enabled
+                            && tipS2 != null && tipS2.GetToolTip(btnSw2).Contains("在测"));
+                    }
+                    finally { try { ps2.Dispose(); } catch { } }
+                }
+            }
         }
 
         // =====================================================================
@@ -4509,7 +4638,7 @@ namespace AgingTestSystem.Tests
         // =====================================================================
         // DesignerStabilityV172_16 —— 快照释放 + 设计器可序列化 + 量程字面值（V1.72.16）
         // 背景（用户一次报四个，全是"释放路径看着对、但差一层"）：
-        // ①流程驾驶舱拖业务框照样终结器跨线程炸：V1.72.12 的 foreach 直接枚举
+        // ①工艺策略窗拖业务框照样终结器跨线程炸：V1.72.12 的 foreach 直接枚举
         //   Controls 逐个 Dispose 是错的——Dispose 会把自己从父集合摘除，枚举器下标
         //   错位跳过一个，被跳过的 Clear 后变孤儿，GC 时终结器线程炸（炸在拖的时候，
         //   漏在早先切节点的时候，极具迷惑性）。修法 = ControlDisposeHelper 快照后释放。
@@ -4564,13 +4693,13 @@ namespace AgingTestSystem.Tests
             ControlDisposeHelper.DisposeAllAndClear(oldPanel.Controls);
             try { oldPanel.Dispose(); } catch { }
 
-            // 真实调用点：驾驶舱 DisposeEditorControls（反射）释放右栏编辑器无孤儿。
-            var cockpit = new FlowCockpitForm();
+            // 真实调用点：工艺策略窗 DisposeEditorControls（反射）释放右栏编辑器无孤儿。
+            var policyForm = new ProcessPolicyForm();
             try
             {
-                var pnlF = typeof(FlowCockpitForm).GetField("_pnlEditors", Flags);
-                var editorsPanel = pnlF?.GetValue(cockpit) as Panel;
-                Check("反射找到驾驶舱_pnlEditors", editorsPanel != null);
+                var pnlF = typeof(ProcessPolicyForm).GetField("_pnlEditors", Flags);
+                var editorsPanel = pnlF?.GetValue(policyForm) as Panel;
+                Check("反射找到工艺策略窗_pnlEditors", editorsPanel != null);
                 if (editorsPanel != null)
                 {
                     var e1 = new Sunny.UI.UITextBox { Multiline = true, ShowScrollBar = true };
@@ -4580,16 +4709,16 @@ namespace AgingTestSystem.Tests
                     bool quiet = true;
                     try
                     {
-                        typeof(FlowCockpitForm).GetMethod("DisposeEditorControls", Flags)
-                            ?.Invoke(cockpit, null);
+                        typeof(ProcessPolicyForm).GetMethod("DisposeEditorControls", Flags)
+                            ?.Invoke(policyForm, null);
                     }
                     catch { quiet = false; }
-                    Check("驾驶舱DisposeEditorControls不炸且清光",
+                    Check("工艺策略窗DisposeEditorControls不炸且清光",
                         quiet && editorsPanel.Controls.Count == 0
                         && e1.IsDisposed && e2.IsDisposed && e3.IsDisposed);
                 }
             }
-            finally { try { cockpit.Dispose(); } catch { } }
+            finally { try { policyForm.Dispose(); } catch { } }
 
             // —— ②③主页布局窗：量程字面值 + 越界赋值不炸 ——
             var layout = new HomeLayoutConfig();
