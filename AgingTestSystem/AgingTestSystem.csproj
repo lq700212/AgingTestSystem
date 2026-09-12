@@ -119,6 +119,7 @@
     <Compile Include="Services\MesCrypto.cs" />
     <Compile Include="Services\RuleExpr.cs" />
     <Compile Include="Services\RuleEngine.cs" />
+    <Compile Include="Services\ControlDisposeHelper.cs" />
     <Compile Include="Services\DeviceManager.cs" />
     <Compile Include="Services\UserManager.cs" />
     <Compile Include="Services\PasswordHasher.cs" />
@@ -167,6 +168,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Dialogs\FanTestForm.resx">
       <DependentUpon>FanTestForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Dialogs\HomeLayoutEditorForm.resx">
+      <DependentUpon>HomeLayoutEditorForm.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Dialogs\InputLotForm.resx">
       <DependentUpon>InputLotForm.cs</DependentUpon>

@@ -192,6 +192,7 @@ namespace AgingTestSystem.Tests
                 { "UiStyleV172_1", UiStyleV172_1Tests },
                 { "UiFinalizerV172_14", UiFinalizerV172_14Tests },
                 { "LegacyRecipeGuard", LegacyRecipeGuardTests },
+                { "DesignerStabilityV172_16", DesignerStabilityV172_16Tests },
             };
 
             // 参数约定：无参=全量；"模块A,模块B"=子集（大小写不敏感）；
@@ -4447,6 +4448,173 @@ namespace AgingTestSystem.Tests
                 }
             }
             finally { batchForm.Dispose(); }
+        }
+
+        // =====================================================================
+        // DesignerStabilityV172_16 —— 快照释放 + 设计器可序列化 + 量程字面值（V1.72.16）
+        // 背景（用户一次报四个，全是"释放路径看着对、但差一层"）：
+        // ①流程驾驶舱拖业务框照样终结器跨线程炸：V1.72.12 的 foreach 直接枚举
+        //   Controls 逐个 Dispose 是错的——Dispose 会把自己从父集合摘除，枚举器下标
+        //   错位跳过一个，被跳过的 Clear 后变孤儿，GC 时终结器线程炸（炸在拖的时候，
+        //   漏在早先切节点的时候，极具迷惑性）。修法 = ControlDisposeHelper 快照后释放。
+        // ②批量窗/主页布局窗双击预览即脏：手写 Designer 与 VS 序列化口径不一致
+        //   （AutoScale.Font+Zoom混搭、AI 估的坐标与真实布局差几像素），打开即标脏；
+        //   以 VS 重写版为 canonical 基线，不再手改回去。
+        // ③主页布局窗拖预览边缘 ArgumentOutOfRange（"340 对 Value 无效"）：
+        //   VS 重写时删掉了元组表达式写的 Minimum/Maximum（序列化器认不出），
+        //   输入框变回 0~100。修法 = 量程写字面值 + 赋值前 ClampNud。
+        // ④判定窗预览还是坏：Designer 里 Items.AddRange(Dispositions) 引静态字段
+        //   （CodeDom 在实例上找不到静态成员，加载失败）+ AutoScale.Font+Zoom 混搭；
+        //   选项改构造填，模式改 None。全程只构造不 Show（零 MessageBox 阻塞）。
+        // =====================================================================
+        private static void DesignerStabilityV172_16Tests()
+        {
+            const BindingFlags Flags = BindingFlags.NonPublic | BindingFlags.Public
+                | BindingFlags.Instance | BindingFlags.Static;
+
+            // —— ①快照释放：helper 全释放无孤儿；旧 foreach 写法复现跳过 ——
+            var panel = new Panel();
+            var sunnyMulti = new Sunny.UI.UITextBox { Multiline = true, ShowScrollBar = true };
+            var sunnyCmb = new Sunny.UI.UIComboBox();
+            var lbl = new Sunny.UI.UILabel { Text = "名" };
+            panel.Controls.AddRange(new Control[] { sunnyMulti, sunnyCmb, lbl });
+            ControlDisposeHelper.DisposeAllAndClear(panel.Controls);
+            Check("快照释放后集合空",
+                panel.Controls.Count == 0);
+            Check("快照释放三个孩子全 IsDisposed",
+                sunnyMulti.IsDisposed && sunnyCmb.IsDisposed && lbl.IsDisposed);
+            bool nullOk = true;
+            try { ControlDisposeHelper.DisposeAllAndClear(null); }
+            catch { nullOk = false; }
+            Check("快照释放 null 不炸", nullOk);
+            try { panel.Dispose(); } catch { }
+
+            // 旧写法复现（红证据）：同样 3 个孩子，foreach 直释必然抛"集合已修改"
+            // 或漏释放——这就是 V1.72.12 没修住的原因。框架行为若变，此条会红，强制重审。
+            var oldPanel = new Panel();
+            var oa = new TextBox(); var ob = new TextBox(); var oc = new TextBox();
+            oldPanel.Controls.AddRange(new Control[] { oa, ob, oc });
+            bool oldThrew = false;
+            try
+            {
+                foreach (Control c in oldPanel.Controls) { c.Dispose(); }
+                oldPanel.Controls.Clear();
+            }
+            catch { oldThrew = true; }
+            int oldLeft = 0;
+            foreach (Control c in new Control[] { oa, ob, oc }) { if (!c.IsDisposed) oldLeft++; }
+            Check("旧foreach直释复现抛异常或漏释放（根因证据）",
+                oldThrew || oldLeft > 0);
+            ControlDisposeHelper.DisposeAllAndClear(oldPanel.Controls);
+            try { oldPanel.Dispose(); } catch { }
+
+            // 真实调用点：驾驶舱 DisposeEditorControls（反射）释放右栏编辑器无孤儿。
+            var cockpit = new FlowCockpitForm();
+            try
+            {
+                var pnlF = typeof(FlowCockpitForm).GetField("_pnlEditors", Flags);
+                var editorsPanel = pnlF?.GetValue(cockpit) as Panel;
+                Check("反射找到驾驶舱_pnlEditors", editorsPanel != null);
+                if (editorsPanel != null)
+                {
+                    var e1 = new Sunny.UI.UITextBox { Multiline = true, ShowScrollBar = true };
+                    var e2 = new Sunny.UI.UIComboBox();
+                    var e3 = new Sunny.UI.UILabel { Text = "规则" };
+                    editorsPanel.Controls.AddRange(new Control[] { e1, e2, e3 });
+                    bool quiet = true;
+                    try
+                    {
+                        typeof(FlowCockpitForm).GetMethod("DisposeEditorControls", Flags)
+                            ?.Invoke(cockpit, null);
+                    }
+                    catch { quiet = false; }
+                    Check("驾驶舱DisposeEditorControls不炸且清光",
+                        quiet && editorsPanel.Controls.Count == 0
+                        && e1.IsDisposed && e2.IsDisposed && e3.IsDisposed);
+                }
+            }
+            finally { try { cockpit.Dispose(); } catch { } }
+
+            // —— ②③主页布局窗：量程字面值 + 越界赋值不炸 ——
+            var layout = new HomeLayoutConfig();
+            var homeForm = new HomeLayoutEditorForm(layout);
+            try
+            {
+                var t = typeof(HomeLayoutEditorForm);
+                var nudTop = t.GetField("_nudTop", Flags)?.GetValue(homeForm) as NumericUpDown;
+                var nudMenu = t.GetField("_nudMenu", Flags)?.GetValue(homeForm) as NumericUpDown;
+                var nudRight = t.GetField("_nudRight", Flags)?.GetValue(homeForm) as NumericUpDown;
+                var nudStatus = t.GetField("_nudStatus", Flags)?.GetValue(homeForm) as NumericUpDown;
+                Check("布局窗四个输入框全建好",
+                    nudTop != null && nudMenu != null && nudRight != null && nudStatus != null);
+                if (nudTop != null && nudMenu != null && nudRight != null && nudStatus != null)
+                {
+                    Check("顶部量程=Range字面值(15~80)",
+                        nudTop.Minimum == HomeLayoutConfig.TopBarRange.Min
+                        && nudTop.Maximum == HomeLayoutConfig.TopBarRange.Max);
+                    Check("菜单量程=Range字面值(25~100)",
+                        nudMenu.Minimum == HomeLayoutConfig.MenuRange.Min
+                        && nudMenu.Maximum == HomeLayoutConfig.MenuRange.Max);
+                    Check("右侧量程=Range字面值(180~600)",
+                        nudRight.Minimum == HomeLayoutConfig.RightPanelRange.Min
+                        && nudRight.Maximum == HomeLayoutConfig.RightPanelRange.Max);
+                    Check("状态栏量程=Range字面值(15~60)",
+                        nudStatus.Minimum == HomeLayoutConfig.StatusBarRange.Min
+                        && nudStatus.Maximum == HomeLayoutConfig.StatusBarRange.Max);
+
+                    // 现场原案：右侧 340（旧 0~100 会炸，现在范围内）拖动同步不抛。
+                    layout.RightPanelWidth = 340;
+                    bool dragOk = true;
+                    try
+                    {
+                        t.GetMethod("Preview_LayoutChanged", Flags)
+                            ?.Invoke(homeForm, new object[] { homeForm, EventArgs.Empty });
+                    }
+                    catch { dragOk = false; }
+                    Check("拖动同步340不抛且框值=340",
+                        dragOk && nudRight.Value == 340m);
+
+                    // 旧文件越界值（如右侧 100，小于下限 180）同步时钳住不抛。
+                    layout.RightPanelWidth = 100;
+                    bool clampOk = true;
+                    try
+                    {
+                        t.GetMethod("Preview_LayoutChanged", Flags)
+                            ?.Invoke(homeForm, new object[] { homeForm, EventArgs.Empty });
+                    }
+                    catch { clampOk = false; }
+                    Check("越界旧值100同步钳到下限180不抛",
+                        clampOk && nudRight.Value == nudRight.Minimum);
+                }
+                Check("布局窗AutoScale=None（Sunny canonical，预览不脏）",
+                    homeForm.AutoScaleMode == AutoScaleMode.None);
+            }
+            finally { try { homeForm.Dispose(); } catch { } }
+
+            // 构造期越界初值也不炸（ClampNud 第一道闸）。
+            var legacyLayout = new HomeLayoutConfig { RightPanelWidth = 50 };
+            bool ctorOk = true;
+            HomeLayoutEditorForm legacyForm = null;
+            try { legacyForm = new HomeLayoutEditorForm(legacyLayout); }
+            catch { ctorOk = false; }
+            Check("构造期越界初值50不炸", ctorOk && legacyForm != null);
+            if (legacyForm != null) { try { legacyForm.Dispose(); } catch { } }
+
+            // —— ④判定窗 AutoScale.None（与批量窗同锁，防 Font+Zoom 混搭回潮） ——
+            var judge2 = new UnloadJudgeForm();
+            try
+            {
+                Check("判定窗AutoScale=None（Sunny canonical）",
+                    judge2.AutoScaleMode == AutoScaleMode.None);
+            }
+            finally { try { judge2.Dispose(); } catch { } }
+            var batchForm2 = new BatchRecipeForm(null, new List<RecipeConfig>(), new List<int>());
+            try
+            {
+                Check("批量窗AutoScale=None（VS canonical，预览不脏）",
+                    batchForm2.AutoScaleMode == AutoScaleMode.None);
+            }
+            finally { try { batchForm2.Dispose(); } catch { } }
         }
 
     }

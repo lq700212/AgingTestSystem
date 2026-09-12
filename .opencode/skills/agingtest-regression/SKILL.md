@@ -1,6 +1,6 @@
 ---
 name: agingtest-regression
-description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案热更删除/终结器释放/关窗竞态/MES映射上报/规则表达式/流程驾驶舱等全部核心逻辑类（1273 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
+description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案热更删除/终结器释放/关窗竞态/MES映射上报/规则表达式/流程驾驶舱等全部核心逻辑类（1290 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
 ---
 
 # AgingTestSystem 回归测试套件（冒烟 + 用例一体）
@@ -57,7 +57,7 @@ agingtest-regression/
     └── TestRunner.cs         ← 全部测试用例源码（加用例就改这里）
 ```
 
-## 三、测试覆盖范围（38 个模块，1273 断言）
+## 三、测试覆盖范围（39 个模块，1290 断言）
 
 | 模块 | 覆盖点 |
 | --- | --- |
@@ -95,10 +95,11 @@ agingtest-regression/
 | **DeviceManagerMes(V1.68)** | Fake抓包端到端：启动/完成(PASS+映射+静态+SN)/下料判定(不良代码)/报警(FAIL)四触发器各一条+发往配置地址 |
 | RuleExprV169(V1.69) | 四则优先级/括号/负号/取模/字面量、比较逻辑与或非、变量大小写、短路跳过除零、除零模零未知变量错、语法错位置、NaN恒false、规则表行格式/行号/上限20、执行器持续计时(假时钟/中断复位/同配置不清/换配置清/非在测复位/立即/求值错)、完成表达式(空禁用/到点/求值错)、缺省锁、ValidateValue规则分支 |
 | **DeviceManagerRules(V1.69)** | 自定义报警端到端(首轮触发FAIL+CSV规则名)、完成表达式提前完成(CSV原因)、跳过抽真空(直接上电+常压不误报+快照Aging+CSV)、各阶段台数R4(抽真空1/老化1/空闲2) |
-| FlowCockpitV170(V1.70) | 拓扑锁(7节点8边+端点全已知+节点挂key+key全真属性)、缺省文本锁、策略切换文本变、台数进文本、布局存取往返/钳制/损坏回空、驾驶舱构造不断言弹窗(V1.71)、检索框 SetCaretToEnd 原生/Sunny 双过(V1.71)、驾驶舱无参构造不抛+边框7件(V1.72 Designer 拆分)、右栏重建先Dispose再Clear旧控件释放新实例(V1.72.12 终结器锁) |
+| FlowCockpitV170(V1.70) | 拓扑锁(7节点8边+端点全已知+节点挂key+key全真属性)、缺省文本锁、策略切换文本变、台数进文本、布局存取往返/钳制/损坏回空、驾驶舱构造不断言弹窗(V1.71)、检索框 SetCaretToEnd 原生/Sunny 双过(V1.71)、驾驶舱无参构造不抛+边框7件(V1.72 Designer 拆分)、右栏重建释放走 ControlDisposeHelper 快照(V1.72.16，旧 foreach 跳过实锤) |
 | UiStyleV172_1(V1.72.1) | 弹窗主按钮蓝5窗(DodgerBlue+Custom+白字)、公共参数设计Y锁(lbl65/nud62/btn110)+CenterControls不动Y、公共参数标签输入框无重叠(V1.72.3：锁视觉间距≥8px；MeasureText比AutoSize实占小3px是根因，Designer残留Size 107过期勿用)、历史日期宽150+实测文本宽防叠、深浅下蓝保留 |
 | UiFinalizerV172_14(V1.72.14) | 关窗竞态静默丢弃（Comm/Fan _closed+句柄双查+BeginInvoke；无句柄/关后日志不炸；RemapNoticeForm自释反射存在）、判定窗预览（无参构造+_lblCode/_lblDisp具名+处置选项数+空快照文案+两按钮）、关于SunnyUI（反射调internal static：UIForm+只读多行+Y≥35+版本版权文案+确认蓝+Accept）；V1.72.15 追加全仓锁 14 条（公共参数/ID绑定/设置/主窗 _closed/_mainClosing 标记、关后完成/扫码/写寄存器/控制命令/补全释放过滤静默丢弃） |
 | LegacyRecipeGuard(V1.72.2) | V1.59老配方0值语义锁：缺字段读出0/null、下发0=定格0(0≠全局)/null=保持/清空回全局、批量窗新建默认全局、老配方回填显示0待人工复核（只构造不启采集） |
+| DesignerStabilityV172_16(V1.72.16) | 快照释放（helper全释放/null安全/旧foreach红证据/驾驶舱真方法反射释放）、布局窗量程字面值（四量程=Range/340拖动同步/越界钳制/构造期越界）、三窗AutoScale=None锁（判定/批量/布局，防Font+Zoom混搭回潮） |
 
 **不在覆盖范围**（明确边界）：真串口/真设备通讯（ModbusRtuBarometerReader /
 ScannerService / FanControllerClient / ModbusTcpIoController，靠现场联调）、
@@ -115,7 +116,8 @@ UI 弹窗分支（如配方同名覆盖确认框，靠界面手工测试）、�
    "关 A 开 B 必炸"是关 A 尾巴被开 B 的 GC 赶出来）。
 2. **跑自动审计**（改 UI 代码后必跑，HIGH>0 拦提交）：
    `powershell -ExecutionPolicy Bypass -File scripts\audit_finalizer_risk.ps1`
-   - R1 `Controls.Clear()` 前 15 行无 Dispose → HIGH；
+   - R1 `Controls.Clear()` 前 15 行无 `ControlDisposeHelper` → HIGH
+     （V1.72.16 收紧：`foreach` 直释会跳过，一律快照 helper，白名单已删）；
    - R2 非模态 `.Show(`（排除 ShowDialog）→ 方法体/配对方法无 Dispose → HIGH；
    - R3 `Controls.Remove(` 后 10 行无 Dispose → HIGH；
    - R4 非 Designer 里 new 输入/表格控件 → INFO（逐条人工定罪，随树/释放才安全）；
@@ -124,17 +126,22 @@ UI 弹窗分支（如配方同名覆盖确认框，靠界面手工测试）、�
    - R6 非 Designer 里 Timer 字段无同文件 `Dispose()` → HIGH
      （`(components)` 随容器跳过；`?.Dispose` 算数）；
    - R7 `_deviceManager`/`_scanner` 的 `On*` 事件 `+=` 无同文件 `-=` → HIGH
-     （退订拦不住已排队 Post，handler 入口另需 `_closed` 自拦）。
-3. **修法四条**：动态重建先逐个 `Dispose()` 再 `Clear()`；
+     （退订拦不住已排队 Post，handler 入口另需 `_closed` 自拦）；
+   - R8 Designer 可序列化锁 → HIGH（R8a `AddRange(裸标识符)` 只许 `new` 数组；
+     R8b `= xxx.Range.Min/Max` 改字面值；R8c `ZoomScaleRect`+`Font` 混搭改 `None`；
+     注释行不扫）。
+3. **修法**：动态重建走 `ControlDisposeHelper.DisposeAllAndClear`
+   （V1.72.16：`foreach` 直释枚举中集合被改会跳过，快照后释放才对）；
    非模态弹窗 `FormClosed` 里 `finally { popup.Dispose(); }`（先回写再释放）；
    关窗竞态三件套——`_closed` 首行置位 + `IsDisposed/Disposing/IsHandleCreated`
    三查 + 日志 `BeginInvoke`（禁同步 `Invoke`），排队回调入口自拦，
    关后硬件写停手（在途遍历/启停整拍丢弃）；长事件源退订 + handler 自拦双保险。
-4. **白名单登记**：修完在脚本 `$SafeShowKeys/$SafeClearFiles/$SafeRemoveFiles`
+4. **白名单登记**：修完在脚本 `$SafeShowKeys/$SafeRemoveFiles`
    登记（方法|文件[|配对方法|reuse:字段]），R2 是行为检查（验方法体真含 Dispose），
    登记了但释放被删照样报警——反向验证（注掉一处重跑必须 HIGH）是脚本改动后的
-   必做项。
-5. **用例双锁**：动态重建锁"旧控件 IsDisposed"；弹窗锁"走生产挂接
+   必做项（`$SafeClearFiles` V1.72.16 已删，R1 只认 helper 行为，不认名单）。
+5. **用例双锁**：动态重建锁"旧控件 IsDisposed"（V1.72.16 起锁 helper 快照释放，
+   另附"旧 foreach 复现抛异常/漏释放"红证据）；弹窗锁"走生产挂接
    （反射 ShowXxxPopup→OpenForms 找窗→Close→IsDisposed）"，裸 Show/Close 恒绿假绿。
 
 ## 四、怎么加测试用例（铁律：改代码必同步补用例）

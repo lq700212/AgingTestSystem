@@ -134,10 +134,13 @@ namespace AgingTestSystem.Dialogs
         {
             if (_syncing) return;
             _syncing = true;
-            _nudTop.Value = _layout.TopBarHeight;
-            _nudMenu.Value = _layout.MenuHeight;
-            _nudRight.Value = _layout.RightPanelWidth;
-            _nudStatus.Value = _layout.StatusBarHeight;
+            // 【V1.72.16】赋值前一律钳制：HomeLayout.json 可能是旧版本存的越界值
+            // （或预览控件将来又被拖出范围），直接赋给 NumericUpDown.Value 会抛
+            // ArgumentOutOfRangeException（现场"340 的值对于 Value 无效"就是这么来的）。
+            _nudTop.Value = ClampNud(_nudTop, _layout.TopBarHeight);
+            _nudMenu.Value = ClampNud(_nudMenu, _layout.MenuHeight);
+            _nudRight.Value = ClampNud(_nudRight, _layout.RightPanelWidth);
+            _nudStatus.Value = ClampNud(_nudStatus, _layout.StatusBarHeight);
             _syncing = false;
         }
 
@@ -155,10 +158,12 @@ namespace AgingTestSystem.Dialogs
             _layout.RightPanelWidth = MainForm.DefaultRightPanelWidth;
             _layout.StatusBarHeight = def.StatusBarHeight;
             _syncing = true;
-            _nudTop.Value = _layout.TopBarHeight;
-            _nudMenu.Value = _layout.MenuHeight;
-            _nudRight.Value = _layout.RightPanelWidth;
-            _nudStatus.Value = _layout.StatusBarHeight;
+            // 【V1.72.16】同上钳制：缺省值理论上都在范围内，但钳一下零成本，
+            // 万一将来改了 Range 常量忘同步 Designer，这里就是最后一道闸。
+            _nudTop.Value = ClampNud(_nudTop, _layout.TopBarHeight);
+            _nudMenu.Value = ClampNud(_nudMenu, _layout.MenuHeight);
+            _nudRight.Value = ClampNud(_nudRight, _layout.RightPanelWidth);
+            _nudStatus.Value = ClampNud(_nudStatus, _layout.StatusBarHeight);
             _syncing = false;
             _preview.Invalidate();
         }

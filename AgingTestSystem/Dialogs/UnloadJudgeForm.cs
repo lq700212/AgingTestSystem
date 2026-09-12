@@ -57,6 +57,10 @@ namespace AgingTestSystem.Dialogs
             // 【V1.72.12 Designer 化】静态边框搬进 UnloadJudgeForm.Designer.cs，
             // 这里只回填"要吃构造参数"的那一项（范围文案依赖 deviceIds/deviceManager）。
             InitializeComponent();
+            // 【V1.72.16】处置下拉选项在这里填：Designer 里写 Items.AddRange(Dispositions)
+            // 会引用本类的静态字段，设计器 CodeDom 反序列化认不出致预览加载失败，
+            // 所以 Designer 只留空下拉，运行时由构造填（4 项=Dispositions，回归锁个数）。
+            _cmbDisposition.Items.AddRange(Dispositions);
             _lblScope.Text = BuildScopeText();
         }
 

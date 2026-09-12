@@ -212,7 +212,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 摘掉右栏旧编辑器（【V1.72.12】先逐个 Dispose 再 Clear）。
+        /// 摘掉右栏旧编辑器（【V1.72.12】先 Dispose 再 Clear；【V1.72.16】改走快照）。
         ///
         /// 【修什么崩溃】Controls.Clear() 只摘父子关系、不释放资源：
         /// 旧编辑器（含 Sunny UITextBox/UIComboBox，内部包着原生 TextBox）变成孤儿，
@@ -221,16 +221,17 @@ namespace AgingTestSystem.Views
         /// 现场症状 = 点/拖节点后随机时刻弹"非 UI 线程"错（终结时机不定，
         /// 炸的时候用户正在干别的事，极具迷惑性；Name="" 是因为动态控件都没设 Name）。
         /// 主窗 CreateWorkstationPanels 早有同款处理（H5 先 Dispose 再 Clear），这里补齐。
-        /// foreach 里 Dispose 安全（Dispose 不改 Controls 集合，改完再 Clear）。
+        ///
+        /// 【V1.72.16 为什么 V1.72.12 没修住】foreach 直接枚举 Controls 集合逐个 Dispose
+        /// 是错的：Control.Dispose() 会把自己从父集合摘除，释放第 0 个后其余前移，
+        /// 枚举器下标 +1 正好跳过一个——被跳过的孩子没释放、又被随后的 Clear() 摘掉，
+        /// 照样是孤儿，GC 时照样在终结器线程炸（拖业务框时炸的其实是早先某次切节点
+        /// 漏掉的旧编辑器）。正确姿势是 ControlDisposeHelper：先 CopyTo 快照成数组
+        /// 再逐个释放（枚举快照不怕原集合被改），最后 Clear。以后动态重建一律调它。
         /// </summary>
         private void DisposeEditorControls()
         {
-            foreach (Control c in _pnlEditors.Controls)
-            {
-                try { if (c != null && !c.IsDisposed) c.Dispose(); }
-                catch { /* 单个释放失败不影响其余 */ }
-            }
-            _pnlEditors.Controls.Clear();
+            ControlDisposeHelper.DisposeAllAndClear(_pnlEditors.Controls);
             _editorControls.Clear();
         }
 
