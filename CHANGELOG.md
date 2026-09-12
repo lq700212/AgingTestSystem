@@ -3,6 +3,27 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.72.7 — 顶栏显示当前项目 + 两弹窗标签输入防叠（2026-09-12，用户点名）
+
+### 改动范围
+- `Views/MainForm.Designer.cs` + `Views/MainForm.cs` — 顶栏 `tableLayoutPanelTop`
+  4 列→5 列（标题 30% + 项目 22% + 权限 20% + 通讯标签 15% + 通讯状态 13%），
+  新增 `lblProject`（Sunny UILabel，Dock=Fill + AutoEllipsis，9pt 加粗与标题同风格）；
+  构造里 `EnsureActiveProfile()` 后 `UpdateProjectDisplay` 回填"当前项目：XXX"
+  （切换项目必须重启，故只需设一次；切错项目=跑错工艺，首屏可见防呆）。
+- `Dialogs/IdBindingForm.Designer.cs` — 标签"工位编号："实宽约 83px 与 X=85
+  输入框重叠 13px：输入列三行统一右移 25（X 85→110），窗加宽 30
+  （750→780，左侧 40% 列跟着放宽，输入右缘不顶边；标签列 X=15 不动）。
+- `Dialogs/InputLotForm.Designer.cs` — "批号："擦边重叠 1px：输入框右移 10
+  （X 90→100）+ 宽度缩 10（280→270，右缘 370 不动，右边距不变，窗体不加宽）。
+
+### 验证
+- harness 直启三窗：ID 绑定三行间隙 40/7/56、批号窗间隙 5（≥5px 口径），
+  主窗顶栏回填"当前项目：Default"；PrintWindow 截图目检顶栏 5 列无挤压、
+  两弹窗标签输入分离。
+- `MainForm.Designer.cs` 声明/实例化配对扫描通过；`build_and_test.ps1 -Affected`
+  构建 + 冒烟 + 回归子集 206 断言全绿。
+
 ## V1.72.6 — 输入框加高防压扁 + 批量窗显示模式行复活（2026-09-12，用户点名）
 
 ### 改动范围
