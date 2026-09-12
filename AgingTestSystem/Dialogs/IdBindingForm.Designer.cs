@@ -101,9 +101,9 @@ namespace AgingTestSystem.Dialogs
             //
             // txtSn - SN输入框
             //
-            this.txtSn.Location = new System.Drawing.Point(85, 130);
+            this.txtSn.Location = new System.Drawing.Point(85, 125);
             this.txtSn.Name = "txtSn";
-            this.txtSn.Size = new System.Drawing.Size(190, 21);
+            this.txtSn.Size = new System.Drawing.Size(190, 29);
             this.txtSn.TabIndex = 5;
             this.txtSn.KeyDown += new System.Windows.Forms.KeyEventHandler(this.txtSn_KeyDown);
             //
@@ -118,9 +118,9 @@ namespace AgingTestSystem.Dialogs
             //
             // txtStationNo - 工位编号输入框
             //
-            this.txtStationNo.Location = new System.Drawing.Point(85, 85);
+            this.txtStationNo.Location = new System.Drawing.Point(85, 80);
             this.txtStationNo.Name = "txtStationNo";
-            this.txtStationNo.Size = new System.Drawing.Size(190, 21);
+            this.txtStationNo.Size = new System.Drawing.Size(190, 29);
             this.txtStationNo.TabIndex = 3;
             this.txtStationNo.KeyDown += new System.Windows.Forms.KeyEventHandler(this.txtStationNo_KeyDown);
             //
@@ -135,10 +135,10 @@ namespace AgingTestSystem.Dialogs
             //
             // txtLot - 批号输入框（只读）
             //
-            this.txtLot.Location = new System.Drawing.Point(85, 40);
+            this.txtLot.Location = new System.Drawing.Point(85, 35);
             this.txtLot.Name = "txtLot";
             this.txtLot.ReadOnly = true;
-            this.txtLot.Size = new System.Drawing.Size(190, 21);
+            this.txtLot.Size = new System.Drawing.Size(190, 29);
             this.txtLot.TabIndex = 1;
             //
             // lblLot - 批号标签

@@ -3,6 +3,31 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.72.6 — 输入框加高防压扁 + 批量窗显示模式行复活（2026-09-12，用户点名）
+
+### 改动范围
+- 5 个窗体 14 个 Sunny 输入框高度 21→29（Sunny 单行标准高；21 高时上下边框被压扁显示不全）：
+  `RecipeManagerForm`（txtRecipeName/txtDisplayMode）、`BatchRecipeForm`
+  （txtRecipeName/txtLimitTemp/txtNegativePressure/txtDisplayMode，其中 txtDisplayMode
+  用户清单漏列但同病顺手一起改）、`IdBindingForm`（txtLot/txtStationNo/txtSn）、
+  `InputLotForm`（txtLot）、`StationSettingsForm`（txtState/txtSN/txtRecipe/txtDisplayMode）。
+- 行内上下居中：绝对定位的加高框 Y 上移 5px（框中心与标签文本中心对齐）；
+  `BatchRecipeForm` 的 TableLayoutPanel 行自动居中，Temp/Pressure 容器 26→34
+  让 24 高框在 40 行里上下各 8px。
+- 行隙拉开（用户复检"每行都要上下居中对齐"后追加）：`RecipeManagerForm`
+  负压/显示两行下移（最小行隙 4→8px）；`StationSettingsForm` 窗高 350→370
+  （MinimumSize 同步），负压行下移 6、显示行下移 17，末两行行隙 6→12/15px。
+- `BatchRecipeForm` 批量窗 6 个原生 nud：`Dock=Fill` 实际高度由容器定，
+  Delay/Start 子 panel 高 26→30（nud 实高 20→26）。
+- `BatchRecipeForm` 窗高 320→360（MinimumSize 同步）：内容区 280 时 5×40 行占满，
+  第 6 行（显示模式，Percent）被挤到 0 高、整行消失（harness 截图抓获：改前窗底
+  直接是"加入队列"按钮）；加高 40 后显示行回到 40，Percent 行判据见 AGENTS。
+
+### 验证
+- harness 直启 5 窗：反射打印全部目标控件实高 + PrintWindow 截图目检边框完整、
+  标签输入上下居中、行隙无重叠。
+- `build_and_test.ps1 -Affected`：构建 + 冒烟 + 回归子集 483 断言全绿。
+
 ## V1.72.5 — 测试窗屏幕居中 + 配方窗标签输入防叠（2026-09-12，用户点名）
 
 ### 改动范围

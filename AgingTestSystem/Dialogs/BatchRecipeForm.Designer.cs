@@ -169,7 +169,7 @@ namespace AgingTestSystem.Dialogs
             this.txtRecipeName.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
             this.txtRecipeName.Location = new System.Drawing.Point(103, 9);
             this.txtRecipeName.Name = "txtRecipeName";
-            this.txtRecipeName.Size = new System.Drawing.Size(368, 21);
+            this.txtRecipeName.Size = new System.Drawing.Size(368, 29);
             this.txtRecipeName.TabIndex = 1;
             // 
             // lblDelayTime1Label
@@ -196,11 +196,11 @@ namespace AgingTestSystem.Dialogs
             this.tableLayoutPanelDelay1.Controls.Add(this.nudDelayMinutes, 2, 0);
             this.tableLayoutPanelDelay1.Controls.Add(this.lblDelay1Colon2, 3, 0);
             this.tableLayoutPanelDelay1.Controls.Add(this.nudDelaySeconds, 4, 0);
-            this.tableLayoutPanelDelay1.Location = new System.Drawing.Point(103, 47);
+            this.tableLayoutPanelDelay1.Location = new System.Drawing.Point(103, 45);
             this.tableLayoutPanelDelay1.Name = "tableLayoutPanelDelay1";
             this.tableLayoutPanelDelay1.RowCount = 1;
             this.tableLayoutPanelDelay1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelDelay1.Size = new System.Drawing.Size(368, 26);
+            this.tableLayoutPanelDelay1.Size = new System.Drawing.Size(368, 30);
             this.tableLayoutPanelDelay1.TabIndex = 3;
             // 
             // nudDelayHours
@@ -289,11 +289,11 @@ namespace AgingTestSystem.Dialogs
             this.tableLayoutPanelStart.Controls.Add(this.nudStartMinutes, 2, 0);
             this.tableLayoutPanelStart.Controls.Add(this.lblStartColon2, 3, 0);
             this.tableLayoutPanelStart.Controls.Add(this.nudStartSeconds, 4, 0);
-            this.tableLayoutPanelStart.Location = new System.Drawing.Point(103, 87);
+            this.tableLayoutPanelStart.Location = new System.Drawing.Point(103, 85);
             this.tableLayoutPanelStart.Name = "tableLayoutPanelStart";
             this.tableLayoutPanelStart.RowCount = 1;
             this.tableLayoutPanelStart.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelStart.Size = new System.Drawing.Size(368, 26);
+            this.tableLayoutPanelStart.Size = new System.Drawing.Size(368, 30);
             this.tableLayoutPanelStart.TabIndex = 7;
             // 
             // nudStartHours
@@ -376,11 +376,11 @@ namespace AgingTestSystem.Dialogs
             this.tableLayoutPanelTemp.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 40F));
             this.tableLayoutPanelTemp.Controls.Add(this.txtLimitTemp, 0, 0);
             this.tableLayoutPanelTemp.Controls.Add(this.lblTempUnit, 1, 0);
-            this.tableLayoutPanelTemp.Location = new System.Drawing.Point(103, 127);
+            this.tableLayoutPanelTemp.Location = new System.Drawing.Point(103, 123);
             this.tableLayoutPanelTemp.Name = "tableLayoutPanelTemp";
             this.tableLayoutPanelTemp.RowCount = 1;
             this.tableLayoutPanelTemp.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelTemp.Size = new System.Drawing.Size(368, 26);
+            this.tableLayoutPanelTemp.Size = new System.Drawing.Size(368, 34);
             this.tableLayoutPanelTemp.TabIndex = 9;
             // 
             // txtLimitTemp
@@ -389,7 +389,7 @@ namespace AgingTestSystem.Dialogs
             this.txtLimitTemp.Location = new System.Drawing.Point(3, 3);
             this.txtLimitTemp.MaxLength = 3;
             this.txtLimitTemp.Name = "txtLimitTemp";
-            this.txtLimitTemp.Size = new System.Drawing.Size(214, 21);
+            this.txtLimitTemp.Size = new System.Drawing.Size(214, 29);
             this.txtLimitTemp.TabIndex = 0;
             this.txtLimitTemp.Text = "50";
             // 
@@ -425,11 +425,11 @@ namespace AgingTestSystem.Dialogs
             this.tableLayoutPanelPressure.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 40F));
             this.tableLayoutPanelPressure.Controls.Add(this.txtNegativePressure, 0, 0);
             this.tableLayoutPanelPressure.Controls.Add(this.lblPressureUnit, 1, 0);
-            this.tableLayoutPanelPressure.Location = new System.Drawing.Point(103, 167);
+            this.tableLayoutPanelPressure.Location = new System.Drawing.Point(103, 163);
             this.tableLayoutPanelPressure.Name = "tableLayoutPanelPressure";
             this.tableLayoutPanelPressure.RowCount = 1;
             this.tableLayoutPanelPressure.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelPressure.Size = new System.Drawing.Size(368, 26);
+            this.tableLayoutPanelPressure.Size = new System.Drawing.Size(368, 34);
             this.tableLayoutPanelPressure.TabIndex = 11;
             // 
             // txtNegativePressure
@@ -438,7 +438,7 @@ namespace AgingTestSystem.Dialogs
             this.txtNegativePressure.Location = new System.Drawing.Point(3, 3);
             this.txtNegativePressure.MaxLength = 7;
             this.txtNegativePressure.Name = "txtNegativePressure";
-            this.txtNegativePressure.Size = new System.Drawing.Size(214, 21);
+            this.txtNegativePressure.Size = new System.Drawing.Size(214, 29);
             this.txtNegativePressure.TabIndex = 0;
             // 
             // lblPressureUnit
@@ -470,7 +470,7 @@ namespace AgingTestSystem.Dialogs
             this.txtDisplayMode.Location = new System.Drawing.Point(103, 207);
             this.txtDisplayMode.MaxLength = 50;
             this.txtDisplayMode.Name = "txtDisplayMode";
-            this.txtDisplayMode.Size = new System.Drawing.Size(368, 21);
+            this.txtDisplayMode.Size = new System.Drawing.Size(368, 29);
             this.txtDisplayMode.TabIndex = 13;
             // 
             // panelButtons
@@ -518,9 +518,11 @@ namespace AgingTestSystem.Dialogs
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(480, 320);
+            this.ClientSize = new System.Drawing.Size(480, 360);
             // 【V1.71】Dock 布局自适应放大；禁缩小（MinimumSize=ClientSize），防挤坏。
-            this.MinimumSize = new System.Drawing.Size(480, 320);
+            // 【V1.72.6】320 高时第 6 行（显示模式，Percent）被 5×40 挤到 0 高整行消失，
+            // 窗加高 40（内容区 280→320 = 5×40 + 显示行 40 + 按钮 80），显示行回到 40。
+            this.MinimumSize = new System.Drawing.Size(480, 360);
             // 【V1.71】UIForm 自绘蓝标题：Dock=Fill 布局加顶 Pad 避开标题区。
             this.Padding = new System.Windows.Forms.Padding(2, 38, 2, 2);
             this.Controls.Add(this.tableLayoutPanelMain);

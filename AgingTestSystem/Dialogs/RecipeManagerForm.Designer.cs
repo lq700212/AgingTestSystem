@@ -243,7 +243,7 @@ namespace AgingTestSystem.Dialogs
             // 新建默认=全局 AlarmPressureThresholdKPa（构造传入），存什么定格什么，无魔法值。
             //
             this.lblNegativePressure.AutoSize = true;
-            this.lblNegativePressure.Location = new System.Drawing.Point(30, 208);
+            this.lblNegativePressure.Location = new System.Drawing.Point(30, 211);
             this.lblNegativePressure.Name = "lblNegativePressure";
             this.lblNegativePressure.Size = new System.Drawing.Size(65, 12);
             this.lblNegativePressure.TabIndex = 0;
@@ -253,7 +253,7 @@ namespace AgingTestSystem.Dialogs
             //
             this.nudNegativePressure.DecimalPlaces = 1;
             this.nudNegativePressure.Increment = 0.5M;
-            this.nudNegativePressure.Location = new System.Drawing.Point(120, 204);
+            this.nudNegativePressure.Location = new System.Drawing.Point(120, 207);
             this.nudNegativePressure.Maximum = new decimal(new int[] {
             9999,
             0,
@@ -272,7 +272,7 @@ namespace AgingTestSystem.Dialogs
             // lblNegativePressureUnit
             //
             this.lblNegativePressureUnit.AutoSize = true;
-            this.lblNegativePressureUnit.Location = new System.Drawing.Point(192, 208);
+            this.lblNegativePressureUnit.Location = new System.Drawing.Point(192, 211);
             this.lblNegativePressureUnit.Name = "lblNegativePressureUnit";
             this.lblNegativePressureUnit.Size = new System.Drawing.Size(23, 12);
             this.lblNegativePressureUnit.TabIndex = 0;
@@ -284,7 +284,7 @@ namespace AgingTestSystem.Dialogs
             // 不参与任何判定；工位透传走 SetStationRecipe（见 DeviceManager）。
             //
             this.lblDisplayMode.AutoSize = true;
-            this.lblDisplayMode.Location = new System.Drawing.Point(30, 236);
+            this.lblDisplayMode.Location = new System.Drawing.Point(30, 249);
             this.lblDisplayMode.Name = "lblDisplayMode";
             this.lblDisplayMode.Size = new System.Drawing.Size(65, 12);
             this.lblDisplayMode.TabIndex = 0;
@@ -292,10 +292,10 @@ namespace AgingTestSystem.Dialogs
             //
             // txtDisplayMode
             //
-            this.txtDisplayMode.Location = new System.Drawing.Point(120, 232);
+            this.txtDisplayMode.Location = new System.Drawing.Point(120, 241);
             this.txtDisplayMode.MaxLength = 50;
             this.txtDisplayMode.Name = "txtDisplayMode";
-            this.txtDisplayMode.Size = new System.Drawing.Size(200, 21);
+            this.txtDisplayMode.Size = new System.Drawing.Size(200, 29);
             this.txtDisplayMode.TabIndex = 14;
             //
             // lblStartTime
@@ -441,9 +441,9 @@ namespace AgingTestSystem.Dialogs
             //
             // txtRecipeName
             //
-            this.txtRecipeName.Location = new System.Drawing.Point(120, 72);
+            this.txtRecipeName.Location = new System.Drawing.Point(120, 67);
             this.txtRecipeName.Name = "txtRecipeName";
-            this.txtRecipeName.Size = new System.Drawing.Size(180, 21);
+            this.txtRecipeName.Size = new System.Drawing.Size(180, 29);
             this.txtRecipeName.TabIndex = 2;
             //
             // lblRecipeSettings
