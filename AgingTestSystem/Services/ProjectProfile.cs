@@ -58,7 +58,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 当前生效的项目名（读 App.config 的 ActiveProject；为空/缺省回 "Default"）。
+        /// 当前生效的项目名（读 App.config 的 ActiveProject；为空/缺省回 "烧屏测试"）。
         /// 大小写保留原样，目录名即项目名。
         /// </summary>
         public static string ActiveProfileName
@@ -68,7 +68,7 @@ namespace AgingTestSystem.Services
                 string raw = null;
                 try { raw = ConfigurationManager.AppSettings["ActiveProject"]; }
                 catch { raw = null; }
-                if (string.IsNullOrWhiteSpace(raw)) return "Default";
+                if (string.IsNullOrWhiteSpace(raw)) return "烧屏测试";
                 return raw.Trim();
             }
         }
@@ -91,10 +91,10 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 启动时确保档案就绪（MainForm 读任何运行时文件之前调用）：
-        /// 1) 无 ActiveProject → 指向 Default 并写回 exe.config（机器指针初始化）；
+        /// 1) 无 ActiveProject → 指向 烧屏测试 并写回 exe.config（机器指针初始化）；
         /// 2) 项目目录不存在 → 创建。
         /// 【V1.68 改干净】删掉了"老文件搬家"：项目未上线，没有 V1.67 前的老用户，
-        /// 程序目录下的散文件一律视为垃圾不再认——要是启动后配方空了，去 Projects/Default
+        /// 程序目录下的散文件一律视为垃圾不再认——要是启动后配方空了，去 Projects/烧屏测试
         /// 里建，不要从根目录捡（两份数据源是 Suspicion 之源）。
         /// </summary>
         /// <returns>生效的项目名</returns>
@@ -102,7 +102,7 @@ namespace AgingTestSystem.Services
         {
             string name = ActiveProfileName;
 
-            // 1) 指针初始化：没配过就写 Default（只写一次，以后用户在"项目切换"里改）
+            // 1) 指针初始化：没配过就写 烧屏测试（只写一次，以后用户在"项目切换"里改）
             try
             {
                 if (string.IsNullOrWhiteSpace(ConfigurationManager.AppSettings["ActiveProject"]))

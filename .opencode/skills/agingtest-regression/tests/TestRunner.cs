@@ -1753,6 +1753,8 @@ namespace AgingTestSystem.Tests
             try { Directory.Delete(System.IO.Path.Combine(ProjectProfile.ProjectsRoot, tmpName), true); }
             catch { }
             Check("临时项目已清理", !ProjectProfile.ListProfiles().Contains(tmpName));
+            // 【V1.72.9】缺省项目名=烧屏测试（harness 无 ActiveProject 配置，稳定回缺省）
+            Check("缺省项目名=烧屏测试", ProjectProfile.ActiveProfileName == "烧屏测试");
 
             // ── ProjectPolicyStore.Save/Load 往返（写当前项目 Policy.json，隔离目录） ──
             string policyPath = ProjectPolicyStore.PolicyFilePath;
