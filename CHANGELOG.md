@@ -3,6 +3,23 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.72.5 — 测试窗屏幕居中 + 配方窗标签输入防叠（2026-09-12，用户点名）
+
+### 改动范围
+- `Dialogs/FanTestForm.Designer.cs`、`Dialogs/CommunicationTestForm.Designer.cs` —
+  `StartPosition` 由 `CenterParent` 改为 `CenterScreen`（两窗均 `Show(this)` 非模态打开，
+  原来相对主窗居中，用户要求打开即屏幕居中）。
+- `Dialogs/RecipeManagerForm.Designer.cs` — 右侧输入列整体右移 25px
+  （首列 X 95→120，冒号/单位/后序列同步平移，内部 2~3px 间距不变）：
+  左侧标签 `AutoSize=true` 且未定字体，Sunny UILabel 默认 12pt 宋体下
+  "配方名称："类 5 字标签实宽约 80px（右边缘 ~110+内边距），与 X=95 的输入框
+  重叠约 15px；右移后间隙约 7px（≥5px 口径，V1.72.3 同款血泪）。
+  最宽的显示模式框右边缘 320 ＜ 面板宽 376，无溢出。
+
+### 验证
+- 构建一次通过（仅一条既有 MesReporter 警告，与本次无关）。
+- `build_and_test.ps1 -Affected`：构建 + 冒烟（存活 18s）+ 回归子集 150 断言全绿。
+
 ## V1.72.4 — 分级回归：小改只测影响面（2026-09-12，无产品改动，纯测试基建）
 
 ### 改动范围

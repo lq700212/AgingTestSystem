@@ -216,7 +216,7 @@ namespace AgingTestSystem.Dialogs
             //
             this.nudLimitTemp.DecimalPlaces = 1;
             this.nudLimitTemp.Increment = 0.5M;
-            this.nudLimitTemp.Location = new System.Drawing.Point(95, 176);
+            this.nudLimitTemp.Location = new System.Drawing.Point(120, 176);
             this.nudLimitTemp.Maximum = new decimal(new int[] {
             300,
             0,
@@ -230,7 +230,7 @@ namespace AgingTestSystem.Dialogs
             // lblLimitTempUnit
             //
             this.lblLimitTempUnit.AutoSize = true;
-            this.lblLimitTempUnit.Location = new System.Drawing.Point(167, 182);
+            this.lblLimitTempUnit.Location = new System.Drawing.Point(192, 182);
             this.lblLimitTempUnit.Name = "lblLimitTempUnit";
             this.lblLimitTempUnit.Size = new System.Drawing.Size(12, 12);
             this.lblLimitTempUnit.TabIndex = 0;
@@ -253,7 +253,7 @@ namespace AgingTestSystem.Dialogs
             //
             this.nudNegativePressure.DecimalPlaces = 1;
             this.nudNegativePressure.Increment = 0.5M;
-            this.nudNegativePressure.Location = new System.Drawing.Point(95, 204);
+            this.nudNegativePressure.Location = new System.Drawing.Point(120, 204);
             this.nudNegativePressure.Maximum = new decimal(new int[] {
             9999,
             0,
@@ -272,7 +272,7 @@ namespace AgingTestSystem.Dialogs
             // lblNegativePressureUnit
             //
             this.lblNegativePressureUnit.AutoSize = true;
-            this.lblNegativePressureUnit.Location = new System.Drawing.Point(167, 208);
+            this.lblNegativePressureUnit.Location = new System.Drawing.Point(192, 208);
             this.lblNegativePressureUnit.Name = "lblNegativePressureUnit";
             this.lblNegativePressureUnit.Size = new System.Drawing.Size(23, 12);
             this.lblNegativePressureUnit.TabIndex = 0;
@@ -292,7 +292,7 @@ namespace AgingTestSystem.Dialogs
             //
             // txtDisplayMode
             //
-            this.txtDisplayMode.Location = new System.Drawing.Point(95, 232);
+            this.txtDisplayMode.Location = new System.Drawing.Point(120, 232);
             this.txtDisplayMode.MaxLength = 50;
             this.txtDisplayMode.Name = "txtDisplayMode";
             this.txtDisplayMode.Size = new System.Drawing.Size(200, 21);
@@ -309,7 +309,7 @@ namespace AgingTestSystem.Dialogs
             //
             // nudStartHours
             //
-            this.nudStartHours.Location = new System.Drawing.Point(95, 141);
+            this.nudStartHours.Location = new System.Drawing.Point(120, 141);
             this.nudStartHours.Maximum = new decimal(new int[] {
             99,
             0,
@@ -323,7 +323,7 @@ namespace AgingTestSystem.Dialogs
             // lblStartHoursUnit - 启动时间：时与分之间的冒号分隔符（V1.28 由"时"单位改为":"）
             //
             this.lblStartHoursUnit.AutoSize = true;
-            this.lblStartHoursUnit.Location = new System.Drawing.Point(145, 145);
+            this.lblStartHoursUnit.Location = new System.Drawing.Point(170, 145);
             this.lblStartHoursUnit.Name = "lblStartHoursUnit";
             this.lblStartHoursUnit.Size = new System.Drawing.Size(6, 12);
             this.lblStartHoursUnit.TabIndex = 0;
@@ -331,7 +331,7 @@ namespace AgingTestSystem.Dialogs
             //
             // nudStartMinutes
             //
-            this.nudStartMinutes.Location = new System.Drawing.Point(159, 141);
+            this.nudStartMinutes.Location = new System.Drawing.Point(184, 141);
             this.nudStartMinutes.Maximum = new decimal(new int[] {
             59,
             0,
@@ -345,7 +345,7 @@ namespace AgingTestSystem.Dialogs
             // lblStartMinutesUnit - 启动时间：分与秒之间的冒号分隔符（V1.28 由"分"单位改为":"）
             //
             this.lblStartMinutesUnit.AutoSize = true;
-            this.lblStartMinutesUnit.Location = new System.Drawing.Point(209, 145);
+            this.lblStartMinutesUnit.Location = new System.Drawing.Point(234, 145);
             this.lblStartMinutesUnit.Name = "lblStartMinutesUnit";
             this.lblStartMinutesUnit.Size = new System.Drawing.Size(6, 12);
             this.lblStartMinutesUnit.TabIndex = 0;
@@ -353,7 +353,7 @@ namespace AgingTestSystem.Dialogs
             //
             // nudStartSeconds
             //
-            this.nudStartSeconds.Location = new System.Drawing.Point(223, 141);
+            this.nudStartSeconds.Location = new System.Drawing.Point(248, 141);
             this.nudStartSeconds.Maximum = new decimal(new int[] {
             59,
             0,
@@ -375,7 +375,7 @@ namespace AgingTestSystem.Dialogs
             //
             // nudDelayHours
             //
-            this.nudDelayHours.Location = new System.Drawing.Point(95, 106);
+            this.nudDelayHours.Location = new System.Drawing.Point(120, 106);
             this.nudDelayHours.Maximum = new decimal(new int[] {
             99,
             0,
@@ -389,7 +389,7 @@ namespace AgingTestSystem.Dialogs
             // lblDelayHoursUnit - 延时时间：时与分之间的冒号分隔符（V1.28 由"时"单位改为":"）
             //
             this.lblDelayHoursUnit.AutoSize = true;
-            this.lblDelayHoursUnit.Location = new System.Drawing.Point(145, 110);
+            this.lblDelayHoursUnit.Location = new System.Drawing.Point(170, 110);
             this.lblDelayHoursUnit.Name = "lblDelayHoursUnit";
             this.lblDelayHoursUnit.Size = new System.Drawing.Size(6, 12);
             this.lblDelayHoursUnit.TabIndex = 0;
@@ -397,7 +397,7 @@ namespace AgingTestSystem.Dialogs
             //
             // nudDelayMinutes
             //
-            this.nudDelayMinutes.Location = new System.Drawing.Point(159, 106);
+            this.nudDelayMinutes.Location = new System.Drawing.Point(184, 106);
             this.nudDelayMinutes.Maximum = new decimal(new int[] {
             59,
             0,
@@ -411,7 +411,7 @@ namespace AgingTestSystem.Dialogs
             // lblDelayMinutesUnit - 延时时间：分与秒之间的冒号分隔符（V1.28 由"分"单位改为":"）
             //
             this.lblDelayMinutesUnit.AutoSize = true;
-            this.lblDelayMinutesUnit.Location = new System.Drawing.Point(209, 110);
+            this.lblDelayMinutesUnit.Location = new System.Drawing.Point(234, 110);
             this.lblDelayMinutesUnit.Name = "lblDelayMinutesUnit";
             this.lblDelayMinutesUnit.Size = new System.Drawing.Size(6, 12);
             this.lblDelayMinutesUnit.TabIndex = 0;
@@ -419,7 +419,7 @@ namespace AgingTestSystem.Dialogs
             //
             // nudDelaySeconds
             //
-            this.nudDelaySeconds.Location = new System.Drawing.Point(223, 106);
+            this.nudDelaySeconds.Location = new System.Drawing.Point(248, 106);
             this.nudDelaySeconds.Maximum = new decimal(new int[] {
             59,
             0,
@@ -441,7 +441,7 @@ namespace AgingTestSystem.Dialogs
             //
             // txtRecipeName
             //
-            this.txtRecipeName.Location = new System.Drawing.Point(95, 72);
+            this.txtRecipeName.Location = new System.Drawing.Point(120, 72);
             this.txtRecipeName.Name = "txtRecipeName";
             this.txtRecipeName.Size = new System.Drawing.Size(180, 21);
             this.txtRecipeName.TabIndex = 2;

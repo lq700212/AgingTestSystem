@@ -405,7 +405,7 @@ namespace AgingTestSystem.Dialogs
             this.MinimumSize = new System.Drawing.Size(780, 1000);
             this.Name = "CommunicationTestForm";
             this.ShowIcon = false;
-            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Style = Sunny.UI.UIStyle.Custom;
             this.Text = "通讯测试";
             this.TitleFont = new System.Drawing.Font("微软雅黑", 12F, System.Drawing.FontStyle.Bold);

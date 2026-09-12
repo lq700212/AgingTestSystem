@@ -463,7 +463,7 @@ namespace AgingTestSystem.Dialogs
             this.MinimizeBox = false;
             this.Name = "FanTestForm";
             this.ShowIcon = false;
-            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Style = Sunny.UI.UIStyle.Custom;
             this.Text = "冷却送风机通讯测试";
             this.TitleFont = new System.Drawing.Font("微软雅黑", 12F, System.Drawing.FontStyle.Bold);
