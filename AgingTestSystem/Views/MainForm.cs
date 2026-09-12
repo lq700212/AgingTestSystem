@@ -533,6 +533,9 @@ namespace AgingTestSystem.Views
             {
                 popup.Deactivate -= deactivateHandler;
                 popup.KeyDown -= keyDownHandler;
+                // 【V1.72.13】非模态关闭后释放（与设置窗三 popup 同病根：Close 不释放
+                // 非模态窗体；这里虽是原生 Button 不炸跨线程，不释放就是纯泄漏，顺手收掉）
+                popup.Dispose();
             };
 
             // ===== 7. 显示弹出窗体（非模态，不阻塞主窗体） =====
