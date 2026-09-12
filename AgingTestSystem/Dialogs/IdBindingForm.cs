@@ -60,7 +60,7 @@ namespace AgingTestSystem.Dialogs
     /// - SN：扫码枪自动识别（非 2 位数字）或手动输入，不能为空
     /// - 产品列表：同一工位编号只能绑定一个SN，重复则覆盖确认
     /// </summary>
-    public partial class IdBindingForm : Form
+    public partial class IdBindingForm : Sunny.UI.UIForm
     {
         /// <summary>
         /// 产品绑定信息类
@@ -138,6 +138,7 @@ namespace AgingTestSystem.Dialogs
             txtLot.Text = lotNumber;
             txtLot.ReadOnly = true;
             txtLot.BackColor = System.Drawing.Color.LightGray;
+            txtLot.FillColor = System.Drawing.Color.LightGray;   // 【V1.71】Sunny 框渲染走 FillColor，同步设灰（深色下走主题映射回深灰）
 
             // 【V1.16】启用扫码枪时订阅扫码完成事件，实现 SN 自动填充
             // 注意：扫码事件已在 UI 线程触发（ScannerService 内部已封送），可直接更新控件

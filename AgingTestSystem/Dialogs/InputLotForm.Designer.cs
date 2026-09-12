@@ -26,18 +26,18 @@ namespace AgingTestSystem.Dialogs
 
         private void InitializeComponent()
         {
-            this.lblTitle = new System.Windows.Forms.Label();
-            this.lblLot = new System.Windows.Forms.Label();
-            this.txtLot = new System.Windows.Forms.TextBox();
-            this.btnOK = new System.Windows.Forms.Button();
-            this.btnCancel = new System.Windows.Forms.Button();
+            this.lblTitle = new Sunny.UI.UILabel();
+            this.lblLot = new Sunny.UI.UILabel();
+            this.txtLot = new Sunny.UI.UITextBox();
+            this.btnOK = new Sunny.UI.UIButton();
+            this.btnCancel = new Sunny.UI.UIButton();
             this.SuspendLayout();
             // 
             // lblTitle
             // 
             this.lblTitle.AutoSize = true;
             this.lblTitle.Font = new System.Drawing.Font("微软雅黑", 10F, System.Drawing.FontStyle.Bold);
-            this.lblTitle.Location = new System.Drawing.Point(15, 15);
+            this.lblTitle.Location = new System.Drawing.Point(15, 50);
             this.lblTitle.Name = "lblTitle";
             this.lblTitle.Size = new System.Drawing.Size(93, 19);
             this.lblTitle.TabIndex = 0;
@@ -46,7 +46,7 @@ namespace AgingTestSystem.Dialogs
             // lblLot
             // 
             this.lblLot.AutoSize = true;
-            this.lblLot.Location = new System.Drawing.Point(40, 60);
+            this.lblLot.Location = new System.Drawing.Point(40, 95);
             this.lblLot.Name = "lblLot";
             this.lblLot.Size = new System.Drawing.Size(41, 12);
             this.lblLot.TabIndex = 1;
@@ -54,24 +54,32 @@ namespace AgingTestSystem.Dialogs
             // 
             // txtLot
             // 
-            this.txtLot.Location = new System.Drawing.Point(90, 57);
+            this.txtLot.Location = new System.Drawing.Point(90, 92);
             this.txtLot.Name = "txtLot";
             this.txtLot.Size = new System.Drawing.Size(280, 21);
             this.txtLot.TabIndex = 2;
             this.txtLot.KeyDown += new System.Windows.Forms.KeyEventHandler(this.txtLot_KeyDown);
             // 
-            // btnOK
-            // 
-            this.btnOK.Location = new System.Drawing.Point(80, 145);
+            // btnOK - 确定（语义绿，与其它弹窗确认按钮统一走 Custom+FillColor）
+            //
+            this.btnOK.FillColor = System.Drawing.Color.LimeGreen;
+            this.btnOK.RectColor = System.Drawing.Color.LimeGreen;
+            this.btnOK.ForeColor = System.Drawing.Color.White;
+            this.btnOK.Style = Sunny.UI.UIStyle.Custom;
+            this.btnOK.Location = new System.Drawing.Point(80, 180);
             this.btnOK.Name = "btnOK";
             this.btnOK.Size = new System.Drawing.Size(100, 30);
             this.btnOK.TabIndex = 4;
             this.btnOK.Text = "确定";
             this.btnOK.Click += new System.EventHandler(this.btnOK_Click);
             // 
-            // btnCancel
-            // 
-            this.btnCancel.Location = new System.Drawing.Point(200, 145);
+            // btnCancel - 取消（语义灰）
+            //
+            this.btnCancel.FillColor = System.Drawing.Color.DimGray;
+            this.btnCancel.RectColor = System.Drawing.Color.DimGray;
+            this.btnCancel.ForeColor = System.Drawing.Color.White;
+            this.btnCancel.Style = Sunny.UI.UIStyle.Custom;
+            this.btnCancel.Location = new System.Drawing.Point(200, 180);
             this.btnCancel.Name = "btnCancel";
             this.btnCancel.Size = new System.Drawing.Size(100, 30);
             this.btnCancel.TabIndex = 5;
@@ -82,13 +90,15 @@ namespace AgingTestSystem.Dialogs
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(385, 195);
+            this.ClientSize = new System.Drawing.Size(385, 230);
+            // 【V1.71】绝对布局：禁缩小（MinimumSize=ClientSize），防缩坏布局；可放大。
+            this.MinimumSize = new System.Drawing.Size(385, 230);
             this.Controls.Add(this.lblTitle);
             this.Controls.Add(this.lblLot);
             this.Controls.Add(this.txtLot);
             this.Controls.Add(this.btnOK);
             this.Controls.Add(this.btnCancel);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
+            // 【V1.71】UIForm 自绘蓝标题：删 FormBorderStyle，内容整体下移 35px。
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.Name = "InputLotForm";
@@ -101,10 +111,10 @@ namespace AgingTestSystem.Dialogs
 
         #endregion
 
-        private System.Windows.Forms.Label lblTitle;
-        private System.Windows.Forms.Label lblLot;
-        private System.Windows.Forms.TextBox txtLot;
-        private System.Windows.Forms.Button btnOK;
-        private System.Windows.Forms.Button btnCancel;
+        private Sunny.UI.UILabel lblTitle;
+        private Sunny.UI.UILabel lblLot;
+        private Sunny.UI.UITextBox txtLot;
+        private Sunny.UI.UIButton btnOK;
+        private Sunny.UI.UIButton btnCancel;
     }
 }

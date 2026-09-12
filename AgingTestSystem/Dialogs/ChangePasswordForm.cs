@@ -36,7 +36,7 @@ namespace AgingTestSystem.Dialogs
     /// │          [确认]    [取消]     │ ← btnConfirm / btnCancel
     /// └──────────────────────────────┘
     ///</summary>
-    public partial class ChangePasswordForm : Form
+    public partial class ChangePasswordForm : Sunny.UI.UIForm
     {
         /// <summary>用户管理器（提供修改密码功能）</summary>
         private readonly UserManager _userManager;

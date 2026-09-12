@@ -44,28 +44,28 @@
 
         private void InitializeComponent()
         {
-            this.lblTitle = new System.Windows.Forms.Label();
-            this.lblRole = new System.Windows.Forms.Label();
-            this.cboRole = new System.Windows.Forms.ComboBox();
-            this.lblCurrentUsername = new System.Windows.Forms.Label();
-            this.lblCurrentUsernameValue = new System.Windows.Forms.Label();
-            this.lblUsername = new System.Windows.Forms.Label();
-            this.cboUsername = new System.Windows.Forms.ComboBox();
-            this.lblNewPassword = new System.Windows.Forms.Label();
-            this.txtNewPassword = new System.Windows.Forms.TextBox();
-            this.lblConfirmPassword = new System.Windows.Forms.Label();
-            this.txtConfirmPassword = new System.Windows.Forms.TextBox();
-            this.btnAddAccount = new System.Windows.Forms.Button();
-            this.btnDeleteAccount = new System.Windows.Forms.Button();
-            this.btnApply = new System.Windows.Forms.Button();
-            this.btnClose = new System.Windows.Forms.Button();
+            this.lblTitle = new Sunny.UI.UILabel();
+            this.lblRole = new Sunny.UI.UILabel();
+            this.cboRole = new Sunny.UI.UIComboBox();
+            this.lblCurrentUsername = new Sunny.UI.UILabel();
+            this.lblCurrentUsernameValue = new Sunny.UI.UILabel();
+            this.lblUsername = new Sunny.UI.UILabel();
+            this.cboUsername = new Sunny.UI.UIComboBox();
+            this.lblNewPassword = new Sunny.UI.UILabel();
+            this.txtNewPassword = new Sunny.UI.UITextBox();
+            this.lblConfirmPassword = new Sunny.UI.UILabel();
+            this.txtConfirmPassword = new Sunny.UI.UITextBox();
+            this.btnAddAccount = new Sunny.UI.UIButton();
+            this.btnDeleteAccount = new Sunny.UI.UIButton();
+            this.btnApply = new Sunny.UI.UIButton();
+            this.btnClose = new Sunny.UI.UIButton();
             this.SuspendLayout();
             //
             // lblTitle - 标题
             //
             this.lblTitle.AutoSize = true;
             this.lblTitle.Font = new System.Drawing.Font("微软雅黑", 11F, System.Drawing.FontStyle.Bold);
-            this.lblTitle.Location = new System.Drawing.Point(120, 20);
+            this.lblTitle.Location = new System.Drawing.Point(120, 55);
             this.lblTitle.Name = "lblTitle";
             this.lblTitle.Size = new System.Drawing.Size(135, 20);
             this.lblTitle.TabIndex = 0;
@@ -75,7 +75,7 @@
             //
             this.lblRole.AutoSize = true;
             this.lblRole.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.lblRole.Location = new System.Drawing.Point(30, 62);
+            this.lblRole.Location = new System.Drawing.Point(30, 97);
             this.lblRole.Name = "lblRole";
             this.lblRole.Size = new System.Drawing.Size(35, 17);
             this.lblRole.TabIndex = 1;
@@ -83,13 +83,13 @@
             //
             // cboRole - 角色选择下拉框（操作员/技术员）
             //
-            this.cboRole.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.cboRole.DropDownStyle = Sunny.UI.UIDropDownStyle.DropDownList;
             this.cboRole.Font = new System.Drawing.Font("微软雅黑", 9F);
             this.cboRole.FormattingEnabled = true;
             this.cboRole.Items.AddRange(new object[] {
                 "操作员",
                 "技术员"});
-            this.cboRole.Location = new System.Drawing.Point(120, 59);
+            this.cboRole.Location = new System.Drawing.Point(120, 94);
             this.cboRole.Name = "cboRole";
             this.cboRole.Size = new System.Drawing.Size(220, 25);
             this.cboRole.TabIndex = 2;
@@ -99,7 +99,7 @@
             //
             this.lblCurrentUsername.AutoSize = true;
             this.lblCurrentUsername.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.lblCurrentUsername.Location = new System.Drawing.Point(30, 97);
+            this.lblCurrentUsername.Location = new System.Drawing.Point(30, 132);
             this.lblCurrentUsername.Name = "lblCurrentUsername";
             this.lblCurrentUsername.Size = new System.Drawing.Size(84, 17);
             this.lblCurrentUsername.TabIndex = 3;
@@ -111,7 +111,7 @@
             this.lblCurrentUsernameValue.AutoSize = true;
             this.lblCurrentUsernameValue.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Bold);
             this.lblCurrentUsernameValue.ForeColor = System.Drawing.Color.Green;
-            this.lblCurrentUsernameValue.Location = new System.Drawing.Point(120, 97);
+            this.lblCurrentUsernameValue.Location = new System.Drawing.Point(120, 132);
             this.lblCurrentUsernameValue.Name = "lblCurrentUsernameValue";
             this.lblCurrentUsernameValue.Size = new System.Drawing.Size(39, 17);
             this.lblCurrentUsernameValue.TabIndex = 4;
@@ -121,7 +121,7 @@
             //
             this.lblUsername.AutoSize = true;
             this.lblUsername.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.lblUsername.Location = new System.Drawing.Point(30, 132);
+            this.lblUsername.Location = new System.Drawing.Point(30, 167);
             this.lblUsername.Name = "lblUsername";
             this.lblUsername.Size = new System.Drawing.Size(54, 17);
             this.lblUsername.TabIndex = 5;
@@ -131,10 +131,10 @@
             // 点击展开显示当前角色下已创建的全部账号，供选择要修改的目标账号；
             // 也可直接输入新用户名（用于改用户名）。
             //
-            this.cboUsername.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDown;
+            this.cboUsername.DropDownStyle = Sunny.UI.UIDropDownStyle.DropDown;
             this.cboUsername.Font = new System.Drawing.Font("微软雅黑", 9F);
             this.cboUsername.FormattingEnabled = true;
-            this.cboUsername.Location = new System.Drawing.Point(120, 129);
+            this.cboUsername.Location = new System.Drawing.Point(120, 164);
             this.cboUsername.Name = "cboUsername";
             this.cboUsername.Size = new System.Drawing.Size(220, 25);
             this.cboUsername.TabIndex = 6;
@@ -144,7 +144,7 @@
             //
             this.lblNewPassword.AutoSize = true;
             this.lblNewPassword.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.lblNewPassword.Location = new System.Drawing.Point(30, 167);
+            this.lblNewPassword.Location = new System.Drawing.Point(30, 202);
             this.lblNewPassword.Name = "lblNewPassword";
             this.lblNewPassword.Size = new System.Drawing.Size(54, 17);
             this.lblNewPassword.TabIndex = 7;
@@ -153,17 +153,17 @@
             // txtNewPassword - 新密码输入框（密码模式）
             //
             this.txtNewPassword.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.txtNewPassword.Location = new System.Drawing.Point(120, 164);
+            this.txtNewPassword.Location = new System.Drawing.Point(120, 199);
             this.txtNewPassword.Name = "txtNewPassword";
             this.txtNewPassword.Size = new System.Drawing.Size(220, 23);
             this.txtNewPassword.TabIndex = 8;
-            this.txtNewPassword.UseSystemPasswordChar = true;
+            this.txtNewPassword.PasswordChar = '*';
             //
             // lblConfirmPassword - "确认密码:"标签
             //
             this.lblConfirmPassword.AutoSize = true;
             this.lblConfirmPassword.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.lblConfirmPassword.Location = new System.Drawing.Point(30, 202);
+            this.lblConfirmPassword.Location = new System.Drawing.Point(30, 237);
             this.lblConfirmPassword.Name = "lblConfirmPassword";
             this.lblConfirmPassword.Size = new System.Drawing.Size(69, 17);
             this.lblConfirmPassword.TabIndex = 9;
@@ -172,66 +172,66 @@
             // txtConfirmPassword - 确认密码输入框（密码模式）
             //
             this.txtConfirmPassword.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.txtConfirmPassword.Location = new System.Drawing.Point(120, 199);
+            this.txtConfirmPassword.Location = new System.Drawing.Point(120, 234);
             this.txtConfirmPassword.Name = "txtConfirmPassword";
             this.txtConfirmPassword.Size = new System.Drawing.Size(220, 23);
             this.txtConfirmPassword.TabIndex = 10;
-            this.txtConfirmPassword.UseSystemPasswordChar = true;
+            this.txtConfirmPassword.PasswordChar = '*';
             //
             // btnAddAccount - 添加账号按钮
             //
-            this.btnAddAccount.BackColor = System.Drawing.Color.SteelBlue;
+            this.btnAddAccount.FillColor = System.Drawing.Color.SteelBlue;
+            this.btnAddAccount.RectColor = System.Drawing.Color.SteelBlue;
             this.btnAddAccount.ForeColor = System.Drawing.Color.White;
-            this.btnAddAccount.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnAddAccount.Style = Sunny.UI.UIStyle.Custom;
             this.btnAddAccount.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.btnAddAccount.Location = new System.Drawing.Point(20, 247);
+            this.btnAddAccount.Location = new System.Drawing.Point(20, 282);
             this.btnAddAccount.Name = "btnAddAccount";
             this.btnAddAccount.Size = new System.Drawing.Size(85, 32);
             this.btnAddAccount.TabIndex = 11;
             this.btnAddAccount.Text = "添加账号";
-            this.btnAddAccount.UseVisualStyleBackColor = false;
             this.btnAddAccount.Click += new System.EventHandler(this.btnAddAccount_Click);
             //
             // btnDeleteAccount - 删除账号按钮
             //
-            this.btnDeleteAccount.BackColor = System.Drawing.Color.OrangeRed;
+            this.btnDeleteAccount.FillColor = System.Drawing.Color.OrangeRed;
+            this.btnDeleteAccount.RectColor = System.Drawing.Color.OrangeRed;
             this.btnDeleteAccount.ForeColor = System.Drawing.Color.White;
-            this.btnDeleteAccount.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnDeleteAccount.Style = Sunny.UI.UIStyle.Custom;
             this.btnDeleteAccount.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.btnDeleteAccount.Location = new System.Drawing.Point(110, 247);
+            this.btnDeleteAccount.Location = new System.Drawing.Point(110, 282);
             this.btnDeleteAccount.Name = "btnDeleteAccount";
             this.btnDeleteAccount.Size = new System.Drawing.Size(85, 32);
             this.btnDeleteAccount.TabIndex = 12;
             this.btnDeleteAccount.Text = "删除账号";
-            this.btnDeleteAccount.UseVisualStyleBackColor = false;
             this.btnDeleteAccount.Click += new System.EventHandler(this.btnDeleteAccount_Click);
             //
             // btnApply - 应用修改按钮
             //
-            this.btnApply.BackColor = System.Drawing.Color.LimeGreen;
+            this.btnApply.FillColor = System.Drawing.Color.LimeGreen;
+            this.btnApply.RectColor = System.Drawing.Color.LimeGreen;
             this.btnApply.ForeColor = System.Drawing.Color.White;
-            this.btnApply.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnApply.Style = Sunny.UI.UIStyle.Custom;
             this.btnApply.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.btnApply.Location = new System.Drawing.Point(200, 247);
+            this.btnApply.Location = new System.Drawing.Point(200, 282);
             this.btnApply.Name = "btnApply";
             this.btnApply.Size = new System.Drawing.Size(85, 32);
             this.btnApply.TabIndex = 13;
             this.btnApply.Text = "应用修改";
-            this.btnApply.UseVisualStyleBackColor = false;
             this.btnApply.Click += new System.EventHandler(this.btnApply_Click);
             //
             // btnClose - 关闭按钮
             //
-            this.btnClose.BackColor = System.Drawing.Color.DimGray;
+            this.btnClose.FillColor = System.Drawing.Color.DimGray;
+            this.btnClose.RectColor = System.Drawing.Color.DimGray;
             this.btnClose.ForeColor = System.Drawing.Color.White;
-            this.btnClose.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnClose.Style = Sunny.UI.UIStyle.Custom;
             this.btnClose.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.btnClose.Location = new System.Drawing.Point(290, 247);
+            this.btnClose.Location = new System.Drawing.Point(290, 282);
             this.btnClose.Name = "btnClose";
             this.btnClose.Size = new System.Drawing.Size(90, 32);
             this.btnClose.TabIndex = 14;
             this.btnClose.Text = "关闭";
-            this.btnClose.UseVisualStyleBackColor = false;
             this.btnClose.Click += new System.EventHandler(this.btnClose_Click);
             //
             // UserManagementForm - 窗体属性
@@ -242,8 +242,10 @@
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
-            this.ClientSize = new System.Drawing.Size(400, 300);
+            this.ClientSize = new System.Drawing.Size(400, 335);
+            // 【V1.71】绝对布局：禁缩小（MinimumSize=ClientSize），防缩坏布局；可放大。
+            this.MinimumSize = new System.Drawing.Size(400, 335);
+            // 【V1.71】UIForm 自绘蓝标题：删 FormBorderStyle，内容整体下移 35px。
             this.Controls.Add(this.btnClose);
             this.Controls.Add(this.btnApply);
             this.Controls.Add(this.btnDeleteAccount);
@@ -269,20 +271,20 @@
         #endregion
 
         // ===== 控件字段声明 =====
-        private System.Windows.Forms.Label lblTitle;
-        private System.Windows.Forms.Label lblRole;
-        private System.Windows.Forms.ComboBox cboRole;
-        private System.Windows.Forms.Label lblCurrentUsername;
-        private System.Windows.Forms.Label lblCurrentUsernameValue;
-        private System.Windows.Forms.Label lblUsername;
-        private System.Windows.Forms.ComboBox cboUsername;
-        private System.Windows.Forms.Label lblNewPassword;
-        private System.Windows.Forms.TextBox txtNewPassword;
-        private System.Windows.Forms.Label lblConfirmPassword;
-        private System.Windows.Forms.TextBox txtConfirmPassword;
-        private System.Windows.Forms.Button btnAddAccount;
-        private System.Windows.Forms.Button btnDeleteAccount;
-        private System.Windows.Forms.Button btnApply;
-        private System.Windows.Forms.Button btnClose;
+        private Sunny.UI.UILabel lblTitle;
+        private Sunny.UI.UILabel lblRole;
+        private Sunny.UI.UIComboBox cboRole;
+        private Sunny.UI.UILabel lblCurrentUsername;
+        private Sunny.UI.UILabel lblCurrentUsernameValue;
+        private Sunny.UI.UILabel lblUsername;
+        private Sunny.UI.UIComboBox cboUsername;
+        private Sunny.UI.UILabel lblNewPassword;
+        private Sunny.UI.UITextBox txtNewPassword;
+        private Sunny.UI.UILabel lblConfirmPassword;
+        private Sunny.UI.UITextBox txtConfirmPassword;
+        private Sunny.UI.UIButton btnAddAccount;
+        private Sunny.UI.UIButton btnDeleteAccount;
+        private Sunny.UI.UIButton btnApply;
+        private Sunny.UI.UIButton btnClose;
     }
 }

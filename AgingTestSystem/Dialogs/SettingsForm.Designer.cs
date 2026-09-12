@@ -48,7 +48,7 @@ namespace AgingTestSystem.Dialogs
 
         private void InitializeComponent()
         {
-            this.lblHint = new System.Windows.Forms.Label();
+            this.lblHint = new Sunny.UI.UILabel();
             this.pnlHint = new Sunny.UI.UIPanel();
             this.pnlScroll = new Sunny.UI.UIPanel();
             this.pnlBottom = new Sunny.UI.UIPanel();
@@ -141,7 +141,8 @@ namespace AgingTestSystem.Dialogs
             this.Controls.Add(this.pnlScroll);
             this.Controls.Add(this.pnlBottom);
             this.Controls.Add(this.pnlHint);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.Sizable;
+            // 【V1.71】UIForm 自绘蓝标题：删 FormBorderStyle，Dock 布局加顶 Pad 避开标题区。
+            this.Padding = new System.Windows.Forms.Padding(2, 38, 2, 2);
             this.MinimumSize = new System.Drawing.Size(800, 500);
             this.Name = "SettingsForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
@@ -154,7 +155,7 @@ namespace AgingTestSystem.Dialogs
 
         #endregion
 
-        private System.Windows.Forms.Label lblHint;
+        private Sunny.UI.UILabel lblHint;
         private Sunny.UI.UIPanel pnlHint;
         private Sunny.UI.UIPanel pnlScroll;
         private Sunny.UI.UIPanel pnlBottom;

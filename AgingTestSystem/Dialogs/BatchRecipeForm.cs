@@ -57,7 +57,7 @@ namespace AgingTestSystem.Dialogs
     /// 4. 配方名称输入框支持自动检索：输入时弹出模糊匹配的已存在配方列表供选择，
     ///    选中后自动填写配方名称、延时时间、启动时间、极限温度、负压阈值、显示模式（V1.29 新增，V1.66 补后两项）。
     /// </summary>
-    public partial class BatchRecipeForm : Form
+    public partial class BatchRecipeForm : Sunny.UI.UIForm
     {
         /// <summary>
         /// 设备管理器（用于把配方应用（写入工位静态信息）到选中的工位面板）

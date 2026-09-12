@@ -3,6 +3,41 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.71 — 全窗 SunnyUI 小清新：UIForm 蓝标题 + 语义色保留（2026-09-11）
+
+### 改动范围
+- **16 个窗体 + 主窗体**：Form→UIForm（蓝标题），Label→UILabel，Button→UIButton，
+  TextBox→UITextBox，ComboBox→UIComboBox，GroupBox→UIGroupBox，
+  DataGridView→UIDataGridView（配方管理/历史记录）；日志框/CheckBox/NumericUpDown/
+  ListBox/状态条保持原生（参考 HJVision：日志多行滚动条行为不确定）。
+- **语义色一律保留**：绿确认/红急停删除/蓝动作经 Style=Custom+FillColor；
+  默认灰主按钮走 Sunny 蓝，取消关闭走 Sunny 灰；停止/复位/下料判定走 Gray 档，
+  深色经 ApplyOperationButtonsTheme 照旧 DimGray。
+- **标题禁区**：UIForm 自绘标题占 35px 客户区——绝对布局整体下移 35px + 加高，
+  Dock 布局加顶 Pad(38)；绝对窗加 MinimumSize=ClientSize 防缩坏；
+  Dock 窗 ID 绑定加高 35（否则保存按钮被挤出，harness 实测抓获）。
+- **ThemeManager**：Sunny 自绘控件按类型名走分支（UIButton 进按钮不动分支，
+  UITextBox/UIComboBox 进输入分支；UILabel 天然命中 Label 分支）；
+  新增 ApplyButtonColors（原生走 BackColor，Sunny 走 Custom+FillColor）与
+  GetEffectiveButtonColors（下拉菜单继承宿主显示色）。
+- **附带清理**：公共参数保存按钮改语义绿，V1.60.4 DimGray 特例与
+  GetSaveButtonThemeColors 删除（绿两边都清晰）；配方检索框 provider 泛化为
+  Control（原生/Sunny 通吃，光标定位走反射）；保存逻辑抽 PersistChanges
+  （驾驶舱共用，落盘语义一份——抽取时行为逐行对过，零回归）。
+
+### 为什么这么改
+- 客户更容易接受：全软件同一套蓝标题 + 白底 + 蓝按钮，现场演示不露怯。
+  有意不做的：字体统一换雅黑（动 AutoScaleDimensions，DPI 风险大，下次）、
+  MessageBox 换肤（系统弹窗管不着，家规）、自绘大画布/圆形灯/预览画布（自己管颜色）。
+
+### 验证
+- `build_and_test.ps1` 全绿（构建 + 冒烟 + **1158 回归**，0 失败；V1.70 的 1134 + 新增 24：
+  ThemeManager Sunny 分支 + PersistChanges 统一路 + 驾驶舱构造/检索框泛化）。
+- harness 像素目检 16 窗：主窗深/浅 + 14 弹窗全截帧，布局/颜色/语义逐一过；
+  抓到真 bug 2 个：MainForm 27 行块编辑吞掉 3 个 `new` 行（构造即 NRE，
+  已补 + 全仓扫声明/实例化配对）；ID 绑定保存按钮被标题区挤出（已加高）。
+  教训已沉淀：多行块编辑必须逐行核对（Edit 工具会模糊匹配吞间隔行）。
+
 ## V1.70 — 流程驾驶舱：固定拓扑可视化 + 点节点改配置（2026-09-11）
 
 ### 改动范围

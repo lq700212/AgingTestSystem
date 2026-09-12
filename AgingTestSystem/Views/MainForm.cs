@@ -73,7 +73,7 @@ namespace AgingTestSystem.Views
     ///    使用完整命名空间路径，避免设计器因 using 语句解析失败而找不到基类
     /// 2. 将所有 .cs 文件保存为 UTF-8 with BOM 编码（见编码转换脚本）
     /// </remarks>
-    public partial class MainForm : System.Windows.Forms.Form
+    public partial class MainForm : Sunny.UI.UIForm
     {
         /// <summary>
         /// 【V1.58.1】右侧状态按钮区宽度的兜底绝对值（写死在本窗体，不放在 HomeLayoutConfig）。
@@ -378,7 +378,8 @@ namespace AgingTestSystem.Views
             // 算法：菜单栏行高 - tableLayoutPanelMenu 上下 Margin(3×2) - 按钮上下 Margin(3×2)。
             foreach (Control ctl in tableLayoutPanelMenu.Controls)
             {
-                if (ctl is Button btn)
+                // 【V1.71】菜单按钮已换 Sunny UIButton（不是原生 Button 子类，is Button 认不出）
+                if (ctl is Sunny.UI.UIButton btn)
                 {
                     btn.Height = layout.MenuHeight - 12;
                 }
@@ -403,8 +404,8 @@ namespace AgingTestSystem.Views
 
             foreach (Control ctl in groupBoxOperation.Controls)
             {
-                // 只处理操作按钮（都是普通 Button；若以后加入非按钮控件需排除）
-                if (ctl is Button btn && btn != null)
+                // 只处理操作按钮（【V1.71】已换 Sunny UIButton；若以后加入非按钮控件需排除）
+                if (ctl is Sunny.UI.UIButton btn && btn != null)
                 {
                     btn.Width = buttonWidth;
                 }
@@ -427,7 +428,7 @@ namespace AgingTestSystem.Views
         /// </summary>
         /// <param name="hostButton">触发下拉的主按钮，菜单将显示在按钮下方</param>
         /// <param name="items">菜单项数组，每项包含文本和点击处理程序</param>
-        private void ShowDropdownPopup(Button hostButton, (string Text, EventHandler ClickHandler)[] items)
+        private void ShowDropdownPopup(Control hostButton, (string Text, EventHandler ClickHandler)[] items)
         {
             // ===== 1. 创建弹出窗体（无边框） =====
             var popup = new Form
@@ -464,6 +465,11 @@ namespace AgingTestSystem.Views
             }
 
             // ===== 4. 创建每个菜单项按钮（样式和主按钮一致） =====
+            // 【V1.71】宿主已换 Sunny UIButton：BackColor 读出来是底衬不是显示色，
+            // 用 ThemeManager.GetEffectiveButtonColors 读真实显示色（FillColor）。
+            Color hostBack;
+            Color hostFore;
+            ThemeManager.GetEffectiveButtonColors(hostButton, out hostBack, out hostFore);
             for (int i = 0; i < items.Length; i++)
             {
                 var item = items[i];
@@ -473,8 +479,8 @@ namespace AgingTestSystem.Views
                     Text = item.Text,                          // 菜单项文本
                     Dock = DockStyle.Fill,                     // 填满单元格
                     Margin = new Padding(0),                   // 无外边距，紧贴相邻项
-                    BackColor = hostButton.BackColor,          // 继承主按钮背景色（绿色）
-                    ForeColor = hostButton.ForeColor,          // 继承主按钮文字色（白色）
+                    BackColor = hostBack,                      // 继承主按钮显示底色
+                    ForeColor = hostFore,                      // 继承主按钮文字色
                     FlatStyle = FlatStyle.Flat,                // 扁平化样式
                     Cursor = Cursors.Hand,                     // 鼠标悬停显示手型
                     Font = hostButton.Font                     // 继承主按钮字体
@@ -2083,19 +2089,17 @@ namespace AgingTestSystem.Views
             GetOperationButtonThemeColors(ThemeManager.IsDark, out back, out fore);
             if (btnStopRun != null)
             {
-                btnStopRun.BackColor = back;
-                btnStopRun.ForeColor = fore;
+                ThemeManager.ApplyButtonColors(btnStopRun, back, fore);
             }
             if (btnResetAlarm != null)
             {
-                btnResetAlarm.BackColor = back;
-                btnResetAlarm.ForeColor = fore;
+                ThemeManager.ApplyButtonColors(btnResetAlarm, back, fore);
             }
             // 【V1.67】下料判定同为无语义默认灰，随它俩一起换肤
             if (btnUnloadJudge != null)
             {
-                btnUnloadJudge.BackColor = back;
-                btnUnloadJudge.ForeColor = fore;
+                // 【V1.71】按钮已换 Sunny：BackColor 画不出来，走 ApplyButtonColors。
+                ThemeManager.ApplyButtonColors(btnUnloadJudge, back, fore);
             }
         }
 

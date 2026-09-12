@@ -2391,6 +2391,57 @@ namespace AgingTestSystem.Tests
                 }
                 catch { }
             }
+
+            // ── 驾驶舱窗体构造不断言弹窗（V1.71：构造即跑全部编辑器创建链，NRE 当场现形） ──
+            {
+                var cfg = new DeviceConfig();
+                DeviceManager dmCockpit = null;
+                Views.FlowCockpitForm cockpit = null;
+                try
+                {
+                    dmCockpit = new DeviceManager(cfg);
+                    cockpit = new Views.FlowCockpitForm(cfg, dmCockpit, true);
+                    Check("驾驶舱构造成功", cockpit != null);
+                    Check("初态未选中无保存",
+                        cockpit.SavedKeys != null && cockpit.SavedKeys.Count == 0);
+                }
+                finally
+                {
+                    try { if (cockpit != null) cockpit.Dispose(); } catch { }
+                    try { if (dmCockpit != null) dmCockpit.Dispose(); } catch { }
+                }
+            }
+
+            // ── 检索框光标定位（V1.71 provider 泛化 Control：原生与 Sunny 同名属性） ──
+            // provider 是 internal 类，走程序集按名取类型（与 ValidateValue 反射同套路）
+            {
+                var provType = typeof(DeviceConfig).Assembly.GetType(
+                    "AgingTestSystem.Services.RecipeAutoCompleteProvider");
+                Check("反射找到 provider 类型", provType != null);
+                var miCaret = provType != null ? provType.GetMethod("SetCaretToEnd",
+                    BindingFlags.NonPublic | BindingFlags.Static) : null;
+                Check("反射找到 SetCaretToEnd", miCaret != null);
+                if (miCaret != null)
+                {
+                    var tb = new TextBox { Text = "abc" };
+                    miCaret.Invoke(null, new object[] { tb });
+                    Check("原生框光标到末尾",
+                        tb.SelectionStart == 3 && tb.SelectionLength == 0);
+                    var stxt = new Sunny.UI.UITextBox { Text = "abc" };
+                    bool sunnyOk = true;
+                    try { miCaret.Invoke(null, new object[] { stxt }); }
+                    catch { sunnyOk = false; }
+                    Check("Sunny框光标调用不抛", sunnyOk);
+                    Check("Sunny框光标到末尾",
+                        stxt.SelectionStart == 3 && stxt.SelectionLength == 0);
+                    bool panelOk = true;
+                    try { miCaret.Invoke(null, new object[] { new Panel() }); }
+                    catch { panelOk = false; }
+                    Check("无光标属性控件静默跳过", panelOk);
+                    tb.Dispose();
+                    stxt.Dispose();
+                }
+            }
         }
 
         /// <summary>轮询等待（MesTests 用：后台线程投递需等待；超时返回 false）</summary>
@@ -2603,6 +2654,96 @@ namespace AgingTestSystem.Tests
                         && boolKeys.Contains("MesEnabled")
                         && boolKeys.Contains("MesMockEnabled")
                         && boolKeys.Contains("SkipVacuum"));
+                }
+            }
+
+            // —— PersistChanges 统一保存路（V1.70 重构锁：拦截语义与按钮时代逐字一致） ——
+            // 写 exe.config 与 Policy.json：harness 运行目录隔离（run 临时目录），
+            // 用完备份还原，不污染后续模块。
+            EnterCleanDir();
+            {
+                string policyPath = ProjectPolicyStore.PolicyFilePath;
+                bool hadPolicy = File.Exists(policyPath);
+                string policyBackup = hadPolicy ? File.ReadAllText(policyPath) : null;
+                string exeConfig = AppDomain.CurrentDomain.BaseDirectory + "TestRunner.exe.config";
+                // 注：exe.config 可能不存在（首次运行），备份判空处理
+                bool hadExeCfg = File.Exists(exeConfig);
+                string exeBackup = hadExeCfg ? File.ReadAllText(exeConfig) : null;
+                try
+                {
+                    // 1) 矛盾组合被拦（联停开+上限0），且不写文件不改内存
+                    var c1 = new DeviceConfig();
+                    SettingsForm.PersistResult r1;
+                    string e1;
+                    bool ok1 = SettingsForm.PersistChanges(c1,
+                        new Dictionary<string, string> { { "FanTempShutdownEnabled", "true" } },
+                        out r1, out e1);
+                    Check("矛盾组合拦截", !ok1 && r1 == null && e1 != null && e1.Contains("上限"));
+                    Check("拦截后内存不动", c1.FanTempShutdownEnabled == false);
+
+                    // 2) MES 开关无地址被拦
+                    var c2 = new DeviceConfig();
+                    SettingsForm.PersistResult r2;
+                    string e2;
+                    bool ok2 = SettingsForm.PersistChanges(c2,
+                        new Dictionary<string, string> { { "MesEnabled", "true" } },
+                        out r2, out e2);
+                    Check("MES无地址拦截", !ok2 && e2 != null && e2.Contains("MesEndpoint"));
+
+                    // 3) 策略键写 Policy.json + 内存热回写
+                    var c3 = new DeviceConfig();
+                    SettingsForm.PersistResult r3;
+                    string e3;
+                    bool ok3 = SettingsForm.PersistChanges(c3,
+                        new Dictionary<string, string> { { "ZeroDurationPolicy", "Block" } },
+                        out r3, out e3);
+                    Check("策略保存成功", ok3 && e3 == null && r3 != null
+                        && r3.SavedKeys.Contains("ZeroDurationPolicy"));
+                    Check("策略内存热回写", c3.ZeroDurationPolicy == ZeroDurationPolicy.Block);
+                    Check("策略落盘Policy.json",
+                        File.Exists(policyPath)
+                        && File.ReadAllText(policyPath).Contains("Block"));
+
+                    // 4) 机器键写 exe.config + 内存热回写
+                    var c4 = new DeviceConfig();
+                    SettingsForm.PersistResult r4;
+                    string e4;
+                    bool ok4 = SettingsForm.PersistChanges(c4,
+                        new Dictionary<string, string> { { "CollectInterval", "2000" } },
+                        out r4, out e4);
+                    Check("机器键保存成功", ok4 && r4 != null);
+                    Check("机器键内存热回写", c4.CollectInterval == 2000);
+                    Check("机器键落盘exe.config",
+                        File.Exists(exeConfig) && File.ReadAllText(exeConfig).Contains("CollectInterval"));
+
+                    // 5) 空改动直接成功（无文件写入也无报错）
+                    var c5 = new DeviceConfig();
+                    SettingsForm.PersistResult r5;
+                    string e5;
+                    Check("空改动成功",
+                        SettingsForm.PersistChanges(c5,
+                            new Dictionary<string, string>(), out r5, out e5)
+                        && r5 != null && r5.SavedKeys.Count == 0);
+
+                    // 6) null 参数 fail-fast（不抛）
+                    SettingsForm.PersistResult r6 = null;
+                    string e6 = null;
+                    bool ok6 = false;
+                    try { ok6 = SettingsForm.PersistChanges(null, null, out r6, out e6); }
+                    catch { ok6 = true; /* 不应抛 */ }
+                    Check("null参数拦截不抛", !ok6 && e6 != null);
+                }
+                finally
+                {
+                    try
+                    {
+                        if (hadPolicy) File.WriteAllText(policyPath, policyBackup);
+                        else if (File.Exists(policyPath)) File.Delete(policyPath);
+                        if (hadExeCfg) File.WriteAllText(exeConfig, exeBackup);
+                        else if (File.Exists(exeConfig)) File.Delete(exeConfig);
+                        System.Configuration.ConfigurationManager.RefreshSection("appSettings");
+                    }
+                    catch { }
                 }
             }
 
@@ -2959,8 +3100,8 @@ namespace AgingTestSystem.Tests
             try
             {
                 var txtLot = typeof(InputLotForm).GetField("txtLot",
-                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(lotForm) as TextBox;
-                Check("反射拿到批号框", txtLot != null);
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(lotForm) as Sunny.UI.UITextBox;
+                Check("反射拿到批号框(V1.71 Sunny)", txtLot != null);
                 if (txtLot != null)
                 {
                     txtLot.Text = "  LOT-9 ";
@@ -2984,9 +3125,9 @@ namespace AgingTestSystem.Tests
                 var nudP = typeof(RecipeManagerForm).GetField("nudNegativePressure",
                     BindingFlags.NonPublic | BindingFlags.Instance).GetValue(rmForm) as NumericUpDown;
                 var txtM = typeof(RecipeManagerForm).GetField("txtDisplayMode",
-                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(rmForm) as TextBox;
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(rmForm) as Sunny.UI.UITextBox;
                 Check("负压框回填配方值", nudP != null && nudP.Value == 0m);
-                Check("显示模式框null回填空串", txtM != null && txtM.Text == "");
+                Check("显示模式框null回填空串(V1.71 Sunny)", txtM != null && txtM.Text == "");
                 var find = typeof(RecipeManagerForm).GetMethod("FindRecipeIndex",
                     BindingFlags.NonPublic | BindingFlags.Instance);
                 Check("反射找到 FindRecipeIndex", find != null);
@@ -3316,17 +3457,9 @@ namespace AgingTestSystem.Tests
                 offBack.ToArgb() == Color.LightGray.ToArgb() && offFore.ToArgb() == Color.Black.ToArgb(),
                 "实际=" + offBack + "/" + offFore);
 
-            // —— V1.60.4：公共参数保存按钮 + 布局预览画布底（纯函数，不 new 窗体就能断） ——
-            Color saveBack;
-            Color saveFore;
-            CommonParameterForm.GetSaveButtonThemeColors(true, out saveBack, out saveFore);
-            Check("深色公共参数保存按钮灰底白字",
-                saveBack.ToArgb() == Color.DimGray.ToArgb() && saveFore.ToArgb() == Color.White.ToArgb(),
-                "实际=" + saveBack + "/" + saveFore);
-            CommonParameterForm.GetSaveButtonThemeColors(false, out saveBack, out saveFore);
-            Check("浅色公共参数保存按钮保持原生(Empty=不动)",
-                saveBack == Color.Empty && saveFore == Color.Empty,
-                "实际=" + saveBack + "/" + saveFore);
+            // —— V1.60.4：布局预览画布底（纯函数，不 new 窗体就能断） ——
+            // （注：V1.71 公共参数保存按钮改语义绿，DimGray 特例与 GetSaveButtonThemeColors 已删除；
+            // Sunny 按钮语义色保护由上面的通用分支覆盖，不再单列。）
             Check("深色布局预览画布纯黑",
                 HomeLayoutEditorForm.GetPreviewBackColor(true).ToArgb() == Color.Black.ToArgb());
             Check("浅色布局预览画布白纸",
@@ -3370,6 +3503,47 @@ namespace AgingTestSystem.Tests
             Check("输入Control→深界面底",
                 ThemeManager.MapInputBack(SystemColors.Control, true).ToArgb()
                 == ThemeManager.DarkSurfaceBack.ToArgb());
+
+            // —— V1.71：SunnyUI 自绘控件换肤分支（UIForm 换肤配套，STA harness 直接 new） ——
+            var sBtn = new Sunny.UI.UIButton();
+            var sBtnSem = new Sunny.UI.UIButton();
+            ThemeManager.ApplyButtonColors(sBtnSem, Color.Crimson, Color.White);
+            var sTxt = new Sunny.UI.UITextBox();
+            var sCmb = new Sunny.UI.UIComboBox();
+            var sLbl = new Sunny.UI.UILabel();
+            var sPnl = new Sunny.UI.UIPanel();
+            sPnl.Controls.Add(sBtn);
+            sPnl.Controls.Add(sBtnSem);
+            sPnl.Controls.Add(sTxt);
+            sPnl.Controls.Add(sCmb);
+            sPnl.Controls.Add(sLbl);
+            Color sTxtBack0 = sTxt.BackColor;
+            Color sBtnFill0 = sBtn.FillColor;
+
+            ThemeManager.SetMode(AppThemeMode.Dark, false);
+            ThemeManager.ApplyTo(sPnl);
+            Check("Sunny按钮填充色从未被改动(语义色保护)",
+                sBtn.FillColor.ToArgb() == sBtnFill0.ToArgb());
+            Check("ApplyButtonColors写语义色(Style=Custom+FillColor)",
+                sBtnSem.FillColor.ToArgb() == Color.Crimson.ToArgb()
+                && sBtnSem.Style.ToString() == "Custom");
+            Check("深色Sunny输入框底变深",
+                sTxt.BackColor.ToArgb() == ThemeManager.DarkInputBack.ToArgb()
+                || sTxt.FillColor.ToArgb() == ThemeManager.DarkInputBack.ToArgb());
+            Check("深色Sunny下拉底变深",
+                sCmb.BackColor.ToArgb() == ThemeManager.DarkInputBack.ToArgb()
+                || sCmb.FillColor.ToArgb() == ThemeManager.DarkInputBack.ToArgb());
+            Check("深色Sunny标签字变浅",
+                sLbl.ForeColor.ToArgb() == ThemeManager.DarkText.ToArgb());
+
+            ThemeManager.SetMode(AppThemeMode.Light, false);
+            ThemeManager.ApplyTo(sPnl);
+            Check("浅色Sunny输入框底还原", sTxt.BackColor.ToArgb() == sTxtBack0.ToArgb());
+            Check("浅色语义按钮Fill保留",
+                sBtnSem.FillColor.ToArgb() == Color.Crimson.ToArgb());
+
+            ThemeManager.SetMode(AppThemeMode.Light, false); // 收尾复位
+            sPnl.Dispose();
         }
 
     }

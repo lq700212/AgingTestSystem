@@ -55,7 +55,7 @@ namespace AgingTestSystem.Dialogs
     /// 构造时传入设备管理器与共享配方列表，从缓存（优先）或采集缓存读取当前工位数据回显；
     /// SN / 配方 / 延时来自工位静态信息叠加后的缓存（与工位面板一致）。
     /// </summary>
-    public partial class StationSettingsForm : Form
+    public partial class StationSettingsForm : Sunny.UI.UIForm
     {
         /// <summary>设备管理器（用于读写工位数据 / 载台上电输出）</summary>
         private readonly DeviceManager _deviceManager;

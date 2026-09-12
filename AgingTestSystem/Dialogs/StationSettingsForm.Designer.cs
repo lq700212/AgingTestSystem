@@ -51,36 +51,36 @@ namespace AgingTestSystem.Dialogs
         private void InitializeComponent()
         {
             this.components = new System.ComponentModel.Container();
-            this.lblState = new System.Windows.Forms.Label();
-            this.txtState = new System.Windows.Forms.TextBox();
-            this.lblSN = new System.Windows.Forms.Label();
-            this.txtSN = new System.Windows.Forms.TextBox();
-            this.lblRecipe = new System.Windows.Forms.Label();
-            this.txtRecipe = new System.Windows.Forms.TextBox();
-            this.lblDelay = new System.Windows.Forms.Label();
+            this.lblState = new Sunny.UI.UILabel();
+            this.txtState = new Sunny.UI.UITextBox();
+            this.lblSN = new Sunny.UI.UILabel();
+            this.txtSN = new Sunny.UI.UITextBox();
+            this.lblRecipe = new Sunny.UI.UILabel();
+            this.txtRecipe = new Sunny.UI.UITextBox();
+            this.lblDelay = new Sunny.UI.UILabel();
             this.nudDelayHours = new System.Windows.Forms.NumericUpDown();
-            this.lblDelayColon1 = new System.Windows.Forms.Label();
+            this.lblDelayColon1 = new Sunny.UI.UILabel();
             this.nudDelayMinutes = new System.Windows.Forms.NumericUpDown();
-            this.lblDelayColon2 = new System.Windows.Forms.Label();
+            this.lblDelayColon2 = new Sunny.UI.UILabel();
             this.nudDelaySeconds = new System.Windows.Forms.NumericUpDown();
-            this.lblStart = new System.Windows.Forms.Label();
+            this.lblStart = new Sunny.UI.UILabel();
             this.nudStartHours = new System.Windows.Forms.NumericUpDown();
-            this.lblStartColon1 = new System.Windows.Forms.Label();
+            this.lblStartColon1 = new Sunny.UI.UILabel();
             this.nudStartMinutes = new System.Windows.Forms.NumericUpDown();
-            this.lblStartColon2 = new System.Windows.Forms.Label();
+            this.lblStartColon2 = new Sunny.UI.UILabel();
             this.nudStartSeconds = new System.Windows.Forms.NumericUpDown();
-            this.lblTemp = new System.Windows.Forms.Label();
+            this.lblTemp = new Sunny.UI.UILabel();
             this.nudTemp = new System.Windows.Forms.NumericUpDown();
-            this.lblPressure = new System.Windows.Forms.Label();
+            this.lblPressure = new Sunny.UI.UILabel();
             this.nudPressure = new System.Windows.Forms.NumericUpDown();
-            this.lblPressureUnit = new System.Windows.Forms.Label();
-            this.lblDisplayMode = new System.Windows.Forms.Label();
-            this.txtDisplayMode = new System.Windows.Forms.TextBox();
-            this.btnBreakVacuum = new System.Windows.Forms.Button();
-            this.btnPowerOff = new System.Windows.Forms.Button();
-            this.btnSave = new System.Windows.Forms.Button();
-            this.btnAddToQueue = new System.Windows.Forms.Button();
-            this.btnClose = new System.Windows.Forms.Button();
+            this.lblPressureUnit = new Sunny.UI.UILabel();
+            this.lblDisplayMode = new Sunny.UI.UILabel();
+            this.txtDisplayMode = new Sunny.UI.UITextBox();
+            this.btnBreakVacuum = new Sunny.UI.UIButton();
+            this.btnPowerOff = new Sunny.UI.UIButton();
+            this.btnSave = new Sunny.UI.UIButton();
+            this.btnAddToQueue = new Sunny.UI.UIButton();
+            this.btnClose = new Sunny.UI.UIButton();
             ((System.ComponentModel.ISupportInitialize)(this.nudDelayHours)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudDelayMinutes)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudDelaySeconds)).BeginInit();
@@ -94,7 +94,7 @@ namespace AgingTestSystem.Dialogs
             // lblState - "状态"设置项名称（左对齐，V1.18 只显示"状态"两字）
             //
             this.lblState.AutoSize = true;
-            this.lblState.Location = new System.Drawing.Point(30, 28);
+            this.lblState.Location = new System.Drawing.Point(30, 63);
             this.lblState.Name = "lblState";
             this.lblState.Size = new System.Drawing.Size(41, 12);
             this.lblState.TabIndex = 0;
@@ -102,7 +102,7 @@ namespace AgingTestSystem.Dialogs
             //
             // txtState - 状态显示输入框（只读，V1.18 显示中文状态：空闲/选中/繁忙/故障）
             //
-            this.txtState.Location = new System.Drawing.Point(150, 25);
+            this.txtState.Location = new System.Drawing.Point(150, 60);
             this.txtState.Name = "txtState";
             this.txtState.ReadOnly = true;
             this.txtState.Size = new System.Drawing.Size(180, 21);
@@ -112,7 +112,7 @@ namespace AgingTestSystem.Dialogs
             // lblSN - "SN"设置项名称（左对齐）
             //
             this.lblSN.AutoSize = true;
-            this.lblSN.Location = new System.Drawing.Point(30, 66);
+            this.lblSN.Location = new System.Drawing.Point(30, 101);
             this.lblSN.Name = "lblSN";
             this.lblSN.Size = new System.Drawing.Size(29, 12);
             this.lblSN.TabIndex = 2;
@@ -120,7 +120,7 @@ namespace AgingTestSystem.Dialogs
             //
             // txtSN - SN输入框
             //
-            this.txtSN.Location = new System.Drawing.Point(150, 63);
+            this.txtSN.Location = new System.Drawing.Point(150, 98);
             this.txtSN.Name = "txtSN";
             this.txtSN.Size = new System.Drawing.Size(180, 21);
             this.txtSN.TabIndex = 3;
@@ -128,7 +128,7 @@ namespace AgingTestSystem.Dialogs
             // lblRecipe - "配方"设置项名称（左对齐）
             //
             this.lblRecipe.AutoSize = true;
-            this.lblRecipe.Location = new System.Drawing.Point(30, 104);
+            this.lblRecipe.Location = new System.Drawing.Point(30, 139);
             this.lblRecipe.Name = "lblRecipe";
             this.lblRecipe.Size = new System.Drawing.Size(41, 12);
             this.lblRecipe.TabIndex = 4;
@@ -136,7 +136,7 @@ namespace AgingTestSystem.Dialogs
             //
             // txtRecipe - 配方输入框
             //
-            this.txtRecipe.Location = new System.Drawing.Point(150, 101);
+            this.txtRecipe.Location = new System.Drawing.Point(150, 136);
             this.txtRecipe.Name = "txtRecipe";
             this.txtRecipe.Size = new System.Drawing.Size(180, 21);
             this.txtRecipe.TabIndex = 5;
@@ -144,7 +144,7 @@ namespace AgingTestSystem.Dialogs
             // lblDelay - "延时时间"设置项名称（左对齐）
             //
             this.lblDelay.AutoSize = true;
-            this.lblDelay.Location = new System.Drawing.Point(30, 142);
+            this.lblDelay.Location = new System.Drawing.Point(30, 177);
             this.lblDelay.Name = "lblDelay";
             this.lblDelay.Size = new System.Drawing.Size(65, 12);
             this.lblDelay.TabIndex = 6;
@@ -152,7 +152,7 @@ namespace AgingTestSystem.Dialogs
             //
             // nudDelayHours - 延时时间-时（NumericUpDown，V1.28 由 TextBox 改）
             //
-            this.nudDelayHours.Location = new System.Drawing.Point(150, 136);
+            this.nudDelayHours.Location = new System.Drawing.Point(150, 171);
             this.nudDelayHours.Maximum = new decimal(new int[] {
             99,
             0,
@@ -166,7 +166,7 @@ namespace AgingTestSystem.Dialogs
             // lblDelayColon1 - 延时时间：时与分之间的冒号分隔符
             //
             this.lblDelayColon1.AutoSize = true;
-            this.lblDelayColon1.Location = new System.Drawing.Point(200, 140);
+            this.lblDelayColon1.Location = new System.Drawing.Point(200, 175);
             this.lblDelayColon1.Name = "lblDelayColon1";
             this.lblDelayColon1.Size = new System.Drawing.Size(6, 12);
             this.lblDelayColon1.TabIndex = 0;
@@ -174,7 +174,7 @@ namespace AgingTestSystem.Dialogs
             //
             // nudDelayMinutes - 延时时间-分（NumericUpDown）
             //
-            this.nudDelayMinutes.Location = new System.Drawing.Point(212, 136);
+            this.nudDelayMinutes.Location = new System.Drawing.Point(212, 171);
             this.nudDelayMinutes.Maximum = new decimal(new int[] {
             59,
             0,
@@ -188,7 +188,7 @@ namespace AgingTestSystem.Dialogs
             // lblDelayColon2 - 延时时间：分与秒之间的冒号分隔符
             //
             this.lblDelayColon2.AutoSize = true;
-            this.lblDelayColon2.Location = new System.Drawing.Point(262, 140);
+            this.lblDelayColon2.Location = new System.Drawing.Point(262, 175);
             this.lblDelayColon2.Name = "lblDelayColon2";
             this.lblDelayColon2.Size = new System.Drawing.Size(6, 12);
             this.lblDelayColon2.TabIndex = 0;
@@ -196,7 +196,7 @@ namespace AgingTestSystem.Dialogs
             //
             // nudDelaySeconds - 延时时间-秒（NumericUpDown）
             //
-            this.nudDelaySeconds.Location = new System.Drawing.Point(274, 136);
+            this.nudDelaySeconds.Location = new System.Drawing.Point(274, 171);
             this.nudDelaySeconds.Maximum = new decimal(new int[] {
             59,
             0,
@@ -210,7 +210,7 @@ namespace AgingTestSystem.Dialogs
             // lblStart - "启动时间"设置项名称（左对齐）
             //
             this.lblStart.AutoSize = true;
-            this.lblStart.Location = new System.Drawing.Point(30, 180);
+            this.lblStart.Location = new System.Drawing.Point(30, 215);
             this.lblStart.Name = "lblStart";
             this.lblStart.Size = new System.Drawing.Size(65, 12);
             this.lblStart.TabIndex = 8;
@@ -218,7 +218,7 @@ namespace AgingTestSystem.Dialogs
             //
             // nudStartHours - 启动时间-时（NumericUpDown，V1.28 由 TextBox 改）
             //
-            this.nudStartHours.Location = new System.Drawing.Point(150, 174);
+            this.nudStartHours.Location = new System.Drawing.Point(150, 209);
             this.nudStartHours.Maximum = new decimal(new int[] {
             99,
             0,
@@ -232,7 +232,7 @@ namespace AgingTestSystem.Dialogs
             // lblStartColon1 - 启动时间：时与分之间的冒号分隔符
             //
             this.lblStartColon1.AutoSize = true;
-            this.lblStartColon1.Location = new System.Drawing.Point(200, 178);
+            this.lblStartColon1.Location = new System.Drawing.Point(200, 213);
             this.lblStartColon1.Name = "lblStartColon1";
             this.lblStartColon1.Size = new System.Drawing.Size(6, 12);
             this.lblStartColon1.TabIndex = 0;
@@ -240,7 +240,7 @@ namespace AgingTestSystem.Dialogs
             //
             // nudStartMinutes - 启动时间-分（NumericUpDown）
             //
-            this.nudStartMinutes.Location = new System.Drawing.Point(212, 174);
+            this.nudStartMinutes.Location = new System.Drawing.Point(212, 209);
             this.nudStartMinutes.Maximum = new decimal(new int[] {
             59,
             0,
@@ -254,7 +254,7 @@ namespace AgingTestSystem.Dialogs
             // lblStartColon2 - 启动时间：分与秒之间的冒号分隔符
             //
             this.lblStartColon2.AutoSize = true;
-            this.lblStartColon2.Location = new System.Drawing.Point(262, 178);
+            this.lblStartColon2.Location = new System.Drawing.Point(262, 213);
             this.lblStartColon2.Name = "lblStartColon2";
             this.lblStartColon2.Size = new System.Drawing.Size(6, 12);
             this.lblStartColon2.TabIndex = 0;
@@ -262,7 +262,7 @@ namespace AgingTestSystem.Dialogs
             //
             // nudStartSeconds - 启动时间-秒（NumericUpDown）
             //
-            this.nudStartSeconds.Location = new System.Drawing.Point(274, 174);
+            this.nudStartSeconds.Location = new System.Drawing.Point(274, 209);
             this.nudStartSeconds.Maximum = new decimal(new int[] {
             59,
             0,
@@ -276,7 +276,7 @@ namespace AgingTestSystem.Dialogs
             // lblTemp - "极限温度"设置项名称（左对齐）
             //
             this.lblTemp.AutoSize = true;
-            this.lblTemp.Location = new System.Drawing.Point(30, 218);
+            this.lblTemp.Location = new System.Drawing.Point(30, 253);
             this.lblTemp.Name = "lblTemp";
             this.lblTemp.Size = new System.Drawing.Size(65, 12);
             this.lblTemp.TabIndex = 10;
@@ -288,7 +288,7 @@ namespace AgingTestSystem.Dialogs
             //
             this.nudTemp.DecimalPlaces = 1;
             this.nudTemp.Increment = 0.5M;
-            this.nudTemp.Location = new System.Drawing.Point(150, 215);
+            this.nudTemp.Location = new System.Drawing.Point(150, 250);
             this.nudTemp.Maximum = new decimal(new int[] {
             300,
             0,
@@ -305,7 +305,7 @@ namespace AgingTestSystem.Dialogs
             // 下发=框里是什么就是什么（存什么定格什么，无魔法值）。项目未上线无老包袱。
             //
             this.lblPressure.AutoSize = true;
-            this.lblPressure.Location = new System.Drawing.Point(30, 250);
+            this.lblPressure.Location = new System.Drawing.Point(30, 285);
             this.lblPressure.Name = "lblPressure";
             this.lblPressure.Size = new System.Drawing.Size(65, 12);
             this.lblPressure.TabIndex = 10;
@@ -316,7 +316,7 @@ namespace AgingTestSystem.Dialogs
             //
             this.nudPressure.DecimalPlaces = 1;
             this.nudPressure.Increment = 0.5M;
-            this.nudPressure.Location = new System.Drawing.Point(150, 247);
+            this.nudPressure.Location = new System.Drawing.Point(150, 282);
             this.nudPressure.Maximum = new decimal(new int[] {
             9999,
             0,
@@ -335,7 +335,7 @@ namespace AgingTestSystem.Dialogs
             // lblPressureUnit - 负压单位
             //
             this.lblPressureUnit.AutoSize = true;
-            this.lblPressureUnit.Location = new System.Drawing.Point(275, 250);
+            this.lblPressureUnit.Location = new System.Drawing.Point(275, 285);
             this.lblPressureUnit.Name = "lblPressureUnit";
             this.lblPressureUnit.Size = new System.Drawing.Size(23, 12);
             this.lblPressureUnit.TabIndex = 10;
@@ -346,7 +346,7 @@ namespace AgingTestSystem.Dialogs
             // 【V1.66】烧屏画面记录（自由文本）：回填优先级同负压；下发走 SetStationRecipe。
             //
             this.lblDisplayMode.AutoSize = true;
-            this.lblDisplayMode.Location = new System.Drawing.Point(30, 282);
+            this.lblDisplayMode.Location = new System.Drawing.Point(30, 317);
             this.lblDisplayMode.Name = "lblDisplayMode";
             this.lblDisplayMode.Size = new System.Drawing.Size(65, 12);
             this.lblDisplayMode.TabIndex = 10;
@@ -354,7 +354,7 @@ namespace AgingTestSystem.Dialogs
             //
             // txtDisplayMode - 显示模式输入框
             //
-            this.txtDisplayMode.Location = new System.Drawing.Point(150, 279);
+            this.txtDisplayMode.Location = new System.Drawing.Point(150, 314);
             this.txtDisplayMode.MaxLength = 50;
             this.txtDisplayMode.Name = "txtDisplayMode";
             this.txtDisplayMode.Size = new System.Drawing.Size(180, 21);
@@ -362,69 +362,77 @@ namespace AgingTestSystem.Dialogs
             //
             // btnBreakVacuum - 破空按钮（功能待确认）
             //
-            this.btnBreakVacuum.BackColor = System.Drawing.Color.DodgerBlue;
+            this.btnBreakVacuum.FillColor = System.Drawing.Color.DodgerBlue;
+            this.btnBreakVacuum.RectColor = System.Drawing.Color.DodgerBlue;
             this.btnBreakVacuum.ForeColor = System.Drawing.Color.White;
-            this.btnBreakVacuum.Location = new System.Drawing.Point(370, 25);
+            this.btnBreakVacuum.Style = Sunny.UI.UIStyle.Custom;
+            this.btnBreakVacuum.Location = new System.Drawing.Point(370, 60);
             this.btnBreakVacuum.Name = "btnBreakVacuum";
             this.btnBreakVacuum.Size = new System.Drawing.Size(90, 30);
             this.btnBreakVacuum.TabIndex = 12;
             this.btnBreakVacuum.Text = "破空";
-            this.btnBreakVacuum.UseVisualStyleBackColor = false;
             this.btnBreakVacuum.Click += new System.EventHandler(this.btnBreakVacuum_Click);
             //
             // btnPowerOff - 下电按钮（功能待确认）
             //
-            this.btnPowerOff.BackColor = System.Drawing.Color.DodgerBlue;
+            this.btnPowerOff.FillColor = System.Drawing.Color.DodgerBlue;
+            this.btnPowerOff.RectColor = System.Drawing.Color.DodgerBlue;
             this.btnPowerOff.ForeColor = System.Drawing.Color.White;
-            this.btnPowerOff.Location = new System.Drawing.Point(370, 66);
+            this.btnPowerOff.Style = Sunny.UI.UIStyle.Custom;
+            this.btnPowerOff.Location = new System.Drawing.Point(370, 101);
             this.btnPowerOff.Name = "btnPowerOff";
             this.btnPowerOff.Size = new System.Drawing.Size(90, 30);
             this.btnPowerOff.TabIndex = 13;
             this.btnPowerOff.Text = "下电";
-            this.btnPowerOff.UseVisualStyleBackColor = false;
             this.btnPowerOff.Click += new System.EventHandler(this.btnPowerOff_Click);
             //
             // btnSave - 保存按钮（功能待确认）
             //
-            this.btnSave.BackColor = System.Drawing.Color.LimeGreen;
+            this.btnSave.FillColor = System.Drawing.Color.LimeGreen;
+            this.btnSave.RectColor = System.Drawing.Color.LimeGreen;
             this.btnSave.ForeColor = System.Drawing.Color.White;
-            this.btnSave.Location = new System.Drawing.Point(370, 107);
+            this.btnSave.Style = Sunny.UI.UIStyle.Custom;
+            this.btnSave.Location = new System.Drawing.Point(370, 142);
             this.btnSave.Name = "btnSave";
             this.btnSave.Size = new System.Drawing.Size(90, 30);
             this.btnSave.TabIndex = 14;
             this.btnSave.Text = "保存";
-            this.btnSave.UseVisualStyleBackColor = false;
             this.btnSave.Click += new System.EventHandler(this.btnSave_Click);
             //
             // btnAddToQueue - 加入对列按钮（功能待确认）
             //
-            this.btnAddToQueue.BackColor = System.Drawing.Color.LimeGreen;
+            this.btnAddToQueue.FillColor = System.Drawing.Color.LimeGreen;
+            this.btnAddToQueue.RectColor = System.Drawing.Color.LimeGreen;
             this.btnAddToQueue.ForeColor = System.Drawing.Color.White;
-            this.btnAddToQueue.Location = new System.Drawing.Point(370, 148);
+            this.btnAddToQueue.Style = Sunny.UI.UIStyle.Custom;
+            this.btnAddToQueue.Location = new System.Drawing.Point(370, 183);
             this.btnAddToQueue.Name = "btnAddToQueue";
             this.btnAddToQueue.Size = new System.Drawing.Size(90, 30);
             this.btnAddToQueue.TabIndex = 15;
             this.btnAddToQueue.Text = "加入对列";
-            this.btnAddToQueue.UseVisualStyleBackColor = false;
             this.btnAddToQueue.Click += new System.EventHandler(this.btnAddToQueue_Click);
             //
             // btnClose - 关闭窗口按钮
             //
-            this.btnClose.BackColor = System.Drawing.Color.DimGray;
+            this.btnClose.FillColor = System.Drawing.Color.DimGray;
+            this.btnClose.RectColor = System.Drawing.Color.DimGray;
             this.btnClose.ForeColor = System.Drawing.Color.White;
-            this.btnClose.Location = new System.Drawing.Point(370, 189);
+            this.btnClose.Style = Sunny.UI.UIStyle.Custom;
+            this.btnClose.Location = new System.Drawing.Point(370, 224);
             this.btnClose.Name = "btnClose";
             this.btnClose.Size = new System.Drawing.Size(90, 30);
             this.btnClose.TabIndex = 16;
             this.btnClose.Text = "关闭窗口";
-            this.btnClose.UseVisualStyleBackColor = false;
             this.btnClose.Click += new System.EventHandler(this.btnClose_Click);
             //
             // StationSettingsForm - 窗体属性设置
             //
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(490, 315);
+            this.ClientSize = new System.Drawing.Size(490, 350);
+            // 【V1.71】绝对布局：禁缩小（MinimumSize=ClientSize），防缩坏布局；可放大。
+            this.MinimumSize = new System.Drawing.Size(490, 350);
+            // 【V1.71】UIForm 自绘蓝标题：删 FormBorderStyle，内容整体上移 35px 已逐项下移。
             this.Controls.Add(this.btnClose);
             this.Controls.Add(this.btnAddToQueue);
             this.Controls.Add(this.btnSave);
@@ -455,7 +463,6 @@ namespace AgingTestSystem.Dialogs
             this.Controls.Add(this.lblSN);
             this.Controls.Add(this.txtState);
             this.Controls.Add(this.lblState);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.Name = "StationSettingsForm";
@@ -478,64 +485,64 @@ namespace AgingTestSystem.Dialogs
 
         // 控件字段声明区域
         /// <summary>"状态"设置项名称标签</summary>
-        private System.Windows.Forms.Label lblState;
+        private Sunny.UI.UILabel lblState;
         /// <summary>状态显示输入框（只读）</summary>
-        private System.Windows.Forms.TextBox txtState;
+        private Sunny.UI.UITextBox txtState;
         /// <summary>"SN"设置项名称标签</summary>
-        private System.Windows.Forms.Label lblSN;
+        private Sunny.UI.UILabel lblSN;
         /// <summary>SN输入框</summary>
-        private System.Windows.Forms.TextBox txtSN;
+        private Sunny.UI.UITextBox txtSN;
         /// <summary>"配方"设置项名称标签</summary>
-        private System.Windows.Forms.Label lblRecipe;
+        private Sunny.UI.UILabel lblRecipe;
         /// <summary>配方输入框</summary>
-        private System.Windows.Forms.TextBox txtRecipe;
+        private Sunny.UI.UITextBox txtRecipe;
         /// <summary>"延时时间"设置项名称标签</summary>
-        private System.Windows.Forms.Label lblDelay;
+        private Sunny.UI.UILabel lblDelay;
         /// <summary>延时时间-时输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
         private System.Windows.Forms.NumericUpDown nudDelayHours;
         /// <summary>延时时间-时/分冒号分隔符</summary>
-        private System.Windows.Forms.Label lblDelayColon1;
+        private Sunny.UI.UILabel lblDelayColon1;
         /// <summary>延时时间-分输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
         private System.Windows.Forms.NumericUpDown nudDelayMinutes;
         /// <summary>延时时间-分/秒冒号分隔符</summary>
-        private System.Windows.Forms.Label lblDelayColon2;
+        private Sunny.UI.UILabel lblDelayColon2;
         /// <summary>延时时间-秒输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
         private System.Windows.Forms.NumericUpDown nudDelaySeconds;
         /// <summary>"启动时间"设置项名称标签</summary>
-        private System.Windows.Forms.Label lblStart;
+        private Sunny.UI.UILabel lblStart;
         /// <summary>启动时间-时输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
         private System.Windows.Forms.NumericUpDown nudStartHours;
         /// <summary>启动时间-时/分冒号分隔符</summary>
-        private System.Windows.Forms.Label lblStartColon1;
+        private Sunny.UI.UILabel lblStartColon1;
         /// <summary>启动时间-分输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
         private System.Windows.Forms.NumericUpDown nudStartMinutes;
         /// <summary>启动时间-分/秒冒号分隔符</summary>
-        private System.Windows.Forms.Label lblStartColon2;
+        private Sunny.UI.UILabel lblStartColon2;
         /// <summary>启动时间-秒输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
         private System.Windows.Forms.NumericUpDown nudStartSeconds;
         /// <summary>"极限温度"设置项名称标签</summary>
-        private System.Windows.Forms.Label lblTemp;
+        private Sunny.UI.UILabel lblTemp;
         /// <summary>极限温度输入（NumericUpDown，V1.63 由 TextBox 改，与配方管理窗对齐）</summary>
         private System.Windows.Forms.NumericUpDown nudTemp;
         /// <summary>"负压阈值"设置项名称标签（【V1.66】本工位真空工艺要求，kPa）</summary>
-        private System.Windows.Forms.Label lblPressure;
+        private Sunny.UI.UILabel lblPressure;
         /// <summary>负压阈值输入（NumericUpDown，V1.66：1位小数/步进0.5/范围±9999）</summary>
         private System.Windows.Forms.NumericUpDown nudPressure;
         /// <summary>负压单位标签（kPa）</summary>
-        private System.Windows.Forms.Label lblPressureUnit;
+        private Sunny.UI.UILabel lblPressureUnit;
         /// <summary>"显示模式"设置项名称标签（【V1.66】烧屏画面记录）</summary>
-        private System.Windows.Forms.Label lblDisplayMode;
+        private Sunny.UI.UILabel lblDisplayMode;
         /// <summary>显示模式输入框（【V1.66】自由文本，最长50）</summary>
-        private System.Windows.Forms.TextBox txtDisplayMode;
+        private Sunny.UI.UITextBox txtDisplayMode;
         /// <summary>破空按钮（功能待确认）</summary>
-        private System.Windows.Forms.Button btnBreakVacuum;
+        private Sunny.UI.UIButton btnBreakVacuum;
         /// <summary>下电按钮（功能待确认）</summary>
-        private System.Windows.Forms.Button btnPowerOff;
+        private Sunny.UI.UIButton btnPowerOff;
         /// <summary>保存按钮（功能待确认）</summary>
-        private System.Windows.Forms.Button btnSave;
+        private Sunny.UI.UIButton btnSave;
         /// <summary>加入对列按钮（功能待确认）</summary>
-        private System.Windows.Forms.Button btnAddToQueue;
+        private Sunny.UI.UIButton btnAddToQueue;
         /// <summary>关闭窗口按钮</summary>
-        private System.Windows.Forms.Button btnClose;
+        private Sunny.UI.UIButton btnClose;
     }
 }

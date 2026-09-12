@@ -62,7 +62,7 @@ namespace AgingTestSystem.Dialogs
     /// 添加/更新/删除每次操作成功后自动通过 <see cref="RecipeStorage"/> 把整个配方列表
     /// 写入程序运行目录下的 Recipes.json；主窗体启动时加载该文件（见 MainForm.LoadRecipes）。
     /// </summary>
-    public partial class RecipeManagerForm : Form
+    public partial class RecipeManagerForm : Sunny.UI.UIForm
     {
         /// <summary>
         /// 配方列表（由外部传入，修改会反映到外部列表）

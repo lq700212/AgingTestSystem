@@ -37,7 +37,7 @@ namespace AgingTestSystem.Dialogs
     /// └────────────────────────────────────────────────┘
     /// 说明：按选择的日期范围读取 Logs\TestLog_yyyyMMdd.csv 并展示。
     ///</summary>
-    public partial class HistoryRecordForm : Form
+    public partial class HistoryRecordForm : Sunny.UI.UIForm
     {
         /// <summary>
         /// 日志条目数据结构（与 CSV 列对应）

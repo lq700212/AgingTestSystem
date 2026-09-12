@@ -46,17 +46,17 @@ namespace AgingTestSystem.Views
     /// 缩放是纯视图态（不进存盘）；字体用 pt（自动随 DPI 放大）×zoom 缓存两档；
     /// 禁用 Graphics.ScaleTransform（TextRenderer/GDI 与变换矩阵行为不一致，家规）。
     /// </summary>
-    public class FlowCockpitForm : Form, IMessageFilter
+    public class FlowCockpitForm : Sunny.UI.UIForm, IMessageFilter
     {
         private readonly DeviceConfig _config;
         private readonly DeviceManager _deviceManager;
 
         private FlowCanvas _canvas;
         private Panel _pnlRight;
-        private Label _lblNodeTitle;
+        private Sunny.UI.UILabel _lblNodeTitle;
         private Panel _pnlEditors;
-        private Button _btnSaveNode;
-        private Label _lblStatus;
+        private Sunny.UI.UIButton _btnSaveNode;
+        private Sunny.UI.UILabel _lblStatus;
 
         private string _selectedId;
         private readonly Dictionary<string, Control> _editorControls = new Dictionary<string, Control>();
@@ -87,12 +87,14 @@ namespace AgingTestSystem.Views
             this.StartPosition = FormStartPosition.CenterParent;
             this.Size = new Size(1080, 700);
             this.MinimumSize = new Size(860, 560);
+            // 【V1.71】UIForm 自绘蓝标题：Dock 布局加顶 Pad 避开标题区。
+            this.Padding = new Padding(2, 38, 2, 2);
 
             // 右栏（固定 320px，Dock=Right 先加，画布 Fill 后加）
             _pnlRight = new Panel { Dock = DockStyle.Right, Width = 320 };
             this.Controls.Add(_pnlRight);
 
-            _lblNodeTitle = new Label
+            _lblNodeTitle = new Sunny.UI.UILabel
             {
                 Location = new Point(12, 12),
                 Size = new Size(296, 28),
@@ -108,7 +110,7 @@ namespace AgingTestSystem.Views
             };
             _pnlRight.Controls.Add(_pnlEditors);
 
-            _btnSaveNode = new Button
+            _btnSaveNode = new Sunny.UI.UIButton
             {
                 Location = new Point(12, 540),
                 Size = new Size(296, 32),
@@ -118,7 +120,7 @@ namespace AgingTestSystem.Views
             _btnSaveNode.Click += BtnSaveNode_Click;
             _pnlRight.Controls.Add(_btnSaveNode);
 
-            var btnResetLayout = new Button
+            var btnResetLayout = new Sunny.UI.UIButton
             {
                 Location = new Point(12, 578),
                 Size = new Size(144, 30),
@@ -131,11 +133,15 @@ namespace AgingTestSystem.Views
             };
             _pnlRight.Controls.Add(btnResetLayout);
 
-            var btnClose = new Button
+            var btnClose = new Sunny.UI.UIButton
             {
                 Location = new Point(164, 578),
                 Size = new Size(144, 30),
-                Text = "关闭"
+                Text = "关闭",
+                FillColor = Color.DimGray,
+                RectColor = Color.DimGray,
+                ForeColor = Color.White,
+                Style = Sunny.UI.UIStyle.Custom
             };
             btnClose.Click += (s, e) =>
             {
@@ -146,7 +152,7 @@ namespace AgingTestSystem.Views
             _pnlRight.Controls.Add(btnClose);
 
             // 状态条
-            _lblStatus = new Label
+            _lblStatus = new Sunny.UI.UILabel
             {
                 Dock = DockStyle.Bottom,
                 Height = 26,
@@ -277,7 +283,7 @@ namespace AgingTestSystem.Views
             {
                 _lblNodeTitle.Text = "未选中节点";
                 _btnSaveNode.Enabled = false;
-                var hint = new Label
+                var hint = new Sunny.UI.UILabel
                 {
                     Location = new Point(0, 0),
                     Size = new Size(270, 120),
@@ -302,7 +308,7 @@ namespace AgingTestSystem.Views
             int y = 0;
             if (!_canEdit)
             {
-                var ro = new Label
+                var ro = new Sunny.UI.UILabel
                 {
                     Location = new Point(0, y),
                     Size = new Size(270, 30),
@@ -315,7 +321,7 @@ namespace AgingTestSystem.Views
 
             foreach (FlowGraph.NodeKey key in def.Keys)
             {
-                var lbl = new Label
+                var lbl = new Sunny.UI.UILabel
                 {
                     Location = new Point(0, y),
                     Size = new Size(270, 20),
@@ -345,7 +351,7 @@ namespace AgingTestSystem.Views
 
             if (def.Keys.Count == 0)
             {
-                var info = new Label
+                var info = new Sunny.UI.UILabel
                 {
                     Location = new Point(0, y),
                     Size = new Size(270, 80),
@@ -365,7 +371,7 @@ namespace AgingTestSystem.Views
             _editorControls.Clear();
             _lblNodeTitle.Text = "连线（只读）";
             _btnSaveNode.Enabled = false;
-            var info = new Label
+            var info = new Sunny.UI.UILabel
             {
                 Location = new Point(0, 0),
                 Size = new Size(270, 160),
@@ -382,7 +388,7 @@ namespace AgingTestSystem.Views
             string current = GetConfigString(key);
             if (kind == FlowGraph.EditorKind.Bool)
             {
-                var cmb = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+                var cmb = new Sunny.UI.UIComboBox { DropDownStyle = Sunny.UI.UIDropDownStyle.DropDownList };
                 cmb.Items.Add(new FlowOpt("false", "false"));
                 cmb.Items.Add(new FlowOpt("true", "true"));
                 SelectOpt(cmb, current.Equals("true", StringComparison.OrdinalIgnoreCase) ? "true" : "false");
@@ -391,7 +397,7 @@ namespace AgingTestSystem.Views
             }
             if (kind == FlowGraph.EditorKind.Enum)
             {
-                var cmb = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+                var cmb = new Sunny.UI.UIComboBox { DropDownStyle = Sunny.UI.UIDropDownStyle.DropDownList };
                 Tuple<string, string>[] opts;
                 if (ProjectPolicyStore.EnumOptions.TryGetValue(key, out opts))
                 {
@@ -403,12 +409,12 @@ namespace AgingTestSystem.Views
             }
             if (kind == FlowGraph.EditorKind.Multiline)
             {
-                var txt = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical };
+                var txt = new Sunny.UI.UITextBox { Multiline = true, ShowScrollBar = true };
                 txt.Text = current;
                 txt.TextChanged += (s, e) => MarkDirty();
                 return txt;
             }
-            var box = new TextBox();
+            var box = new Sunny.UI.UITextBox();
             box.Text = current;
             box.TextChanged += (s, e) => MarkDirty();
             return box;
@@ -420,7 +426,7 @@ namespace AgingTestSystem.Views
             UpdateStatus("有未保存的修改。");
         }
 
-        private static void SelectOpt(ComboBox cmb, string value)
+        private static void SelectOpt(Sunny.UI.UIComboBox cmb, string value)
         {
             for (int i = 0; i < cmb.Items.Count; i++)
             {
@@ -524,14 +530,17 @@ namespace AgingTestSystem.Views
 
         private static string ReadEditor(Control editor)
         {
-            var cmb = editor as ComboBox;
+            var cmb = editor as Sunny.UI.UIComboBox;
             if (cmb != null)
             {
                 var o = cmb.SelectedItem as FlowOpt;
                 return o != null ? o.Value : (cmb.Text ?? "");
             }
-            var txt = editor as TextBox;
+            var txt = editor as Sunny.UI.UITextBox;
             if (txt != null) return (txt.Text ?? "").Trim();
+            // 兜底：未知编辑器类型读 Text（改干净：不留原生分支）
+            var any = editor as Control;
+            if (any != null) return (any.Text ?? "").Trim();
             return "";
         }
 

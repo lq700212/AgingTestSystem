@@ -64,35 +64,35 @@ namespace AgingTestSystem.Dialogs
         {
             this.tableLayoutPanelMain = new System.Windows.Forms.TableLayoutPanel();
             this.tableLayoutPanelInput = new System.Windows.Forms.TableLayoutPanel();
-            this.lblRecipeNameLabel = new System.Windows.Forms.Label();
-            this.txtRecipeName = new System.Windows.Forms.TextBox();
-            this.lblDelayTime1Label = new System.Windows.Forms.Label();
+            this.lblRecipeNameLabel = new Sunny.UI.UILabel();
+            this.txtRecipeName = new Sunny.UI.UITextBox();
+            this.lblDelayTime1Label = new Sunny.UI.UILabel();
             this.tableLayoutPanelDelay1 = new System.Windows.Forms.TableLayoutPanel();
             this.nudDelayHours = new System.Windows.Forms.NumericUpDown();
-            this.lblDelay1Colon1 = new System.Windows.Forms.Label();
+            this.lblDelay1Colon1 = new Sunny.UI.UILabel();
             this.nudDelayMinutes = new System.Windows.Forms.NumericUpDown();
-            this.lblDelay1Colon2 = new System.Windows.Forms.Label();
+            this.lblDelay1Colon2 = new Sunny.UI.UILabel();
             this.nudDelaySeconds = new System.Windows.Forms.NumericUpDown();
-            this.lblStartTimeLabel = new System.Windows.Forms.Label();
+            this.lblStartTimeLabel = new Sunny.UI.UILabel();
             this.tableLayoutPanelStart = new System.Windows.Forms.TableLayoutPanel();
             this.nudStartHours = new System.Windows.Forms.NumericUpDown();
-            this.lblStartColon1 = new System.Windows.Forms.Label();
+            this.lblStartColon1 = new Sunny.UI.UILabel();
             this.nudStartMinutes = new System.Windows.Forms.NumericUpDown();
-            this.lblStartColon2 = new System.Windows.Forms.Label();
+            this.lblStartColon2 = new Sunny.UI.UILabel();
             this.nudStartSeconds = new System.Windows.Forms.NumericUpDown();
-            this.lblLimitTempLabel = new System.Windows.Forms.Label();
+            this.lblLimitTempLabel = new Sunny.UI.UILabel();
             this.tableLayoutPanelTemp = new System.Windows.Forms.TableLayoutPanel();
-            this.txtLimitTemp = new System.Windows.Forms.TextBox();
-            this.lblTempUnit = new System.Windows.Forms.Label();
-            this.lblNegativePressureLabel = new System.Windows.Forms.Label();
+            this.txtLimitTemp = new Sunny.UI.UITextBox();
+            this.lblTempUnit = new Sunny.UI.UILabel();
+            this.lblNegativePressureLabel = new Sunny.UI.UILabel();
             this.tableLayoutPanelPressure = new System.Windows.Forms.TableLayoutPanel();
-            this.txtNegativePressure = new System.Windows.Forms.TextBox();
-            this.lblPressureUnit = new System.Windows.Forms.Label();
-            this.lblDisplayModeLabel = new System.Windows.Forms.Label();
-            this.txtDisplayMode = new System.Windows.Forms.TextBox();
+            this.txtNegativePressure = new Sunny.UI.UITextBox();
+            this.lblPressureUnit = new Sunny.UI.UILabel();
+            this.lblDisplayModeLabel = new Sunny.UI.UILabel();
+            this.txtDisplayMode = new Sunny.UI.UITextBox();
             this.panelButtons = new System.Windows.Forms.Panel();
-            this.btnAddToQueue = new System.Windows.Forms.Button();
-            this.btnClose = new System.Windows.Forms.Button();
+            this.btnAddToQueue = new Sunny.UI.UIButton();
+            this.btnClose = new Sunny.UI.UIButton();
             this.tableLayoutPanelMain.SuspendLayout();
             this.tableLayoutPanelInput.SuspendLayout();
             this.tableLayoutPanelDelay1.SuspendLayout();
@@ -486,6 +486,12 @@ namespace AgingTestSystem.Dialogs
             // 
             // btnAddToQueue
             // 
+            // btnAddToQueue - 加入队列（语义绿，与保存同款）
+            //
+            this.btnAddToQueue.FillColor = System.Drawing.Color.LimeGreen;
+            this.btnAddToQueue.RectColor = System.Drawing.Color.LimeGreen;
+            this.btnAddToQueue.ForeColor = System.Drawing.Color.White;
+            this.btnAddToQueue.Style = Sunny.UI.UIStyle.Custom;
             this.btnAddToQueue.Location = new System.Drawing.Point(150, 10);
             this.btnAddToQueue.Name = "btnAddToQueue";
             this.btnAddToQueue.Size = new System.Drawing.Size(170, 30);
@@ -495,6 +501,12 @@ namespace AgingTestSystem.Dialogs
             // 
             // btnClose
             // 
+            // btnClose - 关闭窗口（语义灰）
+            //
+            this.btnClose.FillColor = System.Drawing.Color.DimGray;
+            this.btnClose.RectColor = System.Drawing.Color.DimGray;
+            this.btnClose.ForeColor = System.Drawing.Color.White;
+            this.btnClose.Style = Sunny.UI.UIStyle.Custom;
             this.btnClose.Location = new System.Drawing.Point(150, 46);
             this.btnClose.Name = "btnClose";
             this.btnClose.Size = new System.Drawing.Size(170, 30);
@@ -507,6 +519,10 @@ namespace AgingTestSystem.Dialogs
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(480, 320);
+            // 【V1.71】Dock 布局自适应放大；禁缩小（MinimumSize=ClientSize），防挤坏。
+            this.MinimumSize = new System.Drawing.Size(480, 320);
+            // 【V1.71】UIForm 自绘蓝标题：Dock=Fill 布局加顶 Pad 避开标题区。
+            this.Padding = new System.Windows.Forms.Padding(2, 38, 2, 2);
             this.Controls.Add(this.tableLayoutPanelMain);
             this.Name = "BatchRecipeForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
@@ -543,62 +559,62 @@ namespace AgingTestSystem.Dialogs
         /// <summary>输入区域布局容器（6行：配方名称/延时时间/启动时间/极限温度/负压阈值/显示模式）</summary>
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelInput;
         /// <summary>"配方名称"标签</summary>
-        private System.Windows.Forms.Label lblRecipeNameLabel;
+        private Sunny.UI.UILabel lblRecipeNameLabel;
         /// <summary>配方名称输入框</summary>
-        private System.Windows.Forms.TextBox txtRecipeName;
+        private Sunny.UI.UITextBox txtRecipeName;
         /// <summary>"延时时间"标签</summary>
-        private System.Windows.Forms.Label lblDelayTime1Label;
+        private Sunny.UI.UILabel lblDelayTime1Label;
         /// <summary>延时时间输入布局（时:分:秒）</summary>
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelDelay1;
         /// <summary>延时时间-小时输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
         private System.Windows.Forms.NumericUpDown nudDelayHours;
         /// <summary>延时时间-第一个冒号分隔符</summary>
-        private System.Windows.Forms.Label lblDelay1Colon1;
+        private Sunny.UI.UILabel lblDelay1Colon1;
         /// <summary>延时时间-分钟输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
         private System.Windows.Forms.NumericUpDown nudDelayMinutes;
         /// <summary>延时时间-第二个冒号分隔符</summary>
-        private System.Windows.Forms.Label lblDelay1Colon2;
+        private Sunny.UI.UILabel lblDelay1Colon2;
         /// <summary>延时时间-秒输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
         private System.Windows.Forms.NumericUpDown nudDelaySeconds;
         /// <summary>"启动时间"标签</summary>
-        private System.Windows.Forms.Label lblStartTimeLabel;
+        private Sunny.UI.UILabel lblStartTimeLabel;
         /// <summary>启动时间输入布局（时:分:秒）</summary>
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelStart;
         /// <summary>启动时间-小时输入（NumericUpDown，V1.28 由 TextBox 改，与延时时间/配方管理窗口样式一致）</summary>
         private System.Windows.Forms.NumericUpDown nudStartHours;
         /// <summary>启动时间-第一个冒号分隔符</summary>
-        private System.Windows.Forms.Label lblStartColon1;
+        private Sunny.UI.UILabel lblStartColon1;
         /// <summary>启动时间-分钟输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
         private System.Windows.Forms.NumericUpDown nudStartMinutes;
         /// <summary>启动时间-第二个冒号分隔符</summary>
-        private System.Windows.Forms.Label lblStartColon2;
+        private Sunny.UI.UILabel lblStartColon2;
         /// <summary>启动时间-秒输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
         private System.Windows.Forms.NumericUpDown nudStartSeconds;
         /// <summary>"极限温度"标签</summary>
-        private System.Windows.Forms.Label lblLimitTempLabel;
+        private Sunny.UI.UILabel lblLimitTempLabel;
         /// <summary>极限温度输入布局（数值 + 单位）</summary>
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelTemp;
         /// <summary>极限温度值输入框</summary>
-        private System.Windows.Forms.TextBox txtLimitTemp;
+        private Sunny.UI.UITextBox txtLimitTemp;
         /// <summary>温度单位标签（°C）</summary>
-        private System.Windows.Forms.Label lblTempUnit;
+        private Sunny.UI.UILabel lblTempUnit;
         /// <summary>"负压阈值"标签（【V1.66】配方真空工艺要求，kPa）</summary>
-        private System.Windows.Forms.Label lblNegativePressureLabel;
+        private Sunny.UI.UILabel lblNegativePressureLabel;
         /// <summary>负压阈值输入布局（数值 + 单位）</summary>
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelPressure;
         /// <summary>负压阈值输入框（【V1.66】文本解析，范围±9999，新建默认=全局阈值）</summary>
-        private System.Windows.Forms.TextBox txtNegativePressure;
+        private Sunny.UI.UITextBox txtNegativePressure;
         /// <summary>负压单位标签（kPa）</summary>
-        private System.Windows.Forms.Label lblPressureUnit;
+        private Sunny.UI.UILabel lblPressureUnit;
         /// <summary>"显示模式"标签（【V1.66】烧屏画面记录）</summary>
-        private System.Windows.Forms.Label lblDisplayModeLabel;
+        private Sunny.UI.UILabel lblDisplayModeLabel;
         /// <summary>显示模式输入框（【V1.66】自由文本，最长50）</summary>
-        private System.Windows.Forms.TextBox txtDisplayMode;
+        private Sunny.UI.UITextBox txtDisplayMode;
         /// <summary>底部按钮面板（2个按钮：加入队列/关闭窗口）</summary>
         private System.Windows.Forms.Panel panelButtons;
         /// <summary>加入队列按钮</summary>
-        private System.Windows.Forms.Button btnAddToQueue;
+        private Sunny.UI.UIButton btnAddToQueue;
         /// <summary>关闭窗口按钮</summary>
-        private System.Windows.Forms.Button btnClose;
+        private Sunny.UI.UIButton btnClose;
     }
 }
