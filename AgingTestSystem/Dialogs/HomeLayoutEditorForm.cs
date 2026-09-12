@@ -53,28 +53,13 @@ namespace AgingTestSystem.Dialogs
     /// 点击【保存】把当前值写入 HomeLayout.json（<see cref="HomeLayoutConfig.Save"/>），
     /// 返回 DialogResult.OK；取消则不改动任何配置。
     /// </summary>
-    public class HomeLayoutEditorForm : Sunny.UI.UIForm
+    public partial class HomeLayoutEditorForm : Sunny.UI.UIForm
     {
         /// <summary>当前编辑的布局配置（引用外部传入的实例，保存时由外部写盘）</summary>
         private readonly HomeLayoutConfig _layout;
 
-        /// <summary>预览自绘控件</summary>
-        private readonly HomeLayoutPreviewControl _preview;
-
         /// <summary>防止输入框与拖动互相触发造成死循环的标志位</summary>
         private bool _syncing;
-
-        /// <summary>顶部标题栏高输入框</summary>
-        private NumericUpDown _nudTop;
-
-        /// <summary>菜单栏高输入框</summary>
-        private NumericUpDown _nudMenu;
-
-        /// <summary>右侧区域宽输入框</summary>
-        private NumericUpDown _nudRight;
-
-        /// <summary>状态栏高输入框</summary>
-        private NumericUpDown _nudStatus;
 
         /// <summary>
         /// 构造函数
@@ -84,128 +69,25 @@ namespace AgingTestSystem.Dialogs
         {
             _layout = layout;
 
-            // 【V1.58.4 高 DPI】必须先用 SuspendLayout 挂起布局，再设置 AutoScaleDimensions
-            // 与 AutoScaleMode，最后在构造函数末尾 ResumeLayout(false) 恢复。
-            // 原因：若在构造过程中（未挂起）添加控件，WinForms 会在每次 Add 时触发
-            // PerformLayout → PerformAutoScale，而此时 AutoScaleDimensions 尚未生效，
-            // 会导致"以 96DPI 为基准不缩放"，高分屏（150%）下窗体/控件全部偏小。
-            // Designer 生成的窗体（如 SettingsForm）同样在 SuspendLayout 后才设置这些，
-            // 纯代码窗体必须手动补齐，否则 AutoScale 完全不生效（实测 V1.58.4 血泪）。
-            SuspendLayout();
+            // 【V1.72.12 Designer 化】静态边框搬进 HomeLayoutEditorForm.Designer.cs
+            // （含 SuspendLayout 包裹 + AutoScale 三要素 + Dock 挂接，都在里面）。
+            // 这里只回填"要吃构造参数"的两项：预览控件的 Layout 引用 + 四个输入框初值。
+            InitializeComponent();
+            _preview.Layout = _layout;
+            _syncing = true;
+            _nudTop.Value = ClampNud(_nudTop, _layout.TopBarHeight);
+            _nudMenu.Value = ClampNud(_nudMenu, _layout.MenuHeight);
+            _nudRight.Value = ClampNud(_nudRight, _layout.RightPanelWidth);
+            _nudStatus.Value = ClampNud(_nudStatus, _layout.StatusBarHeight);
+            _syncing = false;
+        }
 
-            // 窗体骨架
-            Text = "主页区域调整";
-            StartPosition = FormStartPosition.CenterParent;
-            // 【V1.58.4 高 DPI 适配】与其他标准窗体一致：
-            // - AutoScaleDimensions(6F,12F) + AutoScaleMode.Font，WinForms 会按
-            //   实际 DPI 自动放大窗体及所有子控件（前提：app.manifest 声明 PerMonitorV2
-            //   且 App.config 配置 DpiAwareness=PerMonitorV2，两处主程序均已具备）。
-            // - 此前只设了 AutoScaleMode.Font 而未设 AutoScaleDimensions，WinForms
-            //   默认以 96DPI 基准不缩放，高分屏（如 150%）下控件/文字偏小或布局错位。
-            AutoScaleDimensions = new SizeF(6F, 12F);
-            AutoScaleMode = AutoScaleMode.Font;
-            // 【V1.71】UIForm 自绘蓝标题：删 FormBorderStyle；Dock 布局加顶 Pad 避开标题区。
-            Padding = new Padding(2, 38, 2, 2);
-            MinimumSize = new Size(560, 460);
-            ClientSize = new Size(640, 520);
-
-            // 预览自绘控件（占满窗体中部）
-            _preview = new HomeLayoutPreviewControl { Layout = _layout, Dock = DockStyle.Fill };
-            _preview.LayoutChanged += Preview_LayoutChanged;
-
-            // 数值输入面板：4 行等分（Percent 25%，行高随窗体 AutoScale 等比缩放，
-            // 兼容高低 DPI；Absolute 行高不会随缩放，高分屏下会溢出/留白）。
-            // 【V1.58.4 高 DPI】行高改为 Percent 等分，行内控件用 Top|Bottom 锚定，
-            // 保证 DPI 缩放后文字仍垂直居中、不溢出。
-            var pnlValues = new TableLayoutPanel
-            {
-                Dock = DockStyle.Top,
-                Height = 148,
-                ColumnCount = 2,
-                RowCount = 4,
-                Padding = new Padding(12, 6, 12, 6)
-            };
-            pnlValues.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            pnlValues.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            // 4 行各占 25%，自适应窗体缩放后的高度（96DPI 下约 34px/行，容纳控件）
-            pnlValues.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
-            pnlValues.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
-            pnlValues.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
-            pnlValues.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
-
-            // 四个尺寸输入框（范围与 HomeLayoutConfig.Range 常量同步）
-            _nudTop = CreateNud(pnlValues, "顶部标题栏高 (px)", _layout.TopBarHeight,
-                HomeLayoutConfig.TopBarRange.Min, HomeLayoutConfig.TopBarRange.Max, 0);
-            _nudMenu = CreateNud(pnlValues, "菜单栏高 (px)", _layout.MenuHeight,
-                HomeLayoutConfig.MenuRange.Min, HomeLayoutConfig.MenuRange.Max, 1);
-            _nudRight = CreateNud(pnlValues, "右侧区域宽 (px)", _layout.RightPanelWidth,
-                HomeLayoutConfig.RightPanelRange.Min, HomeLayoutConfig.RightPanelRange.Max, 2);
-            _nudStatus = CreateNud(pnlValues, "状态栏高 (px)", _layout.StatusBarHeight,
-                HomeLayoutConfig.StatusBarRange.Min, HomeLayoutConfig.StatusBarRange.Max, 3);
-
-            // 底部按钮
-            var pnlBottom = new Panel { Dock = DockStyle.Bottom, Height = 52, Padding = new Padding(12, 6, 12, 6) };
-            var btnRestore = new Sunny.UI.UIButton
-            {
-                Text = "恢复默认",
-                Width = 96, Height = 32,
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Left
-            };
-            btnRestore.Click += BtnRestore_Click;
-
-            var btnCancel = new Sunny.UI.UIButton
-            {
-                Text = "取消",
-                Width = 90, Height = 32,
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
-                FillColor = Color.DimGray,
-                RectColor = Color.DimGray,
-                ForeColor = Color.White,
-                Style = Sunny.UI.UIStyle.Custom
-            };
-            btnCancel.Click += (s, e) => DialogResult = DialogResult.Cancel;
-
-            var btnSave = new Sunny.UI.UIButton
-            {
-                Text = "保存",
-                Width = 90, Height = 32,
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
-                FillColor = Color.LimeGreen,
-                RectColor = Color.LimeGreen,
-                ForeColor = Color.White,
-                Style = Sunny.UI.UIStyle.Custom
-            };
-            btnSave.Click += BtnSave_Click;
-
-            // 手工摆放（不用 FlowLayout，避免依赖其尺寸算法）：恢复默认在左下，保存/取消在右下
-            btnRestore.Location = new Point(12, 10);
-            btnCancel.Location = new Point(pnlBottom.Width - 12 - 90 - 90 - 6, 10);
-            btnSave.Location = new Point(pnlBottom.Width - 12 - 90, 10);
-
-            pnlBottom.Controls.Add(btnRestore);
-            pnlBottom.Controls.Add(btnCancel);
-            pnlBottom.Controls.Add(btnSave);
-
-            // 顶部说明条
-            var lblTip = new Sunny.UI.UILabel
-            {
-                Dock = DockStyle.Top,
-                Height = 26,
-                Text = "将鼠标移到区域边缘，光标变为双向箭头后按住拖动即可调整尺寸（单位：px）",
-                ForeColor = Color.FromArgb(80, 80, 80),
-                TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding(12, 0, 0, 0)
-            };
-
-            // 组合
-            Controls.Add(_preview);
-            Controls.Add(pnlValues);
-            Controls.Add(lblTip);
-            Controls.Add(pnlBottom);
-
-            // 【V1.58.4 高 DPI】所有控件添加完毕后再恢复布局，此时才真正执行
-            // PerformAutoScale（以 AutoScaleDimensions=6×12 为基准按实际 DPI 放大）。
-            ResumeLayout(false);
+        /// <summary>输入框初值钳制（与原来 CreateNud 的 Max(Min,Min(Max,Value)) 同口径）</summary>
+        private static decimal ClampNud(NumericUpDown nud, int value)
+        {
+            if (value < nud.Minimum) return nud.Minimum;
+            if (value > nud.Maximum) return nud.Maximum;
+            return value;
         }
 
         /// <summary>
@@ -232,35 +114,6 @@ namespace AgingTestSystem.Dialogs
                 _preview.BackColor = GetPreviewBackColor(ThemeManager.IsDark);
                 _preview.Invalidate();
             }
-        }
-
-        /// <summary>
-        /// 创建一组"文字标签 + 数值输入框"并放入数值面板的指定行
-        /// </summary>
-        private NumericUpDown CreateNud(TableLayoutPanel pnl, string caption, int value,
-            decimal min, decimal max, int row)
-        {
-            var lbl = new Sunny.UI.UILabel
-            {
-                Text = caption,
-                AutoSize = true,
-                // 垂直锚定 Top|Bottom：行高随窗体缩放变化时文字保持垂直居中
-                Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom,
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-            var nud = new NumericUpDown
-            {
-                Minimum = min,
-                Maximum = max,
-                Value = Math.Max(min, Math.Min(max, value)),
-                Width = 120,
-                // 垂直锚定 Top|Bottom：DPI 缩放后输入框随行高拉高、始终占满行
-                Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom
-            };
-            nud.ValueChanged += Nud_ValueChanged;
-            pnl.Controls.Add(lbl, 0, row);
-            pnl.Controls.Add(nud, 1, row);
-            return nud;
         }
 
         /// <summary>数值输入框变化 → 同步到配置并刷新预览</summary>
@@ -308,6 +161,12 @@ namespace AgingTestSystem.Dialogs
             _nudStatus.Value = _layout.StatusBarHeight;
             _syncing = false;
             _preview.Invalidate();
+        }
+
+        /// <summary>取消：不改动任何配置，直接关闭（Designer 原匿名 lambda 落袋）</summary>
+        private void BtnCancel_Click(object sender, EventArgs e)
+        {
+            DialogResult = DialogResult.Cancel;
         }
 
         /// <summary>保存：把当前配置写入 HomeLayout.json 并关闭窗体</summary>

@@ -159,6 +159,11 @@
   - 获取实际 DPI 用 `CreateGraphics().DpiX`，**不要用 `Control.DeviceDpi`**（PerMonitorV2 下句柄刚创建时返回 96，实测不可靠）。
   - 新增自绘控件/改自绘坐标时，记得同步缩放命中检测（鼠标坐标是物理像素）、tooltip、局部重绘矩形，漏一处点击/重绘就错位。
 - **区域宽度按比例自适应，禁止写死像素（V1.65 用户原则）**：主界面各区域宽度（如右侧状态按钮区）一律用"占父容器百分比 + 上下限钳制"（见 `MainForm.RightPanelRatio/RightPanelMinWidth/RightPanelMaxWidth` 与纯函数 `ComputeRightPanelWidth`），窗口 `Resize` 时重算；写死像素在设计屏上正好、换台工控机就溢出/留白。用户手动保存的配置文件（`HomeLayout.json`）是绝对值、优先级高于比例；计算逻辑抽纯函数并锁回归用例。
+- **动态控件重建必须先 Dispose 再 Clear（V1.72.12 血泪）**：`Controls.Clear()` 只摘父子关系，
+  孤儿 Sunny 控件（UITextBox/UIComboBox，内部包原生 TextBox）进终结器线程 Dispose，
+  内部读 Handle 即跨线程崩溃（堆栈终点 `ResetAutoComplete←Dispose←Finalize`，Name 全空、
+  时机随机是三特征）。动态重建处一律先逐个 `Dispose()` 再 `Clear()`（主窗 H5 先例），
+  用例锁"重建后旧控件 IsDisposed"。
 - **自绘性能大坑（V1.57.3 血泪教训）**：**禁止用"离屏 Bitmap 整幅预渲染 + OnPaint DrawImage 拷贝"来优化自绘控件**。实测离屏大图（2040×2025）上 `TextRenderer.DrawText` 每处约 **2.2ms**（屏幕 DC 上近 0ms），全量渲染 72 面板一次高达 2247ms，而 `UpdateAll` 每秒全量刷新 → 整个软件每 1 秒卡死。且 `g.Clear(白色)` 会把面板间隙刷白导致"面板连成一片"。**正确做法**：OnPaint 只重绘可见区面板（`e.ClipRectangle` 算行列范围），数据/选中变化仅 `Invalidate`；滚动卡顿用"16ms 定时器节流 AutoScrollPosition + 画刷/画笔缓存字段"解决，不要预渲染。判断优化效果务必用**真实屏幕 DC**（`CreateGraphics`）测，离屏 Graphics 的 TextRenderer 慢是 GDI+ 固有行为、不代表真实帧速。
 
 ## 关键文件导航

@@ -26,7 +26,7 @@ namespace AgingTestSystem.Dialogs
     /// 面板回空闲后不再保留（既有追溯链，见 RecordUnloadJudge 注释）。
     /// 【权限】操作员可操作（下料是操作员的活）；AutoPass 模式主窗体根本不让进。
     /// </summary>
-    public class UnloadJudgeForm : Sunny.UI.UIForm
+    public partial class UnloadJudgeForm : Sunny.UI.UIForm
     {
         /// <summary>FAIL 处置选项（重测=回到待测，报废/降级/让步=出厂口径，由质量定）</summary>
         public static readonly string[] Dispositions = new string[]
@@ -37,15 +37,6 @@ namespace AgingTestSystem.Dialogs
         private readonly int[] _deviceIds;
         private readonly DeviceManager _deviceManager;
 
-        private Sunny.UI.UILabel _lblScope;
-        private RadioButton _rbPass;
-        private RadioButton _rbFail;
-        private Sunny.UI.UITextBox _txtDefectCode;
-        private Sunny.UI.UIComboBox _cmbDisposition;
-        private Sunny.UI.UIButton _btnExecute;
-        private Sunny.UI.UIButton _btnClose;
-        private Sunny.UI.UILabel _lblResult;
-
         /// <param name="deviceIds">选中的工位号（主窗体已判空）</param>
         /// <param name="deviceManager">设备管理器（执行判定 + 读完成态）</param>
         public UnloadJudgeForm(int[] deviceIds, DeviceManager deviceManager)
@@ -53,75 +44,10 @@ namespace AgingTestSystem.Dialogs
             _deviceIds = deviceIds ?? new int[0];
             _deviceManager = deviceManager;
 
-            // 【高 DPI 三要素】纯代码窗体：基准尺寸 + 挂起布局，末尾 ResumeLayout
-            this.AutoScaleDimensions = new SizeF(6F, 12F);
-            this.AutoScaleMode = AutoScaleMode.Font;
-            this.SuspendLayout();
-
-            this.Text = "下料判定";
-            this.StartPosition = FormStartPosition.CenterParent;
-            this.MaximizeBox = false;
-            this.MinimizeBox = false;
-            this.ClientSize = new Size(440, 335);
-            // 【V1.71】绝对布局：禁缩小（MinimumSize=ClientSize），防缩坏布局；可放大。
-            this.MinimumSize = new Size(440, 335);
-
-            int y = 47;   // 【V1.71】UIForm 标题区 35px，内容下移
-            _lblScope = new Sunny.UI.UILabel
-            {
-                Location = new Point(12, y),
-                Size = new Size(416, 36),
-                Text = BuildScopeText()
-            };
-            this.Controls.Add(_lblScope);
-            y += 44;
-
-            _rbPass = new RadioButton { Location = new Point(12, y), Size = new Size(100, 24), Text = "PASS", Checked = true };
-            _rbFail = new RadioButton { Location = new Point(120, y), Size = new Size(100, 24), Text = "FAIL" };
-            this.Controls.Add(_rbPass);
-            this.Controls.Add(_rbFail);
-            y += 32;
-
-            var lblCode = new Sunny.UI.UILabel { Location = new Point(12, y + 4), Size = new Size(80, 20), Text = "不良代码：" };
-            _txtDefectCode = new Sunny.UI.UITextBox { Location = new Point(96, y), Size = new Size(332, 24) };
-            this.Controls.Add(lblCode);
-            this.Controls.Add(_txtDefectCode);
-            y += 32;
-
-            var lblDisp = new Sunny.UI.UILabel { Location = new Point(12, y + 4), Size = new Size(80, 20), Text = "处置：" };
-            _cmbDisposition = new Sunny.UI.UIComboBox
-            {
-                Location = new Point(96, y),
-                Size = new Size(332, 24),
-                DropDownStyle = Sunny.UI.UIDropDownStyle.DropDownList
-            };
-            _cmbDisposition.Items.AddRange(Dispositions);
-            this.Controls.Add(lblDisp);
-            this.Controls.Add(_cmbDisposition);
-            y += 40;
-
-            _btnExecute = new Sunny.UI.UIButton { Location = new Point(12, y), Size = new Size(200, 30), Text = "执行判定" };
-            _btnExecute.Click += BtnExecute_Click;
-            _btnClose = new Sunny.UI.UIButton
-            {
-                Location = new Point(228, y),
-                Size = new Size(200, 30),
-                Text = "关闭",
-                DialogResult = DialogResult.Cancel,
-                FillColor = Color.DimGray,
-                RectColor = Color.DimGray,
-                ForeColor = Color.White,
-                Style = Sunny.UI.UIStyle.Custom
-            };
-            this.Controls.Add(_btnExecute);
-            this.Controls.Add(_btnClose);
-            y += 40;
-
-            _lblResult = new Sunny.UI.UILabel { Location = new Point(12, y), Size = new Size(416, 40), ForeColor = Color.Blue };
-            this.Controls.Add(_lblResult);
-
-            this.CancelButton = _btnClose;
-            this.ResumeLayout(false);
+            // 【V1.72.12 Designer 化】静态边框搬进 UnloadJudgeForm.Designer.cs，
+            // 这里只回填"要吃构造参数"的那一项（范围文案依赖 deviceIds/deviceManager）。
+            InitializeComponent();
+            _lblScope.Text = BuildScopeText();
         }
 
         /// <summary>统计送判范围文案（完成态可判，其余跳过；打开时快照，仅展示用）</summary>

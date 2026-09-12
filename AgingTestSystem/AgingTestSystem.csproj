@@ -202,8 +202,14 @@
     <Compile Include="Dialogs\UnloadJudgeForm.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="Dialogs\UnloadJudgeForm.Designer.cs">
+      <DependentUpon>UnloadJudgeForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="Dialogs\ProjectSwitchForm.cs">
       <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Dialogs\ProjectSwitchForm.Designer.cs">
+      <DependentUpon>ProjectSwitchForm.cs</DependentUpon>
     </Compile>
     <Compile Include="Dialogs\LoginForm.cs">
       <SubType>Form</SubType>
@@ -246,6 +252,9 @@
     </Compile>
     <Compile Include="Dialogs\HomeLayoutEditorForm.cs">
       <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Dialogs\HomeLayoutEditorForm.Designer.cs">
+      <DependentUpon>HomeLayoutEditorForm.cs</DependentUpon>
     </Compile>
     <Compile Include="Dialogs\SettingsForm.Designer.cs">
       <DependentUpon>SettingsForm.cs</DependentUpon>

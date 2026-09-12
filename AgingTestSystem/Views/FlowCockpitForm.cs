@@ -204,11 +204,33 @@ namespace AgingTestSystem.Views
             RebuildEdgeInfo(edgeId);
         }
 
+        /// <summary>
+        /// 摘掉右栏旧编辑器（【V1.72.12】先逐个 Dispose 再 Clear）。
+        ///
+        /// 【修什么崩溃】Controls.Clear() 只摘父子关系、不释放资源：
+        /// 旧编辑器（含 Sunny UITextBox/UIComboBox，内部包着原生 TextBox）变成孤儿，
+        /// GC 时走终结器线程 Dispose，Sunny 的 Dispose 路径里读了内部 TextBox.Handle，
+        /// 创建线程（UI）≠终结器线程 → InvalidOperationException 跨线程崩溃。
+        /// 现场症状 = 点/拖节点后随机时刻弹"非 UI 线程"错（终结时机不定，
+        /// 炸的时候用户正在干别的事，极具迷惑性；Name="" 是因为动态控件都没设 Name）。
+        /// 主窗 CreateWorkstationPanels 早有同款处理（H5 先 Dispose 再 Clear），这里补齐。
+        /// foreach 里 Dispose 安全（Dispose 不改 Controls 集合，改完再 Clear）。
+        /// </summary>
+        private void DisposeEditorControls()
+        {
+            foreach (Control c in _pnlEditors.Controls)
+            {
+                try { if (c != null && !c.IsDisposed) c.Dispose(); }
+                catch { /* 单个释放失败不影响其余 */ }
+            }
+            _pnlEditors.Controls.Clear();
+            _editorControls.Clear();
+        }
+
         /// <summary>按选中节点重建右栏编辑器。</summary>
         private void RebuildEditors()
         {
-            _pnlEditors.Controls.Clear();
-            _editorControls.Clear();
+            DisposeEditorControls();
             _dirty = false;
 
             if (string.IsNullOrEmpty(_selectedId))
@@ -299,8 +321,7 @@ namespace AgingTestSystem.Views
         /// <summary>连线只读信息（条件在哪改指明，不让用户对着线发呆）。</summary>
         private void RebuildEdgeInfo(string edgeId)
         {
-            _pnlEditors.Controls.Clear();
-            _editorControls.Clear();
+            DisposeEditorControls();
             _lblNodeTitle.Text = "连线（只读）";
             _btnSaveNode.Enabled = false;
             var info = new Sunny.UI.UILabel
