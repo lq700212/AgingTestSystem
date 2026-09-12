@@ -1,4 +1,4 @@
-# ============================================================================
+﻿# ============================================================================
 #  run_unit_tests.ps1 - Compile and run the AgingTestSystem regression harness.
 #
 #  What it does:
@@ -15,7 +15,10 @@
 # ============================================================================
 
 param(
-    [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..\")).Path
+    [string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..\")).Path,
+    # V1.72.4 分级回归：逗号分隔的模块名子集（如 "UiStyleV172_1,ThemeManager"），
+    # 为空=全量。模块名大小写不敏感；"list"=只打印模块清单。
+    [string]$Modules = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -77,11 +80,15 @@ if ($LASTEXITCODE -ne 0) {
 
 # --- 4. run harness ---------------------------------------------------------
 Write-Host ""
+if ($Modules -ne "") { Write-Host ">>> 模块子集: $Modules" }
 Write-Host ">>> Running regression suite in: $runDir"
 # Force UTF-8 console so Chinese assertion names are not mojibake
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 Push-Location $runDir
-try     { & ".\TestRunner.exe"; $code = $LASTEXITCODE }
+try {
+    if ($Modules -ne "") { & ".\TestRunner.exe" $Modules; $code = $LASTEXITCODE }
+    else                  { & ".\TestRunner.exe"; $code = $LASTEXITCODE }
+}
 finally { Pop-Location }
 
 if ($code -eq 0) { Write-Host "`n[UNIT-TESTS PASS]" -ForegroundColor Green }

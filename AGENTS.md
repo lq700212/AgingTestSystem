@@ -104,6 +104,11 @@
   - Sunny UILabel 默认宋体 12pt，"开始时间:"实测 79px（V1.72.1 历史窗血泪）：
     标签 + 日期框间距按实测文本宽（`TextRenderer.MeasureText`，与生产同口径）留 ≥5px，
     不要按 Designer 的 Width/肉眼估；未显示时 Width 未布局，断言走实测宽。
+    另注意 AutoSize 标签实占（Width/PreferredSize，含内边距）比 MeasureText 纯文本宽大
+    （V1.72.3 公共参数窗实测大 3px）：居中算组宽取 `Max(实测文本宽, AutoSize 实宽)`，
+    视觉间距断言直接锁 `nud.Left - lbl.Right ≥ 8`（不与生产同口径，防循环自证）；
+    Designer 残留 Size（如 107）是旧字体过期值，算坐标一律以运行时探针实测为准，
+    设计器初始坐标按运行真值摆（V1.72.3：lbl 36/nud 192）。
 - **流程驾驶舱约定（V1.70）**：拓扑画死（物理锁死，通用连线编辑器会让客户删掉安全联锁，
   参考 HJVision mFormFlowEdit 后否决）；节点只挂真实 key（ key 必须全是 DeviceConfig
   真属性，回归锁），连线只读；保存走 `SettingsForm.PersistChanges`（与设置表同一条路，
@@ -206,7 +211,13 @@ else 分支已做叠加——改采集/状态显示时勿破坏此机制）。�
 
 项目专属测试验证技能为 `.opencode/skills/agingtest-regression/`（SKILL.md 含用法、覆盖范围表、加用例步骤与踩坑清单；用例源码在 `tests/TestRunner.cs`，脚本在 `scripts/`）。以下三条为强制约定：
 
-1. **改完代码必须验证**：功能/修复完成后至少跑一次 `build_and_test.ps1` 全绿才能交付；只动了逻辑类可只跑 `run_unit_tests.ps1`。
+1. **改完代码必须验证（V1.72.4 分级回归）**：日常小改跑
+   `build_and_test.ps1 -Affected`（按 git 改动自动算模块子集，只测影响面；
+   交互模块已含在映射里，如改 CSV 格式会连带全部 DeviceManager*）；
+   大重构/发布前/改骨架（csproj/Interfaces/用例自身/scripts）跑全量
+   `build_and_test.ps1`（默认）；映射不到的新文件自动兜底全量。
+   **新增产品 .cs 文件必须在 `get_affected_modules.ps1` 的 `$Map` 登记**，
+   否则每次改它都付全量代价。
 2. **修 bug 必补用例**：每修复一个 bug，先在 `TestRunner.cs` 对应模块加一条能复现该 bug 的 `Check` 用例（红→修产品代码→绿），防止回归；新增功能同理补正向+边界用例。
 3. **新用例/新冒烟必须回流 skill**：凡是本次工作中新写的测试用例、冒烟步骤、验证脚本，一律直接写进 `agingtest-regression` 的 tests/scripts 目录并在 SKILL.md 补记覆盖点；**禁止散落在临时目录或只留在对话里**。新踩的坑追加进 SKILL.md 踩坑清单。全部完成后重跑全绿才算收尾。
 

@@ -38,19 +38,24 @@ namespace AgingTestSystem.Dialogs
             // 
             // lblThreshold（Y=65：UIForm 自绘蓝标题占 35px 客户区，设计值即运行值，所见即所得；
             // CenterControls 只调水平居中、不动 Y，见 .cs 注释）
+            // X=36：运行时刻整组居中真值（探针实测 AutoSize 实宽 146 + 间距 10 + 数值框 91 = 247，
+            // (320-247)/2=36；Designer 残留 Size 107 是旧字体过期值，勿用它算），
+            // 设计器按运行值摆，所见即所得（V1.72.3：标签实宽口径修正后同步）
             //
             this.lblThreshold.AutoSize = true;
-            this.lblThreshold.Location = new System.Drawing.Point(54, 65);
+            this.lblThreshold.Location = new System.Drawing.Point(36, 65);
             this.lblThreshold.Name = "lblThreshold";
             this.lblThreshold.Size = new System.Drawing.Size(107, 12);
             this.lblThreshold.TabIndex = 4;
             this.lblThreshold.Text = "负压值设定(kPa)：";
             // 
             // nudThreshold - 负压值数值框（支持正负数，范围 -9999~9999）
-            // 
+            // X=192：运行时刻居中真值（36 + 标签实宽 146 + 间距 10；探针实测，见 lbl 注释），
+            // 设计器按运行值摆（V1.72.3 同步）
+            //
             this.nudThreshold.DecimalPlaces = 1;
             this.nudThreshold.Increment = 1m;
-            this.nudThreshold.Location = new System.Drawing.Point(167, 62);
+            this.nudThreshold.Location = new System.Drawing.Point(192, 62);
             this.nudThreshold.Maximum = 9999m;
             this.nudThreshold.Minimum = -9999m;
             this.nudThreshold.Name = "nudThreshold";
