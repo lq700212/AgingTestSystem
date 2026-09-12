@@ -22,7 +22,7 @@ namespace AgingTestSystem.Services
     /// 再逐个 Dispose，最后 Clear。两步缺一不可：只快照不 Clear 会留空引用；
     /// 只 Clear 不 Dispose 进终结器（V1.72.12 血泪）。
     ///
-    /// 【调用方】FlowCockpitForm.DisposeEditorControls（右栏节点编辑器）、
+    /// 【调用方】ProcessPolicyForm.DisposeEditorControls（右栏节点编辑器）、
     /// MainForm.CreateWorkstationPanels（左侧工位区重建）。以后凡是"动态重建容器"
     /// 一律调这里，不要手写 foreach。
     /// </summary>

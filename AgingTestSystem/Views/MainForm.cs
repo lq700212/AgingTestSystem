@@ -906,6 +906,11 @@ namespace AgingTestSystem.Views
             {
                 config.VentValveDoPoint = Math.Max(0, ventPoint);
             }
+            // 【V1.73】本机破空阀开关（无阀=false 现状：手动按钮隐藏+泄压保存即拦）
+            if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["VentValveEnabled"], out bool ventEnabled))
+            {
+                config.VentValveEnabled = ventEnabled;
+            }
 
             // 【V1.68】MES 对接（机器级：开关/URL/超时/鉴权/重试；触发器/映射/静态字段跟项目，
             // 由下面的 ApplyOverlay 从 Policy.json 覆盖——非法字符串同样兜底缺省）。
@@ -1250,7 +1255,7 @@ namespace AgingTestSystem.Views
             // Controls.Clear() 只移除父子关系，不会释放控件资源
             // 旧控件（含子控件）会成为孤儿，等待 GC 回收，可能耗尽 GDI 句柄
             // 【V1.72.16】foreach 直接枚举逐个 Dispose 是错的：Dispose 会把自己从父集合摘除，
-            // 枚举中集合被改会导致跳过（漏释放→孤儿→终结器跨线程炸，流程驾驶舱已实锤），
+            // 枚举中集合被改会导致跳过（漏释放→孤儿→终结器跨线程炸，工艺策略窗已实锤），
             // 一律走 ControlDisposeHelper（快照数组后释放，最后 Clear），不要手写 foreach。
             ControlDisposeHelper.DisposeAllAndClear(splitContainerMain.Panel1.Controls);
 
@@ -1968,21 +1973,21 @@ namespace AgingTestSystem.Views
             {
                 ("公共参数", MenuParamCommon_Click),
                 ("配方管理", MenuParamRecipe_Click),
-                ("流程驾驶舱", MenuParamFlow_Click),
+                ("工艺策略", MenuParamPolicy_Click),
                 ("项目切换", MenuParamProject_Click)
             });
         }
 
         /// <summary>
-        /// 流程驾驶舱 → 弹出可视化流程配置窗体（【V1.70 新增】点节点改配置，
+        /// 工艺策略 → 弹出可视化工艺配置窗体（【V1.70 新增为"流程驾驶舱"，V1.73 改名】点节点改配置，
         /// 与系统设置同一条保存路； savedKeys 非空走同样的热生效分发）。
         /// 入口挂在参数设置下拉下（技术员及以上可见；编辑限管理员——
         /// 只读看图所有人可看，改配置与系统设置同级，不开后门）。
         /// </summary>
-        private void MenuParamFlow_Click(object sender, EventArgs e)
+        private void MenuParamPolicy_Click(object sender, EventArgs e)
         {
             bool canEdit = _userManager.HasPermission(UserRole.Administrator);
-            using (var form = new FlowCockpitForm(_config, _deviceManager, canEdit))
+            using (var form = new ProcessPolicyForm(_config, _deviceManager, canEdit))
             {
                 ThemeManager.ApplyTo(form);
                 if (form.ShowDialog(this) == DialogResult.OK &&

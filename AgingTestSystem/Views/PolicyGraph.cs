@@ -8,14 +8,17 @@ using Newtonsoft.Json;
 namespace AgingTestSystem.Views
 {
     /// <summary>
-    /// 流程图静态数据（【V1.70 新增】流程驾驶舱的图真相：拓扑画死，文本按配置生成）。
+    /// 工艺策略图静态数据（【V1.70 新增为 FlowGraph，V1.73 随窗体改名】工艺策略窗的图真相：
+    /// 拓扑画死，文本按配置生成）。
     ///
-    /// 【节点】启动开阀 / 抽真空 / 上电老化 / 完成下电 / 报警联动 / 断电恢复 / 下料判定。
+    /// 【节点】启动开阀 / 抽真空 / 上电老化 / 完成下电 / 报警联动 / 断电恢复 / 下料判定 / MES上报。
     /// 每个节点挂它真正能改的配置 key（右栏编辑器按此生成）——条件写在边上，
     /// 改条件的入口永远在端点节点里，连线本身只读（防对着线发呆）。
+    /// MES上报是纯配置节点（无连线：上报是正交的，启动/完成/报警/下料四个事件都可能发，
+    /// 画连线反而误导；挂触发器/字段映射/静态字段 3 个跟项目的 key）。
     /// 【文本】BuildNodeLines / BuildEdgeLabel 纯静态，回归可单测（缺省配置长什么样锁死）。
     /// </summary>
-    public static class FlowGraph
+    public static class PolicyGraph
     {
         /// <summary>编辑器种类（右栏按此建控件；数字走 TextBox，保存时 ValidateValue 拦）。</summary>
         public enum EditorKind
@@ -44,7 +47,7 @@ namespace AgingTestSystem.Views
             }
         }
 
-        /// <summary>节点定义（位置是缺省值，用户拖动后存 FlowLayout.json 覆盖）。</summary>
+        /// <summary>节点定义（位置是缺省值，用户拖动后存 PolicyLayout.json 覆盖）。</summary>
         public class NodeDef
         {
             public string Id;
@@ -88,7 +91,7 @@ namespace AgingTestSystem.Views
         // 按截图式宽松两列摆：列间距 150px、行间距 45px+，节点加高到 110~150px
         //（3 行文本 + 标题 + 内边距不挤）。power 与 alarm 中心对齐（横向边水平），
         // done 与 unload 中心对齐（横向边水平），alarm 底到 unload 顶留 55px 走
-        // 竖向虚线。改坐标后“复位布局”即生效；老版本 FlowLayout.json 见 LayoutStore。
+        // 竖向虚线。改坐标后“复位布局”即生效；老版本 PolicyLayout.json 见 LayoutStore。
         public static readonly List<NodeDef> Nodes = new List<NodeDef>
         {
             new NodeDef
@@ -141,6 +144,7 @@ namespace AgingTestSystem.Views
                 {
                     new NodeKey("AgingPressureLossPolicy", "老化失压", EditorKind.Enum),
                     new NodeKey("VacuumFailKind", "真空责任", EditorKind.Enum),
+                    new NodeKey("UseDiAlarmContact", "DI触点并入", EditorKind.Bool),
                     new NodeKey("FanTempShutdownEnabled", "超温联停", EditorKind.Bool),
                     new NodeKey("FanTempAlarmLimitC", "超温上限(°C)", EditorKind.Text),
                     new NodeKey("FanDisconnectPolicy", "风机断连", EditorKind.Enum),
@@ -161,6 +165,20 @@ namespace AgingTestSystem.Views
                 Id = "unload", Title = "下料判定",
                 DefaultRect = new Rectangle(430, 545, 240, 115),
                 Info = "待判定模式下，主界面操作区【下料判定】按钮录 PASS/FAIL。\r\n判定口径在【完成下电】节点改。"
+            },
+            // 【V1.73】MES上报纯配置节点：触发器/字段映射/静态字段 3 个跟项目的 key
+            // 全在这里改（连接类开关/地址跟机器，在系统设置 MES 对接分类里改）。
+            // 无连线（上报正交于流程），画布右下角，绘制顺序最后。
+            new NodeDef
+            {
+                Id = "mes", Title = "MES上报",
+                DefaultRect = new Rectangle(430, 700, 240, 125),
+                Keys = new List<NodeKey>
+                {
+                    new NodeKey("MesTriggers", "上报触发器", EditorKind.Text),
+                    new NodeKey("MesFieldMap", "字段映射", EditorKind.Multiline),
+                    new NodeKey("MesStaticFields", "静态字段", EditorKind.Multiline),
+                }
             },
         };
 
@@ -265,6 +283,14 @@ namespace AgingTestSystem.Views
                             ? $"待判定 {counts.PendingJudge} 台" : "自动PASS（免判定）",
                         "主界面【下料判定】录入"
                     };
+                case "mes":
+                    return new string[]
+                    {
+                        "开关：" + (config.MesEnabled ? "开" : "关"),
+                        string.IsNullOrWhiteSpace(config.MesTriggers)
+                            ? "触发：四个全报" : "触发：" + config.MesTriggers.Trim(),
+                        $"映射 {FieldMapCountOf(config)} 组 + 静态 {StaticFieldCountOf(config)} 组"
+                    };
                 default:
                     return new string[0];
             }
@@ -320,6 +346,32 @@ namespace AgingTestSystem.Views
             catch { return 0; }
         }
 
+        /// <summary>字段映射组数（脏组不计，画布只看"生效了几组"）。</summary>
+        private static int FieldMapCountOf(DeviceConfig config)
+        {
+            try
+            {
+                Dictionary<string, string> map;
+                List<string> errors;
+                Services.MesMapping.ParseFieldMap(config.MesFieldMap, out map, out errors);
+                return map.Count;
+            }
+            catch { return 0; }
+        }
+
+        /// <summary>静态字段组数（同上）。</summary>
+        private static int StaticFieldCountOf(DeviceConfig config)
+        {
+            try
+            {
+                Dictionary<string, string> fields;
+                List<string> errors;
+                Services.MesMapping.ParseStaticFields(config.MesStaticFields, out fields, out errors);
+                return fields.Count;
+            }
+            catch { return 0; }
+        }
+
         private static string ShortEnum(string name)
         {
             // 枚举英文名转短中文（下拉里是全称，节点上只放两字，省地方）
@@ -346,12 +398,13 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 节点布局存取（【V1.70】纯视图态：只存 X/Y，跟机器走 FlowLayout.json；
+        /// 节点布局存取（【V1.70】纯视图态：只存 X/Y，跟机器走 PolicyLayout.json；
         /// 缩放/平移不存盘；文件损坏/缺失回缺省布局）。
+        /// 【V1.73】随窗体改名 FlowLayout.json→PolicyLayout.json（项目未上线，老文件直接弃用）。
         /// </summary>
         public static class LayoutStore
         {
-            private const string FileName = "FlowLayout.json";
+            private const string FileName = "PolicyLayout.json";
             // V2（2026-09-13）：缺省布局从挤列（宽190/列距100/行距40）换成截图式宽松
             // 两列（宽220~240/列距150/行距45+）。版本号递进即迁移：V1 存的坐标全是
             // 按旧缺省摆的（没拖过的是复位存的旧缺省，拖过的也是相对旧缺省的），直接
@@ -419,7 +472,7 @@ namespace AgingTestSystem.Views
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[流程驾驶舱] 布局保存失败: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"[工艺策略] 布局保存失败: {ex.Message}");
                 }
             }
         }

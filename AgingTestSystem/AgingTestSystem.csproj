@@ -129,13 +129,13 @@
     <Compile Include="Controls\RuleListEditorPopup.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="Views\FlowCockpitForm.cs">
+    <Compile Include="Views\ProcessPolicyForm.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="Views\FlowCockpitForm.Designer.cs">
-      <DependentUpon>FlowCockpitForm.cs</DependentUpon>
+    <Compile Include="Views\ProcessPolicyForm.Designer.cs">
+      <DependentUpon>ProcessPolicyForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="Views\FlowGraph.cs" />
+    <Compile Include="Views\PolicyGraph.cs" />
     <Compile Include="Controls\IpListEditorPopup.cs">
       <SubType>Form</SubType>
     </Compile>

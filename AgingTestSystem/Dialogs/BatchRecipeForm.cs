@@ -81,6 +81,12 @@ namespace AgingTestSystem.Dialogs
         private RecipeAutoCompleteProvider _recipeAutoComplete;
 
         /// <summary>
+        /// 悬停说明（【V1.73 新增】每个设置项都挂 tooltip，超 40 字走
+        /// SettingsForm.WrapTooltip 换行，全仓统一口径）。
+        /// </summary>
+        private ToolTip _tip;
+
+        /// <summary>
         /// 构造函数
         /// </summary>
         /// <param name="deviceManager">设备管理器（可 null，仅影响"应用到工位"）</param>
@@ -107,6 +113,43 @@ namespace AgingTestSystem.Dialogs
                 ? _deviceManager.Config.AlarmPressureThresholdKPa
                 : new DeviceConfig().AlarmPressureThresholdKPa;
             txtNegativePressure.Text = defaultPressure.ToString("0.#");
+
+            SetupTooltips();
+        }
+
+        /// <summary>
+        /// 给 6 个设置项挂悬停说明（标签+输入框都挂，悬停哪边都看得到）。
+        /// 文案规则：先说"这是什么"，再说"不填/填错会怎样"，只追溯不判定的项要明说。
+        /// </summary>
+        private void SetupTooltips()
+        {
+            // 本窗 Designer 没建 components 容器（历史原因：从没放过 ToolTip 类控件），
+            // 这里补建一个，后续 Dispose 走容器自动释放（与 StationSettingsForm 同口径）。
+            if (this.components == null) this.components = new System.ComponentModel.Container();
+            _tip = new ToolTip(this.components);
+            _tip.ShowAlways = true;
+            SetTip(new Control[] { lblRecipeNameLabel, txtRecipeName },
+                "配方名称：配方的名字，保存后在配方管理中选用。输入时自动检索已有配方，选中后自动回填延时、温度、负压、显示模式。");
+            SetTip(new Control[] { lblDelayTime1Label, tableLayoutPanelDelay1 },
+                "延时时间：对应工位面板延时开启。上电后等这么久才开始计时老化（时:分:秒）。");
+            SetTip(new Control[] { lblStartTimeLabel, tableLayoutPanelStart },
+                "启动时间：对应工位面板延时到达，与延时时间共同决定上电时序（时:分:秒）。");
+            SetTip(new Control[] { lblLimitTempLabel, txtLimitTemp },
+                "极限温度：该配方的温度上限（0~999°C）。只记录追溯，不参与自动判定。");
+            SetTip(new Control[] { lblNegativePressureLabel, txtNegativePressure },
+                "负压阈值：该配方的真空到位判定阈值（kPa）。新建默认填全局阈值，下发后启动时定格，存什么用什么。");
+            SetTip(new Control[] { lblDisplayModeLabel, txtDisplayMode },
+                "显示模式：本次烧屏跑的显示画面（如红绿蓝纯色、灰阶）。只做生产追溯，不参与PASS/FAIL判定，会写入启动与报警日志。");
+        }
+
+        /// <summary>给一组控件挂同一条说明（超 40 字自动换行）。</summary>
+        private void SetTip(Control[] controls, string text)
+        {
+            string tip = SettingsForm.WrapTooltip(text);
+            foreach (Control c in controls)
+            {
+                if (c != null) _tip.SetToolTip(c, tip);
+            }
         }
 
         /// <summary>

@@ -5,11 +5,15 @@ namespace AgingTestSystem.Dialogs
 {
     /// <summary>
     /// 项目切换窗体 — 设计器部分（【V1.72.12 新增】纯代码拆分：静态边框进 Designer）。
-    /// 这里只装"静态边框"：窗体属性 + 当前项目标签/项目列表/新建行/三操作按钮/备注。
-    /// 以下三样仍在 ProjectSwitchForm.cs 里用代码做：
+    /// 这里只装"静态边框"：窗体属性 + 当前项目标签/项目列表/新建行/三操作按钮。
+    /// 【V1.73】删掉底部灰字备注 _lblNote（丑）：说明转到 _btnSwitch/_lblCurrent 的
+    /// 悬停 tooltip（超 40 字走 SettingsForm.WrapTooltip，全仓统一口径）；
+    /// 窗体随之缩高 415→350。
+    /// 以下在 ProjectSwitchForm.cs 里用代码做：
     /// ①RefreshList 初填（读 ProjectProfile 列表，构造调完 InitializeComponent 后调）；
     /// ②新建/切换/删除逻辑（BtnCreate/BtnSwitch/BtnDelete_Click 调项目档案服务）；
-    /// ③在测台数适配器（CountAdapter 吃构造传进的 Func，真参数 Designer 给不了）。
+    /// ③在测台数适配器（CountAdapter 吃构造传进的 Func，真参数 Designer 给不了）；
+    /// ④切换按钮可用态轮询（1s 定时器，在测>0 即禁用，tooltip 同步换文案）。
     /// 【布局】绝对定位（UIForm 自绘蓝标题占 35px，内容从 y=47 起排）；
     /// 操作行一排三按钮（各 120 宽、间距 8）；
     /// MinimumSize=ClientSize 锁缩小（V1.71 绝对布局窗统一做法）。
@@ -40,9 +44,6 @@ namespace AgingTestSystem.Dialogs
         /// <summary>"新建："静态标签（无逻辑引用，Designer 具名防后人误改坐标）</summary>
         private Sunny.UI.UILabel _lblNew;
 
-        /// <summary>底部备注（灰字：即时生效/禁切/账号全局）</summary>
-        private Sunny.UI.UILabel _lblNote;
-
         private void InitializeComponent()
         {
             this._lblCurrent = new Sunny.UI.UILabel();
@@ -53,7 +54,6 @@ namespace AgingTestSystem.Dialogs
             this._btnSwitch = new Sunny.UI.UIButton();
             this._btnDelete = new Sunny.UI.UIButton();
             this._btnClose = new Sunny.UI.UIButton();
-            this._lblNote = new Sunny.UI.UILabel();
             this.SuspendLayout();
             //
             // ProjectSwitchForm（UIForm 蓝标题；绝对布局内容从 y=47 起排）
@@ -64,8 +64,8 @@ namespace AgingTestSystem.Dialogs
             this.StartPosition = FormStartPosition.CenterParent;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
-            this.ClientSize = new Size(400, 415);
-            this.MinimumSize = new Size(400, 415);
+            this.ClientSize = new Size(400, 350);
+            this.MinimumSize = new Size(400, 350);
             //
             // _lblCurrent（加粗；初值代码回填）
             //
@@ -110,13 +110,6 @@ namespace AgingTestSystem.Dialogs
             this._btnClose.ForeColor = Color.White;
             this._btnClose.Style = Sunny.UI.UIStyle.Custom;
             //
-            // _lblNote（灰字备注）
-            //
-            this._lblNote.Location = new Point(12, 339);
-            this._lblNote.Size = new Size(376, 40);
-            this._lblNote.ForeColor = Color.Gray;
-            this._lblNote.Text = "注：切换即时生效，无需重启；有工位在测时禁止切换。\r\n用户账号全局共享，不跟项目走。";
-            //
             // 挂接
             //
             this.Controls.Add(this._lblCurrent);
@@ -127,7 +120,6 @@ namespace AgingTestSystem.Dialogs
             this.Controls.Add(this._btnSwitch);
             this.Controls.Add(this._btnDelete);
             this.Controls.Add(this._btnClose);
-            this.Controls.Add(this._lblNote);
             this.CancelButton = this._btnClose;
             this.ResumeLayout(false);
         }

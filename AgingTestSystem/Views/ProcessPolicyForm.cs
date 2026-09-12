@@ -10,7 +10,12 @@ using Newtonsoft.Json;
 namespace AgingTestSystem.Views
 {
     /// <summary>
-    /// 流程驾驶舱（【V1.70 新增】三期可视化：老化业务流固定拓扑 + 点节点改配置）。
+    /// 工艺策略（【V1.70 新增为"流程驾驶舱"，V1.73 改名】三期可视化：
+    /// 老化业务流固定拓扑 + 点节点改配置）。
+    ///
+    /// 【为什么叫工艺策略不叫流程驾驶舱】现场操作员看到"驾驶舱"不知道是干什么的；
+    /// 这里改的正是"参数设置→工艺策略/规则流程/MES上报"同一批 key（存 Policy.json），
+    /// 名字与设置分类同词，所见即所得：改工艺来这里。
     ///
     /// 【为什么是固定拓扑而不是通用连线编辑器】
     /// 参考过 HJVision 的 mFormFlowEdit（串行站点流水线 ST1→ST2→…，每次部署拓扑都不同，
@@ -20,27 +25,28 @@ namespace AgingTestSystem.Views
     /// 所以这里拓扑画死、节点可拖（纯视图）、点谁改谁的真实配置，存 Policy.json。
     ///
     /// 【V1.72】静态边框 Designer 化：右栏空壳/状态条/窗体属性搬进
-    /// FlowCockpitForm.Designer.cs；自绘画布（要吃真实参数）+ 动态编辑器 +
+    /// ProcessPolicyForm.Designer.cs；自绘画布（要吃真实参数）+ 动态编辑器 +
     /// 定时器仍在代码里。无参构造只装边框（构造冒烟/以后 VS 可视编辑用）。
     ///
-    /// 【界面布局】
+    /// 【界面布局】（左列主链 + 右列分支 + 右下 MES 纯配置节点）
     /// ┌──────────────────────────────────────────────┬───────────────┐
     /// │ 画布（自绘，可缩放/平移/拖节点）               │ 右栏 320px    │
-    /// │  [启动开阀]                                   │ 选中节点标题  │
-    /// │      │开阀                                    │ [编辑器组]    │
+    /// │  [启动开阀]              [断电恢复]            │ 选中节点标题  │
+    /// │      │开阀                   ┊整台重测/续跑    │ [编辑器组]    │
     /// │  [抽真空]────────超时/失压/失联/规则───────┐   │ [保存本节点]  │
-    /// │      │压力≤阈值 且 延时Ns                    │               │
+    /// │      │压力到位 且 延时到                          │               │
     /// │  [上电老化]────失压/失联/规则/超温───────┐   │               │
     /// │      │时长到 或 表达式                      [报警联动]        │
-    /// │  [完成下电]                                 │               │
-    /// │      │待取料/待判定                          │               │
-    /// │  [下料判定]   [断电恢复]- -重测/续跑- - →[抽真空]            │
+    /// │  [完成下电]──────────待取料/待判定──────→    │               │
+    /// │                        │人工复位回空闲      [下料判定]        │
+    /// │                        └────────→                             │
+    /// │                                     [MES上报]（无连线，纯配置）│
     /// ├──────────────────────────────────────────────┴───────────────┤
     /// │ 状态条：项目名 | 选中节点 | 保存提示                           │
     /// └──────────────────────────────────────────────────────────────┘
     ///
     /// 【鼠标操作】（对标 mFormFlowEdit 手感）
-    /// - 左键拖节点体 = 移动节点（位置存 FlowLayout.json，下次打开接着用）；
+    /// - 左键拖节点体 = 移动节点（位置存 PolicyLayout.json，下次打开接着用）；
     /// - 左键点节点/连线 = 选中（右栏切出该节点的编辑器；连线只读，显示条件来源）；
     /// - 左键点空白 = 取消选中；Esc 同样取消；
     /// - 滚轮 = 缩放（25%~400%，以鼠标为中心，不用先点画布抢焦点）；
@@ -50,13 +56,13 @@ namespace AgingTestSystem.Views
     /// 缩放是纯视图态（不进存盘）；字体用 pt（自动随 DPI 放大）×zoom 缓存两档；
     /// 禁用 Graphics.ScaleTransform（TextRenderer/GDI 与变换矩阵行为不一致，家规）。
     /// </summary>
-    public partial class FlowCockpitForm : Sunny.UI.UIForm, IMessageFilter
+    public partial class ProcessPolicyForm : Sunny.UI.UIForm, IMessageFilter
     {
         private DeviceConfig _config;
         private DeviceManager _deviceManager;
 
         // 注：_canvas/_pnlRight/_lblNodeTitle/_pnlEditors/_btnSaveNode/_btnResetLayout/
-        // _btnClose/_lblStatus 全在 FlowCockpitForm.Designer.cs 里声明并静态装配。
+        // _btnClose/_lblStatus 全在 ProcessPolicyForm.Designer.cs 里声明并静态装配。
         // 这里只留运行时态（选中/脏标记/编辑器表/定时器）+ 动态内容逻辑。
 
         private string _selectedId;
@@ -72,7 +78,7 @@ namespace AgingTestSystem.Views
         /// 无参构造（Designer/构造冒烟用：只装静态边框，不建画布不读配置，
         /// 所有画布调用处均判空，构造永不抛）。
         /// </summary>
-        public FlowCockpitForm()
+        public ProcessPolicyForm()
         {
             SavedKeys = new HashSet<string>();
             InitializeComponent();
@@ -83,7 +89,7 @@ namespace AgingTestSystem.Views
         /// <param name="deviceManager">设备管理器（读实时台数；可为 null，此时计数全 0）</param>
         /// <param name="canEdit">是否可编辑（仅管理员 true；技术员/操作员只读看图。
         /// 与系统设置"仅管理员可改"同级——驾驶舱改的是同一批 key，不能开后门）</param>
-        public FlowCockpitForm(DeviceConfig config, DeviceManager deviceManager, bool canEdit)
+        public ProcessPolicyForm(DeviceConfig config, DeviceManager deviceManager, bool canEdit)
             : this()
         {
             _config = config;
@@ -257,7 +263,7 @@ namespace AgingTestSystem.Views
                 return;
             }
 
-            FlowGraph.NodeDef def = FlowGraph.FindNode(_selectedId);
+            PolicyGraph.NodeDef def = PolicyGraph.FindNode(_selectedId);
             if (def == null)
             {
                 _lblNodeTitle.Text = "未知节点";
@@ -281,8 +287,16 @@ namespace AgingTestSystem.Views
                 y += 34;
             }
 
-            foreach (FlowGraph.NodeKey key in def.Keys)
+            foreach (PolicyGraph.NodeKey key in def.Keys)
             {
+                // 【V1.73】无阀本机藏破空点位行：VentValveDoPoint 是"有阀才填"的通道号，
+                // 无阀时露出来只会诱导人填，填了也写不出去（保存校验+执行双拦）。
+                // 开关本身（VentValveEnabled）照常显示——开阀门的总闸不能藏。
+                if (string.Equals(key.Key, "VentValveDoPoint", StringComparison.Ordinal)
+                    && (_config == null || !_config.VentValveEnabled))
+                {
+                    continue;
+                }
                 var lbl = new Sunny.UI.UILabel
                 {
                     Location = new Point(0, y),
@@ -297,7 +311,7 @@ namespace AgingTestSystem.Views
                 editor.Width = 270;
                 // 只读模式：控件禁用（与系统设置"仅管理员可改"同级，不开后门）
                 editor.Enabled = _canEdit;
-                if (key.Kind == FlowGraph.EditorKind.Multiline)
+                if (key.Kind == PolicyGraph.EditorKind.Multiline)
                 {
                     editor.Height = 96;
                     y += 102;
@@ -336,7 +350,7 @@ namespace AgingTestSystem.Views
             {
                 Location = new Point(0, 0),
                 Size = new Size(270, 160),
-                Text = FlowGraph.BuildEdgeInfo(edgeId, _config),
+                Text = PolicyGraph.BuildEdgeInfo(edgeId, _config),
                 ForeColor = Color.Gray
             };
             _pnlEditors.Controls.Add(info);
@@ -344,10 +358,10 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>按 key 类型建编辑器（初值读内存 _config，与系统设置热回写同一源）。</summary>
-        private Control CreateEditor(string key, FlowGraph.EditorKind kind)
+        private Control CreateEditor(string key, PolicyGraph.EditorKind kind)
         {
             string current = GetConfigString(key);
-            if (kind == FlowGraph.EditorKind.Bool)
+            if (kind == PolicyGraph.EditorKind.Bool)
             {
                 var cmb = new Sunny.UI.UIComboBox { DropDownStyle = Sunny.UI.UIDropDownStyle.DropDownList };
                 cmb.Items.Add(new FlowOpt("false", "false"));
@@ -356,7 +370,7 @@ namespace AgingTestSystem.Views
                 cmb.SelectedIndexChanged += (s, e) => MarkDirty();
                 return cmb;
             }
-            if (kind == FlowGraph.EditorKind.Enum)
+            if (kind == PolicyGraph.EditorKind.Enum)
             {
                 var cmb = new Sunny.UI.UIComboBox { DropDownStyle = Sunny.UI.UIDropDownStyle.DropDownList };
                 Tuple<string, string>[] opts;
@@ -368,7 +382,7 @@ namespace AgingTestSystem.Views
                 cmb.SelectedIndexChanged += (s, e) => MarkDirty();
                 return cmb;
             }
-            if (kind == FlowGraph.EditorKind.Multiline)
+            if (kind == PolicyGraph.EditorKind.Multiline)
             {
                 var txt = new Sunny.UI.UITextBox { Multiline = true, ShowScrollBar = true };
                 txt.Text = current;
@@ -459,12 +473,12 @@ namespace AgingTestSystem.Views
         private bool SaveCurrentNode()
         {
             if (string.IsNullOrEmpty(_selectedId)) return true;
-            FlowGraph.NodeDef def = FlowGraph.FindNode(_selectedId);
+            PolicyGraph.NodeDef def = PolicyGraph.FindNode(_selectedId);
             if (def == null || def.Keys.Count == 0) return true;
 
             var changes = new Dictionary<string, string>();
             var invalid = new List<string>();
-            foreach (FlowGraph.NodeKey key in def.Keys)
+            foreach (PolicyGraph.NodeKey key in def.Keys)
             {
                 Control editor;
                 if (!_editorControls.TryGetValue(key.Key, out editor)) continue;
@@ -538,7 +552,7 @@ namespace AgingTestSystem.Views
             private readonly DeviceManager _deviceManager;
 
             private readonly Dictionary<string, Point> _positions = new Dictionary<string, Point>();
-            private FlowGraph.FlowCounts _counts;
+            private PolicyGraph.FlowCounts _counts;
             private string _selNode;
             private string _selEdge;
 
@@ -571,11 +585,11 @@ namespace AgingTestSystem.Views
                 this.Cursor = Cursors.Default;
 
                 // 节点位置：缺省布局 + 用户存盘覆盖（存过才认，没存过走缺省）
-                foreach (var n in FlowGraph.Nodes)
+                foreach (var n in PolicyGraph.Nodes)
                 {
                     _positions[n.Id] = n.DefaultRect.Location;
                 }
-                foreach (var kv in FlowGraph.LayoutStore.Load())
+                foreach (var kv in PolicyGraph.LayoutStore.Load())
                 {
                     if (_positions.ContainsKey(kv.Key)) _positions[kv.Key] = kv.Value;
                 }
@@ -626,7 +640,7 @@ namespace AgingTestSystem.Views
             {
                 try
                 {
-                    var c = new FlowGraph.FlowCounts();
+                    var c = new PolicyGraph.FlowCounts();
                     if (_deviceManager != null)
                     {
                         int vac, age, done, fault, idle;
@@ -665,11 +679,11 @@ namespace AgingTestSystem.Views
             /// <summary>复位布局（缺省位置 + 存盘 + 重画）。</summary>
             public void ResetLayout()
             {
-                foreach (var n in FlowGraph.Nodes)
+                foreach (var n in PolicyGraph.Nodes)
                 {
                     _positions[n.Id] = n.DefaultRect.Location;
                 }
-                FlowGraph.LayoutStore.Save(new Dictionary<string, Point>(_positions));
+                PolicyGraph.LayoutStore.Save(new Dictionary<string, Point>(_positions));
                 UpdateScrollSize();
                 this.Invalidate();
             }
@@ -708,7 +722,7 @@ namespace AgingTestSystem.Views
             private void UpdateScrollSize()
             {
                 int maxR = 0, maxB = 0;
-                foreach (var n in FlowGraph.Nodes)
+                foreach (var n in PolicyGraph.Nodes)
                 {
                     Point p = GetPos(n.Id);
                     maxR = Math.Max(maxR, p.X + n.DefaultRect.Width);
@@ -723,11 +737,11 @@ namespace AgingTestSystem.Views
             {
                 Point p;
                 if (_positions.TryGetValue(id, out p)) return p;
-                var def = FlowGraph.FindNode(id);
+                var def = PolicyGraph.FindNode(id);
                 return def != null ? def.DefaultRect.Location : Point.Empty;
             }
 
-            private Rectangle GetRect(FlowGraph.NodeDef n)
+            private Rectangle GetRect(PolicyGraph.NodeDef n)
             {
                 Point p = GetPos(n.Id);
                 return new Rectangle(p, n.DefaultRect.Size);
@@ -753,7 +767,7 @@ namespace AgingTestSystem.Views
                 if (e.Button != MouseButtons.Left) return;
 
                 Point logical = new Point(ToLogicalX(e.X), ToLogicalY(e.Y));
-                FlowGraph.NodeDef hit = HitNode(logical);
+                PolicyGraph.NodeDef hit = HitNode(logical);
                 if (hit != null)
                 {
                     // 点节点：选中 + 开始拖（up 时没动也算一次点击选中）
@@ -764,7 +778,7 @@ namespace AgingTestSystem.Views
                     if (NodeSelected != null) NodeSelected(hit.Id);
                     return;
                 }
-                FlowGraph.EdgeDef edge = HitEdge(e.Location);
+                PolicyGraph.EdgeDef edge = HitEdge(e.Location);
                 if (edge != null)
                 {
                     if (EdgeSelected != null) EdgeSelected(edge.Id);
@@ -818,26 +832,26 @@ namespace AgingTestSystem.Views
                     if (moved != null)
                     {
                         // 拖完落定即存盘（下次打开接着用）
-                        FlowGraph.LayoutStore.Save(new Dictionary<string, Point>(_positions));
+                        PolicyGraph.LayoutStore.Save(new Dictionary<string, Point>(_positions));
                         this.Invalidate();
                     }
                 }
             }
 
-            private FlowGraph.NodeDef HitNode(Point logical)
+            private PolicyGraph.NodeDef HitNode(Point logical)
             {
                 // 倒序命中（后画的报警等侧栏优先，压边不断）
-                for (int i = FlowGraph.Nodes.Count - 1; i >= 0; i--)
+                for (int i = PolicyGraph.Nodes.Count - 1; i >= 0; i--)
                 {
-                    var n = FlowGraph.Nodes[i];
+                    var n = PolicyGraph.Nodes[i];
                     if (GetRect(n).Contains(logical)) return n;
                 }
                 return null;
             }
 
-            private FlowGraph.EdgeDef HitEdge(Point device)
+            private PolicyGraph.EdgeDef HitEdge(Point device)
             {
-                foreach (var e in FlowGraph.Edges)
+                foreach (var e in PolicyGraph.Edges)
                 {
                     Point a, b;
                     EdgeEndpoints(e, out a, out b);
@@ -859,10 +873,10 @@ namespace AgingTestSystem.Views
             }
 
             /// <summary>连线端点（设备坐标）：按两框相对位置选边（横向走左右，纵向走上下）。</summary>
-            private void EdgeEndpoints(FlowGraph.EdgeDef e, out Point a, out Point b)
+            private void EdgeEndpoints(PolicyGraph.EdgeDef e, out Point a, out Point b)
             {
-                var na = FlowGraph.FindNode(e.From);
-                var nb = FlowGraph.FindNode(e.To);
+                var na = PolicyGraph.FindNode(e.From);
+                var nb = PolicyGraph.FindNode(e.To);
                 Rectangle ra = na != null ? GetRect(na) : Rectangle.Empty;
                 Rectangle rb = nb != null ? GetRect(nb) : Rectangle.Empty;
                 Point ca = new Point(ra.Left + ra.Width / 2, ra.Top + ra.Height / 2);
@@ -894,20 +908,20 @@ namespace AgingTestSystem.Views
                 g.Clear(this.BackColor);
 
                 // 先画边（X 形交叉处边在下，节点在上）
-                foreach (var edge in FlowGraph.Edges)
+                foreach (var edge in PolicyGraph.Edges)
                 {
                     bool selected = string.Equals(_selEdge, edge.Id, StringComparison.Ordinal);
                     DrawEdge(g, edge, selected, dark);
                 }
                 // 后画节点
-                foreach (var n in FlowGraph.Nodes)
+                foreach (var n in PolicyGraph.Nodes)
                 {
                     bool selected = string.Equals(_selNode, n.Id, StringComparison.Ordinal);
                     DrawNode(g, n, selected, dark);
                 }
             }
 
-            private void DrawEdge(Graphics g, FlowGraph.EdgeDef e, bool selected, bool dark)
+            private void DrawEdge(Graphics g, PolicyGraph.EdgeDef e, bool selected, bool dark)
             {
                 Point a, b;
                 EdgeEndpoints(e, out a, out b);
@@ -930,7 +944,7 @@ namespace AgingTestSystem.Views
                     g.DrawLine(pen, b, p2);
                 }
                 // 条件标签（中点，白底/黑底衬一下，字不糊在线上）
-                string label = FlowGraph.BuildEdgeLabel(e.Id, _config);
+                string label = PolicyGraph.BuildEdgeLabel(e.Id, _config);
                 if (!string.IsNullOrEmpty(label))
                 {
                     Point mid = new Point((a.X + b.X) / 2, (a.Y + b.Y) / 2);
@@ -947,7 +961,7 @@ namespace AgingTestSystem.Views
                 }
             }
 
-            private void DrawNode(Graphics g, FlowGraph.NodeDef n, bool selected, bool dark)
+            private void DrawNode(Graphics g, PolicyGraph.NodeDef n, bool selected, bool dark)
             {
                 Rectangle lr = GetRect(n);
                 Rectangle r = new Rectangle(Dx(lr.X), Dy(lr.Y),
@@ -970,7 +984,7 @@ namespace AgingTestSystem.Views
                     new Rectangle(r.Left + 6, r.Top, r.Width - 12, headH),
                     Color.White, TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
 
-                string[] lines = FlowGraph.BuildNodeLines(n.Id, _config, _counts);
+                string[] lines = PolicyGraph.BuildNodeLines(n.Id, _config, _counts);
                 int y = r.Top + headH + 3;
                 foreach (string line in lines)
                 {

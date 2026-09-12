@@ -11,13 +11,12 @@ namespace AgingTestSystem.Dialogs
     ///
     /// 【界面布局】
     /// ┌──────────────────────────────────┐
-    /// │ 当前项目：烧屏测试                │
+    /// │ 当前项目：烧屏测试                │  ← 悬停：账号全局共享说明
     /// │ ┌──────────────────────────────┐ │
     /// │ │ 项目列表（ListBox，★=当前）   │ │
     /// │ └──────────────────────────────┘ │
     /// │ 新建：[________] [创建]          │
-    /// │ [切换并生效] [删除项目] [关闭]   │
-    /// │ 注：测试中有在测工位时禁切       │
+    /// │ [切换并生效] [删除项目] [关闭]   │  ← 切换按钮悬停说明随可用态变
     /// └──────────────────────────────────┘
     ///
     /// 【规则】
@@ -57,7 +56,83 @@ namespace AgingTestSystem.Dialogs
             // 【V1.72.12 Designer 化】静态边框搬进 ProjectSwitchForm.Designer.cs，
             // 这里只初填"要读服务"的那一项（项目列表依赖 ProjectProfile）。
             InitializeComponent();
+
+            // 【V1.73】说明全部转悬停 tooltip（底部灰字备注已删）：
+            // 切换按钮的提示随可用态变，在测禁用时直接告诉用户为什么点不了。
+            _tip = new ToolTip();
+            _tip.ShowAlways = true;
+            _tip.SetToolTip(_lblCurrent,
+                SettingsForm.WrapTooltip("用户账号全局共享，不跟项目走。"));
             RefreshList();
+        }
+
+        /// <summary>悬停说明（构造时建，关闭时释放）。</summary>
+        private ToolTip _tip;
+
+        /// <summary>切换按钮可用态轮询（1s；在测台数会变，不能只在构造时算一次）。</summary>
+        private Timer _refreshTimer;
+
+        /// <summary>关窗标记（V1.72.15 关窗竞态：置位后定时 Tick 直接丢弃）。</summary>
+        private bool _closed;
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            _refreshTimer = new Timer();
+            _refreshTimer.Interval = 1000;
+            _refreshTimer.Tick += (s, args) =>
+            {
+                try
+                {
+                    if (_closed || IsDisposed || Disposing) return;
+                    UpdateSwitchState();
+                }
+                catch { }
+            };
+            _refreshTimer.Start();
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            _closed = true;
+            try
+            {
+                if (_refreshTimer != null) { _refreshTimer.Stop(); _refreshTimer.Dispose(); _refreshTimer = null; }
+                if (_tip != null) { _tip.Dispose(); _tip = null; }
+            }
+            catch { }
+            base.OnFormClosed(e);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                // 构造了没 Show 就释放的路径（OnFormClosed 走不到，这里兜底）
+                try
+                {
+                    if (_refreshTimer != null) { _refreshTimer.Stop(); _refreshTimer.Dispose(); _refreshTimer = null; }
+                    if (_tip != null) { _tip.Dispose(); _tip = null; }
+                }
+                catch { }
+            }
+            base.Dispose(disposing);
+        }
+
+        /// <summary>
+        /// 按在测台数刷新切换按钮可用态 + 悬停文案（有工位在测时禁用，悬停告诉原因）。
+        /// </summary>
+        private void UpdateSwitchState()
+        {
+            if (_btnSwitch == null || _btnSwitch.IsDisposed) return;
+            bool canSwitch = _deviceManager.TestingCount <= 0;
+            _btnSwitch.Enabled = canSwitch;
+            if (_tip != null && !_btnSwitch.IsDisposed)
+            {
+                _tip.SetToolTip(_btnSwitch, SettingsForm.WrapTooltip(canSwitch
+                    ? "切换即时生效，无需重启。"
+                    : "有工位在测时禁用：等待完成/停止并复位后再切换。"));
+            }
         }
 
         /// <summary>Func 适配器（MainForm 传 () => 在测台数 即可，不用把 DeviceManager 整个交进来）。</summary>
@@ -85,6 +160,7 @@ namespace AgingTestSystem.Dialogs
                     _lstProjects.SelectedIndex = _lstProjects.Items.Count - 1;
                 }
             }
+            UpdateSwitchState();
         }
 
         /// <summary>从列表行文本还原项目名（去 ★/空格前缀）。</summary>

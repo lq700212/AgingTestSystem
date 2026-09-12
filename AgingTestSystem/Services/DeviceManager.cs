@@ -2266,7 +2266,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 各阶段实时台数（【V1.70 新增】流程驾驶舱节点计数用）。
+        /// 各阶段实时台数（【V1.70 新增】工艺策略窗节点计数用）。
         /// 在测按子阶段拆抽真空/老化计时；完成/故障/空闲读缓存状态（与面板显示一致口径）。
         /// 两把锁分开取（先状态后缓存），1 秒级刷新 wink 一下不同步无所谓，不持双锁防死锁。
         /// </summary>
@@ -3089,10 +3089,12 @@ namespace AgingTestSystem.Services
                     try { Console.Beep(880, 400); }
                     catch { /* 无音频设备时静默跳过 */ }
                 }
+            // 【V1.73】开关未开（VentValveEnabled=false，本机无阀）同样只记日志跳过：
+            // 保存时校验已拦泄压组合，这里是纵深防御（老 Policy.json 残留泄压动作也不写 DO）。
                 if (action == CompletionAction.PowerOffAndVent
                     || action == CompletionAction.PowerOffVentAndBeep)
                 {
-                    if (_config.VentValveDoPoint > 0)
+                    if (_config.VentValveEnabled && _config.VentValveDoPoint > 0)
                     {
                         _ioController.WriteOutput(_config.VentValveDoPoint, true);
                         TestEventLogger.Write(_currentLotNumber, deviceId, "破空泄压",
@@ -3101,7 +3103,7 @@ namespace AgingTestSystem.Services
                     else
                     {
                         TestEventLogger.Write(_currentLotNumber, deviceId, "破空泄压",
-                            "完成动作要求泄压但 VentValveDoPoint=0（未配点位），已跳过泄压只下电");
+                            "完成动作要求泄压但本机未装破空阀或未配点位（VentValveEnabled=false 或 VentValveDoPoint=0），已跳过泄压只下电");
                     }
                 }
             }

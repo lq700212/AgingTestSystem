@@ -473,6 +473,15 @@ namespace AgingTestSystem.Models
         /// </summary>
         public int VentValveDoPoint { get; set; } = 0;
 
+        /// <summary>
+        /// 本机是否装破空阀（【V1.73 新增】通用型开关：这台工控机接没接破空阀硬件）。
+        /// false（默认，本项目无阀）：工位设置窗手动"破空"按钮自动隐藏，
+        /// 完成动作选泄压保存即拦（防配出到时"假泄压"）；
+        /// true（下个有阀项目）：按钮显示 + 点位生效，泄压真写 DO。
+        /// 跟机器（App.config），不是工艺——阀接在哪台机子上是接线事实。
+        /// </summary>
+        public bool VentValveEnabled { get; set; } = false;
+
         // =====================================================================
         // MES 对接（【V1.68 新增】二期：映射层可配，传输层走 HTTP POST JSON）
         // 说明：

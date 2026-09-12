@@ -63,9 +63,13 @@
   静态内存（工位缓存）切项目必须 `Reload`；清状态禁调 `StopAll`
  （那是写 IO 全 OFF 的急停语义）；历史项目目录的改名/删除收进
   `EnsureActiveProfile` 启动自愈，列表里永远干净。
-- **设置表 tooltip 全覆盖（V1.67 用户原则）**：配置项说明悬停可见，超 40 字按
+- **设置表 tooltip 全覆盖（V1.67 用户原则，V1.73 固化全仓）**：配置项说明悬停可见，超 40 字按
   `WrapTooltip` 换行（断点优先标点，不断英文单词）；新增配置项的 `_descriptions`
   写清"现状是什么/改了会怎样"，别只写名字。
+  **换行只调 `SettingsForm.WrapTooltip`（唯一入口，不许手写截断）**；
+  新增带说明的控件（录入窗设置项、按钮动作说明、状态解释）一律挂 `ToolTip`，
+  标签+输入框两边都挂；容器管理的 (`new ToolTip(components)`) 随窗体自动释放，
+  无容器的手写 `Dispose`（项目切换窗先例）；动态文案（可用/禁用两套话）随状态同步换。
 - **MES 映射类配置约定（V1.68）**：触发器/字段映射/静态字段是自由文本，
   校验走 `MesMapping` 纯函数（vocabulary 改只改它；SettingsForm/上报器/用例三方共用），
   脏输入保存时拦（报出哪一组错）、上报时跳过（不带病全停）。`MesReporter.Transport`
@@ -117,12 +121,14 @@
     视觉间距断言直接锁 `nud.Left - lbl.Right ≥ 8`（不与生产同口径，防循环自证）；
     Designer 残留 Size（如 107）是旧字体过期值，算坐标一律以运行时探针实测为准，
     设计器初始坐标按运行真值摆（V1.72.3：lbl 36/nud 192）。
-- **流程驾驶舱约定（V1.70）**：拓扑画死（物理锁死，通用连线编辑器会让客户删掉安全联锁，
+- **工艺策略窗约定（V1.70 建图，V1.73 由"流程驾驶舱"改名）**：拓扑画死（物理锁死，通用连线编辑器会让客户删掉安全联锁，
   参考 HJVision mFormFlowEdit 后否决）；节点只挂真实 key（ key 必须全是 DeviceConfig
   真属性，回归锁），连线只读；保存走 `SettingsForm.PersistChanges`（与设置表同一条路，
-  落盘语义只有一份）；节点位置纯视图存 `FlowLayout.json`（跟机器，缩放/平移不存）；
+  落盘语义只有一份）；节点位置纯视图存 `PolicyLayout.json`（跟机器，缩放/平移不存）；
   缩放以鼠标为中心（IMessageFilter 预过滤滚轮），中键平移注意 AutoScrollPosition
   存取符号坑（setter 取正值）；双锁分开取防死锁（`GetPhaseCounts` 先状态后缓存）。
+  MES上报是无连线纯配置节点（上报正交于流程，画连线误导）；无阀本机藏破空点位行
+  （`VentValveEnabled=false` 时，开关本身照常显示）。
 - **配方加字段三窗同步（V1.66）**：`RecipeConfig` 加字段 → 三个录入窗
   （`RecipeManagerForm`/`BatchRecipeForm`/`StationSettingsForm`：输入框 + 保存 + 回填 +
   自动检索回调 + 头部 ASCII 图）→ `SetStationRecipe` 下发 → `StationInfo`（+`Clone`）→
@@ -232,8 +238,8 @@
 | `AgingTestSystem/Services/RuleExpr.cs` | 规则表达式引擎（V1.69；沙盒解析求值，变量冻结 12 个） |
 | `AgingTestSystem/Services/RuleEngine.cs` | 规则执行器（V1.69；编译缓存+持续计时+完成表达式 OR） |
 | `AgingTestSystem/Controls/RuleListEditorPopup.cs` | 规则表编辑弹窗（V1.69；多行文本+实时校验） |
-| `AgingTestSystem/Views/FlowCockpitForm.cs` | 流程驾驶舱（V1.70；固定拓扑画布+点节点改配置+缩放平移拖拽） |
-| `AgingTestSystem/Views/FlowGraph.cs` | 流程图静态数据（V1.70；拓扑/文本/布局存取，纯静态可单测） |
+| `AgingTestSystem/Views/ProcessPolicyForm.cs` | 工艺策略窗（V1.70 建图；固定拓扑画布+点节点改配置+缩放平移拖拽） |
+| `AgingTestSystem/Views/PolicyGraph.cs` | 工艺策略图静态数据（V1.70；拓扑/文本/布局存取，纯静态可单测） |
 | `AgingTestSystem/Services/TestSessionStore.cs` | 在测任务快照持久化（TestSession.json，断电恢复用，gitignore） |
 | `AgingTestSystem/Services/RecipeAutoCompleteProvider.cs` | 配方名称自动检索 |
 | `AgingTestSystem/Services/ThemeManager.cs` | 深色/浅色主题服务（V1.60；AppTheme 配置 + 双向映射表着色；新窗体打开前 ApplyTo） |
@@ -253,7 +259,7 @@
 - **新增 .cs 文件必须手工在 csproj 登记**（老式项目无通配，漏登记报 CS0246）：
   在 `<Compile Include="...">` 段按目录加一行（纯代码窗体加 `<SubType>Form</SubType>` 即可，
   无需 Designer/resx）。V1.67 实锤：5 个新文件漏登记编译全红。
-- **最终测试验证手段（V1.58.23 起）**：一键跑 `powershell -ExecutionPolicy Bypass -File .opencode\skills\agingtest-regression\scripts\build_and_test.ps1`，自动完成"构建 → 真机冒烟（exe 启动存活）→ 全量回归用例（1300 断言，覆盖 PasswordHasher/UserManager/配置归一化/IO 映射/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案/MES映射上报/规则表达式/流程驾驶舱/编排扩展场景等核心逻辑类）"。也可单独跑同目录 `smoke_test.ps1`（只冒烟）/ `run_unit_tests.ps1`（只回归）。退出码 0 = 全绿。
+- **最终测试验证手段（V1.58.23 起）**：一键跑 `powershell -ExecutionPolicy Bypass -File .opencode\skills\agingtest-regression\scripts\build_and_test.ps1`，自动完成"构建 → 真机冒烟（exe 启动存活）→ 全量回归用例（1318 断言，覆盖 PasswordHasher/UserManager/配置归一化/IO 映射/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案/MES映射上报/规则表达式/流程驾驶舱/编排扩展场景等核心逻辑类）"。也可单独跑同目录 `smoke_test.ps1`（只冒烟）/ `run_unit_tests.ps1`（只回归）。退出码 0 = 全绿。
 - **界面像素级 bug（竖线/横线/颜色/叠色/裁剪/滚动条）**：调用全局技能 `winforms-ui-debug`——编译独立 harness 直接 new 目标窗体（指哪打哪，绕过登录/主流程），用反射探私有字段 + PrintWindow 截图 + 像素扫描定位根因并验证修复。含可复用的 csc 编译命令、坐标映射、色值字典与踩坑清单。
 - **调试完自动沉淀技能**：每次用 `winforms-ui-debug` 排查成功（尤其是"一次性改对"的高光案例）后，**主动把可复用的新套路/新踩坑/新型探针代码回写到全局技能 `winforms-ui-debug` 的 SKILL.md**（新增/补充小节、追加踩坑条目），不用等用户提醒。价值标准：换个人靠这份 skill 能更快解决同类问题。
 - 改构建输出（csproj 路径/bin 目录/主 exe 名）时，同步改全局技能 `winforms-ui-debug` 附录 A 的 AgingTestSystem 行（防开工查表拿到旧值）。
