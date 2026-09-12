@@ -3189,6 +3189,73 @@ namespace AgingTestSystem.Tests
                 }
                 finally { sf.Dispose(); }
             }
+
+            // ── 非模态编辑弹窗关闭即释放（V1.72.13：终结器跨线程崩溃锁） ──
+            // 复现：设置窗点映射/IP/规则格弹非模态窗，FormClosed 只回写不 Dispose，
+            // 里面的 Sunny 输入框/表格成孤儿，GC 时终结器线程 Dispose 即炸
+            // （与驾驶舱右栏同病根；案发时机看 GC，报错时正在干什么都是巧合）。
+            // 走生产挂接路径验证：反射调 ShowXxxPopup → OpenForms 按类型找窗 →
+            // Close → IsDisposed 必须 true（修的是 handler，裸 Show/Close 测不到）。
+            SettingsForm sfPop = null;
+            try
+            {
+                sfPop = new SettingsForm(new DeviceConfig());
+                sfPop.Show();
+                Application.DoEvents();
+                var gridF = typeof(SettingsForm).GetField("_grid",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                var grid = (DataGridView)gridF.GetValue(sfPop);
+                Check("反射拿到设置表格", grid != null && grid.Rows.Count > 0);
+                if (grid != null && grid.Rows.Count > 0)
+                {
+                    var cases = new[]
+                    {
+                        new { Method = "ShowIpListPopup", Type = typeof(Controls.IpListEditorPopup),
+                            Value = (object)"192.168.1.220", Name = "IP弹窗" },
+                        new { Method = "ShowIoMappingPopup", Type = typeof(Controls.IoMappingEditorPopup),
+                            Value = (object)"0x2000@0x00->0x2009@0x01", Name = "IO映射弹窗" },
+                        new { Method = "ShowRuleListPopup", Type = typeof(Controls.RuleListEditorPopup),
+                            Value = (object)"", Name = "规则弹窗" },
+                    };
+                    foreach (var c in cases)
+                    {
+                        var mi = typeof(SettingsForm).GetMethod(c.Method,
+                            BindingFlags.NonPublic | BindingFlags.Instance);
+                        Check("反射找到 " + c.Method, mi != null);
+                        if (mi == null) continue;
+                        mi.Invoke(sfPop, new object[] { grid, 0, c.Value });
+                        Application.DoEvents();
+                        Form found = null;
+                        foreach (Form f in Application.OpenForms)
+                        {
+                            if (f != null && f.GetType() == c.Type) { found = f; break; }
+                        }
+                        Check(c.Name + "已弹出", found != null);
+                        if (found != null)
+                        {
+                            found.Close();
+                            Application.DoEvents();
+                            Check(c.Name + "Close后已释放（不进终结器）", found.IsDisposed);
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                // 兜底：关残留弹窗 + 设置窗，不留孤儿污染后模块
+                foreach (Form f in new System.Collections.ArrayList(Application.OpenForms))
+                {
+                    try
+                    {
+                        if (f != null && !(f is SettingsForm) && !f.IsDisposed
+                            && (f is Controls.IpListEditorPopup
+                                || f is Controls.IoMappingEditorPopup
+                                || f is Controls.RuleListEditorPopup)) f.Dispose();
+                    }
+                    catch { }
+                }
+                try { if (sfPop != null) { sfPop.Close(); sfPop.Dispose(); } } catch { }
+            }
         }
 
         // =====================================================================

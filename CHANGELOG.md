@@ -3,6 +3,34 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md).
 
+## V1.72.13 — 设置窗三弹窗关闭不释放 + 终结器崩溃再犯（2026-09-12，用户报障）
+
+### 改动范围
+- `Dialogs/SettingsForm.cs` — IP 列表 / IO 映射 / 规则三个非模态编辑弹窗，
+  FormClosed 只回写不 Dispose：`Close()` 不释放非模态窗体，弹窗里的 Sunny 输入框/
+  表格成孤儿，GC 时终结器线程 Dispose 即跨线程崩溃（与 V1.72.12 驾驶舱右栏同病根；
+  用户在"打开公共参数弹窗时"炸纯属终结时机巧合，案发时干什么都是背锅）。
+  三处 FormClosed 加 `finally { popup.Dispose(); }`（先回写再释放）。
+- `Views/MainForm.cs` — 下拉菜单 popup 同病（原生 Button 不炸但泄漏），
+  FormClosed 顺手加 Dispose。
+- 地毯式排查 + 自动审计固化：全仓 14 个动态创建点逐个定罪（Designer 随树/
+  模态 using/字段复用/provider 早有释放，全部安全）；新增
+  `scripts/audit_finalizer_risk.ps1`（R1 Clear/R2 非模态 Show/R3 Remove/R4 动态创建，
+  HIGH 拦提交；R2 是行为检查，反向验证注掉释放必报警），改 UI 代码后必跑。
+
+### 为什么这么改
+- V1.72.12 只修了驾驶舱两处 Clear，用户现场又炸（同堆栈
+  `ResetAutoComplete←Dispose←Finalize`）。全仓排查：Designer 控件随窗体树释放、
+  模态窗有 using、连接提示/测试窗有关闭释放——只剩这三个非模态 popup 漏网。
+  用户最近正好频繁进设置改策略/映射，孤儿堆得比平时多，炸得更快。
+
+### 验证
+- `build_and_test.ps1 -Affected`（SettingsForm+用例改动，实际跑全量兜底）：
+  构建 + 冒烟 + **1239 全绿**（1229 + 10：走生产挂接反射调 ShowXxxPopup→
+  OpenForms 找窗→Close→IsDisposed，IP/IO/规则各 3 条 + 表格反射 1 条）。
+- 用例写法教训：裸 `new popup → Show → Close` 测的是框架行为（恒绿假绿），
+  必须走生产 handler 才锁得住修复（见 skill 踩坑）。
+
 ## V1.72.12 — 配方删光切回串数据 + 终结器跨线程崩溃 + 三窗Designer化（2026-09-12，用户点名）
 
 ### 改动范围

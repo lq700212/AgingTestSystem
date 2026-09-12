@@ -1206,11 +1206,21 @@ namespace AgingTestSystem.Dialogs
 
             popup.FormClosed += (s, args) =>
             {
-                if (!string.IsNullOrEmpty(popup.ResultValue))
+                try
                 {
-                    grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
-                    // 值可能变化，重新按内容算行高
-                    LayoutSections();
+                    if (!string.IsNullOrEmpty(popup.ResultValue))
+                    {
+                        grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
+                        // 值可能变化，重新按内容算行高
+                        LayoutSections();
+                    }
+                }
+                finally
+                {
+                    // 【V1.72.13】非模态关闭后必须释放：Close 不释放非模态窗体，
+                    // 弹窗里的 Sunny 输入框/表格成孤儿，GC 时走终结器线程 Dispose，
+                    // 内部读原生 TextBox.Handle 即跨线程崩溃（与驾驶舱右栏同病根）。
+                    popup.Dispose();
                 }
             };
 
@@ -1243,11 +1253,19 @@ namespace AgingTestSystem.Dialogs
 
             popup.FormClosed += (s, args) =>
             {
-                if (!string.IsNullOrEmpty(popup.ResultValue))
+                try
                 {
-                    grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
-                    // 值可能变化，重新按内容算行高
-                    LayoutSections();
+                    if (!string.IsNullOrEmpty(popup.ResultValue))
+                    {
+                        grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
+                        // 值可能变化，重新按内容算行高
+                        LayoutSections();
+                    }
+                }
+                finally
+                {
+                    // 【V1.72.13】同上：非模态关闭后释放，防孤儿 Sunny 控件终结器跨线程崩溃。
+                    popup.Dispose();
                 }
             };
 
@@ -1280,11 +1298,19 @@ namespace AgingTestSystem.Dialogs
 
             popup.FormClosed += (s, args) =>
             {
-                if (popup.ResultValue != null)
+                try
                 {
-                    grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
-                    // 值可能变化，重新按内容算行高
-                    LayoutSections();
+                    if (popup.ResultValue != null)
+                    {
+                        grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
+                        // 值可能变化，重新按内容算行高
+                        LayoutSections();
+                    }
+                }
+                finally
+                {
+                    // 【V1.72.13】同上：非模态关闭后释放，防孤儿控件终结器跨线程崩溃。
+                    popup.Dispose();
                 }
             };
 

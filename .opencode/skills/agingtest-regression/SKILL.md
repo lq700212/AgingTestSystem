@@ -1,6 +1,6 @@
 ---
 name: agingtest-regression
-description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案热更删除/终结器释放/MES映射上报/规则表达式/流程驾驶舱等全部核心逻辑类（1229 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
+description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案热更删除/终结器释放/MES映射上报/规则表达式/流程驾驶舱等全部核心逻辑类（1239 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
 ---
 
 # AgingTestSystem 回归测试套件（冒烟 + 用例一体）
@@ -57,7 +57,7 @@ agingtest-regression/
     └── TestRunner.cs         ← 全部测试用例源码（加用例就改这里）
 ```
 
-## 三、测试覆盖范围（37 个模块，1229 断言）
+## 三、测试覆盖范围（37 个模块，1239 断言）
 
 | 模块 | 覆盖点 |
 | --- | --- |
@@ -81,7 +81,7 @@ agingtest-regression/
 | MockDevices(V1.62) | 三 Mock 未连接约定/越界/副本隔离、气压两档区间千次采样、风机启停守卫与漂移界 |
 | StationCache(V1.62) | 往返全字段、覆盖语义、副本双向隔离、脏文件三态、非法编号过滤（反射重置静态缓存+隔离目录） |
 | ModelDefaults(V1.62) | DeviceConfig 全构造默认值、风机枚举寄存器值、FanData/BarometerData Clone 全字段与数组深拷贝、LoginResult 工厂、角色值、快照与配方构造默认 |
-| SettingsValidate(V1.62) | ValidateValue 全类型矩阵、TryParseUShort、范围表抽查+默认值落界、布尔键一致（V1.71：14 项含 SkipVacuum）、连接键契约、CreateValueCell 全分发、分类/说明键对齐（构造真窗体不断言弹窗）、PersistChanges 统一路（V1.71：矛盾/MES 拦截、策略落盘+热回写、机器键落盘、空改动、null 不抛，运行目录隔离+备份还原） |
+| SettingsValidate(V1.62) | ValidateValue 全类型矩阵、TryParseUShort、范围表抽查+默认值落界、布尔键一致（V1.71：14 项含 SkipVacuum）、连接键契约、CreateValueCell 全分发、分类/说明键对齐（构造真窗体不断言弹窗）、PersistChanges 统一路（V1.71：矛盾/MES 拦截、策略落盘+热回写、机器键落盘、空改动、null 不抛，运行目录隔离+备份还原）、三非模态弹窗关闭即释放（V1.72.13：走生产挂接反射调 ShowXxxPopup→OpenForms 找窗→Close→IsDisposed） |
 | ScannerParse(V1.62) | JoinPorts、ParseParity/ParseStopBits、与设置窗 NormalizeStopBits 跨文件 15 口径 |
 | ModbusConvert(V1.62) | 气压/阈值换算纯函数、IsPortLevelFailure 中英文关键字、未连接约定、串口参数解析 |
 | FanParse(V1.62) | 寄存器解析(/100 全字段)、不足 6 个、非法枚举透传、未连接约定、Connect(null) |
@@ -102,6 +102,28 @@ agingtest-regression/
 **不在覆盖范围**（明确边界）：真串口/真设备通讯（ModbusRtuBarometerReader /
 ScannerService / FanControllerClient / ModbusTcpIoController，靠现场联调）、
 UI 弹窗分支（如配方同名覆盖确认框，靠界面手工测试）、像素级渲染（走全局技能 winforms-ui-debug）。
+
+## 三点五、终结器跨线程排查标准流程（V1.72.13 固化，下次不犯）
+
+报错长这样（堆栈终点 `ResetAutoComplete←Dispose←Finalize`，控件 Name 全空，
+案发时机看 GC、"报错时正在干什么"全是巧合），按本节走：
+
+1. **先定罪再动手**：harness（Mock 采集+可疑窗+模拟操作）常规路径大概率干净，
+   没有用户堆栈不硬修。拿到堆栈看终点帧——`UITextBox.Dispose` 系=孤儿输入控件。
+2. **跑自动审计**（改 UI 代码后必跑，HIGH>0 拦提交）：
+   `powershell -ExecutionPolicy Bypass -File scripts\audit_finalizer_risk.ps1`
+   - R1 `Controls.Clear()` 前 15 行无 Dispose → HIGH；
+   - R2 非模态 `.Show(`（排除 ShowDialog）→ 方法体/配对方法无 Dispose → HIGH；
+   - R3 `Controls.Remove(` 后 10 行无 Dispose → HIGH；
+   - R4 非 Designer 里 new 输入/表格控件 → INFO（逐条人工定罪，随树/释放才安全）。
+3. **修法两条**：动态重建先逐个 `Dispose()` 再 `Clear()`；
+   非模态弹窗 `FormClosed` 里 `finally { popup.Dispose(); }`（先回写再释放）。
+4. **白名单登记**：修完在脚本 `$SafeShowKeys/$SafeClearFiles/$SafeRemoveFiles`
+   登记（方法|文件[|配对方法|reuse:字段]），R2 是行为检查（验方法体真含 Dispose），
+   登记了但释放被删照样报警——反向验证（注掉一处重跑必须 HIGH）是脚本改动后的
+   必做项。
+5. **用例双锁**：动态重建锁"旧控件 IsDisposed"；弹窗锁"走生产挂接
+   （反射 ShowXxxPopup→OpenForms 找窗→Close→IsDisposed）"，裸 Show/Close 恒绿假绿。
 
 ## 四、怎么加测试用例（铁律：改代码必同步补用例）
 
@@ -241,4 +263,11 @@ UI 弹窗分支（如配方同名覆盖确认框，靠界面手工测试）、�
     （主窗 H5 早有先例，漏网必炸）；②跨线程错 Name="" + 时机随机（看 GC）
     + "报错时正在干别的事"三特征齐了先查 Clear；③没有用户堆栈不硬修跨线程
     bug——harness（Mock 采集+双窗+17 轮模拟拖动）常规路径零异常，
-    定罪全靠堆栈。用例锁"重建后旧控件 IsDisposed"（反射调两次 RebuildEditors）。
+    定罪全靠堆栈。    用例锁"重建后旧控件 IsDisposed"（反射调两次 RebuildEditors）。
+29. **非模态 Form.Close() 不释放窗体，三编辑弹窗是第二案发现场**
+    （V1.72.13：修完驾驶舱用户现场又炸，同堆栈——全仓排查 Designer/modal/
+    using/测试窗全有释放，只剩设置窗 IP/IO/规则三 popup 的 FormClosed 只回写
+    不 Dispose）。修法是 handler 里 `finally { popup.Dispose(); }`（先回写再释放）。
+    **用例必须是真回归**：裸 `new popup→Show→Close` 测的是框架行为（恒绿假绿），
+    必须反射调生产 `ShowXxxPopup` → `Application.OpenForms` 按类型找窗 →
+    Close → IsDisposed（修前 false、修后 true）。

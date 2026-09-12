@@ -164,6 +164,13 @@
   内部读 Handle 即跨线程崩溃（堆栈终点 `ResetAutoComplete←Dispose←Finalize`，Name 全空、
   时机随机是三特征）。动态重建处一律先逐个 `Dispose()` 再 `Clear()`（主窗 H5 先例），
   用例锁"重建后旧控件 IsDisposed"。
+  **非模态弹窗同罪（V1.72.13）**：`Form.Close()` 不释放非模态窗体，设置窗 IP/IO/规则
+  三 popup 的 FormClosed 只回写不释放就是第二案发现场——handler 里
+  `finally { popup.Dispose(); }`，用例走生产挂接（反射 ShowXxxPopup→OpenForms 找窗→
+  Close→IsDisposed），裸 Show/Close 是恒绿假绿。
+  **改 UI 代码后必跑终结器审计**：`scripts/audit_finalizer_risk.ps1`
+  （R1 Clear/R2 非模态 Show/R3 Remove/R4 动态创建，HIGH 拦提交）；
+  新增非模态弹窗在 `$SafeShowKeys` 登记（方法|文件|配对），R2 验行为不认空登记。
 - **自绘性能大坑（V1.57.3 血泪教训）**：**禁止用"离屏 Bitmap 整幅预渲染 + OnPaint DrawImage 拷贝"来优化自绘控件**。实测离屏大图（2040×2025）上 `TextRenderer.DrawText` 每处约 **2.2ms**（屏幕 DC 上近 0ms），全量渲染 72 面板一次高达 2247ms，而 `UpdateAll` 每秒全量刷新 → 整个软件每 1 秒卡死。且 `g.Clear(白色)` 会把面板间隙刷白导致"面板连成一片"。**正确做法**：OnPaint 只重绘可见区面板（`e.ClipRectangle` 算行列范围），数据/选中变化仅 `Invalidate`；滚动卡顿用"16ms 定时器节流 AutoScrollPosition + 画刷/画笔缓存字段"解决，不要预渲染。判断优化效果务必用**真实屏幕 DC**（`CreateGraphics`）测，离屏 Graphics 的 TextRenderer 慢是 GDI+ 固有行为、不代表真实帧速。
 
 ## 关键文件导航
