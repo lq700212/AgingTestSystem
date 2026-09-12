@@ -27,6 +27,13 @@ namespace AgingTestSystem.Services
         private bool _disposed;
 
         /// <summary>
+        /// 待触发的延迟隐藏定时器（V1.72.15 新增，全仓关窗竞态排查：TextBox_Leave/ListBox_Leave
+        /// 建的 200ms/100ms 一次性 Timer 若在窗体关闭后才到点，Tick 直碰已释放 _listBox/_textBox
+        /// 即炸。集中登记，Dispose 时统一 Stop+Dispose；Tick 入口先查 _disposed 再碰控件）。
+        /// </summary>
+        private readonly List<Timer> _pendingHideTimers = new List<Timer>();
+
+        /// <summary>
         /// 最近一次通过下拉列表确认选中的配方名称。
         /// 用于抑制选中回填后再次弹出匹配列表（仅当用户产生新输入时才会重新匹配）。
         /// </summary>
@@ -82,10 +89,15 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 显示匹配的配方列表
+        /// 显示匹配的配方列表（V1.72.15：释放后静默丢弃）。
         /// </summary>
         private void ShowDropdown()
         {
+            try
+            {
+                if (_disposed) return;
+                if (_textBox == null || _textBox.IsDisposed) return;
+                if (_listBox == null || _listBox.IsDisposed) return;
             string input = _textBox.Text;
 
             List<RecipeConfig> matches;
@@ -131,6 +143,8 @@ namespace AgingTestSystem.Services
 
             _listBox.SelectedIndex = -1;
             _listBox.Visible = true;
+            }
+            catch { }
         }
 
         /// <summary>
@@ -140,10 +154,11 @@ namespace AgingTestSystem.Services
         /// </summary>
         public bool PreFilterMessage(ref Message m)
         {
-            if (m.Msg != WM_LBUTTONDOWN || _disposed || !_listBox.Visible)
+            try
             {
-                return false;
-            }
+                if (m.Msg != WM_LBUTTONDOWN || _disposed) return false;
+                if (_listBox == null || _listBox.IsDisposed || !_listBox.Visible) return false;
+                if (_textBox == null || _textBox.IsDisposed) return false;
 
             Point screenPos = Control.MousePosition;
             Rectangle listScreen = _listBox.RectangleToScreen(_listBox.ClientRectangle);
@@ -155,14 +170,22 @@ namespace AgingTestSystem.Services
             }
 
             return false;
+            }
+            catch { return false; }
         }
 
         /// <summary>
-        /// 隐藏下拉弹窗
+        /// 隐藏下拉弹窗（V1.72.15：关后静默丢弃，防延迟 Tick 在释放后碰句柄）。
         /// </summary>
         private void HideDropdown()
         {
-            _listBox.Visible = false;
+            try
+            {
+                if (_disposed) return;
+                if (_listBox == null || _listBox.IsDisposed) return;
+                _listBox.Visible = false;
+            }
+            catch { }
         }
 
         /// <summary>
@@ -201,30 +224,45 @@ namespace AgingTestSystem.Services
 
         private void TextBox_TextChanged(object sender, EventArgs e)
         {
-            // 用户刚通过下拉列表选中配方并回填名称，此变化不视为新输入，
-            // 不要重新弹出匹配列表；只有当用户产生新的输入时才继续匹配。
-            if (string.Equals(_textBox.Text, _lastConfirmedName, StringComparison.Ordinal))
+            if (_disposed) return;
+            try
             {
-                return;
-            }
+                // 用户刚通过下拉列表选中配方并回填名称，此变化不视为新输入，
+                // 不要重新弹出匹配列表；只有当用户产生新的输入时才继续匹配。
+                if (string.Equals(_textBox.Text, _lastConfirmedName, StringComparison.Ordinal))
+                {
+                    return;
+                }
 
-            // 重启防抖定时器
-            _debounceTimer.Stop();
-            _debounceTimer.Start();
+                // 重启防抖定时器
+                _debounceTimer.Stop();
+                _debounceTimer.Start();
+            }
+            catch { }
         }
 
         private void DebounceTimer_Tick(object sender, EventArgs e)
         {
-            _debounceTimer.Stop();
-            ShowDropdown();
+            if (_disposed) return;
+            try
+            {
+                _debounceTimer.Stop();
+                ShowDropdown();
+            }
+            catch { }
         }
 
         private void TextBox_KeyDown(object sender, KeyEventArgs e)
         {
-            if (!_listBox.Visible)
+            if (_disposed) return;
+            try
             {
-                return;
+                if (_listBox == null || _listBox.IsDisposed || !_listBox.Visible)
+                {
+                    return;
+                }
             }
+            catch { return; }
 
             if (e.KeyCode == Keys.Down)
             {
@@ -263,26 +301,42 @@ namespace AgingTestSystem.Services
 
         private void TextBox_Leave(object sender, EventArgs e)
         {
+            if (_disposed) return;
             // 延迟隐藏，让鼠标点击 ListBox 有机会触发
             _debounceTimer.Stop();
             Timer delayHide = new Timer
             {
                 Interval = 200
             };
+            _pendingHideTimers.Add(delayHide);
             delayHide.Tick += (s, args) =>
             {
-                delayHide.Stop();
-                delayHide.Dispose();
-                if (!_listBox.Focused && !_textBox.Focused)
+                try
                 {
-                    // 如果下拉框已被隐藏（如用户已通过鼠标选中列表项），无需处理
-                    if (!_listBox.Visible) return;
+                    delayHide.Stop();
+                    _pendingHideTimers.Remove(delayHide);
+                    delayHide.Dispose();
+                    // 【V1.72.15】关窗竞态：宿主窗体已释放时直接丢弃，不碰已释放控件。
+                    if (_disposed) return;
+                    if (_listBox == null || _listBox.IsDisposed) return;
+                    if (_textBox == null || _textBox.IsDisposed) return;
+                    if (!_listBox.Focused && !_textBox.Focused)
+                    {
+                        // 如果下拉框已被隐藏（如用户已通过鼠标选中列表项），无需处理
+                        if (!_listBox.Visible) return;
 
-                    // 点击非匹配列表区域 → 仅隐藏下拉框，文本框内容保持不变（视为未选择）
-                    HideDropdown();
+                        // 点击非匹配列表区域 → 仅隐藏下拉框，文本框内容保持不变（视为未选择）
+                        HideDropdown();
+                    }
                 }
+                catch { }
             };
-            delayHide.Start();
+            try
+            {
+                if (_disposed) { delayHide.Dispose(); return; }
+                delayHide.Start();
+            }
+            catch { }
         }
 
         /// <summary>
@@ -290,24 +344,39 @@ namespace AgingTestSystem.Services
         /// </summary>
         private void ListBox_Leave(object sender, EventArgs e)
         {
+            if (_disposed) return;
             if (!_listBox.Visible) return;
 
             Timer delayHide = new Timer
             {
                 Interval = 100
             };
+            _pendingHideTimers.Add(delayHide);
             delayHide.Tick += (s, args) =>
             {
-                delayHide.Stop();
-                delayHide.Dispose();
-                if (!_listBox.Visible) return;
-                if (!_textBox.Focused)
+                try
                 {
-                    // 点击非匹配列表区域 → 仅隐藏下拉框，文本框内容保持不变（视为未选择）
-                    HideDropdown();
+                    delayHide.Stop();
+                    _pendingHideTimers.Remove(delayHide);
+                    delayHide.Dispose();
+                    // 【V1.72.15】关窗竞态：同 TextBox_Leave，见该处注释。
+                    if (_disposed) return;
+                    if (!_listBox.Visible) return;
+                    if (_textBox == null || _textBox.IsDisposed) return;
+                    if (!_textBox.Focused)
+                    {
+                        // 点击非匹配列表区域 → 仅隐藏下拉框，文本框内容保持不变（视为未选择）
+                        HideDropdown();
+                    }
                 }
+                catch { }
             };
-            delayHide.Start();
+            try
+            {
+                if (_disposed) { delayHide.Dispose(); return; }
+                delayHide.Start();
+            }
+            catch { }
         }
 
         private void ListBox_MouseClick(object sender, MouseEventArgs e)
@@ -347,8 +416,17 @@ namespace AgingTestSystem.Services
 
             if (disposing)
             {
-                _debounceTimer.Stop();
-                _debounceTimer.Dispose();
+                // 【V1.72.15】先排空延迟隐藏定时器：它们到点即碰 _listBox/_textBox，
+                // 宿主关闭后到点就是关窗竞态，Stop+Dispose 后 Tick 永不再 fire。
+                foreach (Timer t in _pendingHideTimers.ToArray())
+                {
+                    try { t.Stop(); t.Dispose(); }
+                    catch { }
+                }
+                _pendingHideTimers.Clear();
+
+                try { _debounceTimer.Stop(); } catch { }
+                try { _debounceTimer.Dispose(); } catch { }
 
                 Application.RemoveMessageFilter(this);
 

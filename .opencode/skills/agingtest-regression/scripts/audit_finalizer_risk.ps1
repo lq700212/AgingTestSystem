@@ -1,5 +1,6 @@
 ﻿# ============================================================================
-#  audit_finalizer_risk.ps1 - 终结器跨线程崩溃风险审计（V1.72.13 固化）。
+#  audit_finalizer_risk.ps1 - 终结器跨线程崩溃 + 关窗竞态风险审计
+#  （V1.72.13 固化终结器，V1.72.15 追加关窗竞态 R5/R6/R7）。
 #
 #  背景：Sunny 输入控件（UITextBox/UIComboBox，内部包原生 TextBox）与原生
 #  TextBox/ComboBox/ListBox，若"显示过句柄 + 没显式 Dispose + 无根引用"，
@@ -7,16 +8,30 @@
 #  （堆栈终点 ResetAutoComplete←Dispose←Finalize，控件 Name 全空、案发时机
 #  看 GC 三特征）。案发现场两次：驾驶舱右栏 Clear（V1.72.12）、设置窗三
 #  popup（V1.72.13），案发时用户正在干什么全是巧合。
+#  V1.72.14 定罪第三类"关窗竞态"：释放路径全对，仍炸——后台拍在关窗前后脚
+#  Invoke/BeginInvoke 进已销毁句柄，或排队回调关后执行直碰已释放控件；
+#  "关 A 开 B 必炸"是关 A 尾巴被开 B 的 GC/排队赶出来。对策三件套：
+#  _closed 首行置位 + 句柄三查 + 日志 BeginInvoke（禁同步 Invoke），
+#  排队回调入口自拦，关后硬件写停手。
 #
 #  用法：powershell -ExecutionPolicy Bypass -File audit_finalizer_risk.ps1
-#  改 UI 代码（新增窗体/动态控件/非模态弹窗/Clear/Remove）后必跑；
-#  HIGH > 0 即 exit 1（先修再提交），只有 SAFE/INFO 即 exit 0。
+#  改 UI 代码（新增窗体/动态控件/非模态弹窗/Clear/Remove/后台线程/定时器/
+#  事件订阅）后必跑；HIGH > 0 即 exit 1（先修再提交），只有 INFO 即 exit 0。
 #
 #  规则（宁误报不漏报，误报进白名单）：
 #    R1 Controls.Clear() 前 15 行无 Dispose()                      → HIGH
 #    R2 非模态 .Show(（排除 ShowDialog），无释放关联              → HIGH
 #    R3 Controls.Remove( 后 10 行无 Dispose()                      → HIGH
 #    R4 非 Designer.cs 里 new 输入类控件                          → INFO（人工确认随树/释放）
+#    R5 UI 文件（Dialogs/Views/Controls）同步 Control.Invoke(    → HIGH
+#       （后台线程必须 BeginInvoke + 关窗守卫；?.Invoke 事件触发与反射
+#       MethodInfo.Invoke 不在此列；V1.72.15：通讯窗 txtLog.Invoke 即此病）
+#    R6 非 Designer.cs 里 Timer 字段无同文件 Dispose()            → HIGH
+#       （字段定时器不在 components 容器就必须手停手放；V1.72.15：
+#       设置窗 _pressTimer 曾漏网；(components) 构造的跳过）
+#    R7 UI 文件里自定义 On* 事件 += 无同文件 -=                  → HIGH
+#       （长生命周期的事件源抓着窗体不放 = 泄漏 + 关后回调；
+#       V1.72.15：ID 绑定窗扫码/MainForm 五事件即此锁）
 # ============================================================================
 
 param(
@@ -144,6 +159,48 @@ foreach ($file in $files) {
         # DataGridView 也进名单：自带编辑控件与滚动条，随树释放才安全。
         if (-not $isDesigner -and $ln -match "new (Sunny\.UI\.UITextBox|Sunny\.UI\.UIComboBox|Sunny\.UI\.UIDataGridView|TextBox|ComboBox|ListBox|RichTextBox|DataGridView)\b") {
             $info += "R4 INFO $($rel):$($i + 1) 动态创建 $($Matches[1])（确认随窗体树释放或显式 Dispose）"
+        }
+
+        # ── R5：UI 文件同步 Control.Invoke(（V1.72.15 关窗竞态） ──
+        # 后台线程回 UI 必须 BeginInvoke + 关窗守卫；同步 Invoke 在关闭前后脚
+        # 直接炸"线程间操作无效"。?.Invoke（事件触发）与反射 Invoke 不在此列。
+        # 范围：Dialogs/Views/Controls（Services 的 MethodInfo.Invoke 如
+        # ThemeManager 反射着色是合法用途，不扫）。
+        $isUiDir = ($rel -like "Dialogs\*" -or $rel -like "Views\*" -or $rel -like "Controls\*")
+        if ($isUiDir -and $ln -match "(?<!\?)\.Invoke\(" -and $ln -notmatch "MethodInfo|GetMethod|\bm\.Invoke") {
+            $high += "R5 HIGH $($rel):$($i + 1) 同步 .Invoke(（改 BeginInvoke + _closed/句柄守卫）"
+        }
+
+        # ── R7：长生命周期服务事件 += 无同文件 -=（V1.72.15 关窗竞态） ──
+        # 设备管理器/扫码枪服务活得比任何窗体都久：窗体订阅其 On* 事件后若不退订，
+        # 服务抓着窗体引用 = 泄漏 + 关后回调炸框；退订还拦不住已排队的 Post，
+        # handler 入口另需 _closed 自拦（R7 只锁退订）。
+        # 短命源（bindingForm/form/popup 等局部弹窗的事件）不在此列：源先死，无泄漏。
+        # _gridView 自绘网格同理（重建即 Dispose 旧实例，订阅随旧实例进 GC）。
+        if (-not $isDesigner -and $isUiDir -and $ln -match "(_deviceManager|_scanner)\.(On[A-Z]\w*)\s*\+=") {
+            $src = $Matches[1]
+            $evt = $Matches[2]
+            $body = ($lines -join "`n")
+            if ($body -notmatch [regex]::Escape("$src.$evt") + "\s*-=") {
+                $high += "R7 HIGH $($rel):$($i + 1) 长生命周期 $src.$evt 只有 += 无 -=（OnFormClosed/FormClosing 里退订）"
+            }
+        }
+    }
+
+    # ── R6：非 Designer Timer 字段无同文件 Dispose()（V1.72.15 关窗竞态） ──
+    # 字段定时器不在 components 容器就必须手停手放，否则关后 Tick 碰释放后控件。
+    # (components) 构造的随容器释放，跳过。文件级检查（放循环外，每文件报一次）。
+    if (-not $isDesigner) {
+        $full = ($lines -join "`n")
+        foreach ($tm in [regex]::Matches($full, "(?m)^\s*(?:private|readonly|private\s+readonly)[\w\.\s,<>]*\bTimer\s+(_\w+)")) {
+            $fld = $tm.Groups[1].Value
+            $decl = $tm.Value
+            if ($full -match [regex]::Escape($fld) + "\s*=\s*new[^\;]*\(\s*components\s*\)") { continue }
+            if ($full -match [regex]::Escape($fld) + "\s*=\s*new[^\;]*\(\s*this\.components\s*\)") { continue }
+            # ?.Dispose（DeviceManager 的 _collectTimer?.Dispose() 之类）同样算数。
+            if ($full -notmatch [regex]::Escape($fld) + "\s*\?*\.Dispose\(\)") {
+                $high += "R6 HIGH $($rel) Timer 字段 $fld 无 Dispose（OnFormClosed/Dispose 里 Stop+Dispose）"
+            }
         }
     }
 }

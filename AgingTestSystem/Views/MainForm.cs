@@ -117,6 +117,13 @@ namespace AgingTestSystem.Views
         private readonly DeviceManager _deviceManager;
 
         /// <summary>
+        /// 主窗正在关闭标记（V1.72.15 新增，全仓关窗竞态排查：退出瞬间后台采集/扫码/重连线程的
+        /// BeginInvoke 排队回调会在句柄销毁后执行。FormClosing 首行置位，RunOnUi 与各事件入口双查，
+        /// 退出期回调静默丢弃；volatile 保证采集线程立即可见）。
+        /// </summary>
+        private volatile bool _mainClosing;
+
+        /// <summary>
         /// 【新增】用户管理器
         /// 负责用户登录验证、用户名密码修改等功能
         /// 默认账号：
@@ -1208,12 +1215,17 @@ namespace AgingTestSystem.Views
             RunOnUi(() => WriteLog(message));
         }
 
-        /// <summary>切换到 UI 线程执行（窗体已释放时安全跳过）</summary>
+        /// <summary>切换到 UI 线程执行（窗体已释放时安全跳过）
+        /// 【V1.72.15】加 _mainClosing + 句柄查：退出期排队回调此时最密，旧版只查释放状态，
+        /// BeginInvoke 进销毁中句柄仍抛 InvalidOperationException（catch 能吞，但高频刷异常埋单；
+        /// 先查直接丢弃，一个异常都不抛）。action 本体包 try，防投递后关闭的竞态。</summary>
         private void RunOnUi(Action action)
         {
-            if (IsDisposed || Disposing) return;
+            if (action == null) return;
+            if (_mainClosing || IsDisposed || Disposing) return;
             try
             {
+                if (!IsHandleCreated) return;
                 if (InvokeRequired) BeginInvoke(action);
                 else action();
             }
@@ -1304,7 +1316,8 @@ namespace AgingTestSystem.Views
         private void DeviceManager_OnBatchDataUpdated(object sender, BarometerData[] allData)
         {
             // 窗体已释放或正在释放时直接返回，避免 Invoke 抛 ObjectDisposedException
-            if (this.IsDisposed || this.Disposing) return;
+            // 【V1.72.15】加 _mainClosing：退出期排队最密，先拦少抛异常。
+            if (_mainClosing || this.IsDisposed || this.Disposing) return;
 
             // 防御性检查：数据为空时直接返回
             if (allData == null || allData.Length == 0) return;
@@ -1364,7 +1377,8 @@ namespace AgingTestSystem.Views
         private void DeviceManager_OnQuickTrackDataUpdated(object sender, BarometerData data)
         {
             // 窗体已释放或正在释放时直接返回，避免 Invoke 抛 ObjectDisposedException
-            if (this.IsDisposed || this.Disposing) return;
+            // 【V1.72.15】加 _mainClosing（同 BatchData）。
+            if (_mainClosing || this.IsDisposed || this.Disposing) return;
 
             // 防御性检查：数据为空时直接返回
             if (data == null) return;
@@ -1401,7 +1415,8 @@ namespace AgingTestSystem.Views
         private void UpdateSinglePanel(BarometerData data)
         {
             // 窗体已释放则不更新
-            if (this.IsDisposed || data == null) return;
+            // 【V1.72.15】加 _mainClosing/Disposing（排队回调关后丢弃）。
+            if (_mainClosing || this.IsDisposed || this.Disposing || data == null) return;
 
             if (_gridView != null)
             {
@@ -1417,7 +1432,8 @@ namespace AgingTestSystem.Views
         private void UpdateAllPanels(BarometerData[] allData)
         {
             // 窗体已释放则不更新
-            if (this.IsDisposed || allData == null) return;
+            // 【V1.72.15】加 _mainClosing/Disposing（同上）。
+            if (_mainClosing || this.IsDisposed || this.Disposing || allData == null) return;
 
             if (_gridView != null)
             {
@@ -1441,7 +1457,8 @@ namespace AgingTestSystem.Views
         private void DeviceManager_OnFanDataUpdated(object sender, FanData data)
         {
             // 窗体已释放或正在释放时直接返回
-            if (this.IsDisposed || this.Disposing) return;
+            // 【V1.72.15】加 _mainClosing（同 BatchData）。
+            if (_mainClosing || this.IsDisposed || this.Disposing) return;
 
             try
             {
@@ -1662,6 +1679,9 @@ namespace AgingTestSystem.Views
         /// </summary>
         private void DeviceManager_OnConnectionStatusChanged(object sender, bool isConnected)
         {
+            // 【V1.72.15】退出期丢弃（此回调无 try，关后 UpdateConnectionStatus 虽自拦，
+            // 但 _commConnected 写脏无妨，直接早退最干净）。
+            if (_mainClosing || this.IsDisposed || this.Disposing) return;
             _commConnected = isConnected;
             UpdateConnectionStatus();
         }
@@ -1675,7 +1695,8 @@ namespace AgingTestSystem.Views
         private void DeviceManager_OnDiagnostic(object sender, string message)
         {
             // 窗体已释放或正在释放时直接返回
-            if (this.IsDisposed || this.Disposing) return;
+            // 【V1.72.15】加 _mainClosing（同 BatchData）。
+            if (_mainClosing || this.IsDisposed || this.Disposing) return;
 
             try
             {
@@ -1707,7 +1728,8 @@ namespace AgingTestSystem.Views
         private void UpdateConnectionStatus()
         {
             // 窗体已释放或正在释放时直接返回
-            if (this.IsDisposed || this.Disposing) return;
+            // 【V1.72.15】加 _mainClosing（排队回调关后丢弃，与通讯窗 SetConnected 同因）。
+            if (_mainClosing || this.IsDisposed || this.Disposing) return;
 
             try
             {
@@ -1791,6 +1813,8 @@ namespace AgingTestSystem.Views
         /// <param name="deviceName">设备名（如"耦合器"/"送风机"），用于提示文案</param>
         private void ShowConnecting(string deviceName)
         {
+            // 【V1.72.15】退出中不再建提示窗（异步重连收尾与退出并行时，建了即孤儿）。
+            if (_mainClosing || this.IsDisposed || this.Disposing) return;
             if (_connectingForm != null) return;
 
             _connectingForm = new Form
@@ -1825,7 +1849,8 @@ namespace AgingTestSystem.Views
             if (_connectingForm != null)
             {
                 try { _connectingForm.Close(); } catch { /* 窗体已关闭则忽略 */ }
-                _connectingForm.Dispose();
+                // 【V1.72.15】Dispose 包 try：Close 竞态后 Dispose 再抛会连带炸 finally 链。
+                try { _connectingForm.Dispose(); } catch { }
                 _connectingForm = null;
             }
 
@@ -2620,11 +2645,12 @@ namespace AgingTestSystem.Views
         /// 用于手动测试负压开关与载台上电的 Modbus TCP 输出（直接操作 PLC DO 寄存器）
         /// V1.21：改为非模态（Show 替代 ShowDialog），打开测试窗体的同时仍可点击操作主窗体
         /// 及其它窗体（测试窗体关闭时自动 Dispose 释放资源）。
+        /// 【V1.72.14】FormClosed 里包 try：Dispose 偶发竞态抛一次即够炸框，吞掉保主窗不连带。
         /// </summary>
         private void MenuHelpCommunicationTest_Click(object sender, EventArgs e)
         {
             var form = new Dialogs.CommunicationTestForm(_deviceManager);
-            form.FormClosed += (s, args) => form.Dispose();
+            form.FormClosed += (s, args) => { try { form.Dispose(); } catch { } };
             ThemeManager.ApplyTo(form);
             form.Show(this);
         }
@@ -2633,11 +2659,12 @@ namespace AgingTestSystem.Views
         /// 送风机测试 → 弹出冷却送风机通讯测试窗体（技术员及以上权限）
         /// 用于手动测试送风机控制屏的 Modbus TCP 通讯与定值启动/停止（直接读写设备寄存器）
         /// 非模态（Show 替代 ShowDialog），打开测试窗体的同时仍可点击操作主窗体。
+        /// 【V1.72.14】同上，释放包 try。
         /// </summary>
         private void MenuHelpFanTest_Click(object sender, EventArgs e)
         {
             var form = new Dialogs.FanTestForm(_deviceManager);
-            form.FormClosed += (s, args) => form.Dispose();
+            form.FormClosed += (s, args) => { try { form.Dispose(); } catch { } };
             ThemeManager.ApplyTo(form);
             form.Show(this);
         }
@@ -2651,6 +2678,8 @@ namespace AgingTestSystem.Views
         ///  否则版本说明会与实际版本脱节（曾长期停留在 V1.16 的教训）。
         ///  （V1.72.8 顶栏 lblTitle 已删，标题只剩窗体标题栏，不用两处同步了）
         /// 【V1.60.4】MessageBox 换成普通窗体：系统弹窗跟不了深色主题，自定义窗才能 ApplyTo。
+        /// 【V1.72.14】普通窗再换 SunnyUI：UIForm 蓝标题 + UITextBox + UIButton 确认蓝，
+        /// 与全窗 SunnyUI 换肤同口径（用户点名"关于按钮弹窗也要 SunnyUI 风格"）。
         /// </summary>
         private void MenuHelpVersionInfo_Click(object sender, EventArgs e)
         {
@@ -2663,10 +2692,14 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 构建版本说明对话框（【V1.60.4 新增】，纯界面搭建，方便探针反射直调验证）。
-        /// 布局：只读多行文本框（Dock=Fill，主题文本框着色）+ 底部"确定"按钮（FixedDialog 固定坐标）。
-        /// "确定"是关闭语义，深色下走 DimGray 底白字（跟各窗"关闭"同款）；浅色保持原生默认样式。
+        /// 【V1.72.14】原生 Form+TextBox+Button 改 SunnyUI：UIForm 蓝标题 + UITextBox 只读多行 +
+        /// UIButton 确认蓝（DodgerBlue 白字 Custom，与登录确认/各弹窗确认同色，V1.72.1 收敛）。
+        /// 布局：UIForm 自绘标题占 35px，内容从 y=47 起排（txt 12→47，btn 386→421，窗高 430→465），
+        /// MinimumSize=ClientSize 锁缩小；只读框 TabStop=false，焦点落"确定"上，不全文蓝底选中。
+        /// 【可测性】不碰任何实例状态，特意做成 internal static，回归可直调断言 SunnyUI 风格，
+        /// 不必 new 整个主窗（主窗构造会建 DeviceManager/扫码枪，测试里太重）。
         /// </summary>
-        private Form BuildVersionInfoDialog()
+        internal static Form BuildVersionInfoDialog()
         {
             // 用 string.Join("\n", ...) 组织多行文本：比字符串逐行 + 拼接更易读、易增删，避免拼错换行。
             string[] lines =
@@ -2697,43 +2730,53 @@ namespace AgingTestSystem.Views
                 "版权所有 © 2024-2026。保留所有权利。",
             };
 
-            var dlg = new Form
+            var dlg = new Sunny.UI.UIForm
             {
                 Text = "版本说明",
+                Name = "VersionInfoDialog",
                 StartPosition = FormStartPosition.CenterParent,
-                FormBorderStyle = FormBorderStyle.FixedDialog,
                 MaximizeBox = false,
                 MinimizeBox = false,
+                ShowIcon = false,
                 ShowInTaskbar = false,
-                ClientSize = new Size(560, 430)
+                Font = new Font("微软雅黑", 9F),
+                ClientSize = new Size(560, 465),
+                MinimumSize = new Size(560, 465),
+                Style = Sunny.UI.UIStyle.Custom,
+                TitleFont = new Font("微软雅黑", 12F, FontStyle.Bold),
+                EscClose = true,
+                ZoomScaleRect = new Rectangle(15, 15, 560, 465)
             };
-            var txt = new TextBox
+            var txt = new Sunny.UI.UITextBox
             {
+                Name = "txtVersionInfo",
                 Multiline = true,
                 ReadOnly = true,
-                ScrollBars = ScrollBars.Vertical,
-                Location = new Point(12, 12),
+                ShowScrollBar = true,
+                ShowText = false,
+                Location = new Point(12, 47),
                 Size = new Size(536, 364),
                 Font = new Font("微软雅黑", 9F),
                 TabStop = false, // 只读展示框不抢焦点：打开时焦点落在"确定"上，避免全文蓝底选中
                 Text = string.Join(Environment.NewLine, lines)
             };
-            var btnOk = new Button
+            var btnOk = new Sunny.UI.UIButton
             {
+                Name = "btnOk",
                 Text = "确定",
                 DialogResult = DialogResult.OK,
-                Location = new Point(232, 386),
-                Size = new Size(96, 32)
+                Location = new Point(232, 421),
+                Size = new Size(96, 32),
+                Font = new Font("微软雅黑", 10F, FontStyle.Bold),
+                Style = Sunny.UI.UIStyle.Custom,
+                FillColor = Color.DodgerBlue,
+                RectColor = Color.DodgerBlue,
+                ForeColor = Color.White
             };
-            if (ThemeManager.IsDark)
-            {
-                btnOk.BackColor = Color.DimGray;
-                btnOk.ForeColor = Color.White;
-                btnOk.UseVisualStyleBackColor = false;
-            }
             dlg.Controls.Add(txt);
             dlg.Controls.Add(btnOk);
             dlg.AcceptButton = btnOk;
+            dlg.CancelButton = btnOk;
             return dlg;
         }
 
@@ -3054,6 +3097,8 @@ namespace AgingTestSystem.Views
         /// <param name="barcode">扫到的条码内容</param>
         private void Scanner_OnBarcodeScanned(object sender, string barcode)
         {
+            // 【V1.72.15】退出期丢弃（WriteLog 虽自拦，早退少一次排队）。
+            if (_mainClosing || this.IsDisposed || this.Disposing) return;
             // 写日志（条码内容可能含敏感字符，仅记录内容即可）
             WriteLog($"[扫码枪] 读码成功: {barcode}");
 
@@ -3069,6 +3114,8 @@ namespace AgingTestSystem.Views
         /// <param name="message">状态描述文本</param>
         private void Scanner_OnStatusChanged(object sender, string message)
         {
+            // 【V1.72.15】退出期丢弃（同上）。
+            if (_mainClosing || this.IsDisposed || this.Disposing) return;
             WriteLog($"[扫码枪] {message}");
 
             // 【V1.16.2】扫码枪连接状态变化 → 刷新状态栏显示（已连接/未连接/未启用）
@@ -3084,7 +3131,8 @@ namespace AgingTestSystem.Views
         /// </summary>
         private void RefreshScannerStatus()
         {
-            if (this.IsDisposed || this.Disposing) return;
+            // 【V1.72.15】加 _mainClosing（排队回调关后丢弃）。
+            if (_mainClosing || this.IsDisposed || this.Disposing) return;
 
             try
             {
@@ -3132,18 +3180,26 @@ namespace AgingTestSystem.Views
         /// <param name="message">日志消息</param>
         private void WriteLog(string message)
         {
-            // 拼接时间戳，格式：[2024-01-01 12:00:00] 消息内容
+            // 【V1.72.15】退出/释放期 UI 丢弃、文件照写：此方法此前零守卫，退出瞬间排队回调
+            // 直碰 txtLog 即炸（UI 线程 ObjectDisposedException 弹框）；文件写无窗口依赖，照写。
             string logLine = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\r\n";
-
-            // 【修复 M8】限制日志文本框最大字符数，避免长时间运行后 GDI 句柄耗尽或卡顿
-            // 超过上限时裁剪掉旧内容，只保留最近一半
-            if (txtLog.TextLength > MaxLogTextLength)
+            try
             {
-                txtLog.Text = txtLog.Text.Substring(txtLog.TextLength - LogTrimKeepLength);
-            }
+                if (!_mainClosing && !this.IsDisposed && !this.Disposing
+                    && txtLog != null && !txtLog.IsDisposed)
+                {
+                    // 【修复 M8】限制日志文本框最大字符数，避免长时间运行后 GDI 句柄耗尽或卡顿
+                    // 超过上限时裁剪掉旧内容，只保留最近一半
+                    if (txtLog.TextLength > MaxLogTextLength)
+                    {
+                        txtLog.Text = txtLog.Text.Substring(txtLog.TextLength - LogTrimKeepLength);
+                    }
 
-            // 追加到日志文本框
-            txtLog.AppendText(logLine);
+                    // 追加到日志文本框
+                    txtLog.AppendText(logLine);
+                }
+            }
+            catch { }
 
             // 【V1.58.21 持久化】同一行日志同时写入本地文件（Logs\AppLog_yyyyMMdd.log），
             // 与 UI 显示内容一致；内部有 lock 线程安全 + 写失败静默，不影响主流程
@@ -3157,6 +3213,9 @@ namespace AgingTestSystem.Views
         /// </summary>
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
         {
+            // 【V1.72.15】首行置退出标记：后台采集/扫码/重连线程的排队回调即刻开始丢弃，
+            // 再退订事件、再 Dispose（退订拦不住已排队的 Post，靠入口 _mainClosing 拦）。
+            _mainClosing = true;
             // 【修复 H4】先取消事件订阅，避免 Dispose 过程中事件回调到已释放的 UI
             // 顺序很重要：必须先取消订阅，再 Dispose
             if (_deviceManager != null)

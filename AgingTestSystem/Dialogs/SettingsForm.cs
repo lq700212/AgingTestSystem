@@ -117,6 +117,11 @@ namespace AgingTestSystem.Dialogs
         private int _pressCol = -1;
         /// <summary>长按计时器：按够 700ms 即触发复制（不用等松开，体验更跟手）</summary>
         private readonly Timer _pressTimer = new Timer { Interval = 700 };
+        /// <summary>
+        /// 窗体已关闭标记（V1.72.15 新增，全仓关窗竞态排查：_pressTimer/复制气泡的 BeginInvoke
+        /// 在关闭前后脚仍能投递进已销毁句柄。OnFormClosed 首行置位 + 停表，投递点双查）。
+        /// </summary>
+        private volatile bool _closed;
         /// <summary>长按复制的提示气泡（ShowAlways=true 保证模态对话框内也可靠显示）</summary>
         private readonly ToolTip _copyTip = new ToolTip { ShowAlways = true };
         /// <summary>长按复制已触发、等待松开鼠标后弹出的提示内容（显示太早会被鼠标捕获盖住）</summary>
@@ -483,6 +488,24 @@ namespace AgingTestSystem.Dialogs
             base.OnShown(e);
             _copyTip.Show(" ", this, new Point(1, 1), 1);
             _copyTip.Hide(this);
+        }
+
+        /// <summary>
+        /// 窗体关闭时停长按计时器（V1.72.15 新增，全仓关窗竞态排查：_pressTimer 是字段定时器，
+        /// 不在 components 容器里，Dispose 不会自动停；关后到点 Tick 即碰已释放表格。
+        /// 首行置 _closed 拦投递，停表防 Tick）。
+        /// </summary>
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            _closed = true;
+            try
+            {
+                _pressTimer.Stop();
+                _pressTimer.Tick -= PressTimer_Tick;
+                _pressTimer.Dispose();
+            }
+            catch { }
+            base.OnFormClosed(e);
         }
 
         /// <summary>
@@ -1104,7 +1127,13 @@ namespace AgingTestSystem.Dialogs
 
             // 兜底：万一按住状态下气泡因表格鼠标捕获未成功渲染，松开后再弹一次；
             // 已显示过则 _pendingCopyTip 已为 null，此调用是空转（见 ShowPendingCopyTip）。
-            BeginInvoke(new Action(ShowPendingCopyTip));
+            // 【V1.72.15】关窗竞态：关闭后 BeginInvoke 进已销毁句柄即炸，先查后包 try。
+            try
+            {
+                if (!_closed && !IsDisposed && !Disposing && IsHandleCreated)
+                    BeginInvoke(new Action(ShowPendingCopyTip));
+            }
+            catch { }
         }
 
         /// <summary>
@@ -1116,6 +1145,7 @@ namespace AgingTestSystem.Dialogs
         private void PressTimer_Tick(object sender, EventArgs e)
         {
             _pressTimer.Stop();
+            if (_closed || IsDisposed || Disposing) return;
             DataGridView grid = _pressGrid;
             int rowIndex = _pressRow;
             int colIndex = _pressCol;
@@ -1141,7 +1171,13 @@ namespace AgingTestSystem.Dialogs
             _pendingCopyTip = text;
 
             // 长按到点即弹提示（无需等松开鼠标）
-            BeginInvoke(new Action(ShowPendingCopyTip));
+            // 【V1.72.15】同上，关后丢弃。
+            try
+            {
+                if (!_closed && !IsDisposed && !Disposing && IsHandleCreated)
+                    BeginInvoke(new Action(ShowPendingCopyTip));
+            }
+            catch { }
         }
 
         /// <summary>

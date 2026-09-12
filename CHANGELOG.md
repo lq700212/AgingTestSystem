@@ -3,6 +3,88 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md).
 
+## V1.72.15 — 全仓关窗竞态排查 + 审计 R5/R6/R7（2026-09-13，用户点名"全局检查+经验固化"）
+
+### 改动范围
+- 关窗竞态（V1.72.14 的第三类）在全仓地毯式排查，修了 7 处漏网（释放路径都对，
+  炸的都是"关闭前后脚的后台回调/排队委托/在途硬件写"）：
+  - `CommonParameterForm`：后台批量写阈值的 `BeginInvoke` 只查 `IsHandleCreated` 且无 try，
+    加 `_closed` + 三查 + try，完成入口 `OnBatchWriteCompleted` 同样自拦（排队回调关后丢弃）。
+  - `IdBindingForm`：扫码事件经 `_syncContext.Post` 排队，退订拦不住已排队回调，
+    handler（`Scanner_OnBarcodeScanned`/`HandleScannedBarcode`）入口加 `_closed` 自拦，
+    `OnFormClosed` 先置位再调基类再退订（退订包 try）。
+  - `RecipeAutoCompleteProvider`：`TextBox_Leave`/`ListBox_Leave` 建的 200ms/100ms
+    一次性延迟 Timer 关后到点即碰已释放列表，集中 `_pendingHideTimers` 登记、
+    `Dispose` 统一排空；`PreFilterMessage`/`ShowDropdown`/各事件入口全加释放守卫。
+  - `SettingsForm`：字段 `_pressTimer`（不在 components 容器）从不释放，加 `OnFormClosed`
+    停表卸事件释放；两处复制气泡 `BeginInvoke` 加关窗双查；`PressTimer_Tick` 入口拦。
+  - `MainForm`：加 `_mainClosing`（`FormClosing` 首行置位），`RunOnUi` 加标记+句柄查，
+    采集/快跟/风机/诊断/连接/扫码 7 个事件入口与 `Update*`/`WriteLog`/`RefreshScannerStatus`
+    全加标记（`WriteLog` 改 UI 丢弃文件照写）；`ShowConnecting` 退出中不再建窗，
+    `HideConnecting` 的 `Dispose` 包 try。
+  - `CommunicationTestForm`/`FanTestForm`：关后停硬件写（`TryConnectSilent`/
+    `SweepStepWorker`/`WriteRegister`/`WriteSweepRegisters`/`ConnectInternal`/
+    `RunCommand` 查 `_closed`，在途遍历拍整拍丢弃）；`StopSweep`/`StartSweep`/
+    风扇重连 `RefreshTimer.Start()` 执行期再查（定时器已释放则 `Start` 即炸）。
+  - `FlowCockpitForm` 秒刷 Tick 加释放守卫（与 `RefreshCounts` 自拦双保险）。
+- 审计脚本 `audit_finalizer_risk.ps1` 加三条关窗竞态规则（HIGH 拦提交）：
+  R5 禁 UI 文件同步 `Control.Invoke(`（后台一律 `BeginInvoke`+守卫；`?.Invoke`
+  事件触发与反射 `MethodInfo.Invoke` 不在列）、R6 锁 Timer 字段同文件 `Dispose()`
+  （`(components)` 随容器跳过，`?.Dispose` 算数）、R7 锁 `_deviceManager`/`_scanner`
+  的 `On*` 事件 `+=` 必须同文件 `-=`（短命局部弹窗源不在列）。
+  反向验证：旧 `SettingsForm._pressTimer` 无释放会被 R6 报警。
+
+### 为什么这么改
+- V1.72.14 只堵了测试窗两扇门，用户要的是"全局还有没有"。结论：模态窗大多安全
+  （using + 同步流程），风险集中在四种模式——后台 `Task` 投递、有延迟的 UI `Timer`、
+  经 `Post` 排队的事件、活得比窗久的服务事件源。本次把四种在全仓扫了一遍，
+  共同教训是"退订/停表拦不住已排队的回调"，所以每处都是"停/退 + 入口自拦"双保险。
+- 经验不进脚本等于没修：R5/R6/R7 把"关窗竞态三件套"变成机器检查，下次新增
+  后台线程/定时器/服务订阅不写守卫，审计直接红。
+
+### 验证
+- `build_and_test.ps1`（产品+用例+脚本改动兜底全量）：构建 + 冒烟 + **1273 全绿**
+  （1259 + 14：公共参数/ID绑定/设置/主窗标记 4、关后静默丢弃 5、停硬件写 2、补全提供者 4，
+  全在 `UiFinalizerV172_14` 模块；零 MessageBox 阻塞，只构造不 Show）。
+- `audit_finalizer_risk.ps1`：HIGH=0（R5/R6/R7 全过；INFO 14）。
+- `get_affected_modules.ps1`：新覆盖文件全部登记（公共参数/ID绑定/设置/驾驶舱/
+  补全提供者→`UiFinalizerV172_14`），`-Affected` 增量可达。
+
+## V1.72.14 — 测试窗关窗竞态跨线程 + 判定窗预览 + 关于SunnyUI（2026-09-12，用户点名三件）
+
+### 改动范围
+- 终结器同堆栈又炸（关通讯窗开风扇窗时弹"非 UI 线程"错）：
+  `CommunicationTestForm` / `FanTestForm` 加 `_closed` 关窗标记 + 句柄双查，
+  `RunOnUi`/`AppendLog`/`SetConnected`/`UpdateStatus` 关后全丢弃不碰句柄；
+  日志由同步 `Invoke` 改异步 `BeginInvoke`（关窗瞬间后台拍 Invoke 进已销毁句柄即炸）；
+  `RemapNoticeForm` 自带 `FormClosed→Dispose`（用户先×提示窗也不进终结器）；
+  主窗两处 `FormClosed→Dispose` 包 try。——审计 R2 白名单只保"主窗在时不进终结"，
+  关窗竞态的排队回调是漏网，现场"关 A 开 B 必炸"实则是关 A 的尾巴被开 B 的 GC 赶出来。
+- `UnloadJudgeForm` 设计器预览修复：补无参构造（VS 实例化必需，原仅带参构造故预览报
+  "没有无参数构造函数"）；静态文本 `var` 局部改具名字段 `_lblCode`/`_lblDisp`
+  （设计器序列化认字段）；全控件补 Name/字体/样式（UIForm 蓝标题/EscClose/ZoomScaleRect，
+  与 ProjectSwitchForm 同口径）；`BtnExecute_Click` 加 null-manager 守卫（预览点执行不 NRE）。
+- 关于弹窗 SunnyUI 化：`MainForm.BuildVersionInfoDialog` 由原生 `Form+TextBox+Button`
+  改 `UIForm+UITextBox+UIButton`（蓝标题，内容 y=47 起排、窗高 430→465，确定钮
+  DodgerBlue 白字 Custom 与登录确认同色）；顺手由 `private` 改 `internal static`
+  （不碰实例状态，回归可直调不断言弹窗）。
+
+### 为什么这么改
+- 前两次（V1.72.12 驾驶舱 Clear、V1.72.13 设置窗三 popup）修的是"孤儿进终结器"，
+  本次是"活窗关窗竞态"：窗体本身释放路径是对的（FormClosed→Dispose），但后台
+  遍历/重连拍在关闭前后脚 `BeginInvoke/Invoke` 进已销毁句柄，或排队回调关后执行
+  直碰已释放 label/txt。终结时机仍看 GC，所以"关 A 开 B"只是 GC 被新窗分配赶出来，
+  炸的仍是关 A 的尾巴。修法是关即拦（_closed 首行置位）而非改 Sunny 源码。
+- 判定窗是 V1.72.12 Designer 化遗留：三窗里只有它用 `var` 局部 + 无无参构造，
+  预览当场挂；关于弹窗是 V1.71 全窗换肤漏网的最后一处原生窗（用户目检点名）。
+
+### 验证
+- `build_and_test.ps1`（用例+脚本改动兜底全量）：构建 + 冒烟 + **1259 全绿**
+  （1239 + 20 新模块 `UiFinalizerV172_14`：Comm/Fan 标记与静默丢弃 7、判定窗预览 5、关于 SunnyUI 8）。
+- `audit_finalizer_risk.ps1`：HIGH=0（INFO 14，关于窗 UITextBox 随 using 树释放，安全）。
+- 用例写法：Comm/Fan 用 Mock-DM 构造不 Show（无句柄 AppendLog 应丢弃）；判定窗走无参构造；
+  关于窗反射调 internal static（不 new 主窗，主窗构造太重）。
+
 ## V1.72.13 — 设置窗三弹窗关闭不释放 + 终结器崩溃再犯（2026-09-12，用户报障）
 
 ### 改动范围

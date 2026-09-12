@@ -114,7 +114,14 @@ namespace AgingTestSystem.Views
             _timer = new Timer { Interval = 1000 };
             _timer.Tick += (s, args) =>
             {
-                if (_canvas != null && !_canvas.IsDisposed) _canvas.RefreshCounts();
+                // 【V1.72.15】关窗竞态：释放后 Tick 丢弃（UI 定时器与关闭同线程串行，
+                // 此查防 Dispose 后残留触发；RefreshCounts 内部另有 IsDisposed 自拦，双保险）。
+                try
+                {
+                    if (IsDisposed || Disposing) return;
+                    if (_canvas != null && !_canvas.IsDisposed) _canvas.RefreshCounts();
+                }
+                catch { }
             };
             _timer.Start();
         }

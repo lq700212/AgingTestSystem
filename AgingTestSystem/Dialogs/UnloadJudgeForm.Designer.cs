@@ -8,13 +8,32 @@ namespace AgingTestSystem.Dialogs
     /// 这里只装"静态边框"：窗体属性 + 范围标签/单选/输入/下拉/两按钮/结果标签。
     /// 以下两样仍在 UnloadJudgeForm.cs 里用代码做：
     /// ①_lblScope 初值（BuildScopeText 要吃构造传进的 deviceIds/deviceManager 真参数，
-    /// Designer 给不了，构造调完 InitializeComponent 后再回填）；
+    /// Designer 给不了，构造调完 InitializeComponent 后再回填；设计器无参构造给空快照占位）；
     /// ②判定执行逻辑（BtnExecute_Click 调 DeviceManager 落盘）。
     /// 【布局】绝对定位（UIForm 自绘蓝标题占 35px，内容从 y=47 起排）；
     /// MinimumSize=ClientSize 锁缩小（V1.71 绝对布局窗统一做法）。
+    /// 【V1.72.14】设计器可预览修复：①补无参构造（见 UnloadJudgeForm.cs，VS 设计器实例化必需，
+    /// 原先只有带参构造，预览报"没有无参数构造函数"）；②静态文本标签由 var 局部改为具名字段
+    /// （_lblCode/_lblDisp，设计器序列化认字段，局部下次存盘即丢）；③全控件补 Name/字体/样式，
+    /// 与 ProjectSwitchForm.Designer 同口径，SunnyUI 换肤（ThemeManager.ApplyTo）按类型名走分支，
+    /// 具名后审计也不再"Name 全空"。
     /// </summary>
     partial class UnloadJudgeForm
     {
+        /// <summary>必需的设计器变量（本窗无组件，留空容器与他窗同口径，设计器不报错）。</summary>
+        private System.ComponentModel.IContainer components = null;
+
+        /// <summary>释放所有正在使用的资源。</summary>
+        /// <param name="disposing">是否释放托管资源</param>
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && (components != null))
+            {
+                components.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+
         /// <summary>送判范围说明（完成态可判/其余跳过；初值代码回填）</summary>
         private Sunny.UI.UILabel _lblScope;
 
@@ -24,8 +43,14 @@ namespace AgingTestSystem.Dialogs
         /// <summary>FAIL 单选</summary>
         private RadioButton _rbFail;
 
+        /// <summary>"不良代码："静态标签（具名字段，设计器序列化不丢）</summary>
+        private Sunny.UI.UILabel _lblCode;
+
         /// <summary>不良代码输入（FAIL 必填）</summary>
         private Sunny.UI.UITextBox _txtDefectCode;
+
+        /// <summary>"处置："静态标签（具名字段，设计器序列化不丢）</summary>
+        private Sunny.UI.UILabel _lblDisp;
 
         /// <summary>处置下拉（FAIL 必选；选项=Dispositions 静态数组）</summary>
         private Sunny.UI.UIComboBox _cmbDisposition;
@@ -44,7 +69,9 @@ namespace AgingTestSystem.Dialogs
             this._lblScope = new Sunny.UI.UILabel();
             this._rbPass = new RadioButton();
             this._rbFail = new RadioButton();
+            this._lblCode = new Sunny.UI.UILabel();
             this._txtDefectCode = new Sunny.UI.UITextBox();
+            this._lblDisp = new Sunny.UI.UILabel();
             this._cmbDisposition = new Sunny.UI.UIComboBox();
             this._btnExecute = new Sunny.UI.UIButton();
             this._btnClose = new Sunny.UI.UIButton();
@@ -56,42 +83,68 @@ namespace AgingTestSystem.Dialogs
             this.AutoScaleDimensions = new SizeF(6F, 12F);
             this.AutoScaleMode = AutoScaleMode.Font;
             this.Text = "下料判定";
+            this.Name = "UnloadJudgeForm";
             this.StartPosition = FormStartPosition.CenterParent;
+            this.ShowIcon = false;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
+            this.Font = new Font("微软雅黑", 9F);
             this.ClientSize = new Size(440, 335);
             this.MinimumSize = new Size(440, 335);
+            this.Style = Sunny.UI.UIStyle.Custom;
+            this.TitleFont = new Font("微软雅黑", 12F, FontStyle.Bold);
+            this.EscClose = true;
+            this.ZoomScaleRect = new Rectangle(15, 15, 440, 335);
             //
-            // _lblScope（初值代码回填，见构造）
+            // _lblScope（初值代码回填，见构造；设计器里给占位文本，预览不空白）
             //
+            this._lblScope.Name = "_lblScope";
+            this._lblScope.Font = new Font("微软雅黑", 9F);
+            this._lblScope.ForeColor = Color.FromArgb(48, 48, 48);
             this._lblScope.Location = new Point(12, 47);
             this._lblScope.Size = new Size(416, 36);
+            this._lblScope.Text = "送判 N 台：完成态 M 台可判，K 台非完成态将跳过。";
+            this._lblScope.TextAlign = ContentAlignment.TopLeft;
             //
             // _rbPass / _rbFail
             //
+            this._rbPass.Name = "_rbPass";
+            this._rbPass.Font = new Font("微软雅黑", 10F, FontStyle.Bold);
             this._rbPass.Location = new Point(12, 91);
             this._rbPass.Size = new Size(100, 24);
             this._rbPass.Text = "PASS";
             this._rbPass.Checked = true;
+            this._rbFail.Name = "_rbFail";
+            this._rbFail.Font = new Font("微软雅黑", 10F, FontStyle.Bold);
             this._rbFail.Location = new Point(120, 91);
             this._rbFail.Size = new Size(100, 24);
             this._rbFail.Text = "FAIL";
             //
-            // 不良代码行（标签口头创建：静态文本，无逻辑引用）
+            // 不良代码行
             //
-            var lblCode = new Sunny.UI.UILabel();
-            lblCode.Location = new Point(12, 127);
-            lblCode.Size = new Size(80, 20);
-            lblCode.Text = "不良代码：";
+            this._lblCode.Name = "_lblCode";
+            this._lblCode.Font = new Font("微软雅黑", 9F);
+            this._lblCode.Location = new Point(12, 127);
+            this._lblCode.Size = new Size(80, 20);
+            this._lblCode.Text = "不良代码：";
+            this._lblCode.TextAlign = ContentAlignment.MiddleLeft;
+            this._txtDefectCode.Name = "_txtDefectCode";
+            this._txtDefectCode.Font = new Font("微软雅黑", 10F);
             this._txtDefectCode.Location = new Point(96, 123);
             this._txtDefectCode.Size = new Size(332, 24);
+            this._txtDefectCode.ShowText = false;
+            this._txtDefectCode.Watermark = "FAIL 时必填，如 E01";
             //
             // 处置行
             //
-            var lblDisp = new Sunny.UI.UILabel();
-            lblDisp.Location = new Point(12, 159);
-            lblDisp.Size = new Size(80, 20);
-            lblDisp.Text = "处置：";
+            this._lblDisp.Name = "_lblDisp";
+            this._lblDisp.Font = new Font("微软雅黑", 9F);
+            this._lblDisp.Location = new Point(12, 159);
+            this._lblDisp.Size = new Size(80, 20);
+            this._lblDisp.Text = "处置：";
+            this._lblDisp.TextAlign = ContentAlignment.MiddleLeft;
+            this._cmbDisposition.Name = "_cmbDisposition";
+            this._cmbDisposition.Font = new Font("微软雅黑", 10F);
             this._cmbDisposition.Location = new Point(96, 155);
             this._cmbDisposition.Size = new Size(332, 24);
             this._cmbDisposition.DropDownStyle = Sunny.UI.UIDropDownStyle.DropDownList;
@@ -99,6 +152,8 @@ namespace AgingTestSystem.Dialogs
             //
             // _btnExecute（Sunny 默认蓝，主操作）
             //
+            this._btnExecute.Name = "_btnExecute";
+            this._btnExecute.Font = new Font("微软雅黑", 10F, FontStyle.Bold);
             this._btnExecute.Location = new Point(12, 195);
             this._btnExecute.Size = new Size(200, 30);
             this._btnExecute.Text = "执行判定";
@@ -106,6 +161,8 @@ namespace AgingTestSystem.Dialogs
             //
             // _btnClose（Sunny 灰；语义=取消关闭，走灰）
             //
+            this._btnClose.Name = "_btnClose";
+            this._btnClose.Font = new Font("微软雅黑", 10F, FontStyle.Bold);
             this._btnClose.Location = new Point(228, 195);
             this._btnClose.Size = new Size(200, 30);
             this._btnClose.Text = "关闭";
@@ -117,18 +174,21 @@ namespace AgingTestSystem.Dialogs
             //
             // _lblResult（蓝字）
             //
+            this._lblResult.Name = "_lblResult";
+            this._lblResult.Font = new Font("微软雅黑", 9F);
             this._lblResult.Location = new Point(12, 235);
             this._lblResult.Size = new Size(416, 40);
             this._lblResult.ForeColor = Color.Blue;
+            this._lblResult.TextAlign = ContentAlignment.TopLeft;
             //
             // 挂接
             //
             this.Controls.Add(this._lblScope);
             this.Controls.Add(this._rbPass);
             this.Controls.Add(this._rbFail);
-            this.Controls.Add(lblCode);
+            this.Controls.Add(this._lblCode);
             this.Controls.Add(this._txtDefectCode);
-            this.Controls.Add(lblDisp);
+            this.Controls.Add(this._lblDisp);
             this.Controls.Add(this._cmbDisposition);
             this.Controls.Add(this._btnExecute);
             this.Controls.Add(this._btnClose);
