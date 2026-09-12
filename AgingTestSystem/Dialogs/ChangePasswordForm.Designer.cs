@@ -40,24 +40,24 @@ namespace AgingTestSystem.Dialogs
 
         private void InitializeComponent()
         {
-            this.lblTitle = new System.Windows.Forms.Label();
-            this.lblUser = new System.Windows.Forms.Label();
-            this.lblUserValue = new System.Windows.Forms.Label();
-            this.lblCurrentPassword = new System.Windows.Forms.Label();
-            this.txtCurrentPassword = new System.Windows.Forms.TextBox();
-            this.lblNewPassword = new System.Windows.Forms.Label();
-            this.txtNewPassword = new System.Windows.Forms.TextBox();
-            this.lblConfirmPassword = new System.Windows.Forms.Label();
-            this.txtConfirmPassword = new System.Windows.Forms.TextBox();
-            this.btnOK = new System.Windows.Forms.Button();
-            this.btnCancel = new System.Windows.Forms.Button();
+            this.lblTitle = new Sunny.UI.UILabel();
+            this.lblUser = new Sunny.UI.UILabel();
+            this.lblUserValue = new Sunny.UI.UILabel();
+            this.lblCurrentPassword = new Sunny.UI.UILabel();
+            this.txtCurrentPassword = new Sunny.UI.UITextBox();
+            this.lblNewPassword = new Sunny.UI.UILabel();
+            this.txtNewPassword = new Sunny.UI.UITextBox();
+            this.lblConfirmPassword = new Sunny.UI.UILabel();
+            this.txtConfirmPassword = new Sunny.UI.UITextBox();
+            this.btnOK = new Sunny.UI.UIButton();
+            this.btnCancel = new Sunny.UI.UIButton();
             this.SuspendLayout();
             //
             // lblTitle - 标题
             //
             this.lblTitle.AutoSize = true;
             this.lblTitle.Font = new System.Drawing.Font("微软雅黑", 11F, System.Drawing.FontStyle.Bold);
-            this.lblTitle.Location = new System.Drawing.Point(150, 20);
+            this.lblTitle.Location = new System.Drawing.Point(150, 55);
             this.lblTitle.Name = "lblTitle";
             this.lblTitle.Size = new System.Drawing.Size(80, 20);
             this.lblTitle.TabIndex = 0;
@@ -67,7 +67,7 @@ namespace AgingTestSystem.Dialogs
             //
             this.lblUser.AutoSize = true;
             this.lblUser.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.lblUser.Location = new System.Drawing.Point(30, 62);
+            this.lblUser.Location = new System.Drawing.Point(30, 97);
             this.lblUser.Name = "lblUser";
             this.lblUser.Size = new System.Drawing.Size(69, 17);
             this.lblUser.TabIndex = 1;
@@ -78,7 +78,7 @@ namespace AgingTestSystem.Dialogs
             this.lblUserValue.AutoSize = true;
             this.lblUserValue.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Bold);
             this.lblUserValue.ForeColor = System.Drawing.Color.DarkBlue;
-            this.lblUserValue.Location = new System.Drawing.Point(110, 62);
+            this.lblUserValue.Location = new System.Drawing.Point(110, 97);
             this.lblUserValue.Name = "lblUserValue";
             this.lblUserValue.Size = new System.Drawing.Size(0, 17);
             this.lblUserValue.TabIndex = 2;
@@ -88,7 +88,7 @@ namespace AgingTestSystem.Dialogs
             //
             this.lblCurrentPassword.AutoSize = true;
             this.lblCurrentPassword.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.lblCurrentPassword.Location = new System.Drawing.Point(30, 97);
+            this.lblCurrentPassword.Location = new System.Drawing.Point(30, 132);
             this.lblCurrentPassword.Name = "lblCurrentPassword";
             this.lblCurrentPassword.Size = new System.Drawing.Size(69, 17);
             this.lblCurrentPassword.TabIndex = 3;
@@ -97,17 +97,17 @@ namespace AgingTestSystem.Dialogs
             // txtCurrentPassword - 当前密码输入框（密码模式）
             //
             this.txtCurrentPassword.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.txtCurrentPassword.Location = new System.Drawing.Point(110, 94);
+            this.txtCurrentPassword.Location = new System.Drawing.Point(110, 129);
             this.txtCurrentPassword.Name = "txtCurrentPassword";
             this.txtCurrentPassword.Size = new System.Drawing.Size(250, 23);
             this.txtCurrentPassword.TabIndex = 4;
-            this.txtCurrentPassword.UseSystemPasswordChar = true;
+            this.txtCurrentPassword.PasswordChar = '*';
             //
             // lblNewPassword - "新密码:"标签
             //
             this.lblNewPassword.AutoSize = true;
             this.lblNewPassword.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.lblNewPassword.Location = new System.Drawing.Point(30, 132);
+            this.lblNewPassword.Location = new System.Drawing.Point(30, 167);
             this.lblNewPassword.Name = "lblNewPassword";
             this.lblNewPassword.Size = new System.Drawing.Size(54, 17);
             this.lblNewPassword.TabIndex = 5;
@@ -116,17 +116,17 @@ namespace AgingTestSystem.Dialogs
             // txtNewPassword - 新密码输入框（密码模式）
             //
             this.txtNewPassword.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.txtNewPassword.Location = new System.Drawing.Point(110, 129);
+            this.txtNewPassword.Location = new System.Drawing.Point(110, 164);
             this.txtNewPassword.Name = "txtNewPassword";
             this.txtNewPassword.Size = new System.Drawing.Size(250, 23);
             this.txtNewPassword.TabIndex = 6;
-            this.txtNewPassword.UseSystemPasswordChar = true;
+            this.txtNewPassword.PasswordChar = '*';
             //
             // lblConfirmPassword - "确认密码:"标签
             //
             this.lblConfirmPassword.AutoSize = true;
             this.lblConfirmPassword.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.lblConfirmPassword.Location = new System.Drawing.Point(30, 167);
+            this.lblConfirmPassword.Location = new System.Drawing.Point(30, 202);
             this.lblConfirmPassword.Name = "lblConfirmPassword";
             this.lblConfirmPassword.Size = new System.Drawing.Size(69, 17);
             this.lblConfirmPassword.TabIndex = 7;
@@ -135,38 +135,38 @@ namespace AgingTestSystem.Dialogs
             // txtConfirmPassword - 确认密码输入框（密码模式）
             //
             this.txtConfirmPassword.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.txtConfirmPassword.Location = new System.Drawing.Point(110, 164);
+            this.txtConfirmPassword.Location = new System.Drawing.Point(110, 199);
             this.txtConfirmPassword.Name = "txtConfirmPassword";
             this.txtConfirmPassword.Size = new System.Drawing.Size(250, 23);
             this.txtConfirmPassword.TabIndex = 8;
-            this.txtConfirmPassword.UseSystemPasswordChar = true;
+            this.txtConfirmPassword.PasswordChar = '*';
             //
             // btnOK - 确认按钮
             //
-            this.btnOK.BackColor = System.Drawing.Color.LimeGreen;
+            this.btnOK.FillColor = System.Drawing.Color.LimeGreen;
+            this.btnOK.RectColor = System.Drawing.Color.LimeGreen;
             this.btnOK.ForeColor = System.Drawing.Color.White;
-            this.btnOK.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnOK.Style = Sunny.UI.UIStyle.Custom;
             this.btnOK.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.btnOK.Location = new System.Drawing.Point(110, 210);
+            this.btnOK.Location = new System.Drawing.Point(110, 245);
             this.btnOK.Name = "btnOK";
             this.btnOK.Size = new System.Drawing.Size(100, 32);
             this.btnOK.TabIndex = 9;
             this.btnOK.Text = "确认";
-            this.btnOK.UseVisualStyleBackColor = false;
             this.btnOK.Click += new System.EventHandler(this.btnOK_Click);
             //
             // btnCancel - 取消按钮
             //
-            this.btnCancel.BackColor = System.Drawing.Color.DimGray;
+            this.btnCancel.FillColor = System.Drawing.Color.DimGray;
+            this.btnCancel.RectColor = System.Drawing.Color.DimGray;
             this.btnCancel.ForeColor = System.Drawing.Color.White;
-            this.btnCancel.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnCancel.Style = Sunny.UI.UIStyle.Custom;
             this.btnCancel.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.btnCancel.Location = new System.Drawing.Point(260, 210);
+            this.btnCancel.Location = new System.Drawing.Point(260, 245);
             this.btnCancel.Name = "btnCancel";
             this.btnCancel.Size = new System.Drawing.Size(100, 32);
             this.btnCancel.TabIndex = 10;
             this.btnCancel.Text = "取消";
-            this.btnCancel.UseVisualStyleBackColor = false;
             this.btnCancel.Click += new System.EventHandler(this.btnCancel_Click);
             //
             // ChangePasswordForm - 窗体属性
@@ -177,8 +177,10 @@ namespace AgingTestSystem.Dialogs
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
-            this.ClientSize = new System.Drawing.Size(390, 260);
+            // 【V1.71】UIForm 自绘蓝标题：删 FormBorderStyle，内容整体下移 35px；语义按钮走 Custom+FillColor。
+            this.ClientSize = new System.Drawing.Size(390, 295);
+            // 【V1.71】绝对布局：禁缩小（MinimumSize=ClientSize），防缩坏布局；可放大。
+            this.MinimumSize = new System.Drawing.Size(390, 295);
             this.Controls.Add(this.btnCancel);
             this.Controls.Add(this.btnOK);
             this.Controls.Add(this.txtConfirmPassword);
@@ -200,16 +202,16 @@ namespace AgingTestSystem.Dialogs
         #endregion
 
         // ===== 控件字段声明 =====
-        private System.Windows.Forms.Label lblTitle;
-        private System.Windows.Forms.Label lblUser;
-        private System.Windows.Forms.Label lblUserValue;
-        private System.Windows.Forms.Label lblCurrentPassword;
-        private System.Windows.Forms.TextBox txtCurrentPassword;
-        private System.Windows.Forms.Label lblNewPassword;
-        private System.Windows.Forms.TextBox txtNewPassword;
-        private System.Windows.Forms.Label lblConfirmPassword;
-        private System.Windows.Forms.TextBox txtConfirmPassword;
-        private System.Windows.Forms.Button btnOK;
-        private System.Windows.Forms.Button btnCancel;
+        private Sunny.UI.UILabel lblTitle;
+        private Sunny.UI.UILabel lblUser;
+        private Sunny.UI.UILabel lblUserValue;
+        private Sunny.UI.UILabel lblCurrentPassword;
+        private Sunny.UI.UITextBox txtCurrentPassword;
+        private Sunny.UI.UILabel lblNewPassword;
+        private Sunny.UI.UITextBox txtNewPassword;
+        private Sunny.UI.UILabel lblConfirmPassword;
+        private Sunny.UI.UITextBox txtConfirmPassword;
+        private Sunny.UI.UIButton btnOK;
+        private Sunny.UI.UIButton btnCancel;
     }
 }

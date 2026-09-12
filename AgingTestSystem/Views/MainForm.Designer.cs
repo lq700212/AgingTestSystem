@@ -48,37 +48,37 @@
             this.rootScrollPanel = new System.Windows.Forms.Panel();
             this.tableLayoutPanelMain = new System.Windows.Forms.TableLayoutPanel();
             this.tableLayoutPanelTop = new System.Windows.Forms.TableLayoutPanel();
-            this.lblTitle = new System.Windows.Forms.Label();
+            this.lblTitle = new Sunny.UI.UILabel();
             this.panelPermission = new System.Windows.Forms.FlowLayoutPanel();
-            this.lblPermissionPrefix = new System.Windows.Forms.Label();
-            this.lblPermissionRole = new System.Windows.Forms.Label();
-            this.lblCommStatusLabel = new System.Windows.Forms.Label();
-            this.lblCommStatus = new System.Windows.Forms.Label();
+            this.lblPermissionPrefix = new Sunny.UI.UILabel();
+            this.lblPermissionRole = new Sunny.UI.UILabel();
+            this.lblCommStatusLabel = new Sunny.UI.UILabel();
+            this.lblCommStatus = new Sunny.UI.UILabel();
             this.tableLayoutPanelMenu = new System.Windows.Forms.TableLayoutPanel();
-            this.btnUserPermission = new System.Windows.Forms.Button();
-            this.btnParameter = new System.Windows.Forms.Button();
-            this.btnLog = new System.Windows.Forms.Button();
-            this.btnAbout = new System.Windows.Forms.Button();
+            this.btnUserPermission = new Sunny.UI.UIButton();
+            this.btnParameter = new Sunny.UI.UIButton();
+            this.btnLog = new Sunny.UI.UIButton();
+            this.btnAbout = new Sunny.UI.UIButton();
             this.splitContainerMain = new System.Windows.Forms.SplitContainer();
             this.tableLayoutPanelRight = new System.Windows.Forms.TableLayoutPanel();
-            this.groupBoxStatus = new System.Windows.Forms.GroupBox();
-            this.lblRunStatus = new System.Windows.Forms.Label();
-            this.groupBoxMonitor = new System.Windows.Forms.GroupBox();
-            this.lblUpperTempLabel = new System.Windows.Forms.Label();
-            this.lblUpperTemp = new System.Windows.Forms.Label();
-            this.lblSetTempLabel = new System.Windows.Forms.Label();
-            this.lblSetTemp = new System.Windows.Forms.Label();
-            this.lblFanStateLabel = new System.Windows.Forms.Label();
-            this.lblFanState = new System.Windows.Forms.Label();
-            this.groupBoxOperation = new System.Windows.Forms.GroupBox();
-            this.btnStartRun = new System.Windows.Forms.Button();
-            this.btnStopRun = new System.Windows.Forms.Button();
-            this.btnResetAlarm = new System.Windows.Forms.Button();
-            this.btnUnloadJudge = new System.Windows.Forms.Button();
-            this.btnStopAll = new System.Windows.Forms.Button();
-            this.btnInputLot = new System.Windows.Forms.Button();
-            this.btnBatchRecipe = new System.Windows.Forms.Button();
-            this.groupBoxLog = new System.Windows.Forms.GroupBox();
+            this.groupBoxStatus = new Sunny.UI.UIGroupBox();
+            this.lblRunStatus = new Sunny.UI.UILabel();
+            this.groupBoxMonitor = new Sunny.UI.UIGroupBox();
+            this.lblUpperTempLabel = new Sunny.UI.UILabel();
+            this.lblUpperTemp = new Sunny.UI.UILabel();
+            this.lblSetTempLabel = new Sunny.UI.UILabel();
+            this.lblSetTemp = new Sunny.UI.UILabel();
+            this.lblFanStateLabel = new Sunny.UI.UILabel();
+            this.lblFanState = new Sunny.UI.UILabel();
+            this.groupBoxOperation = new Sunny.UI.UIGroupBox();
+            this.btnStartRun = new Sunny.UI.UIButton();
+            this.btnStopRun = new Sunny.UI.UIButton();
+            this.btnResetAlarm = new Sunny.UI.UIButton();
+            this.btnUnloadJudge = new Sunny.UI.UIButton();
+            this.btnStopAll = new Sunny.UI.UIButton();
+            this.btnInputLot = new Sunny.UI.UIButton();
+            this.btnBatchRecipe = new Sunny.UI.UIButton();
+            this.groupBoxLog = new Sunny.UI.UIGroupBox();
             this.txtLog = new System.Windows.Forms.TextBox();
             this.statusStripMain = new System.Windows.Forms.StatusStrip();
             this.toolStripStatusLabelDeviceCount = new System.Windows.Forms.ToolStripStatusLabel();
@@ -246,51 +246,39 @@
             // 
             // btnUserPermission
             // 
-            this.btnUserPermission.BackColor = System.Drawing.Color.LimeGreen;
-            this.btnUserPermission.ForeColor = System.Drawing.Color.White;
             this.btnUserPermission.Location = new System.Drawing.Point(3, 3);
             this.btnUserPermission.Name = "btnUserPermission";
             this.btnUserPermission.Size = new System.Drawing.Size(226, 28);
             this.btnUserPermission.TabIndex = 0;
             this.btnUserPermission.Text = "用户权限";
-            this.btnUserPermission.UseVisualStyleBackColor = false;
             this.btnUserPermission.Click += new System.EventHandler(this.btnUserPermission_Click);
             // 
             // btnParameter
             // 
-            this.btnParameter.BackColor = System.Drawing.Color.LimeGreen;
-            this.btnParameter.ForeColor = System.Drawing.Color.White;
             this.btnParameter.Location = new System.Drawing.Point(282, 3);
             this.btnParameter.Name = "btnParameter";
             this.btnParameter.Size = new System.Drawing.Size(226, 28);
             this.btnParameter.TabIndex = 1;
             this.btnParameter.Text = "参数设置";
-            this.btnParameter.UseVisualStyleBackColor = false;
             this.btnParameter.Click += new System.EventHandler(this.btnParameter_Click);
             // 
             // btnLog
             // 
-            this.btnLog.BackColor = System.Drawing.Color.LimeGreen;
-            this.btnLog.ForeColor = System.Drawing.Color.White;
             this.btnLog.Location = new System.Drawing.Point(561, 3);
             this.btnLog.Name = "btnLog";
             this.btnLog.Size = new System.Drawing.Size(226, 28);
             this.btnLog.TabIndex = 2;
             this.btnLog.Text = "日志记录";
-            this.btnLog.UseVisualStyleBackColor = false;
             this.btnLog.Click += new System.EventHandler(this.btnLog_Click);
             // 
             // btnAbout - "关于"按钮（V1.19.12 更名：btnHelp → btnAbout，文字 帮助 → 关于）
             // 点击弹出下拉菜单：设置（仅管理员） / 版本说明
             //
-            this.btnAbout.BackColor = System.Drawing.Color.LimeGreen;
-            this.btnAbout.ForeColor = System.Drawing.Color.White;
             this.btnAbout.Location = new System.Drawing.Point(840, 3);
             this.btnAbout.Name = "btnAbout";
             this.btnAbout.Size = new System.Drawing.Size(228, 28);
             this.btnAbout.TabIndex = 4;
             this.btnAbout.Text = "关于";
-            this.btnAbout.UseVisualStyleBackColor = false;
             this.btnAbout.Click += new System.EventHandler(this.btnAbout_Click);
             // 
             // splitContainerMain
@@ -437,85 +425,89 @@
             this.groupBoxOperation.Text = "操作";
             //
             // btnBatchRecipe（V1.59.1 重排：按业务流程顺序 选配方→录批号→启动→停止→复位→急停，自上而下）
+            // 【V1.71】语义绿走 Custom+FillColor（自绘按钮 BackColor 画不出来）
             //
-            this.btnBatchRecipe.BackColor = System.Drawing.Color.LimeGreen;
+            this.btnBatchRecipe.FillColor = System.Drawing.Color.LimeGreen;
+            this.btnBatchRecipe.RectColor = System.Drawing.Color.LimeGreen;
             this.btnBatchRecipe.ForeColor = System.Drawing.Color.White;
+            this.btnBatchRecipe.Style = Sunny.UI.UIStyle.Custom;
             this.btnBatchRecipe.Location = new System.Drawing.Point(15, 18);
             this.btnBatchRecipe.Name = "btnBatchRecipe";
             this.btnBatchRecipe.Size = new System.Drawing.Size(256, 28);
             this.btnBatchRecipe.TabIndex = 0;
             this.btnBatchRecipe.Text = "批量设置配方";
-            this.btnBatchRecipe.UseVisualStyleBackColor = false;
             this.btnBatchRecipe.Click += new System.EventHandler(this.btnBatchRecipe_Click);
             //
             // btnInputLot
             //
-            this.btnInputLot.BackColor = System.Drawing.Color.LimeGreen;
+            this.btnInputLot.FillColor = System.Drawing.Color.LimeGreen;
+            this.btnInputLot.RectColor = System.Drawing.Color.LimeGreen;
             this.btnInputLot.ForeColor = System.Drawing.Color.White;
+            this.btnInputLot.Style = Sunny.UI.UIStyle.Custom;
             this.btnInputLot.Location = new System.Drawing.Point(15, 47);
             this.btnInputLot.Name = "btnInputLot";
             this.btnInputLot.Size = new System.Drawing.Size(256, 28);
             this.btnInputLot.TabIndex = 1;
             this.btnInputLot.Text = "录入批号";
-            this.btnInputLot.UseVisualStyleBackColor = false;
             this.btnInputLot.Click += new System.EventHandler(this.btnInputLot_Click);
             //
             // btnStartRun
             //
-            this.btnStartRun.BackColor = System.Drawing.Color.DodgerBlue;
+            this.btnStartRun.FillColor = System.Drawing.Color.DodgerBlue;
+            this.btnStartRun.RectColor = System.Drawing.Color.DodgerBlue;
             this.btnStartRun.ForeColor = System.Drawing.Color.White;
+            this.btnStartRun.Style = Sunny.UI.UIStyle.Custom;
             this.btnStartRun.Location = new System.Drawing.Point(15, 76);
             this.btnStartRun.Name = "btnStartRun";
             this.btnStartRun.Size = new System.Drawing.Size(256, 28);
             this.btnStartRun.TabIndex = 2;
             this.btnStartRun.Text = "启动运行（选中台）";
-            this.btnStartRun.UseVisualStyleBackColor = false;
             this.btnStartRun.Click += new System.EventHandler(this.btnStartRun_Click);
             //
             // btnStopRun
             //
-            this.btnStopRun.BackColor = System.Drawing.SystemColors.Control;
+            // 【V1.71】无语义默认灰走 Sunny Gray 档（深色换肤经 ApplyOperationButtonsTheme+ApplyButtonColors）
+            //
+            this.btnStopRun.Style = Sunny.UI.UIStyle.Gray;
             this.btnStopRun.Location = new System.Drawing.Point(15, 105);
             this.btnStopRun.Name = "btnStopRun";
             this.btnStopRun.Size = new System.Drawing.Size(256, 28);
             this.btnStopRun.TabIndex = 3;
             this.btnStopRun.Text = "停止运行（选中台）";
-            this.btnStopRun.UseVisualStyleBackColor = false;
             this.btnStopRun.Click += new System.EventHandler(this.btnStopRun_Click);
             //
             // btnResetAlarm
             //
-            this.btnResetAlarm.BackColor = System.Drawing.SystemColors.Control;
+            this.btnResetAlarm.Style = Sunny.UI.UIStyle.Gray;
             this.btnResetAlarm.Location = new System.Drawing.Point(15, 134);
             this.btnResetAlarm.Name = "btnResetAlarm";
             this.btnResetAlarm.Size = new System.Drawing.Size(256, 28);
             this.btnResetAlarm.TabIndex = 4;
             this.btnResetAlarm.Text = "报警复位（选中台）";
-            this.btnResetAlarm.UseVisualStyleBackColor = false;
             this.btnResetAlarm.Click += new System.EventHandler(this.btnResetAlarm_Click);
             //
             // btnUnloadJudge（V1.67：Q22 待判定配套，下料时人工录 PASS/FAIL；平时隐藏？不：
             // 常驻但 AutoPass 下点它只提示，无操作员误触风险；位置在复位下、急停上，29px 步进）
             //
-            this.btnUnloadJudge.BackColor = System.Drawing.SystemColors.Control;
+            this.btnUnloadJudge.Style = Sunny.UI.UIStyle.Gray;
             this.btnUnloadJudge.Location = new System.Drawing.Point(15, 192);
             this.btnUnloadJudge.Name = "btnUnloadJudge";
             this.btnUnloadJudge.Size = new System.Drawing.Size(256, 28);
             this.btnUnloadJudge.TabIndex = 6;
             this.btnUnloadJudge.Text = "下料判定（选中台）";
-            this.btnUnloadJudge.UseVisualStyleBackColor = false;
             this.btnUnloadJudge.Click += new System.EventHandler(this.btnUnloadJudge_Click);
             //
             // btnStopAll
             //
-            this.btnStopAll.BackColor = System.Drawing.Color.Crimson;
+            this.btnStopAll.FillColor = System.Drawing.Color.Crimson;
+            this.btnStopAll.RectColor = System.Drawing.Color.Crimson;
             this.btnStopAll.ForeColor = System.Drawing.Color.White;
+            this.btnStopAll.Style = Sunny.UI.UIStyle.Custom;
             this.btnStopAll.Location = new System.Drawing.Point(15, 221);
             this.btnStopAll.Name = "btnStopAll";
             this.btnStopAll.Size = new System.Drawing.Size(256, 28);
             this.btnStopAll.TabIndex = 7;
             this.btnStopAll.Text = "全部停止（急停）";
-            this.btnStopAll.UseVisualStyleBackColor = false;
             this.btnStopAll.Click += new System.EventHandler(this.btnStopAll_Click);
             //
             // groupBoxLog
@@ -603,6 +595,10 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1280, 900);
+            // 【V1.71】UIForm 自绘蓝标题：Dock=Fill 主布局加顶 Pad 避开标题区。
+            this.Padding = new System.Windows.Forms.Padding(0, 38, 0, 0);
+            // 【V1.71】UIForm 自绘蓝标题：Dock=Fill 主布局加顶 Pad 避开标题区。
+            this.Padding = new System.Windows.Forms.Padding(0, 38, 0, 0);
             this.Controls.Add(this.rootScrollPanel);
             this.MinimumSize = new System.Drawing.Size(800, 600);
             this.Name = "MainForm";
@@ -645,67 +641,67 @@
         /// <summary>顶部信息栏容器</summary>
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelTop;
         /// <summary>系统标题标签</summary>
-        private System.Windows.Forms.Label lblTitle;
+        private Sunny.UI.UILabel lblTitle;
         /// <summary>当前操作权限显示容器（V1.19.7：拆为前缀+角色名两个标签）</summary>
         private System.Windows.Forms.FlowLayoutPanel panelPermission;
         /// <summary>固定前缀"当前操作权限: "（默认黑字）</summary>
-        private System.Windows.Forms.Label lblPermissionPrefix;
+        private Sunny.UI.UILabel lblPermissionPrefix;
         /// <summary>角色名标签（V1.19.7：ForeColor 按权限着色——管理员=红/技术员=蓝/操作员=绿）</summary>
-        private System.Windows.Forms.Label lblPermissionRole;
+        private Sunny.UI.UILabel lblPermissionRole;
         /// <summary>"通讯连接状态:"标签（V1.16 更名：现场无 PLC，改为通讯连接状态）</summary>
-        private System.Windows.Forms.Label lblCommStatusLabel;
+        private Sunny.UI.UILabel lblCommStatusLabel;
         /// <summary>通讯连接状态值标签（绿=已连接，红=未连接）</summary>
-        private System.Windows.Forms.Label lblCommStatus;
+        private Sunny.UI.UILabel lblCommStatus;
         /// <summary>"送风机运行状态:"标签（V1.10）</summary>
-        private System.Windows.Forms.Label lblFanStateLabel;
+        private Sunny.UI.UILabel lblFanStateLabel;
         /// <summary>送风机运行状态值标签（V1.16.1：未连接=红/定值启动·已连接=绿/定值停止=灰）</summary>
-        private System.Windows.Forms.Label lblFanState;
+        private Sunny.UI.UILabel lblFanState;
         /// <summary>菜单按钮栏容器</summary>
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelMenu;
         /// <summary>用户权限按钮</summary>
-        private System.Windows.Forms.Button btnUserPermission;
+        private Sunny.UI.UIButton btnUserPermission;
         /// <summary>参数设置按钮</summary>
-        private System.Windows.Forms.Button btnParameter;
+        private Sunny.UI.UIButton btnParameter;
         /// <summary>LOG记录按钮</summary>
-        private System.Windows.Forms.Button btnLog;
+        private Sunny.UI.UIButton btnLog;
         /// <summary>关于按钮（下拉：设置 / 版本说明；V1.64 起深浅模式切换也收进该下拉，仅 dev 可见）</summary>
-        private System.Windows.Forms.Button btnAbout;
+        private Sunny.UI.UIButton btnAbout;
         /// <summary>中间分割容器（左:气压表 右:操作面板）</summary>
         private System.Windows.Forms.SplitContainer splitContainerMain;
         /// <summary>右侧布局容器</summary>
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelRight;
         /// <summary>运行状态分组</summary>
-        private System.Windows.Forms.GroupBox groupBoxStatus;
+        private Sunny.UI.UIGroupBox groupBoxStatus;
         /// <summary>运行状态文本标签</summary>
-        private System.Windows.Forms.Label lblRunStatus;
+        private Sunny.UI.UILabel lblRunStatus;
         /// <summary>监视分组（温度显示）</summary>
-        private System.Windows.Forms.GroupBox groupBoxMonitor;
+        private Sunny.UI.UIGroupBox groupBoxMonitor;
         /// <summary>"当前温度"标签（V1.16.1 更名：上部温度 → 当前温度）</summary>
-        private System.Windows.Forms.Label lblUpperTempLabel;
+        private Sunny.UI.UILabel lblUpperTempLabel;
         /// <summary>当前温度值显示（V1.16.3：TextBox → Label，保证 ForeColor 生效）</summary>
-        private System.Windows.Forms.Label lblUpperTemp;
+        private Sunny.UI.UILabel lblUpperTemp;
         /// <summary>"设置温度"标签</summary>
-        private System.Windows.Forms.Label lblSetTempLabel;
+        private Sunny.UI.UILabel lblSetTempLabel;
         /// <summary>设置温度值显示（V1.16.3：TextBox → Label）</summary>
-        private System.Windows.Forms.Label lblSetTemp;
+        private Sunny.UI.UILabel lblSetTemp;
         /// <summary>操作分组（V1.67：7 个按钮，新增下料判定；顺序：批量设置配方/录入批号/启动运行/停止运行/报警复位/下料判定/全部停止）</summary>
-        private System.Windows.Forms.GroupBox groupBoxOperation;
+        private Sunny.UI.UIGroupBox groupBoxOperation;
         /// <summary>启动运行按钮</summary>
-        private System.Windows.Forms.Button btnStartRun;
+        private Sunny.UI.UIButton btnStartRun;
         /// <summary>停止运行按钮（V1.10）</summary>
-        private System.Windows.Forms.Button btnStopRun;
+        private Sunny.UI.UIButton btnStopRun;
         /// <summary>报警复位按钮（V1.10）</summary>
-        private System.Windows.Forms.Button btnResetAlarm;
+        private Sunny.UI.UIButton btnResetAlarm;
         /// <summary>下料判定按钮（V1.67：Q22 待判定配套）</summary>
-        private System.Windows.Forms.Button btnUnloadJudge;
+        private Sunny.UI.UIButton btnUnloadJudge;
         /// <summary>全部停止（急停）按钮（V1.10）</summary>
-        private System.Windows.Forms.Button btnStopAll;
+        private Sunny.UI.UIButton btnStopAll;
         /// <summary>录入批号按钮</summary>
-        private System.Windows.Forms.Button btnInputLot;
+        private Sunny.UI.UIButton btnInputLot;
         /// <summary>批量设置配方按钮</summary>
-        private System.Windows.Forms.Button btnBatchRecipe;
+        private Sunny.UI.UIButton btnBatchRecipe;
         /// <summary>LOG日志分组</summary>
-        private System.Windows.Forms.GroupBox groupBoxLog;
+        private Sunny.UI.UIGroupBox groupBoxLog;
         /// <summary>日志输出文本框</summary>
         private System.Windows.Forms.TextBox txtLog;
         /// <summary>底部状态栏</summary>

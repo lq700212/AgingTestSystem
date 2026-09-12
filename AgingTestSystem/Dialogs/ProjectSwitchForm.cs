@@ -27,16 +27,16 @@ namespace AgingTestSystem.Dialogs
     ///   跑中的任务会读劈叉，等停机/完成再切。
     /// - 用户账号是全局的，不跟项目走（见 ProjectProfile 注释）。
     /// </summary>
-    public class ProjectSwitchForm : Form
+    public class ProjectSwitchForm : Sunny.UI.UIForm
     {
         private readonly DeviceManagerRef _deviceManager;
 
-        private Label _lblCurrent;
+        private Sunny.UI.UILabel _lblCurrent;
         private ListBox _lstProjects;
-        private TextBox _txtNewName;
-        private Button _btnCreate;
-        private Button _btnSwitch;
-        private Button _btnClose;
+        private Sunny.UI.UITextBox _txtNewName;
+        private Sunny.UI.UIButton _btnCreate;
+        private Sunny.UI.UIButton _btnSwitch;
+        private Sunny.UI.UIButton _btnClose;
 
         /// <summary>
         /// 对 DeviceManager 的最小引用（只为查"是否在测"；用接口隔离防窗体碰业务）。
@@ -59,13 +59,14 @@ namespace AgingTestSystem.Dialogs
 
             this.Text = "项目切换（需重启生效）";
             this.StartPosition = FormStartPosition.CenterParent;
-            this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
-            this.ClientSize = new Size(400, 380);
+            this.ClientSize = new Size(400, 415);
+            // 【V1.71】绝对布局：禁缩小（MinimumSize=ClientSize），防缩坏布局；可放大。
+            this.MinimumSize = new Size(400, 415);
 
-            int y = 12;
-            _lblCurrent = new Label
+            int y = 47;   // 【V1.71】UIForm 标题区 35px，内容下移
+            _lblCurrent = new Sunny.UI.UILabel
             {
                 Location = new Point(12, y),
                 Size = new Size(376, 24),
@@ -79,23 +80,33 @@ namespace AgingTestSystem.Dialogs
             this.Controls.Add(_lstProjects);
             y += 190;
 
-            var lblNew = new Label { Location = new Point(12, y + 4), Size = new Size(48, 20), Text = "新建：" };
-            _txtNewName = new TextBox { Location = new Point(64, y), Size = new Size(220, 24) };
-            _btnCreate = new Button { Location = new Point(292, y - 1), Size = new Size(96, 26), Text = "创建" };
+            var lblNew = new Sunny.UI.UILabel { Location = new Point(12, y + 4), Size = new Size(48, 20), Text = "新建：" };
+            _txtNewName = new Sunny.UI.UITextBox { Location = new Point(64, y), Size = new Size(220, 24) };
+            _btnCreate = new Sunny.UI.UIButton { Location = new Point(292, y - 1), Size = new Size(96, 26), Text = "创建" };
             _btnCreate.Click += BtnCreate_Click;
             this.Controls.Add(lblNew);
             this.Controls.Add(_txtNewName);
             this.Controls.Add(_btnCreate);
             y += 34;
 
-            _btnSwitch = new Button { Location = new Point(12, y), Size = new Size(188, 30), Text = "切换并重启" };
+            _btnSwitch = new Sunny.UI.UIButton { Location = new Point(12, y), Size = new Size(188, 30), Text = "切换并重启" };
             _btnSwitch.Click += BtnSwitch_Click;
-            _btnClose = new Button { Location = new Point(208, y), Size = new Size(180, 30), Text = "关闭", DialogResult = DialogResult.Cancel };
+            _btnClose = new Sunny.UI.UIButton
+            {
+                Location = new Point(208, y),
+                Size = new Size(180, 30),
+                Text = "关闭",
+                DialogResult = DialogResult.Cancel,
+                FillColor = Color.DimGray,
+                RectColor = Color.DimGray,
+                ForeColor = Color.White,
+                Style = Sunny.UI.UIStyle.Custom
+            };
             this.Controls.Add(_btnSwitch);
             this.Controls.Add(_btnClose);
             y += 38;
 
-            var lblNote = new Label
+            var lblNote = new Sunny.UI.UILabel
             {
                 Location = new Point(12, y),
                 Size = new Size(376, 40),

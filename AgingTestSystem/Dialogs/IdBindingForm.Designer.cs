@@ -54,16 +54,16 @@ namespace AgingTestSystem.Dialogs
         {
             this.tableLayoutPanelMain = new System.Windows.Forms.TableLayoutPanel();
             this.panelLeft = new System.Windows.Forms.Panel();
-            this.txtSn = new System.Windows.Forms.TextBox();
-            this.lblSn = new System.Windows.Forms.Label();
-            this.txtStationNo = new System.Windows.Forms.TextBox();
-            this.lblStationNo = new System.Windows.Forms.Label();
-            this.txtLot = new System.Windows.Forms.TextBox();
-            this.lblLot = new System.Windows.Forms.Label();
+            this.txtSn = new Sunny.UI.UITextBox();
+            this.lblSn = new Sunny.UI.UILabel();
+            this.txtStationNo = new Sunny.UI.UITextBox();
+            this.lblStationNo = new Sunny.UI.UILabel();
+            this.txtLot = new Sunny.UI.UITextBox();
+            this.lblLot = new Sunny.UI.UILabel();
             this.panelRight = new System.Windows.Forms.Panel();
-            this.btnSave = new System.Windows.Forms.Button();
+            this.btnSave = new Sunny.UI.UIButton();
             this.listBoxProducts = new System.Windows.Forms.ListBox();
-            this.lblProductListTitle = new System.Windows.Forms.Label();
+            this.lblProductListTitle = new Sunny.UI.UILabel();
             this.tableLayoutPanelMain.SuspendLayout();
             this.panelLeft.SuspendLayout();
             this.panelRight.SuspendLayout();
@@ -162,8 +162,12 @@ namespace AgingTestSystem.Dialogs
             this.panelRight.Size = new System.Drawing.Size(444, 444);
             this.panelRight.TabIndex = 1;
             //
-            // btnSave - 保存按钮
+            // btnSave - 保存按钮（语义绿，与其它弹窗确认按钮统一）
             //
+            this.btnSave.FillColor = System.Drawing.Color.LimeGreen;
+            this.btnSave.RectColor = System.Drawing.Color.LimeGreen;
+            this.btnSave.ForeColor = System.Drawing.Color.White;
+            this.btnSave.Style = Sunny.UI.UIStyle.Custom;
             this.btnSave.Location = new System.Drawing.Point(330, 395);
             this.btnSave.Name = "btnSave";
             this.btnSave.Size = new System.Drawing.Size(100, 40);
@@ -194,9 +198,14 @@ namespace AgingTestSystem.Dialogs
             //
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(750, 450);
+            // 【V1.71】UIForm 标题占 35px 客户区：ClientSize 加高 35，保证 Dock 区内容高度与原来一致
+            //（否则右侧保存按钮被挤出可视区，harness 实测抓获）。
+            this.ClientSize = new System.Drawing.Size(750, 485);
+            // 【V1.71】Dock 布局自适应放大；禁缩小（MinimumSize=ClientSize），防右下保存按钮被挤出。
+            this.MinimumSize = new System.Drawing.Size(750, 485);
             this.Controls.Add(this.tableLayoutPanelMain);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
+            // 【V1.71】UIForm 自绘蓝标题：删 FormBorderStyle；Dock=Fill 布局加顶 Pad 避开标题区。
+            this.Padding = new System.Windows.Forms.Padding(2, 38, 2, 2);
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.Name = "IdBindingForm";
@@ -226,30 +235,30 @@ namespace AgingTestSystem.Dialogs
         private System.Windows.Forms.Panel panelRight;
 
         /// <summary>批号标签</summary>
-        private System.Windows.Forms.Label lblLot;
+        private Sunny.UI.UILabel lblLot;
 
         /// <summary>批号输入框（只读）</summary>
-        private System.Windows.Forms.TextBox txtLot;
+        private Sunny.UI.UITextBox txtLot;
 
         /// <summary>工位编号标签</summary>
-        private System.Windows.Forms.Label lblStationNo;
+        private Sunny.UI.UILabel lblStationNo;
 
         /// <summary>工位编号输入框</summary>
-        private System.Windows.Forms.TextBox txtStationNo;
+        private Sunny.UI.UITextBox txtStationNo;
 
         /// <summary>SN标签</summary>
-        private System.Windows.Forms.Label lblSn;
+        private Sunny.UI.UILabel lblSn;
 
         /// <summary>SN输入框</summary>
-        private System.Windows.Forms.TextBox txtSn;
+        private Sunny.UI.UITextBox txtSn;
 
         /// <summary>产品列表标题标签</summary>
-        private System.Windows.Forms.Label lblProductListTitle;
+        private Sunny.UI.UILabel lblProductListTitle;
 
         /// <summary>产品列表框（带滚动条）</summary>
         private System.Windows.Forms.ListBox listBoxProducts;
 
         /// <summary>保存按钮</summary>
-        private System.Windows.Forms.Button btnSave;
+        private Sunny.UI.UIButton btnSave;
     }
 }

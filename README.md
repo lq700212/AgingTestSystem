@@ -90,7 +90,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Models/` | BarometerData / FanData(+FanRunState) / IoStatus / DeviceConfig / RecipeConfig / StationInfo / PanelLayoutConfig / HomeLayoutConfig / PolicyEnums（V1.67 工艺策略枚举） / 用户模型 |
 | `Services/ProjectProfile.cs` / `Services/ProjectPolicyStore.cs` | 项目档案（V1.67）：`Projects/<项目>/` 路径解析/迁移/切换（配方/工位设置/主页布局/策略跟项目，用户/快照/日志跟机器）；策略分流读写 Policy.json（PolicyKeys 唯一名单） |
 | `Dialogs/UnloadJudgeForm.cs` / `Dialogs/ProjectSwitchForm.cs` | 下料判定窗（V1.67，Q22 待判定配套）/ 项目切换窗（V1.67，仅管理员；纯代码窗体） |
-| `.opencode/skills/agingtest-regression/` | 项目最终测试验证技能（V1.58.23）：一键"构建→冒烟→1134+ 条回归断言（V1.70）"，用例源码 `tests/TestRunner.cs`，新测试用例一律沉淀于此（用法见其 SKILL.md） |
+| `.opencode/skills/agingtest-regression/` | 项目最终测试验证技能（V1.58.23）：一键"构建→冒烟→1158+ 条回归断言（V1.71）"，用例源码 `tests/TestRunner.cs`，新测试用例一律沉淀于此（用法见其 SKILL.md） |
 
 > WinForms 视图均拆 `.cs` + `.Designer.cs` 两个 partial；**所有 .cs 必须 UTF-8 with BOM 编码**（否则设计器报"无法设计基类 System.Void"）。
 
@@ -222,6 +222,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 | 版本 | 要点 |
 | :--- | :--- |
+| V1.71 | 全窗 SunnyUI 小清新：UIForm 蓝标题 + 语义色保留（绿确认/红急停经 Custom+FillColor）；标题禁区 35px（绝对下移/ Dock 加 Pad）；公共参数保存按钮改语义绿；配方检索框泛化通吃原生/Sunny 输入框 |
 | V1.70 | 流程驾驶舱：固定拓扑可视化（7 节点 8 连线，节点显示真实配置+实时台数）+ 点节点改配置（与系统设置同一条保存路）+ 滚轮缩放/中键平移/节点拖拽（位置存 FlowLayout.json） |
 | V1.69 | 三期规则表达式+阶段流：沙盒引擎（12 变量冻结，短路，NaN 恒 false）+ 自定义报警（持续计时，只多报）+ 完成表达式 OR（只能提前）+ 跳过抽真空（机械夹具，压力同步豁免）+ 规则编辑弹窗（实时校验） |
 | V1.68 | 二期 MES 映射层可配：后台 POST JSON（单入口+鉴权+重试+离线缓存，失败永不阻断生产）+ 触发器/字段映射/静态字段可配（连接跟机器，映射跟项目）+ Mock 联调（只写 CSV）+ Fake 传输回归缝 + 密钥 DPAPI 加密/自定义头/按事件分地址 |

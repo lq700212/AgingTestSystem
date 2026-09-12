@@ -44,7 +44,7 @@ namespace AgingTestSystem.Dialogs
     /// 旧版误做成"采集间隔 + 软件报警阈值"的通用参数设置；新版按现场实际需求简化为
     /// 只设置所有气压表的负压阈值（写设备 0x0010），并同步简化界面。
     /// </summary>
-    public partial class CommonParameterForm : Form
+    public partial class CommonParameterForm : Sunny.UI.UIForm
     {
         /// <summary>
         /// 设备管理器（核心服务，透传所有硬件通讯）
@@ -66,36 +66,13 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 保存按钮主题配色（【V1.60.4】纯函数，方便回归直接断言）。
-        /// 深色：DimGray 底 + 白字（跟停止/复位按钮与各窗"取消"同款）；
-        /// 浅色：返回 Empty/Empty 表示"保持原生默认样式不动"（本按钮浅色就是系统默认灰，
-        /// 原生渲染跟主题最协调，不要手设 Control 写死）。
-        /// </summary>
-        /// <param name="dark">true=深色配色，false=浅色（不动）</param>
-        /// <param name="back">按钮底色（浅色返回 Empty）</param>
-        /// <param name="fore">按钮文字色（浅色返回 Empty）</param>
-        public static void GetSaveButtonThemeColors(bool dark, out Color back, out Color fore)
-        {
-            back = dark ? Color.DimGray : Color.Empty;
-            fore = dark ? Color.White : Color.Empty;
-        }
-
-        /// <summary>
-        /// 打开后调一次：整窗按当前主题着色 + 保存按钮深色下换 DimGray 白字。
-        /// （窗体每次 new 的新实例，浅色下按钮本来就是原生默认，无需恢复。）
+        /// 打开后调一次：整窗按当前主题着色。
+        /// 【V1.71】保存按钮已是语义绿（两边都清晰），V1.60.4 的 DimGray 特例已删除。
+        /// （窗体每次 new 的新实例，无需恢复。）
         /// </summary>
         public void ApplyTheme()
         {
             ThemeManager.ApplyTo(this);
-            if (ThemeManager.IsDark)
-            {
-                Color back;
-                Color fore;
-                GetSaveButtonThemeColors(true, out back, out fore);
-                btnSave.BackColor = back;
-                btnSave.ForeColor = fore;
-                btnSave.UseVisualStyleBackColor = false; // 关掉原生渲染，自定义底色才生效
-            }
         }
 
         /// <summary>
@@ -121,11 +98,12 @@ namespace AgingTestSystem.Dialogs
             int groupLeft = (ClientSize.Width - groupWidth) / 2;
 
             // 第一行：标签在上、数值框微调垂直对齐（标签高 12，数值框高 21，y 差 3 即居中）
-            lblThreshold.Location = new System.Drawing.Point(groupLeft, 30);
-            nudThreshold.Location = new System.Drawing.Point(groupLeft + labelWidth + gap, 27);
+            // 【V1.71】Y 坐标整体下移 35px（UIForm 自绘蓝标题区）
+            lblThreshold.Location = new System.Drawing.Point(groupLeft, 65);
+            nudThreshold.Location = new System.Drawing.Point(groupLeft + labelWidth + gap, 62);
 
             // 第二行：保存按钮水平居中
-            btnSave.Location = new System.Drawing.Point((ClientSize.Width - btnSave.Width) / 2, 75);
+            btnSave.Location = new System.Drawing.Point((ClientSize.Width - btnSave.Width) / 2, 110);
         }
 
         /// <summary>

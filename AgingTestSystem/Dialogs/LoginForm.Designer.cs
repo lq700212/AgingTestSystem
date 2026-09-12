@@ -42,21 +42,21 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.lblTitle = new System.Windows.Forms.Label();
-            this.lblUsername = new System.Windows.Forms.Label();
-            this.lblPassword = new System.Windows.Forms.Label();
-            this.txtUsername = new System.Windows.Forms.ComboBox();
-            this.txtPassword = new System.Windows.Forms.TextBox();
+            this.lblTitle = new Sunny.UI.UILabel();
+            this.lblUsername = new Sunny.UI.UILabel();
+            this.lblPassword = new Sunny.UI.UILabel();
+            this.txtUsername = new Sunny.UI.UIComboBox();
+            this.txtPassword = new Sunny.UI.UITextBox();
             this.chkRemember = new System.Windows.Forms.CheckBox();
-            this.btnOK = new System.Windows.Forms.Button();
-            this.btnCancel = new System.Windows.Forms.Button();
+            this.btnOK = new Sunny.UI.UIButton();
+            this.btnCancel = new Sunny.UI.UIButton();
             this.SuspendLayout();
             //
             // lblTitle - 标题（显示"切换为 XXX 权限"）
             //
             this.lblTitle.AutoSize = true;
             this.lblTitle.Font = new System.Drawing.Font("微软雅黑", 11F, System.Drawing.FontStyle.Bold);
-            this.lblTitle.Location = new System.Drawing.Point(50, 25);
+            this.lblTitle.Location = new System.Drawing.Point(50, 60);
             this.lblTitle.Name = "lblTitle";
             this.lblTitle.Size = new System.Drawing.Size(0, 20);
             this.lblTitle.TabIndex = 0;
@@ -67,7 +67,7 @@
             //
             this.lblUsername.AutoSize = true;
             this.lblUsername.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.lblUsername.Location = new System.Drawing.Point(30, 75);
+            this.lblUsername.Location = new System.Drawing.Point(30, 110);
             this.lblUsername.Name = "lblUsername";
             this.lblUsername.Size = new System.Drawing.Size(54, 17);
             this.lblUsername.TabIndex = 1;
@@ -77,7 +77,7 @@
             //
             this.lblPassword.AutoSize = true;
             this.lblPassword.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.lblPassword.Location = new System.Drawing.Point(30, 115);
+            this.lblPassword.Location = new System.Drawing.Point(30, 150);
             this.lblPassword.Name = "lblPassword";
             this.lblPassword.Size = new System.Drawing.Size(54, 17);
             this.lblPassword.TabIndex = 3;
@@ -85,10 +85,10 @@
             //
             // txtUsername - 用户名下拉框（列出该角色已有账号，可下拉选择或手动输入）
             //
-            this.txtUsername.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDown;
+            this.txtUsername.DropDownStyle = Sunny.UI.UIDropDownStyle.DropDown;
             this.txtUsername.Font = new System.Drawing.Font("微软雅黑", 9F);
             this.txtUsername.FormattingEnabled = true;
-            this.txtUsername.Location = new System.Drawing.Point(100, 72);
+            this.txtUsername.Location = new System.Drawing.Point(100, 107);
             this.txtUsername.Name = "txtUsername";
             this.txtUsername.Size = new System.Drawing.Size(220, 25);
             this.txtUsername.TabIndex = 2;
@@ -97,51 +97,51 @@
             // txtPassword - 密码输入框（密码模式：输入显示为 *）
             //
             this.txtPassword.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.txtPassword.Location = new System.Drawing.Point(100, 112);
+            this.txtPassword.Location = new System.Drawing.Point(100, 147);
             this.txtPassword.Name = "txtPassword";
             this.txtPassword.Size = new System.Drawing.Size(220, 23);
             this.txtPassword.TabIndex = 4;
-            // UseSystemPasswordChar=true：使用系统默认的密码字符（圆点）显示输入内容
-            this.txtPassword.UseSystemPasswordChar = true;
+            // PasswordChar='*'：SunnyUI 文本框用字符密码模式（无 UseSystemPasswordChar）
+            this.txtPassword.PasswordChar = '*';
             this.txtPassword.KeyPress += new System.Windows.Forms.KeyPressEventHandler(this.txtPassword_KeyPress);
             //
             // chkRemember - 记住密码复选框
             //
             this.chkRemember.AutoSize = true;
             this.chkRemember.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.chkRemember.Location = new System.Drawing.Point(100, 148);
+            this.chkRemember.Location = new System.Drawing.Point(100, 183);
             this.chkRemember.Name = "chkRemember";
             this.chkRemember.Size = new System.Drawing.Size(75, 21);
             this.chkRemember.TabIndex = 5;
             this.chkRemember.Text = "记住密码";
             this.chkRemember.UseVisualStyleBackColor = true;
             //
-            // btnOK - 确认按钮
+            // btnOK - 确认按钮（语义绿：Sunny 自绘按钮走 Style=Custom+FillColor，原生 BackColor 画不出来）
             //
-            this.btnOK.BackColor = System.Drawing.Color.LimeGreen;
+            this.btnOK.FillColor = System.Drawing.Color.LimeGreen;
+            this.btnOK.RectColor = System.Drawing.Color.LimeGreen;
             this.btnOK.ForeColor = System.Drawing.Color.White;
-            this.btnOK.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnOK.Style = Sunny.UI.UIStyle.Custom;
             this.btnOK.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.btnOK.Location = new System.Drawing.Point(100, 180);
+            this.btnOK.Location = new System.Drawing.Point(100, 215);
             this.btnOK.Name = "btnOK";
             this.btnOK.Size = new System.Drawing.Size(100, 32);
             this.btnOK.TabIndex = 6;
             this.btnOK.Text = "确认";
-            this.btnOK.UseVisualStyleBackColor = false;
             this.btnOK.Click += new System.EventHandler(this.btnOK_Click);
             //
-            // btnCancel - 取消按钮
+            // btnCancel - 取消按钮（语义灰，同上走 Custom+FillColor）
             //
-            this.btnCancel.BackColor = System.Drawing.Color.DimGray;
+            this.btnCancel.FillColor = System.Drawing.Color.DimGray;
+            this.btnCancel.RectColor = System.Drawing.Color.DimGray;
             this.btnCancel.ForeColor = System.Drawing.Color.White;
-            this.btnCancel.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnCancel.Style = Sunny.UI.UIStyle.Custom;
             this.btnCancel.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.btnCancel.Location = new System.Drawing.Point(220, 180);
+            this.btnCancel.Location = new System.Drawing.Point(220, 215);
             this.btnCancel.Name = "btnCancel";
             this.btnCancel.Size = new System.Drawing.Size(100, 32);
             this.btnCancel.TabIndex = 7;
             this.btnCancel.Text = "取消";
-            this.btnCancel.UseVisualStyleBackColor = false;
             this.btnCancel.Click += new System.EventHandler(this.btnCancel_Click);
             //
             // LoginForm - 登录窗体自身属性设置
@@ -155,9 +155,11 @@
             this.MinimizeBox = false;
             // 居中显示在父窗体上
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
-            // 固定边框，禁止拖动调整大小
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
-            this.ClientSize = new System.Drawing.Size(380, 240);
+            // 【V1.71】UIForm 自绘蓝标题（约 35px），内容整体下移 35px，窗体同步加高；
+            // FormBorderStyle 删除（UIForm 自己管边框，固定值会盖掉自绘标题）。
+            this.ClientSize = new System.Drawing.Size(380, 275);
+            // 【V1.71】绝对布局：禁缩小（MinimumSize=ClientSize），防缩坏布局；可放大。
+            this.MinimumSize = new System.Drawing.Size(380, 275);
             this.Controls.Add(this.btnCancel);
             this.Controls.Add(this.btnOK);
             this.Controls.Add(this.chkRemember);
@@ -178,20 +180,20 @@
         // ===== 控件字段声明（在两个 partial 文件中共享） =====
 
         /// <summary>标题标签（显示"切换为 XXX 权限"）</summary>
-        private System.Windows.Forms.Label lblTitle;
+        private Sunny.UI.UILabel lblTitle;
         /// <summary>"用户名:"标签</summary>
-        private System.Windows.Forms.Label lblUsername;
+        private Sunny.UI.UILabel lblUsername;
         /// <summary>"密  码:"标签</summary>
-        private System.Windows.Forms.Label lblPassword;
+        private Sunny.UI.UILabel lblPassword;
         /// <summary>用户名下拉框（列出该角色已有账号）</summary>
-        private System.Windows.Forms.ComboBox txtUsername;
+        private Sunny.UI.UIComboBox txtUsername;
         /// <summary>密码输入框（密码模式）</summary>
-        private System.Windows.Forms.TextBox txtPassword;
+        private Sunny.UI.UITextBox txtPassword;
         /// <summary>记住密码复选框</summary>
         private System.Windows.Forms.CheckBox chkRemember;
         /// <summary>确认按钮</summary>
-        private System.Windows.Forms.Button btnOK;
+        private Sunny.UI.UIButton btnOK;
         /// <summary>取消按钮</summary>
-        private System.Windows.Forms.Button btnCancel;
+        private Sunny.UI.UIButton btnCancel;
     }
 }

@@ -47,7 +47,7 @@ namespace AgingTestSystem.Dialogs
     /// │ [添加账号] [删除账号] [应用修改] [关闭]   │ ← btnAdd / btnDelete / btnApply / btnClose
     /// └──────────────────────────────────────────┘
     ///</summary>
-    public partial class UserManagementForm : Form
+    public partial class UserManagementForm : Sunny.UI.UIForm
     {
         /// <summary>用户管理器实例</summary>
         private readonly UserManager _userManager;

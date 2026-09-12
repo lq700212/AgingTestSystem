@@ -53,7 +53,7 @@ namespace AgingTestSystem.Dialogs
     /// 点击【保存】把当前值写入 HomeLayout.json（<see cref="HomeLayoutConfig.Save"/>），
     /// 返回 DialogResult.OK；取消则不改动任何配置。
     /// </summary>
-    public class HomeLayoutEditorForm : Form
+    public class HomeLayoutEditorForm : Sunny.UI.UIForm
     {
         /// <summary>当前编辑的布局配置（引用外部传入的实例，保存时由外部写盘）</summary>
         private readonly HomeLayoutConfig _layout;
@@ -104,7 +104,8 @@ namespace AgingTestSystem.Dialogs
             //   默认以 96DPI 基准不缩放，高分屏（如 150%）下控件/文字偏小或布局错位。
             AutoScaleDimensions = new SizeF(6F, 12F);
             AutoScaleMode = AutoScaleMode.Font;
-            FormBorderStyle = FormBorderStyle.Sizable;
+            // 【V1.71】UIForm 自绘蓝标题：删 FormBorderStyle；Dock 布局加顶 Pad 避开标题区。
+            Padding = new Padding(2, 38, 2, 2);
             MinimumSize = new Size(560, 460);
             ClientSize = new Size(640, 520);
 
@@ -144,7 +145,7 @@ namespace AgingTestSystem.Dialogs
 
             // 底部按钮
             var pnlBottom = new Panel { Dock = DockStyle.Bottom, Height = 52, Padding = new Padding(12, 6, 12, 6) };
-            var btnRestore = new Button
+            var btnRestore = new Sunny.UI.UIButton
             {
                 Text = "恢复默认",
                 Width = 96, Height = 32,
@@ -152,19 +153,27 @@ namespace AgingTestSystem.Dialogs
             };
             btnRestore.Click += BtnRestore_Click;
 
-            var btnCancel = new Button
+            var btnCancel = new Sunny.UI.UIButton
             {
                 Text = "取消",
                 Width = 90, Height = 32,
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Right
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
+                FillColor = Color.DimGray,
+                RectColor = Color.DimGray,
+                ForeColor = Color.White,
+                Style = Sunny.UI.UIStyle.Custom
             };
             btnCancel.Click += (s, e) => DialogResult = DialogResult.Cancel;
 
-            var btnSave = new Button
+            var btnSave = new Sunny.UI.UIButton
             {
                 Text = "保存",
                 Width = 90, Height = 32,
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Right
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
+                FillColor = Color.LimeGreen,
+                RectColor = Color.LimeGreen,
+                ForeColor = Color.White,
+                Style = Sunny.UI.UIStyle.Custom
             };
             btnSave.Click += BtnSave_Click;
 
@@ -178,7 +187,7 @@ namespace AgingTestSystem.Dialogs
             pnlBottom.Controls.Add(btnSave);
 
             // 顶部说明条
-            var lblTip = new Label
+            var lblTip = new Sunny.UI.UILabel
             {
                 Dock = DockStyle.Top,
                 Height = 26,
@@ -231,7 +240,7 @@ namespace AgingTestSystem.Dialogs
         private NumericUpDown CreateNud(TableLayoutPanel pnl, string caption, int value,
             decimal min, decimal max, int row)
         {
-            var lbl = new Label
+            var lbl = new Sunny.UI.UILabel
             {
                 Text = caption,
                 AutoSize = true,

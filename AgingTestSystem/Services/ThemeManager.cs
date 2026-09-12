@@ -27,6 +27,9 @@ namespace AgingTestSystem.Services
     /// 【配色约定】
     /// - 按钮一律不动：全项目的按钮都是语义色（绿=确认/启动、蓝=动作、红=急停/删除、
     ///   灰=取消/关闭），深浅色下都清晰可辨，动了反而丢业务含义；
+    ///   【V1.71】SunnyUI 的 UIButton 不是原生 Button 的子类（自绘控件），
+    ///   `is Button` 认不出它——这里按类型名单独走同一条"不动"分支；
+    ///   语义色经 ApplyButtonColors 写入（原生走 BackColor，Sunny 走 Style=Custom+FillColor）。
     /// - 自绘控件不动：WorkstationGridView（工位大画布）、CircleButton（圆形灯）、
     ///   HomeLayoutPreviewControl（布局预览画布）自己管颜色，由各自的 SetDarkMode
     ///   或父容器透色跟随，不在本类递归里硬改；
@@ -447,9 +450,19 @@ namespace AgingTestSystem.Services
 
             try
             {
+                // 【V1.71】SunnyUI 自绘控件的类型判定（它们大多不是原生控件的子类，
+                // `is Button/TextBox` 认不出，必须按类型名走分支，否则会被容器表误染）：
+                // - Sunny.UI.UIButton：自绘按钮，走"按钮不动"分支（语义色保护）；
+                // - Sunny.UI.UITextBox / Sunny.UI.UIComboBox：自绘输入框，走输入分支；
+                // - Sunny.UI.UILabel：继承原生 Label，自动命中下面的 Label 分支，不用管；
+                // - Sunny.UI.UIGroupBox：走容器分支（与原生 GroupBox 同待遇）。
+                bool isSunnyButton = string.Equals(typeName, "Sunny.UI.UIButton", StringComparison.Ordinal);
+                bool isSunnyInput = string.Equals(typeName, "Sunny.UI.UITextBox", StringComparison.Ordinal)
+                    || string.Equals(typeName, "Sunny.UI.UIComboBox", StringComparison.Ordinal);
+
                 // 标准按钮（确认绿/动作蓝/急停红/取消灰…）是语义色，两边都清晰，原样保留。
                 // CheckBox/RadioButton 例外：它们只是勾选项，字要跟着主题走。
-                if (c is Button && !(c is CheckBox) && !(c is RadioButton))
+                if ((c is Button && !(c is CheckBox) && !(c is RadioButton)) || isSunnyButton)
                 {
                     // 只钻子控件（一般没有），颜色不动
                 }
@@ -458,7 +471,7 @@ namespace AgingTestSystem.Services
                     ApplyGrid((DataGridView)c, toDark);
                 }
                 else if (c is TextBoxBase || c is ComboBox || c is ListBox
-                    || c is NumericUpDown || c is DateTimePicker)
+                    || c is NumericUpDown || c is DateTimePicker || isSunnyInput)
                 {
                     // 输入类：底、字都按表走（只读灰底 LightGray 也在表里→深灰，保留"只读"暗示）
                     c.BackColor = _inputBackMap.Map(c.BackColor, toDark);
@@ -686,6 +699,75 @@ namespace AgingTestSystem.Services
             {
                 style.BackColor = _cellBackMap.Map(style.BackColor, toDark);
                 style.ForeColor = _cellForeMap.Map(style.ForeColor, toDark);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// 给按钮写语义色（【V1.71 新增】SunnyUI 换肤配套）：
+        /// 原生 Button 走 BackColor/ForeColor；SunnyUI UIButton 是自绘的，
+        /// BackColor 画不出来，必须 Style=Custom + FillColor/RectColor/ForeColor。
+        /// </summary>
+        public static void ApplyButtonColors(Control btn, Color back, Color fore)
+        {
+            if (btn == null || btn.IsDisposed || btn.Disposing) return;
+            try
+            {
+                string typeName = btn.GetType().FullName ?? "";
+                if (string.Equals(typeName, "Sunny.UI.UIButton", StringComparison.Ordinal))
+                {
+                    TrySetEnumProperty(btn, "Style", "Sunny.UI.UIStyle, SunnyUI", "Custom");
+                    TrySetColorProperty(btn, "FillColor", back);
+                    TrySetColorProperty(btn, "RectColor", back);
+                    TrySetColorProperty(btn, "ForeColor", fore);
+                    return;
+                }
+                btn.BackColor = back;
+                btn.ForeColor = fore;
+            }
+            catch { }
+        }
+
+        /// <summary>反射写枚举属性（程序集限定名解析，失败吞掉：版本差异是正常的）。</summary>
+        private static void TrySetEnumProperty(object obj, string propName,
+            string enumTypeName, string valueName)
+        {
+            try
+            {
+                var p = obj.GetType().GetProperty(propName);
+                if (p == null || !p.CanWrite) return;
+                Type enumType = Type.GetType(enumTypeName);
+                if (enumType == null || !enumType.IsEnum) return;
+                if (p.PropertyType != enumType) return;
+                object value = Enum.Parse(enumType, valueName);
+                p.SetValue(obj, value, null);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// 读按钮的"实际显示色"（【V1.71 新增】下拉菜单项继承宿主颜色用）：
+        /// 原生 Button 读 BackColor/ForeColor；SunnyUI UIButton 是自绘的，
+        /// BackColor 只是底衬，真实显示色在 FillColor/ForeColor。
+        /// </summary>
+        public static void GetEffectiveButtonColors(Control btn, out Color back, out Color fore)
+        {
+            back = Color.Empty;
+            fore = Color.Empty;
+            if (btn == null || btn.IsDisposed || btn.Disposing) return;
+            try
+            {
+                string typeName = btn.GetType().FullName ?? "";
+                if (string.Equals(typeName, "Sunny.UI.UIButton", StringComparison.Ordinal))
+                {
+                    Color fill;
+                    if (TryGetColorProperty(btn, "FillColor", out fill)) back = fill;
+                    Color fg;
+                    if (TryGetColorProperty(btn, "ForeColor", out fg)) fore = fg;
+                    return;
+                }
+                back = btn.BackColor;
+                fore = btn.ForeColor;
             }
             catch { }
         }

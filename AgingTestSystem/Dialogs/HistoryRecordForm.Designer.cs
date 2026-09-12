@@ -21,18 +21,18 @@
         private void InitializeComponent()
         {
             this.panelTop = new System.Windows.Forms.Panel();
-            this.lblStart = new System.Windows.Forms.Label();
+            this.lblStart = new Sunny.UI.UILabel();
             this.dtpStart = new System.Windows.Forms.DateTimePicker();
-            this.lblEnd = new System.Windows.Forms.Label();
+            this.lblEnd = new Sunny.UI.UILabel();
             this.dtpEnd = new System.Windows.Forms.DateTimePicker();
-            this.btnQuery = new System.Windows.Forms.Button();
-            this.btnExport = new System.Windows.Forms.Button();
-            this.dgvHistory = new System.Windows.Forms.DataGridView();
+            this.btnQuery = new Sunny.UI.UIButton();
+            this.btnExport = new Sunny.UI.UIButton();
+            this.dgvHistory = new Sunny.UI.UIDataGridView();
             this.colTime = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colDevice = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colEvent = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colDetail = new System.Windows.Forms.DataGridViewTextBoxColumn();
-            this.btnClose = new System.Windows.Forms.Button();
+            this.btnClose = new Sunny.UI.UIButton();
             this.panelBottom = new System.Windows.Forms.Panel();
             this.panelTop.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.dgvHistory)).BeginInit();
@@ -150,6 +150,11 @@
             this.btnClose.Name = "btnClose";
             this.btnClose.Size = new System.Drawing.Size(90, 30);
             this.btnClose.Text = "关闭";
+            // 【V1.71】关闭按钮语义灰（自绘按钮走 Custom+FillColor）
+            this.btnClose.FillColor = System.Drawing.Color.DimGray;
+            this.btnClose.RectColor = System.Drawing.Color.DimGray;
+            this.btnClose.ForeColor = System.Drawing.Color.White;
+            this.btnClose.Style = Sunny.UI.UIStyle.Custom;
             this.btnClose.Click += new System.EventHandler(this.btnClose_Click);
             //
             // HistoryRecordForm - 窗体自身
@@ -157,6 +162,10 @@
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(784, 450);
+            // 【V1.71】Dock 布局自适应放大；禁缩小（MinimumSize=ClientSize），防挤坏。
+            this.MinimumSize = new System.Drawing.Size(784, 450);
+            // 【V1.71】UIForm 自绘蓝标题：Dock 布局加顶 Pad 避开标题区。
+            this.Padding = new System.Windows.Forms.Padding(2, 38, 2, 2);
             this.Controls.Add(this.dgvHistory);
             this.Controls.Add(this.panelTop);
             this.Controls.Add(this.panelBottom);
@@ -173,18 +182,18 @@
         #endregion
 
         private System.Windows.Forms.Panel panelTop;
-        private System.Windows.Forms.Label lblStart;
+        private Sunny.UI.UILabel lblStart;
         private System.Windows.Forms.DateTimePicker dtpStart;
-        private System.Windows.Forms.Label lblEnd;
+        private Sunny.UI.UILabel lblEnd;
         private System.Windows.Forms.DateTimePicker dtpEnd;
-        private System.Windows.Forms.Button btnQuery;
-        private System.Windows.Forms.Button btnExport;
-        private System.Windows.Forms.DataGridView dgvHistory;
+        private Sunny.UI.UIButton btnQuery;
+        private Sunny.UI.UIButton btnExport;
+        private Sunny.UI.UIDataGridView dgvHistory;
         private System.Windows.Forms.DataGridViewTextBoxColumn colTime;
         private System.Windows.Forms.DataGridViewTextBoxColumn colDevice;
         private System.Windows.Forms.DataGridViewTextBoxColumn colEvent;
         private System.Windows.Forms.DataGridViewTextBoxColumn colDetail;
         private System.Windows.Forms.Panel panelBottom;
-        private System.Windows.Forms.Button btnClose;
+        private Sunny.UI.UIButton btnClose;
     }
 }

@@ -71,6 +71,26 @@
   （自定义报警只多报、完成表达式 OR 只能提前、内置联锁动不了）；
   规则表解析 `RuleEngine.ParseRuleList`（行号报错，上限 20 条）；持续计时状态变迁
   （启动/复位/停止/急停）必须调 `ResetStation`，否则旧计时带到新任务。
+- **SunnyUI 换肤约定（V1.71，全窗已切）**：Form→UIForm（蓝标题）/
+  Label→UILabel / Button→UIButton / TextBox→UITextBox / ComboBox→UIComboBox /
+  GroupBox→UIGroupBox / DataGridView→UIDataGridView；日志框/CheckBox/NumericUpDown/
+  ListBox/状态条保持原生。语义色经 Style=Custom+FillColor/RectColor（原生 BackColor
+  在自绘按钮上画不出来）；默认灰主按钮走 Sunny 蓝，取消关闭走 Sunny 灰。
+  - UIForm 自绘标题占 35px 客户区：绝对布局整体下移 35px + 窗体加高 + MinimumSize
+    锁缩小；Dock 布局加顶 Pad(38)；Dock 窗内容高度不够时窗体加高（ID 绑定血泪：
+    保存按钮被挤出）。Y&lt;35 的控件 Add 时被静默搬到 35（harness 实测）。
+  - `is Button/TextBox/ComboBox` 认不出 Sunny 自绘控件（UIButton/UITextBox/
+    UIComboBox 不是原生子类；UILabel 是 Label 子类无碍）：类型判断改 Sunny 类型，
+    ThemeManager 按类型名走分支；按钮改色走 `ApplyButtonColors`，读显示色走
+    `GetEffectiveButtonColors`（FillColor 才是显示色）。
+  - UITextBox 有 AppendText/Clear/Lines/PasswordChar/Multiline（无 ScrollBars/
+    WordWrap，用 ShowScrollBar/WordWarp）；UIComboBox 有 Items/SelectedIndex/
+    SelectedValue/DropDownWidth，DropDownStyle 换 `UIDropDownStyle` 枚举；
+    UIButton 实现 IButtonControl（AcceptButton/CancelButton 照用）；删 FormBorderStyle
+    行（UIForm 自己管边框）；字体不动（动 AutoScaleDimensions 是 DPI 红线）。
+  - 多行块编辑必须逐行核对：Edit 工具会模糊匹配吞掉间隔行（V1.71 实锤：27 行块吞掉
+    3 个 `new`，构造即 NRE）。改完 Designer 必跑"声明/实例化配对"扫描 +
+    harness 构造一次（NRE 当场现形）+ 截图目检。
 - **流程驾驶舱约定（V1.70）**：拓扑画死（物理锁死，通用连线编辑器会让客户删掉安全联锁，
   参考 HJVision mFormFlowEdit 后否决）；节点只挂真实 key（ key 必须全是 DeviceConfig
   真属性，回归锁），连线只读；保存走 `SettingsForm.PersistChanges`（与设置表同一条路，
@@ -96,7 +116,7 @@
   登录下拉/记住登录永不出现 dev；用户管理窗"管理员"角色项只给 dev 加；
   关于下拉的深浅切换项只给 dev 看。Users.json 含 dev 哈希（PBKDF2，非明文）但仍属
   运行时数据，gitignore 绝不入库（已有红线，dev 不例外）。
-- **深色/浅色主题约定（V1.60 起，V1.64 改入口）**：主题状态只认 `Services/ThemeManager`（App.config 存 `AppTheme`=Light/Dark，大小写兼容、写错兜底浅色）。新增窗体/弹窗必须在打开前调一次 `ThemeManager.ApplyTo(form)`（打开点与窗体构造解耦，动态内容在 Show 时已建完才刷得全）；切换入口只有"关于"下拉内的深浅项（`MenuThemeToggle_Click`+`ApplyToAllOpenForms`），**仅 dev 登录可见**。**按钮颜色一律不动**（全是业务语义色）；自绘控件自己管换肤（如 `WorkstationGridView.SetDarkMode`），禁止在 ThemeManager 里硬改自绘颜色；运行时状态色（红/绿/蓝）靠"双向映射表查不到就保留"自动豁免，不要另写白名单。**例外（用户指定的深灰底白字）**：主窗体"停止运行/报警复位"（V1.60.1，`MainForm.GetOperationButtonThemeColors`）、公共参数"保存设置"（V1.60.4，`CommonParameterForm.GetSaveButtonThemeColors`，浅色保持原生样式）、版本说明"确定"——浅色无语义默认灰的按钮深色才动；布局预览画布深色走纯黑（V1.60.4，`HomeLayoutEditorForm.GetPreviewBackColor`，色块自带底所以安全）；系统 `MessageBox` 跟不了主题，要换肤必须换自定义窗（V1.60.4 版本说明先例）。
+- **深色/浅色主题约定（V1.60 起，V1.64 改入口）**：主题状态只认 `Services/ThemeManager`（App.config 存 `AppTheme`=Light/Dark，大小写兼容、写错兜底浅色）。新增窗体/弹窗必须在打开前调一次 `ThemeManager.ApplyTo(form)`（打开点与窗体构造解耦，动态内容在 Show 时已建完才刷得全）；切换入口只有"关于"下拉内的深浅项（`MenuThemeToggle_Click`+`ApplyToAllOpenForms`），**仅 dev 登录可见**。**按钮颜色一律不动**（全是业务语义色）；自绘控件自己管换肤（如 `WorkstationGridView.SetDarkMode`），禁止在 ThemeManager 里硬改自绘颜色；运行时状态色（红/绿/蓝）靠"双向映射表查不到就保留"自动豁免，不要另写白名单。**例外（用户指定的深灰底白字）**：主窗体"停止运行/报警复位/下料判定"（V1.60.1，`MainForm.GetOperationButtonThemeColors`，V1.71 走 Sunny Gray 档 + `ApplyButtonColors`）、版本说明"确定"——浅色无语义默认灰的按钮深色才动；布局预览画布深色走纯黑（V1.60.4，`HomeLayoutEditorForm.GetPreviewBackColor`，色块自带底所以安全）；系统 `MessageBox` 跟不了主题，要换肤必须换自定义窗（V1.60.4 版本说明先例）。
 - **界面文件头注释必须带 ASCII 布局图**：所有 View/Dialog（`Views/*.cs`、`Dialogs/*.cs`）的类 XML 注释里都要有一段用 `┌─┐│└┘` 画出的界面布局图（参考 `RecipeManagerForm.cs` / `WorkstationGridView.cs` 头部注释），框内标注控件名与关键交互点。AI 无法看图，改界面全靠这段文本图，故**每次新增/修改界面文件都补画或同步更新该图**，且要和实际控件布局一致（坐标、控件名、按钮文字都对上）。
 - **自绘控件（WorkstationGridView 等）的坐标类常量一律外部化**：不写死像素常量，放到布局配置模型（如 `Models/PanelLayoutConfig.cs`，可被 `PanelLayout.json` 覆盖），并把坐标标注进头部注释的 ASCII 图里，便于现场改配置微调间距/颜色/字号。
 - **自绘控件坐标一律用锚定，禁止"孤岛绝对坐标"（V1.58.13~1.58.17 沉淀）**：面板内元素通过锚定字段声明与"面板边缘"或"其他元素"的相对关系，加载时统一解析，改面板尺寸/基准元素时自动联动，不用手改一串坐标。字段：矩形 `RightMargin/TopMargin/RightAlignTo/VerticalAlignTo/LeftAlignTo/RightToLeftAlignTo`（双端锚定=LeftAlignTo+RightToLeftAlignTo 自动定宽）、标签 `LeftMargin/TopMargin/Width/RightToLeftAlignTo/LeftAlignTo`。**三步解析顺序铁律**（`ResolveAnchors`）：①面板边缘锚定 → ②元素间锚定（设置按钮→右对齐组→压力框→下电）→ ③标签锚定，顺序错会取到目标旧值致错位。**全表/依赖链/调整指南/坑（标签 Width 依赖字体、字段互斥、json 与代码默认一致）都在 `PanelLayoutConfig.cs` 类头注释**，改坐标前必读；改完同步 `bin/Debug/PanelLayout.json` 与 WorkstationGridView 头部 ASCII 图。
@@ -156,7 +176,7 @@
 - **新增 .cs 文件必须手工在 csproj 登记**（老式项目无通配，漏登记报 CS0246）：
   在 `<Compile Include="...">` 段按目录加一行（纯代码窗体加 `<SubType>Form</SubType>` 即可，
   无需 Designer/resx）。V1.67 实锤：5 个新文件漏登记编译全红。
-- **最终测试验证手段（V1.58.23 起）**：一键跑 `powershell -ExecutionPolicy Bypass -File .opencode\skills\agingtest-regression\scripts\build_and_test.ps1`，自动完成"构建 → 真机冒烟（exe 启动存活）→ 全量回归用例（1134+ 断言，覆盖 PasswordHasher/UserManager/配置归一化/IO 映射/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案/MES映射上报/规则表达式/流程驾驶舱/编排扩展场景等核心逻辑类）"。也可单独跑同目录 `smoke_test.ps1`（只冒烟）/ `run_unit_tests.ps1`（只回归）。退出码 0 = 全绿。
+- **最终测试验证手段（V1.58.23 起）**：一键跑 `powershell -ExecutionPolicy Bypass -File .opencode\skills\agingtest-regression\scripts\build_and_test.ps1`，自动完成"构建 → 真机冒烟（exe 启动存活）→ 全量回归用例（1158+ 断言，覆盖 PasswordHasher/UserManager/配置归一化/IO 映射/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案/MES映射上报/规则表达式/流程驾驶舱/编排扩展场景等核心逻辑类）"。也可单独跑同目录 `smoke_test.ps1`（只冒烟）/ `run_unit_tests.ps1`（只回归）。退出码 0 = 全绿。
 - **界面像素级 bug（竖线/横线/颜色/叠色/裁剪/滚动条）**：调用全局技能 `winforms-ui-debug`——编译独立 harness 直接 new 目标窗体（指哪打哪，绕过登录/主流程），用反射探私有字段 + PrintWindow 截图 + 像素扫描定位根因并验证修复。含可复用的 csc 编译命令、坐标映射、色值字典与踩坑清单。
 - **调试完自动沉淀技能**：每次用 `winforms-ui-debug` 排查成功（尤其是"一次性改对"的高光案例）后，**主动把可复用的新套路/新踩坑/新型探针代码回写到全局技能 `winforms-ui-debug` 的 SKILL.md**（新增/补充小节、追加踩坑条目），不用等用户提醒。价值标准：换个人靠这份 skill 能更快解决同类问题。
 - 改构建输出（csproj 路径/bin 目录/主 exe 名）时，同步改全局技能 `winforms-ui-debug` 附录 A 的 AgingTestSystem 行（防开工查表拿到旧值）。

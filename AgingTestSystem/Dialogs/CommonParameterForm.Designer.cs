@@ -29,9 +29,9 @@ namespace AgingTestSystem.Dialogs
 
         private void InitializeComponent()
         {
-            this.lblThreshold = new System.Windows.Forms.Label();
+            this.lblThreshold = new Sunny.UI.UILabel();
             this.nudThreshold = new System.Windows.Forms.NumericUpDown();
-            this.btnSave = new System.Windows.Forms.Button();
+            this.btnSave = new Sunny.UI.UIButton();
             this.SuspendLayout();
             // 
             // lblThreshold
@@ -55,25 +55,30 @@ namespace AgingTestSystem.Dialogs
             this.nudThreshold.TabIndex = 3;
             this.nudThreshold.Value = -5m;
             // 
-            // btnSave
-            // 
-            this.btnSave.Location = new System.Drawing.Point(112, 75);
+            // btnSave - 保存按钮（语义绿；深色下绿底白字本来就清晰，无需 V1.60.4 的 DimGray 特例）
+            //
+            this.btnSave.FillColor = System.Drawing.Color.LimeGreen;
+            this.btnSave.RectColor = System.Drawing.Color.LimeGreen;
+            this.btnSave.ForeColor = System.Drawing.Color.White;
+            this.btnSave.Style = Sunny.UI.UIStyle.Custom;
+            this.btnSave.Location = new System.Drawing.Point(112, 110);
             this.btnSave.Name = "btnSave";
             this.btnSave.Size = new System.Drawing.Size(96, 32);
             this.btnSave.TabIndex = 2;
             this.btnSave.Text = "保存设置";
-            this.btnSave.UseVisualStyleBackColor = true;
             this.btnSave.Click += new System.EventHandler(this.btnSave_Click);
             // 
             // CommonParameterForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(320, 140);
+            this.ClientSize = new System.Drawing.Size(320, 175);
+            // 【V1.71】绝对布局：禁缩小（MinimumSize=ClientSize），防缩坏布局；可放大。
+            this.MinimumSize = new System.Drawing.Size(320, 175);
             this.Controls.Add(this.btnSave);
             this.Controls.Add(this.nudThreshold);
             this.Controls.Add(this.lblThreshold);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
+            // 【V1.71】UIForm 自绘蓝标题：删 FormBorderStyle；CenterControls 里 Y 坐标整体下移 35px。
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.Name = "CommonParameterForm";
@@ -86,8 +91,8 @@ namespace AgingTestSystem.Dialogs
 
         #endregion
 
-        private System.Windows.Forms.Label lblThreshold;
+        private Sunny.UI.UILabel lblThreshold;
         private System.Windows.Forms.NumericUpDown nudThreshold;
-        private System.Windows.Forms.Button btnSave;
+        private Sunny.UI.UIButton btnSave;
     }
 }

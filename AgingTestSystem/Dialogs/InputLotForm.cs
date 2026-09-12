@@ -38,7 +38,7 @@ namespace AgingTestSystem.Dialogs
     /// 2. 后续可扩展：将批号写入数据库、关联生产记录等
     /// 3. 可增加批号格式校验（如日期+流水号格式）
     /// </summary>
-    public partial class InputLotForm : Form
+    public partial class InputLotForm : Sunny.UI.UIForm
     {
         /// <summary>
         /// 批号录入完成事件

@@ -1,6 +1,6 @@
 ---
 name: agingtest-regression
-description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案/MES映射上报/规则表达式/流程驾驶舱等全部核心逻辑类（1134+ 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
+description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案/MES映射上报/规则表达式/流程驾驶舱等全部核心逻辑类（1158+ 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
 ---
 
 # AgingTestSystem 回归测试套件（冒烟 + 用例一体）
@@ -41,7 +41,7 @@ agingtest-regression/
     └── TestRunner.cs         ← 全部测试用例源码（加用例就改这里）
 ```
 
-## 三、测试覆盖范围（35 个模块，1134+ 断言）
+## 三、测试覆盖范围（35 个模块，1158+ 断言）
 
 | 模块 | 覆盖点 |
 | --- | --- |
@@ -59,19 +59,19 @@ agingtest-regression/
 | AgingSequencer | ShouldPowerOn(压力×延时双条件)、ShouldComplete(0=不限时长)、IsVacuumBuildFailed(到位即不失败) 边界族、IsPressureOutOfRange 双方向+恰等不越限(V1.62)、负时间语义锁、BuildStartWarningText 0时长/空SN 警告文案(V1.66)、IsFanOverTempShutdown 开关+上限+边界(V1.66) |
 | TestSessionStore | 快照往返全字段、损坏 json 静默 null、Clear 幂等、空清单视为无任务、Stations:null 与"null"字面量、Save(null)=false |
 | AgingBusinessModel | DeviceStatus.Completed 枚举与 BarometerData 往返、LastTestResult 默认值/Clone、AgingPhase 三值、StationInfo.RecipeNegativePressure |
-| ThemeManager | Parse 大小写/空格兼容与乱写兜底浅色、双向映射表往返精确（容器底/文字/单元格/输入底，V1.62 补齐剩余分支）、语义色保留（红/绿不动）、SetMode 内存切换、Panel+Label+TextBox+Button+DataGridView 整树着色冒烟（STA harness 直接 new 控件不断言弹窗；注意 Label/Button 的 Fore/Back 地 getter 在 Empty 时返回父容器值，断言要写"跟父一致"而非具体值，见 TestRunner 注释） |
+| ThemeManager | Parse 大小写/空格兼容与乱写兜底浅色、双向映射表往返精确（容器底/文字/单元格/输入底，V1.62 补齐剩余分支）、语义色保留（红/绿不动）、SetMode 内存切换、Panel+Label+TextBox+Button+DataGridView 整树着色冒烟（STA harness 直接 new 控件不断言弹窗；注意 Label/Button 的 Fore/Back 地 getter 在 Empty 时返回父容器值，断言要写"跟父一致"而非具体值，见 TestRunner 注释）、Sunny 分支(V1.71：UIButton 不动/FillColor 保留、UITextBox/UIComboBox 输入映射、ApplyButtonColors 原生/Sunny 双写、GetEffectiveButtonColors 读 FillColor) |
 | **DeviceManagerIntegration** | **端到端状态机**（Fake 气压表+Fake IO 经注入构造驱动真实 DeviceManager，30ms 采集秒级跑完生命周期）：正常全流程(启动只开阀→到位+延时上电→配方时长完成→Completed·PASS→阀电全关)、真空建立失败(超时报警+全程不带电+FAIL)、通讯失联(设备异常≠FAIL)、手动中止(回空闲不计结果)、断电恢复(快照落盘→重启询问→整台重测/放弃关阀)、扫码重绑清完成态、配方阈值优先于全局 |
 | IoMapBuilder(V1.62) | 八进制编址(X000/X007/X010/Y110/Y217)、预留点、非法四抛、编号公式、兼容重载 |
 | MockDevices(V1.62) | 三 Mock 未连接约定/越界/副本隔离、气压两档区间千次采样、风机启停守卫与漂移界 |
 | StationCache(V1.62) | 往返全字段、覆盖语义、副本双向隔离、脏文件三态、非法编号过滤（反射重置静态缓存+隔离目录） |
 | ModelDefaults(V1.62) | DeviceConfig 全构造默认值、风机枚举寄存器值、FanData/BarometerData Clone 全字段与数组深拷贝、LoginResult 工厂、角色值、快照与配方构造默认 |
-| SettingsValidate(V1.62) | ValidateValue 全类型矩阵、TryParseUShort、范围表抽查+默认值落界、布尔键一致、连接键契约、CreateValueCell 全分发、分类/说明键对齐（构造真窗体不断言弹窗） |
+| SettingsValidate(V1.62) | ValidateValue 全类型矩阵、TryParseUShort、范围表抽查+默认值落界、布尔键一致（V1.71：14 项含 SkipVacuum）、连接键契约、CreateValueCell 全分发、分类/说明键对齐（构造真窗体不断言弹窗）、PersistChanges 统一路（V1.71：矛盾/MES 拦截、策略落盘+热回写、机器键落盘、空改动、null 不抛，运行目录隔离+备份还原） |
 | ScannerParse(V1.62) | JoinPorts、ParseParity/ParseStopBits、与设置窗 NormalizeStopBits 跨文件 15 口径 |
 | ModbusConvert(V1.62) | 气压/阈值换算纯函数、IsPortLevelFailure 中英文关键字、未连接约定、串口参数解析 |
 | FanParse(V1.62) | 寄存器解析(/100 全字段)、不足 6 个、非法枚举透传、未连接约定、Connect(null) |
 | StationTime(V1.62) | 时分秒组合、25 小时不截断(V1.62 修复锁)、超 99 钳制、文本格式、Clamp |
 | HistoryCsv(V1.62) | CSV 解析边角、与 TestEventLogger 互逆 7 列 |
-| UiPureHelpers(V1.62) | 批号去空格、配方查找(ignoreCase)+25h 不截断、工位温度读取(V1.63 数字框恒合法+回填钳制)、IP 合法、数字格钳制、网格命中/边界/四色、位值→通道、风机中文(V1.63 对齐主窗)、CH340 谓词/串口参数钳制(V1.63)、右侧宽度比例 ComputeRightPanelWidth(V1.65：0.234 常量/护栏/兜底/自定义优先 8 条)、配方窗负压/显示模式框回填(V1.66) |
+| UiPureHelpers(V1.62) | 批号去空格、配方查找(ignoreCase)+25h 不截断、工位温度读取(V1.63 数字框恒合法+回填钳制)、IP 合法、数字格钳制、网格命中/边界/四色、位值→通道、风机中文(V1.63 对齐主窗)、CH340 谓词/串口参数钳制(V1.63)、右侧宽度比例 ComputeRightPanelWidth(V1.65：0.234 常量/护栏/兜底/自定义优先 8 条)、配方窗负压/显示模式框回填(V1.66)、反射 as-cast 跟随控件换型（V1.71：TextBox→UITextBox 两处） |
 | **DeviceManagerExtended(V1.62)** | 状态口/在线数/启动错误、批量 SN、配方名负压联动、副本隔离、非法电池、连接与间隔热生效、批量阈值+定时器恢复、反方向报警端到端、全局时长回退、定格隔离、清理回全局、不限时、2s 延时门、空闲容错、自愈计数、报警驻留、边沿单次(CSV 计数)、快照全字段+双台+批号、急停、停止再启动、风机生命周期(MockFan)、超长数组与错 id 防火墙、脏快照恢复、显示模式下发/保持/清空+叠加采集可见+GetTestingDeviceIds(V1.66) |
 | PolicyV167(V1.67) | BuildStartBlockText 阻断文案、MapAlarmResult 责任映射、ComputeResumeDuration 剩余/跑超/回拨、ValidatePolicyCombination 矛盾锁、ParseValue 大小写/非法、PolicyKeys↔DeviceConfig↔下拉选项三处同步锁、DeviceConfig 缺省=现状锁、快照新字段缺省锁、ValidateValue 策略分支+点位、NormalizePolicyValue 脏值兜底、WrapTooltip 40字换行、ProjectProfile 非法名/重复/切换拒绝/路径分流、Policy.json 存取往返 |
 | **DeviceManagerPolicy(V1.67)** | 治具责任端到端(装夹异常+CSV)、待判定完成+下料录入(收/跳过/null)+CSV明细、失压保持(不停机+边沿单条不刷屏)、续跑(快照阶段/上电时刻+剩余60s+重抽真空)、泄压(破空阀开+CSV+复位关阀不残留) |
@@ -79,7 +79,7 @@ agingtest-regression/
 | **DeviceManagerMes(V1.68)** | Fake抓包端到端：启动/完成(PASS+映射+静态+SN)/下料判定(不良代码)/报警(FAIL)四触发器各一条+发往配置地址 |
 | RuleExprV169(V1.69) | 四则优先级/括号/负号/取模/字面量、比较逻辑与或非、变量大小写、短路跳过除零、除零模零未知变量错、语法错位置、NaN恒false、规则表行格式/行号/上限20、执行器持续计时(假时钟/中断复位/同配置不清/换配置清/非在测复位/立即/求值错)、完成表达式(空禁用/到点/求值错)、缺省锁、ValidateValue规则分支 |
 | **DeviceManagerRules(V1.69)** | 自定义报警端到端(首轮触发FAIL+CSV规则名)、完成表达式提前完成(CSV原因)、跳过抽真空(直接上电+常压不误报+快照Aging+CSV)、各阶段台数R4(抽真空1/老化1/空闲2) |
-| FlowCockpitV170(V1.70) | 拓扑锁(7节点8边+端点全已知+节点挂key+key全真属性)、缺省文本锁、策略切换文本变、台数进文本、布局存取往返/钳制/损坏回空 |
+| FlowCockpitV170(V1.70) | 拓扑锁(7节点8边+端点全已知+节点挂key+key全真属性)、缺省文本锁、策略切换文本变、台数进文本、布局存取往返/钳制/损坏回空、驾驶舱构造不断言弹窗(V1.71)、检索框 SetCaretToEnd 原生/Sunny 双过(V1.71) |
 
 **不在覆盖范围**（明确边界）：真串口/真设备通讯（ModbusRtuBarometerReader /
 ScannerService / FanControllerClient / ModbusTcpIoController，靠现场联调）、

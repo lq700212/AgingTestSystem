@@ -9,15 +9,17 @@ namespace AgingTestSystem.Services
 {
     /// <summary>
     /// 配方名称自动完成/模糊搜索辅助类
-    /// 在 TextBox 下方弹出 ListBox 展示匹配的配方名称，
+    /// 在输入框下方弹出 ListBox 展示匹配的配方名称，
     /// 支持键盘导航（Up/Down/Enter）和鼠标选择。
+    /// 【V1.71】输入框泛化为 Control：原生 TextBox 与 SunnyUI UITextBox 通吃
+    /// （用到的全是 Control 级成员；光标定位两行走反射，两边同名属性）。
     /// </summary>
     internal class RecipeAutoCompleteProvider : IDisposable, IMessageFilter
     {
         /// <summary>WM_LBUTTONDOWN 消息编号（用于点击列表外区域时收起下拉框）</summary>
         private const int WM_LBUTTONDOWN = 0x201;
 
-        private readonly TextBox _textBox;
+        private readonly Control _textBox;
         private readonly List<RecipeConfig> _recipes;
         private readonly Action<RecipeConfig> _onRecipeSelected;
         private readonly ListBox _listBox;
@@ -33,10 +35,10 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 构造函数
         /// </summary>
-        /// <param name="textBox">要附加自动完成功能的 TextBox</param>
+        /// <param name="textBox">要附加自动完成功能的输入框（原生 TextBox / SunnyUI UITextBox 均可）</param>
         /// <param name="recipes">所有配方列表</param>
         /// <param name="onRecipeSelected">选中配方后的回调</param>
-        public RecipeAutoCompleteProvider(TextBox textBox, List<RecipeConfig> recipes, Action<RecipeConfig> onRecipeSelected)
+        public RecipeAutoCompleteProvider(Control textBox, List<RecipeConfig> recipes, Action<RecipeConfig> onRecipeSelected)
         {
             _textBox = textBox ?? throw new ArgumentNullException(nameof(textBox));
             _recipes = recipes ?? throw new ArgumentNullException(nameof(recipes));
@@ -172,11 +174,27 @@ namespace AgingTestSystem.Services
             {
                 _lastConfirmedName = selected.Name;
                 _textBox.Text = selected.Name;
-                _textBox.SelectionStart = _textBox.Text.Length;
-                _textBox.SelectionLength = 0;
+                SetCaretToEnd(_textBox);
                 HideDropdown();
                 _onRecipeSelected(selected);
             }
+        }
+
+        /// <summary>
+        /// 光标移到末尾（原生 TextBox 与 SunnyUI UITextBox 同名属性，反射一次调用，
+        /// 不给 Services 层引入 Sunny 依赖；失败静默——光标位置不影响功能正确性）。
+        /// </summary>
+        private static void SetCaretToEnd(Control c)
+        {
+            try
+            {
+                var p1 = c.GetType().GetProperty("SelectionStart");
+                var p2 = c.GetType().GetProperty("SelectionLength");
+                if (p1 == null || p2 == null || !p1.CanWrite || !p2.CanWrite) return;
+                p1.SetValue(c, c.Text.Length, null);
+                p2.SetValue(c, 0, null);
+            }
+            catch { }
         }
 
         // ──────────────── 事件处理 ────────────────

@@ -75,7 +75,7 @@ namespace AgingTestSystem.Dialogs
     /// 表格三列（设置名称/说明/设置值），值列控件由 CreateValueCell 按 key 分发
     /// （布尔=下拉框 / 串口波特率等=下拉框 / 数字=数字框 / 文本=文本框）。
     ///</summary>
-    public partial class SettingsForm : Form
+    public partial class SettingsForm : Sunny.UI.UIForm
     {
         /// <summary>
         /// 当前程序正在使用的设备配置（用于取当前生效值做兜底、以及按属性类型校验）
@@ -2006,7 +2006,7 @@ namespace AgingTestSystem.Dialogs
         /// <summary>
         /// 持久化结果（【V1.70 新增】PersistChanges 的输出，调用方按需提示/分发）。
         /// </summary>
-        internal class PersistResult
+        public class PersistResult
         {
             /// <summary>本次成功写入的 key（主窗体按需触发重连/热生效）</summary>
             public HashSet<string> SavedKeys = new HashSet<string>();
@@ -2027,7 +2027,7 @@ namespace AgingTestSystem.Dialogs
         /// <param name="result">成功时的明细（失败为 null）</param>
         /// <param name="error">失败原因（成功为 null，调用方直接弹框展示）</param>
         /// <returns>true=保存成功，false=被拦截（error 有内容）</returns>
-        internal static bool PersistChanges(DeviceConfig config,
+        public static bool PersistChanges(DeviceConfig config,
             Dictionary<string, string> changes, out PersistResult result, out string error)
         {
             result = null;
