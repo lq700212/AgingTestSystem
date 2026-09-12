@@ -75,7 +75,7 @@ namespace AgingTestSystem.Dialogs
             this.nudPressure = new System.Windows.Forms.NumericUpDown();
             this.lblPressureUnit = new Sunny.UI.UILabel();
             this.lblDisplayMode = new Sunny.UI.UILabel();
-            this.txtDisplayMode = new Sunny.UI.UITextBox();
+            this.cmbDisplayMode = new Sunny.UI.UIComboBox();
             this.btnBreakVacuum = new Sunny.UI.UIButton();
             this.btnPowerOff = new Sunny.UI.UIButton();
             this.btnSave = new Sunny.UI.UIButton();
@@ -352,13 +352,13 @@ namespace AgingTestSystem.Dialogs
             this.lblDisplayMode.TabIndex = 10;
             this.lblDisplayMode.Text = "显示模式:";
             //
-            // txtDisplayMode - 显示模式输入框
+            // cmbDisplayMode
             //
-            this.txtDisplayMode.Location = new System.Drawing.Point(150, 326);
-            this.txtDisplayMode.MaxLength = 50;
-            this.txtDisplayMode.Name = "txtDisplayMode";
-            this.txtDisplayMode.Size = new System.Drawing.Size(180, 29);
-            this.txtDisplayMode.TabIndex = 18;
+            this.cmbDisplayMode.DropDownStyle = Sunny.UI.UIDropDownStyle.DropDownList;
+            this.cmbDisplayMode.Location = new System.Drawing.Point(150, 326);
+            this.cmbDisplayMode.Name = "cmbDisplayMode";
+            this.cmbDisplayMode.Size = new System.Drawing.Size(180, 29);
+            this.cmbDisplayMode.TabIndex = 18;
             //
             // btnBreakVacuum - 破空按钮（功能待确认）
             //
@@ -440,7 +440,7 @@ namespace AgingTestSystem.Dialogs
             this.Controls.Add(this.btnSave);
             this.Controls.Add(this.btnPowerOff);
             this.Controls.Add(this.btnBreakVacuum);
-            this.Controls.Add(this.txtDisplayMode);
+            this.Controls.Add(this.cmbDisplayMode);
             this.Controls.Add(this.lblDisplayMode);
             this.Controls.Add(this.lblPressureUnit);
             this.Controls.Add(this.nudPressure);
@@ -535,7 +535,7 @@ namespace AgingTestSystem.Dialogs
         /// <summary>"显示模式"设置项名称标签（【V1.66】烧屏画面记录）</summary>
         private Sunny.UI.UILabel lblDisplayMode;
         /// <summary>显示模式输入框（【V1.66】自由文本，最长50）</summary>
-        private Sunny.UI.UITextBox txtDisplayMode;
+        private Sunny.UI.UIComboBox cmbDisplayMode;
         /// <summary>破空按钮（功能待确认）</summary>
         private Sunny.UI.UIButton btnBreakVacuum;
         /// <summary>下电按钮（功能待确认）</summary>

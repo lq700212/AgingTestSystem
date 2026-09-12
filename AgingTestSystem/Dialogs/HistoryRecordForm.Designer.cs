@@ -27,6 +27,7 @@
             this.dtpEnd = new System.Windows.Forms.DateTimePicker();
             this.btnQuery = new Sunny.UI.UIButton();
             this.btnExport = new Sunny.UI.UIButton();
+            this.btnColumns = new Sunny.UI.UIButton();
             this.dgvHistory = new Sunny.UI.UIDataGridView();
             this.colTime = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colDevice = new System.Windows.Forms.DataGridViewTextBoxColumn();
@@ -47,10 +48,11 @@
             this.panelTop.Controls.Add(this.dtpEnd);
             this.panelTop.Controls.Add(this.btnQuery);
             this.panelTop.Controls.Add(this.btnExport);
+            this.panelTop.Controls.Add(this.btnColumns);
             this.panelTop.Dock = System.Windows.Forms.DockStyle.Top;
             this.panelTop.Location = new System.Drawing.Point(0, 0);
             this.panelTop.Name = "panelTop";
-            this.panelTop.Size = new System.Drawing.Size(784, 50);
+            this.panelTop.Size = new System.Drawing.Size(880, 50);
             //
             // lblStart - 开始时间标签
             //
@@ -81,9 +83,9 @@
             this.dtpEnd.Name = "dtpEnd";
             this.dtpEnd.Size = new System.Drawing.Size(150, 21);
             //
-            // btnQuery - 查询按钮
+            // btnQuery - 查询按钮（V1.75 窗加宽 784→880：查询/导出/报表列右移，详情列看得全）
             //
-            this.btnQuery.Location = new System.Drawing.Point(520, 12);
+            this.btnQuery.Location = new System.Drawing.Point(560, 12);
             this.btnQuery.Name = "btnQuery";
             this.btnQuery.Size = new System.Drawing.Size(80, 28);
             this.btnQuery.Text = "查询";
@@ -91,11 +93,16 @@
             //
             // btnExport - 导出按钮（预留功能）
             //
-            this.btnExport.Location = new System.Drawing.Point(610, 12);
+            this.btnExport.Location = new System.Drawing.Point(650, 12);
             this.btnExport.Name = "btnExport";
             this.btnExport.Size = new System.Drawing.Size(80, 28);
             this.btnExport.Text = "导出";
             this.btnExport.Click += new System.EventHandler(this.btnExport_Click);
+            this.btnColumns.Location = new System.Drawing.Point(740, 12);
+            this.btnColumns.Name = "btnColumns";
+            this.btnColumns.Size = new System.Drawing.Size(124, 28);
+            this.btnColumns.Text = "报表列设置";
+            this.btnColumns.Click += new System.EventHandler(this.btnColumns_Click);
             //
             // dgvHistory - 历史记录表格
             //
@@ -143,11 +150,11 @@
             this.panelBottom.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.panelBottom.Location = new System.Drawing.Point(0, 410);
             this.panelBottom.Name = "panelBottom";
-            this.panelBottom.Size = new System.Drawing.Size(784, 40);
+            this.panelBottom.Size = new System.Drawing.Size(880, 40);
             //
             // btnClose - 关闭按钮
             //
-            this.btnClose.Location = new System.Drawing.Point(684, 5);
+            this.btnClose.Location = new System.Drawing.Point(780, 5);
             this.btnClose.Name = "btnClose";
             this.btnClose.Size = new System.Drawing.Size(90, 30);
             this.btnClose.Text = "关闭";
@@ -162,9 +169,9 @@
             //
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(784, 450);
+            this.ClientSize = new System.Drawing.Size(880, 450);
             // 【V1.71】Dock 布局自适应放大；禁缩小（MinimumSize=ClientSize），防挤坏。
-            this.MinimumSize = new System.Drawing.Size(784, 450);
+            this.MinimumSize = new System.Drawing.Size(880, 450);
             // 【V1.71】UIForm 自绘蓝标题：Dock 布局加顶 Pad 避开标题区。
             this.Padding = new System.Windows.Forms.Padding(2, 38, 2, 2);
             this.Controls.Add(this.dgvHistory);
@@ -189,6 +196,7 @@
         private System.Windows.Forms.DateTimePicker dtpEnd;
         private Sunny.UI.UIButton btnQuery;
         private Sunny.UI.UIButton btnExport;
+        private Sunny.UI.UIButton btnColumns;
         private Sunny.UI.UIDataGridView dgvHistory;
         private System.Windows.Forms.DataGridViewTextBoxColumn colTime;
         private System.Windows.Forms.DataGridViewTextBoxColumn colDevice;

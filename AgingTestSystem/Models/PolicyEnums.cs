@@ -116,4 +116,18 @@ namespace AgingTestSystem.Models
         /// <summary>蜂鸣 + 泄压都要。</summary>
         PowerOffVentAndBeep = 3
     }
+
+    /// <summary>
+    /// 事件行 SN/配方取值（【V1.76 新增】Q8 追溯口径：CSV/报表/MES 三处统一走它）。
+    /// 背景：在测中途重绑 SN（SetStationSerialNumbers 只复位完成态台，测试中台不断测），
+    /// "现值"与"启动值"会分叉——报警行写 A 还是 B，必须有个开关拍板，全表统一。
+    /// </summary>
+    public enum EventIdentityMode
+    {
+        /// <summary>记录现值（现状：事件发生瞬间工位绑定的 SN/配方，与 MES 上报口径一致）。</summary>
+        RecordTime = 0,
+        /// <summary>启动定格：该轮启动时绑定的 SN/配方，中途重绑不影响已跑任务的事件归属；
+        /// 无快照（复位后/未启动）回退现值。复位行永远是现值（复位=回到当前装夹）。</summary>
+        StartSnapshot = 1
+    }
 }

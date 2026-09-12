@@ -147,6 +147,12 @@
     <Compile Include="Controls\IoMappingEditorPopup.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="Controls\ReportColumnsEditorPopup.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Controls\DisplayModesEditorPopup.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Services\RecipeAutoCompleteProvider.cs" />
     <Compile Include="Services\StationSettingsCache.cs" />
     <Compile Include="Services\ThemeManager.cs" />

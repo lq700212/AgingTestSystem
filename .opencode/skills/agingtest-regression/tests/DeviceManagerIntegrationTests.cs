@@ -271,7 +271,8 @@ namespace AgingTestSystem.Tests
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(dm);
         }
 
-        /// <summary>数当日事件 CSV 里某台的 报警(FAIL) 行数（报警边沿单次性断言用）</summary>
+        /// <summary>数当日事件 CSV 里某台的 报警(FAIL) 行数（报警边沿单次性断言用；
+        /// V1.76 列序：0=时间,1=批号,2=SN,3=配方,4=设备编号,5=事件,6=结果）</summary>
         private static int CountAlarmLines(int deviceId)
         {
             string file = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs",
@@ -281,8 +282,8 @@ namespace AgingTestSystem.Tests
             foreach (string line in File.ReadAllLines(file))
             {
                 string[] cols = line.Split(',');
-                if (cols.Length >= 4 && cols[2].Trim() == deviceId.ToString()
-                    && cols[3].Trim() == "报警(FAIL)") n++;
+                if (cols.Length >= 6 && cols[4].Trim() == deviceId.ToString()
+                    && cols[5].Trim() == "报警(FAIL)") n++;
             }
             return n;
         }
@@ -1308,6 +1309,108 @@ namespace AgingTestSystem.Tests
             finally { try { dm4.StopAll(); } catch { } try { dm4.Dispose(); } catch { } }
 
             try { TestSessionStore.Clear(); } catch { }
+        }
+
+        // =====================================================================
+        // 15c. DeviceManager 身份口径端到端（V1.76 新增：SN/配方/结果结构化列 E2E）
+        // 与手工验证清单一一对应：启动行结果空/完成行结果=判定值/定格模式中途重绑
+        // 报警仍归属启动 SN。不 mock CSV 解析器，读真实落盘文件（与 HistoryCsv 互逆
+        // 形成"写→读"闭环：这里锁"写对了"，HistoryCsv 锁"读对了"）。
+        // =====================================================================
+        private static void DeviceManagerIdentityTests()
+        {
+            EnterCleanDir();
+            FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+            DeviceManager dm = BuildTestManager(out reader, out io, out config);
+            try
+            {
+                // ---------- I1 现值模式（缺省）启动→完成：11 列 E2E ----------
+                dm.CurrentLotNumber = "LOT-ID";
+                dm.SetStationSerialNumber(1, "SN-1");
+                dm.SetStationRecipe(1, "R1", -3m, null);
+                dm.SetStationDelayTimes(1, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1.5));
+                dm.StartTesting(new[] { 1 });
+                Thread.Sleep(120); // 过几个采集周期（BuildTestManager 初始常压 0，先别触发宽限）
+                reader.SetPressure(1, -4m); // 配方阈值 -3 下到位
+                Check("[身份] 1号到时完成",
+                    WaitUntil(() =>
+                    {
+                        var d = dm.GetBarometerData(1);
+                        return d != null && d.Status == DeviceStatus.Completed;
+                    }, 5000));
+                string[] startRow = FindCsvRow(1, "启动");
+                Check("[身份] 启动行SN/配方有值",
+                    startRow != null && startRow[2] == "SN-1" && startRow[3] == "R1");
+                Check("[身份] 启动行结果记空（未跑完无判定）",
+                    startRow != null && startRow[6] == "");
+                Check("[身份] 启动详情无SN字串（专属列已承载，不重复）",
+                    startRow != null && !startRow[7].Contains("SN:"));
+                string[] doneRow = FindCsvRow(1, "完成");
+                Check("[身份] 完成行SN/配方有值",
+                    doneRow != null && doneRow[2] == "SN-1" && doneRow[3] == "R1");
+                Check("[身份] 完成行结果=判定值PASS",
+                    doneRow != null && doneRow[6] == "PASS");
+
+                // ---------- I2 定格模式：中途重绑→报警归属启动 SN ----------
+                config.EventIdentityMode = EventIdentityMode.StartSnapshot; // 热切（helper 读实时值）
+                dm.SetStationSerialNumber(2, "SN-A");
+                dm.SetStationRecipe(2, "RA", -3m, null);
+                dm.StartTesting(new[] { 2 });
+                Check("[身份] 2号进入在测",
+                    WaitUntil(() => dm.GetTestingCount() >= 1, 2000));
+                dm.SetStationSerialNumber(2, "SN-B"); // 在测中途重绑（测试中台不断测）
+                Check("[身份] 在测中途重绑不断测",
+                    dm.GetTestingCount() >= 1 && io.ReadOutput(ValveOut(config, 2)));
+                // 常压 0 恒越限：600ms 宽限耗尽判真空建立失败
+                Check("[身份] 重绑后报警",
+                    WaitUntil(() =>
+                    {
+                        var d = dm.GetBarometerData(2);
+                        return d != null && d.Status == DeviceStatus.Fault;
+                    }, 3000));
+                string[] almRow = FindCsvRow(2, "报警(FAIL)");
+                Check("[身份] 定格模式报警行归属启动SN",
+                    almRow != null && almRow[2] == "SN-A");
+                Check("[身份] 报警行结果=FAIL",
+                    almRow != null && almRow[6] == "FAIL");
+
+                // ---------- I3 现值模式：同样重绑→报警归属现值 ----------
+                config.EventIdentityMode = EventIdentityMode.RecordTime;
+                dm.SetStationSerialNumber(3, "SN-C");
+                dm.SetStationRecipe(3, "RC", -3m, null);
+                dm.StartTesting(new[] { 3 });
+                dm.SetStationSerialNumber(3, "SN-D");
+                Check("[身份] 3号报警",
+                    WaitUntil(() =>
+                    {
+                        var d = dm.GetBarometerData(3);
+                        return d != null && d.Status == DeviceStatus.Fault;
+                    }, 3000));
+                string[] almRow3 = FindCsvRow(3, "报警(FAIL)");
+                Check("[身份] 现值模式报警行归属重绑后SN",
+                    almRow3 != null && almRow3[2] == "SN-D");
+            }
+            finally { try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
+        }
+
+        /// <summary>取当日 CSV 里某台某事件的最后一行（V1.76 列序拆列；无则 null）</summary>
+        private static string[] FindCsvRow(int deviceId, string evt)
+        {
+            try
+            {
+                string file = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs",
+                    "TestLog_" + DateTime.Now.ToString("yyyyMMdd") + ".csv");
+                if (!File.Exists(file)) return null;
+                string[] found = null;
+                foreach (string line in File.ReadAllLines(file))
+                {
+                    string[] cols = line.Split(',');
+                    if (cols.Length >= 11 && cols[4].Trim() == deviceId.ToString()
+                        && cols[5].Trim() == evt) found = cols;
+                }
+                return found;
+            }
+            catch { return null; }
         }
 
         /// <summary>当日事件 CSV 是否含标记行（规则场景的CSV断言用）</summary>

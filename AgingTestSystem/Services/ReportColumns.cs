@@ -11,14 +11,14 @@ namespace AgingTestSystem.Services
     /// 不能流到导出线程。SettingsForm 校验、历史窗导出、回归用例三方共用同一份
     /// vocabulary，改可用字段只改这里（与 MesMapping 同思路）。
     ///
-    /// 【与 MES 映射的关系】MES vocabulary（15 个，MesMapping.FieldVocabulary）是
-    /// "上报 payload 能带的字段"；这里是"历史 CSV 真实有的列"，只有 8 个
-    /// （SN/配方/结果尚未进 CSV，见类注释末尾）。两套名单各管各的，不许互相引用，
-    /// 否则 CSV 加一列就要动 MES（V1.68 血泪：名单分叉即灵异 bug）。
+    /// 【与 MES 映射的关系】MES vocabulary（MesMapping.FieldVocabulary）是
+    /// "上报 payload 能带的字段"；这里是"历史 CSV 真实有的列"，11 个。
+    /// 两套名单各管各的，不许互相引用，否则 CSV 加一列就要动 MES
+    /// （V1.68 血泪：名单分叉即灵异 bug）。
     ///
-    /// 【未做的事】SN/配方/结果三列尚未进 CSV（TestEventLogger.Write 调用点 20 处，
-    /// 每处都要确认数据口径，不在这次做；做了之后把三字段加进 AvailableFields，
-    /// 预设模板同步加三列，旧 CSV 缺列按空处理——解析层已预留这个兼容方向）。
+    /// 【V1.76】SN/配方/结果结构化进 CSV（Q8 追溯口径），预设同步 11 列，
+    /// 列序与 CSV 物理列序一致（时间→批号→SN→配方→工位→事件→结果→详情→
+    /// 压力→温度→电流）。项目未上线，无老文件包袱，不做缺列兼容。
     /// </summary>
     public static class ReportColumns
     {
@@ -36,21 +36,22 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 可用字段 vocabulary（历史 CSV 真实有的列，大小写无所谓）：
-        /// time=时间 / lot=批号 / device=工位号 / event=事件 / detail=详情 /
+        /// time=时间 / lot=批号 / sn=SN / recipe=配方 / device=工位号 /
+        /// event=事件 / result=判定结果 / detail=详情 /
         /// pressure=压力kPa / temp=温度°C / current=电流A（V1.74，无表记空）
         /// </summary>
         public static readonly string[] AvailableFields = new string[]
         {
-            "time", "lot", "device", "event", "detail",
+            "time", "lot", "sn", "recipe", "device", "event", "result", "detail",
             "pressure", "temp", "current"
         };
 
         /// <summary>
-        /// 缺省预设（烧屏追溯惯例列序：时间→批号→工位→事件→详情→压力→温度→电流）。
+        /// 缺省预设（烧屏追溯惯例列序：身份→事件→判定→详情→三数；与 CSV 物理列序一致）。
         /// 配置留空 = 用这套（开关都不用开，客户改列才填）。
         /// </summary>
         public const string DefaultPreset =
-            "时间=time;批号=lot;工位=device;事件=event;详情=detail;压力(kPa)=pressure;温度(°C)=temp;电流(A)=current";
+            "时间=time;批号=lot;SN=sn;配方=recipe;工位=device;事件=event;结果=result;详情=detail;压力(kPa)=pressure;温度(°C)=temp;电流(A)=current";
 
         /// <summary>组分隔符（中英文分号/逗号/顿号都认，与 MesMapping 同口径）</summary>
         private static readonly char[] GroupSeparators = { ';', '；', ',', '，', '、' };

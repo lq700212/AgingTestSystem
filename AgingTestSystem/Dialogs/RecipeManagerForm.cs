@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Windows.Forms;
 using AgingTestSystem.Models;
 using AgingTestSystem.Services;
@@ -76,18 +77,34 @@ namespace AgingTestSystem.Dialogs
         private readonly decimal _defaultNegativePressureKPa;
 
         /// <summary>
+        /// 生效配置（【V1.75 新增】显示模式字典与开关走它；可为 null，
+        /// null 时 Resolve 读当前项目文件——主窗体传 _config，测试传参即定）。
+        /// </summary>
+        private readonly DeviceConfig _displayConfig;
+
+        /// <summary>
+        /// 显示模式行是否显示（【V1.75 新增】构造时按开关定死，Fill/回填认它。
+        /// 不读 cmb.Visible——窗体没 Show 时 Visible 读恒 false（V1.73 血泪），
+        /// 读它 Fill 永远进隐藏分支，下拉永远是空的）。
+        /// </summary>
+        private readonly bool _displayModeShown;
+
+        /// <summary>
         /// 构造函数
         /// </summary>
         /// <param name="recipes">外部传入的配方列表，修改将反映到外部列表实例</param>
         /// <param name="defaultNegativePressureKPa">新建配方负压阈值默认值（传全局阈值）</param>
+        /// <param name="config">生效配置（可选，不传读项目文件；显示模式开关与字典走它）</param>
         /// <exception cref="System.ArgumentNullException">recipes 为 null 时抛出</exception>
-        public RecipeManagerForm(List<RecipeConfig> recipes, decimal defaultNegativePressureKPa)
+        public RecipeManagerForm(List<RecipeConfig> recipes, decimal defaultNegativePressureKPa,
+            DeviceConfig config = null)
         {
             InitializeComponent();
 
             _recipes = recipes ?? throw new System.ArgumentNullException(nameof(recipes),
                 "配方列表不能为 null，请传入外部维护的列表实例");
             _defaultNegativePressureKPa = defaultNegativePressureKPa;
+            _displayConfig = config;
 
             LoadRecipesToGrid();
 
@@ -97,19 +114,70 @@ namespace AgingTestSystem.Dialogs
                 UpdateRecipeSettings(_recipes[0]);
             }
 
-            // 【V1.74】显示模式悬停说明（标签+输入框两边都挂；选项走字典，
-            // 本窗无配置对象，Resolve(null) 读当前项目文件，再没有走缺省预设。
+            // 【V1.74】显示模式下拉填项（字典选项代码填，R8a 禁 Designer 写 AddRange）：
+            // 字典改了重开本窗即换（窗体短命，不做热更）。
+            // 【V1.75】开关关时整行隐藏 + 布局收缩（显示行是末行：按钮上移 38 + 窗高缩 38）。
+            _displayModeShown = DisplayModeOptions.ShouldShowDisplayMode(_displayConfig);
+            lblDisplayMode.Visible = _displayModeShown;
+            cmbDisplayMode.Visible = _displayModeShown;
+            if (_displayModeShown)
+            {
+                FillDisplayModes(null);
+            }
+            else
+            {
+                cmbDisplayMode.Text = "";
+                btnAdd.Top -= DisplayModeRowHeight;
+                btnUpdate.Top -= DisplayModeRowHeight;
+                btnDelete.Top -= DisplayModeRowHeight;
+                this.ClientSize = new Size(this.ClientSize.Width,
+                    this.ClientSize.Height - DisplayModeRowHeight);
+                this.MinimumSize = this.ClientSize;
+            }
+
+            // 【V1.74】显示模式悬停说明（标签+输入框两边都挂；选项走字典。
             // ToolTip 进 components 容器随窗体自动释放；本窗 Designer 从未放过组件类控件，
             // components 为 null 时补建（与 BatchRecipeForm 同口径，回归 UiPureHelpers 锁）。
             if (this.components == null) this.components = new System.ComponentModel.Container();
             var modeTipText = SettingsForm.WrapTooltip(
-                "显示模式：本次烧屏跑的显示画面，只追溯不判定。可选：" +
-                string.Join("/", DisplayModeOptions.Resolve(null).ToArray()) +
+                "显示模式：下拉选择本次烧屏跑的显示画面，只追溯不判定。可选：" +
+                string.Join("/", DisplayModeOptions.Resolve(_displayConfig).ToArray()) +
                 "（字典在系统设置→工艺策略里改）。");
             var modeTip = new ToolTip(this.components);
             modeTip.ShowAlways = true;
             modeTip.SetToolTip(lblDisplayMode, modeTipText);
-            modeTip.SetToolTip(txtDisplayMode, modeTipText);
+            modeTip.SetToolTip(cmbDisplayMode, modeTipText);
+        }
+
+        /// <summary>
+        /// 显示模式行高（【V1.75 新增】隐藏时布局收缩量 = 该行高 38px：
+        /// 显示行 combo Y=241 高 29 → 底 270，按钮 Y=280（10px 间隙），
+        /// 收缩后按钮 Y=242，窗高同步缩 38，行隙/边距原样保留）。
+        /// </summary>
+        private const int DisplayModeRowHeight = 38;
+
+        /// <summary>
+        /// 显示模式下拉填项（【V1.74 新增】字典驱动；遗留值参数供回填时带上旧值）。
+        /// selectedAfterFill 为 null = 不动当前选择（构造时用）；非 null = 填完选中它
+        /// （回填时用，遗留值不在字典则追加末尾，保证看得见）。
+        /// </summary>
+        private void FillDisplayModes(string selectedAfterFill, bool selectIt = false)
+        {
+            // 【V1.75】隐藏态守卫（同工位窗）：隐藏=恒空，防遗留值堵死保存。
+            // 认 _displayModeShown 字段，不读 Visible（未 Show 恒 false，见字段注释）。
+            if (!_displayModeShown)
+            {
+                cmbDisplayMode.Text = "";
+                return;
+            }
+            var options = DisplayModeOptions.Resolve(_displayConfig);
+            if (selectIt)
+            {
+                options = DisplayModeOptions.WithLegacy(options, selectedAfterFill);
+            }
+            cmbDisplayMode.Items.Clear();
+            foreach (string o in options) cmbDisplayMode.Items.Add(o);
+            if (selectIt) cmbDisplayMode.Text = (selectedAfterFill ?? "").Trim();
         }
 
         /// <summary>
@@ -146,7 +214,10 @@ namespace AgingTestSystem.Dialogs
                 nudLimitTemp.Value = nudLimitTemp.Minimum;
                 // 【V1.66】清空时负压回到新建默认值（全局阈值），显示模式清空
                 nudNegativePressure.Value = ClampPressure(_defaultNegativePressureKPa);
-                txtDisplayMode.Clear();
+                // 【V1.74】下拉清空=选空（Text="" 即 SelectedIndex=-1）；顺手重填字典，
+                // 把之前回填追加的遗留值清掉（下拉选项永远等于干净字典）。
+                FillDisplayModes(null);
+                cmbDisplayMode.Text = "";
                 return;
             }
 
@@ -164,7 +235,8 @@ namespace AgingTestSystem.Dialogs
 
             // 【V1.66】负压阈值 + 显示模式（超出范围钳制；显示模式 null→空串）
             nudNegativePressure.Value = ClampPressure(recipe.NegativePressure);
-            txtDisplayMode.Text = recipe.DisplayMode ?? "";
+            // 【V1.74】下拉回填：字典选项 + 遗留值追加（老配方字典外文本看得见，存时拦整改）
+            FillDisplayModes(recipe.DisplayMode, true);
         }
 
         /// <summary>
@@ -220,12 +292,12 @@ namespace AgingTestSystem.Dialogs
             // 【V1.74】显示模式字典校验（Q20：空=清空允许，字典内=存规范写法，
             // 字典外拦并报出全部选项；本窗无配置对象，读项目文件字典）
             string canonicalMode, modeErr;
-            if (!DisplayModeOptions.ValidateInput(txtDisplayMode.Text,
-                DisplayModeOptions.Resolve(null), out canonicalMode, out modeErr))
+            if (!DisplayModeOptions.ValidateInput(cmbDisplayMode.Text,
+                DisplayModeOptions.Resolve(_displayConfig), out canonicalMode, out modeErr))
             {
                 MessageBox.Show(modeErr, "输入验证",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                txtDisplayMode.Focus();
+                cmbDisplayMode.Focus();
                 return false;
             }
             recipe.DisplayMode = canonicalMode;

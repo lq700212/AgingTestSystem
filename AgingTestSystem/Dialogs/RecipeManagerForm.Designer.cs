@@ -46,7 +46,7 @@ namespace AgingTestSystem.Dialogs
             this.nudNegativePressure = new System.Windows.Forms.NumericUpDown();
             this.lblNegativePressureUnit = new Sunny.UI.UILabel();
             this.lblDisplayMode = new Sunny.UI.UILabel();
-            this.txtDisplayMode = new Sunny.UI.UITextBox();
+            this.cmbDisplayMode = new Sunny.UI.UIComboBox();
             this.nudStartSeconds = new System.Windows.Forms.NumericUpDown();
             this.lblStartMinutesUnit = new Sunny.UI.UILabel();
             this.nudStartMinutes = new System.Windows.Forms.NumericUpDown();
@@ -141,7 +141,7 @@ namespace AgingTestSystem.Dialogs
             this.panelRight.Controls.Add(this.btnDelete);
             this.panelRight.Controls.Add(this.btnUpdate);
             this.panelRight.Controls.Add(this.btnAdd);
-            this.panelRight.Controls.Add(this.txtDisplayMode);
+            this.panelRight.Controls.Add(this.cmbDisplayMode);
             this.panelRight.Controls.Add(this.lblDisplayMode);
             this.panelRight.Controls.Add(this.lblNegativePressureUnit);
             this.panelRight.Controls.Add(this.nudNegativePressure);
@@ -290,13 +290,13 @@ namespace AgingTestSystem.Dialogs
             this.lblDisplayMode.TabIndex = 0;
             this.lblDisplayMode.Text = "显示模式：";
             //
-            // txtDisplayMode
+            // cmbDisplayMode
             //
-            this.txtDisplayMode.Location = new System.Drawing.Point(120, 241);
-            this.txtDisplayMode.MaxLength = 50;
-            this.txtDisplayMode.Name = "txtDisplayMode";
-            this.txtDisplayMode.Size = new System.Drawing.Size(200, 29);
-            this.txtDisplayMode.TabIndex = 14;
+            this.cmbDisplayMode.DropDownStyle = Sunny.UI.UIDropDownStyle.DropDownList;
+            this.cmbDisplayMode.Location = new System.Drawing.Point(120, 241);
+            this.cmbDisplayMode.Name = "cmbDisplayMode";
+            this.cmbDisplayMode.Size = new System.Drawing.Size(200, 29);
+            this.cmbDisplayMode.TabIndex = 14;
             //
             // lblStartTime
             //
@@ -578,7 +578,7 @@ namespace AgingTestSystem.Dialogs
         private Sunny.UI.UILabel lblDisplayMode;
 
         /// <summary>显示模式输入（【V1.66】自由文本，最长50）</summary>
-        private Sunny.UI.UITextBox txtDisplayMode;
+        private Sunny.UI.UIComboBox cmbDisplayMode;
 
         /// <summary>添加按钮</summary>
         private Sunny.UI.UIButton btnAdd;

@@ -189,6 +189,7 @@ namespace AgingTestSystem.Tests
                 { "DeviceManagerPolicy", DeviceManagerPolicyTests },
                 { "DeviceManagerMes", DeviceManagerMesTests },
                 { "DeviceManagerRules", DeviceManagerRulesTests },
+                { "DeviceManagerIdentity", DeviceManagerIdentityTests },
                 { "ProcessPolicyV170", ProcessPolicyTests },
                 { "UiStyleV172_1", UiStyleV172_1Tests },
                 { "UiFinalizerV172_14", UiFinalizerV172_14Tests },
@@ -1029,21 +1030,21 @@ namespace AgingTestSystem.Tests
 
             string[] lines = ReadAllLinesShared(file);
             Check("首行为固定表头", lines.Length > 0 &&
-                lines[0] == "时间,批号,设备编号,事件,详情,压力(kPa),温度(°C),电流(A)");
+                lines[0] == "时间,批号,SN,配方,设备编号,事件,结果,详情,压力(kPa),温度(°C),电流(A)");
             Check("两条事件均已落盘", lines.Length >= 3);
             if (lines.Length < 3) return;
 
             Check("时间列 yyyy-MM-dd HH:mm:ss 格式开头",
                 System.Text.RegularExpressions.Regex.IsMatch(lines[1], @"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},"));
-            Check("批号列正确", lines[1].Contains(",LOT20260825,"));
-            Check("设备编号列=3", lines[1].Contains(",LOT20260825,3,"));
+            Check("批号/SN/配方/编号列序正确", lines[1].Contains(",LOT20260825,,,3,"));
+            Check("事件结果列正确", lines[1].Contains(",3,报警,,"));
             Check("含逗号详情被转义包裹", lines[1].Contains("\"压力超限,需关注\""));
             Check("压力列=-85.5", lines[1].Contains(",-85.5,"));
             Check("温度列一位小数 66.6", lines[1].Contains(",66.6,"));
             // V1.74：电流列追加末尾，老调用无电流记空（行尾多一个逗号）
             Check("无电流时电流列留空(行尾逗号)", lines[1].EndsWith("66.6,"));
             // 压力/温度/电流都为空时，详情后三个空字段让行尾必然是 ",,,"（CSV 列留空）
-            Check("可选压力/温度/电流缺省时留空(行尾,,,)", lines[2].EndsWith(",急停,手动触发,,,"));
+            Check("可选压力/温度/电流缺省时留空(行尾,,,)", lines[2].EndsWith(",急停,,手动触发,,,"));
 
             // V1.62：回车转义 + 字段格式边角
             if (mi != null)
@@ -1055,7 +1056,7 @@ namespace AgingTestSystem.Tests
             TestEventLogger.Write(null, -1, null, null, 12m, 33.56f);
             string[] lines2 = ReadAllLinesShared(file);
             string last = lines2[lines2.Length - 1];
-            Check("全null字段仍8列不抛", last.Split(',').Length >= 8 && last.Contains(",-1,"));
+            Check("全null字段仍11列不抛", last.Split(',').Length >= 11 && last.Contains(",-1,"));
             Check("温度一位小数格式化33.6", last.Contains(",33.6,"));
             Check("压力整数12原样写", last.Contains(",12,"));
             TestEventLogger.Write("LOTX", 1, "启动", "ok", null, null);
@@ -1065,10 +1066,18 @@ namespace AgingTestSystem.Tests
             string[] linesC = ReadAllLinesShared(file);
             string lastC = linesC[linesC.Length - 1];
             Check("电流有数写两位小数", lastC.EndsWith(",0.42"));
-            Check("电流列有数不断列", lastC.Split(',').Length >= 8);
+            Check("电流列有数不断列", lastC.Split(',').Length >= 11);
             TestEventLogger.Write("LOTN", 8, "上电", "无表", null, null, float.NaN);
             string lastN = ReadAllLinesShared(file)[ReadAllLinesShared(file).Length - 1];
             Check("电流NaN记空不写NaN字样", lastN.EndsWith(",") && !lastN.Contains("NaN"));
+
+            // V1.76：SN/配方/结果结构化列（11列：时间,批号,SN,配方,设备编号,事件,结果,详情,压力,温度,电流）
+            TestEventLogger.Write("LOT2", 5, "完成", "到时", null, null, null, "SN001", "R-A", "PASS");
+            string lastS = ReadAllLinesShared(file)[ReadAllLinesShared(file).Length - 1];
+            Check("SN配方结果列序正确", lastS.Contains(",LOT2,SN001,R-A,5,完成,PASS,"));
+            TestEventLogger.Write("LOT3", 0, "急停", "整机", null, null, null, null, null, null);
+            string lastZ = ReadAllLinesShared(file)[ReadAllLinesShared(file).Length - 1];
+            Check("整机行身份结果记空", lastZ.Contains(",LOT3,,,0,急停,,"));
 
             // 并发写零丢失（对标 AppLog 并发用例）
             int beforeCount = ReadAllLinesShared(file).Length;
@@ -1671,10 +1680,12 @@ namespace AgingTestSystem.Tests
             bool optsOk = true;
             foreach (string k in ProjectPolicyStore.PolicyKeys)
             {
-                // VentValveDoPoint 是数字项、FanTempShutdownEnabled/SkipVacuum 是布尔项、
-                // MesTriggers/MesFieldMap/MesStaticFields/CustomAlarmRules/CompleteExpression/
-                // ReportColumns/DisplayModes 是自由文本（V1.68/V1.69/V1.74），都无策略下拉
+                // VentValveDoPoint 是数字项、FanTempShutdownEnabled/SkipVacuum/DisplayModeEnabled
+                // 是布尔项、MesTriggers/MesFieldMap/MesStaticFields/CustomAlarmRules/
+                // CompleteExpression/ReportColumns/DisplayModes 是自由文本
+                // （V1.68/V1.69/V1.74/V1.75），都无策略下拉
                 if (k == "VentValveDoPoint" || k == "FanTempShutdownEnabled" || k == "SkipVacuum"
+                    || k == "DisplayModeEnabled"
                     || k == "MesTriggers" || k == "MesFieldMap" || k == "MesStaticFields"
                     || k == "CustomAlarmRules" || k == "CompleteExpression"
                     || k == "ReportColumns" || k == "DisplayModes") continue;
@@ -1702,6 +1713,27 @@ namespace AgingTestSystem.Tests
                 dc.AgingPressureLossPolicy == AgingPressureLossPolicy.StopOnLoss
                 && dc.CompletionAction == CompletionAction.PowerOffOnly
                 && dc.VentValveDoPoint == 0);
+            Check("缺省身份口径=记录现值",
+                dc.EventIdentityMode == EventIdentityMode.RecordTime);
+
+            // ── V1.76：事件身份口径（开关解析 + ResolveEventIdentity 纯函数）──
+            Check("身份枚举解析StartSnapshot",
+                Equals(ProjectPolicyStore.ParseValue(typeof(EventIdentityMode), "StartSnapshot"), EventIdentityMode.StartSnapshot));
+            Check("身份枚举小写兼容",
+                Equals(ProjectPolicyStore.ParseValue(typeof(EventIdentityMode), "startsnapshot"), EventIdentityMode.StartSnapshot));
+            Check("身份枚举非法回null(调用方保持缺省)",
+                ProjectPolicyStore.ParseValue(typeof(EventIdentityMode), "xxx") == null);
+            string oSn, oRecipe;
+            DeviceManager.ResolveEventIdentity(EventIdentityMode.RecordTime, "A", "RA", "B", "RB", out oSn, out oRecipe);
+            Check("现值模式取现值", oSn == "B" && oRecipe == "RB");
+            DeviceManager.ResolveEventIdentity(EventIdentityMode.StartSnapshot, "A", "RA", "B", "RB", out oSn, out oRecipe);
+            Check("定格模式取启动值", oSn == "A" && oRecipe == "RA");
+            DeviceManager.ResolveEventIdentity(EventIdentityMode.StartSnapshot, "", "", "B", "RB", out oSn, out oRecipe);
+            Check("定格无快照回退现值", oSn == "B" && oRecipe == "RB");
+            DeviceManager.ResolveEventIdentity(EventIdentityMode.StartSnapshot, "", "RA", "B", "RB", out oSn, out oRecipe);
+            Check("半快照仍用快照", oSn == "" && oRecipe == "RA");
+            DeviceManager.ResolveEventIdentity(EventIdentityMode.RecordTime, null, null, null, null, out oSn, out oRecipe);
+            Check("全null转空串不抛", oSn == "" && oRecipe == "");
 
             // ── 快照新字段缺省锁：老快照(无阶段字段)按整段重跑，安全回退 ──
             var oldSnap = new TestSessionStation { DeviceId = 1, DurationSeconds = 100 };
@@ -3055,10 +3087,10 @@ namespace AgingTestSystem.Tests
                 Check("IP候选/映射表不强制校验",
                     ok("FanIpCandidates", "xxx") && ok("IoBackupChannelMappings", "xxx"));
 
-                // _boolKeys 16 项逐项过校验（防"只加一边"的配置漂移；V1.68 +MesEnabled/MesMockEnabled；V1.69 +SkipVacuum；V1.73 +VentValveEnabled；V1.74 +UsePowerMeter）
+                // _boolKeys 17 项逐项过校验（防"只加一边"的配置漂移；V1.68 +MesEnabled/MesMockEnabled；V1.69 +SkipVacuum；V1.73 +VentValveEnabled；V1.74 +UsePowerMeter；V1.75 +DisplayModeEnabled）
                 var boolKeys = (HashSet<string>)typeof(SettingsForm).GetField("_boolKeys",
                     BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
-                Check("布尔键16项", boolKeys != null && boolKeys.Count == 16);
+                Check("布尔键17项", boolKeys != null && boolKeys.Count == 17);
                 if (boolKeys != null)
                 {
                     bool allBoolOk = boolKeys.All(k => ok(k, "true") && ok(k, "false") && !ok(k, "YES"));
@@ -3071,7 +3103,8 @@ namespace AgingTestSystem.Tests
                         && boolKeys.Contains("MesMockEnabled")
                         && boolKeys.Contains("SkipVacuum")
                         && boolKeys.Contains("VentValveEnabled")
-                        && boolKeys.Contains("UsePowerMeter"));
+                        && boolKeys.Contains("UsePowerMeter")
+                        && boolKeys.Contains("DisplayModeEnabled"));
                 }
             }
 
@@ -3239,6 +3272,8 @@ namespace AgingTestSystem.Tests
             Check("映射表→弹窗只读格",
                 popCell is DataGridViewPopupEditCell && Equals(popCell.Value, "0x2000@0x00->0x2009@0x00"));
             Check("IP候选→弹窗格", cellOf("FanIpCandidates", "a") is DataGridViewPopupEditCell);
+            Check("报表列→弹窗格", cellOf("ReportColumns", "时间=time") is DataGridViewPopupEditCell);
+            Check("显示字典→弹窗格", cellOf("DisplayModes", "白场") is DataGridViewPopupEditCell);
             Check("主页布局→弹窗格", cellOf("HomeLayout", "") is DataGridViewPopupEditCell);
             var baudCell = cellOf("BaudRate", "230400");
             Check("波特率含档位+自定义回显",
@@ -3319,6 +3354,10 @@ namespace AgingTestSystem.Tests
                             Value = (object)"0x2000@0x00->0x2009@0x01", Name = "IO映射弹窗" },
                         new { Method = "ShowRuleListPopup", Type = typeof(Controls.RuleListEditorPopup),
                             Value = (object)"", Name = "规则弹窗" },
+                        new { Method = "ShowReportColumnsPopup", Type = typeof(Controls.ReportColumnsEditorPopup),
+                            Value = (object)"时间=time;批号=lot", Name = "报表列弹窗" },
+                        new { Method = "ShowDisplayModesPopup", Type = typeof(Controls.DisplayModesEditorPopup),
+                            Value = (object)"白场,红场", Name = "显示字典弹窗" },
                     };
                     foreach (var c in cases)
                     {
@@ -3557,23 +3596,70 @@ namespace AgingTestSystem.Tests
                 Check("尾逗号出空尾段", parse("a,").Length == 2 && parse("a,")[1] == "");
                 Check("空行出1空段", parse("").Length == 1 && parse("")[0] == "");
 
-                // 互逆：写入器转义 → 解析器还原（8 列对齐，详情含逗号引号）
+                // 互逆：写入器转义 → 解析器还原（11 列对齐，详情含逗号引号）
                 EnterCleanDir();
-                TestEventLogger.Write("INV", 5, "报警", "详情,有\"引号\"", -5.5m, 36.6f);
+                TestEventLogger.Write("INV", 5, "报警", "详情,有\"引号\"", -5.5m, 36.6f, null, "SN9", "配方Z", "FAIL");
                 string file = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs",
                     "TestLog_" + DateTime.Now.ToString("yyyyMMdd") + ".csv");
                 string[] lines = ReadAllLinesShared(file);
                 string[] f = parse(lines[lines.Length - 1]);
-                Check("互逆8列", f.Length == 8);
-                if (f.Length == 8)
+                Check("互逆11列", f.Length == 11);
+                if (f.Length == 11)
                 {
-                    Check("互逆批号/编号/事件", f[1] == "INV" && f[2] == "5" && f[3] == "报警");
-                    Check("互逆详情还原", f[4] == "详情,有\"引号\"");
-                    Check("互逆压力温度", f[5] == "-5.5" && f[6] == "36.6");
-                    Check("互逆电流空", f[7] == "");
+                    Check("互逆批号/SN/配方", f[1] == "INV" && f[2] == "SN9" && f[3] == "配方Z");
+                    Check("互逆编号/事件/结果", f[4] == "5" && f[5] == "报警" && f[6] == "FAIL");
+                    Check("互逆详情还原", f[7] == "详情,有\"引号\"");
+                    Check("互逆压力温度", f[8] == "-5.5" && f[9] == "36.6");
+                    Check("互逆电流空", f[10] == "");
+                }
+                // V1.76：报表格字段映射（sn/recipe/result 落专属列，防索引漂移）
+                var logType = typeof(HistoryRecordForm).GetNestedType("LogEntry",
+                    BindingFlags.NonPublic);
+                var cellMi = typeof(HistoryRecordForm).GetMethod("GetReportCellText",
+                    BindingFlags.NonPublic | BindingFlags.Static);
+                Check("反射找到 LogEntry 与 GetReportCellText", logType != null && cellMi != null);
+                if (logType != null && cellMi != null)
+                {
+                    object log = Activator.CreateInstance(logType);
+                    logType.GetProperty("Sn").SetValue(log, "SN9", null);
+                    logType.GetProperty("Recipe").SetValue(log, "配方Z", null);
+                    logType.GetProperty("Result").SetValue(log, "FAIL", null);
+                    Func<string, string> cell = fd => (string)cellMi.Invoke(null, new object[] { log, fd });
+                    Check("报表格SN/配方/结果映射",
+                        cell("sn") == "SN9" && cell("recipe") == "配方Z" && cell("result") == "FAIL");
+                }
+                // V1.75：报表列按钮权限门（默认无权限；管理员才可见，操作员看不见改不了）
+                var flagF = typeof(HistoryRecordForm).GetField("_canConfigureColumns",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                var btnF = typeof(HistoryRecordForm).GetField("btnColumns",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Check("反射找到权限旗与列按钮", flagF != null && btnF != null);
+                if (flagF != null && btnF != null)
+                {
+                    Check("默认无列配置权限",
+                        Equals(flagF.GetValue(form), false));
+                    var btnCol = btnF.GetValue(form) as Control;
+                    Check("报表列按钮已建好", btnCol != null && btnCol.Text == "报表列设置");
                 }
             }
             finally { form.Dispose(); }
+
+            // V1.75：管理员构造带权限旗（按钮显隐逻辑走 Visible，窗体未 Show 时读恒 false，
+            // 故只锁权限旗本身；显隐已在构造赋值，界面手工验证）。
+            HistoryRecordForm adminForm = null;
+            try { adminForm = new HistoryRecordForm(true); }
+            catch (Exception ex) { Check("管理员历史窗可构造", false, ex.GetType().Name + ":" + ex.Message); }
+            if (adminForm != null)
+            {
+                try
+                {
+                    var flagA = typeof(HistoryRecordForm).GetField("_canConfigureColumns",
+                        BindingFlags.NonPublic | BindingFlags.Instance);
+                    Check("管理员有列配置权限",
+                        flagA != null && Equals(flagA.GetValue(adminForm), true));
+                }
+                finally { adminForm.Dispose(); }
+            }
         }
 
         // =====================================================================
@@ -3610,10 +3696,28 @@ namespace AgingTestSystem.Tests
                 // V1.66：负压/显示模式框回填（存什么显什么：配方0→框0，null→空串，无魔法值）
                 var nudP = typeof(RecipeManagerForm).GetField("nudNegativePressure",
                     BindingFlags.NonPublic | BindingFlags.Instance).GetValue(rmForm) as NumericUpDown;
-                var txtM = typeof(RecipeManagerForm).GetField("txtDisplayMode",
-                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(rmForm) as Sunny.UI.UITextBox;
+                var txtM = typeof(RecipeManagerForm).GetField("cmbDisplayMode",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(rmForm) as Sunny.UI.UIComboBox;
                 Check("负压框回填配方值", nudP != null && nudP.Value == 0m);
                 Check("显示模式框null回填空串(V1.71 Sunny)", txtM != null && txtM.Text == "");
+                Check("维度关时配方窗下拉空(V1.75: 隐藏=恒空，不读字典)",
+                    txtM != null && txtM.Items.Count == 0 && txtM.Text == "");
+                Check("显示模式是下拉单选(V1.74)",
+                    txtM != null && txtM.DropDownStyle == Sunny.UI.UIDropDownStyle.DropDownList);
+                Check("维度关时配方窗收缩(V1.75: 355→317)",
+                    rmForm.ClientSize.Height == 317);
+                var rmFormOn = new RecipeManagerForm(new List<RecipeConfig>(),
+                    -5m, new DeviceConfig { DisplayModeEnabled = true });
+                try
+                {
+                    Check("维度开时配方窗高度不变(V1.75)",
+                        rmFormOn.ClientSize.Height == 355);
+                    var cmbOn = typeof(RecipeManagerForm).GetField("cmbDisplayMode",
+                        BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(rmFormOn) as Sunny.UI.UIComboBox;
+                    Check("维度开时下拉项=缺省预设8项(V1.75)",
+                        cmbOn != null && cmbOn.Items.Count == 8 && cmbOn.Items.Contains("白场"));
+                }
+                finally { rmFormOn.Dispose(); }
                 var find = typeof(RecipeManagerForm).GetMethod("FindRecipeIndex",
                     BindingFlags.NonPublic | BindingFlags.Instance);
                 Check("反射找到 FindRecipeIndex", find != null);
@@ -3698,6 +3802,14 @@ namespace AgingTestSystem.Tests
                             BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(stNoVent) as Control;
                         Check("工位窗tooltip已挂（含显示模式追溯说明）",
                             tip != null && lblDm != null && tip.GetToolTip(lblDm).Contains("追溯"));
+                        var cmbDm = typeof(StationSettingsForm).GetField("cmbDisplayMode",
+                            BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(stNoVent) as Sunny.UI.UIComboBox;
+                        Check("工位窗显示模式是下拉单选(V1.74)",
+                            cmbDm != null && cmbDm.DropDownStyle == Sunny.UI.UIDropDownStyle.DropDownList);
+                        Check("维度关时工位窗下拉空(V1.75)",
+                            cmbDm != null && cmbDm.Items.Count == 0);
+                        Check("维度关时工位窗收缩(V1.75: 370→330)",
+                            stNoVent.ClientSize.Height == 330);
                     }
                     finally { stNoVent.Dispose(); }
                 }
@@ -3706,7 +3818,6 @@ namespace AgingTestSystem.Tests
                 catch { }
                 Check("有阀工位窗可构造", stVent != null);
                 if (stVent != null)
-                {
                     try
                     {
                         // Visible 在窗体未 Show 时读恒 false，测纯函数 ShouldShowBreakVacuum
@@ -3717,8 +3828,27 @@ namespace AgingTestSystem.Tests
                             && Equals(showFn.Invoke(null, new object[] { new DeviceConfig() }), false)
                             && Equals(showFn.Invoke(null, new object[] { null }), false)
                             && Equals(showFn.Invoke(null, new object[] { new DeviceConfig { VentValveEnabled = true } }), true));
+                        Check("维度关时有阀窗同样收缩(V1.75)",
+                            stVent.ClientSize.Height == 330);
                     }
                     finally { stVent.Dispose(); }
+                StationSettingsForm stModeOn = null;
+                try { stModeOn = new StationSettingsForm(null,
+                    new DeviceConfig { DisplayModeEnabled = true }, new List<RecipeConfig>(), 1); }
+                catch { }
+                Check("维度开时工位窗可构造", stModeOn != null);
+                if (stModeOn != null)
+                {
+                    try
+                    {
+                        Check("维度开时工位窗高度不变(V1.75)",
+                            stModeOn.ClientSize.Height == 370);
+                        var cmbDmOn = typeof(StationSettingsForm).GetField("cmbDisplayMode",
+                            BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(stModeOn) as Sunny.UI.UIComboBox;
+                        Check("维度开时工位窗下拉项非空(V1.75)",
+                            cmbDmOn != null && cmbDmOn.Items.Count >= 8 && cmbDmOn.Items.Contains("白场"));
+                    }
+                    finally { stModeOn.Dispose(); }
                 }
                 BatchRecipeForm bTipForm = null;
                 try { bTipForm = new BatchRecipeForm(null, new List<RecipeConfig>(), new List<int>()); }
@@ -3734,9 +3864,41 @@ namespace AgingTestSystem.Tests
                             BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(bTipForm) as Control;
                         Check("批量窗tooltip已挂（含显示模式追溯说明）",
                             tipB != null && lblB != null && tipB.GetToolTip(lblB).Contains("追溯"));
+                        var cmbB = typeof(BatchRecipeForm).GetField("cmbDisplayMode",
+                            BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(bTipForm) as Sunny.UI.UIComboBox;
+                        Check("批量窗显示模式是下拉单选(V1.74)",
+                            cmbB != null && cmbB.DropDownStyle == Sunny.UI.UIDropDownStyle.DropDownList);
+                        Check("维度关时批量窗下拉空(V1.75)",
+                            cmbB != null && cmbB.Items.Count == 0);
+                        Check("维度关时批量窗收缩(V1.75: 360→323)",
+                            bTipForm.ClientSize.Height == 323);
                     }
                     finally { bTipForm.Dispose(); }
                 }
+                DeviceManager dmModeOn = null;
+                BatchRecipeForm bModeOn = null;
+                try
+                {
+                    dmModeOn = new DeviceManager(
+                        new DeviceConfig { DisplayModeEnabled = true });
+                    bModeOn = new BatchRecipeForm(dmModeOn, new List<RecipeConfig>(), new List<int>());
+                }
+                catch { }
+                Check("维度开时批量窗可构造", bModeOn != null);
+                if (bModeOn != null)
+                {
+                    try
+                    {
+                        Check("维度开时批量窗高度不变(V1.75)",
+                            bModeOn.ClientSize.Height == 360);
+                        var cmbBOn = typeof(BatchRecipeForm).GetField("cmbDisplayMode",
+                            BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(bModeOn) as Sunny.UI.UIComboBox;
+                        Check("维度开时批量窗下拉项非空(V1.75)",
+                            cmbBOn != null && cmbBOn.Items.Count >= 8 && cmbBOn.Items.Contains("视频"));
+                    }
+                    finally { bModeOn.Dispose(); }
+                }
+                if (dmModeOn != null) { try { dmModeOn.Dispose(); } catch { } }
             }
 
             // —— IP 合法性（反射私有静态） ——
@@ -4221,6 +4383,19 @@ namespace AgingTestSystem.Tests
                         dtpE.Left >= lblE.Left + textW(lblE) + 3);
                     Check("两组先后不碰",
                         lblE.Left >= dtpS.Left + dtpS.Width + 3);
+                }
+                var btnC = t.GetField("btnColumns", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(hisForm) as Control;
+                var pnlT = t.GetField("panelTop", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(hisForm) as Control;
+                Check("报表列按钮已建好", btnC != null && btnC.Text == "报表列设置");
+                if (btnC != null && btnX != null && pnlT != null)
+                {
+                    // V1.75：窗加宽 784→880，报表列设置在导出右侧，不叠不出界，五字容得下
+                    Check("报表列设置与导出无重叠",
+                        btnC.Left >= btnX.Left + btnX.Width + 3);
+                    Check("报表列设置不出顶栏右界",
+                        btnC.Left + btnC.Width <= pnlT.Width);
+                    Check("报表列设置宽容得下五字",
+                        btnC.Width >= 110);
                 }
             }
             finally { hisForm.Dispose(); }
@@ -4828,6 +5003,12 @@ namespace AgingTestSystem.Tests
             // —— 缺省锁：不配=和以前一模一样 ——
             var dc = new DeviceConfig();
             Check("缺省不用电表", dc.UsePowerMeter == false);
+            Check("缺省显示维度关闭", dc.DisplayModeEnabled == false);
+            Check("维度开关真值显示", DisplayModeOptions.ShouldShowDisplayMode(
+                new DeviceConfig { DisplayModeEnabled = true }));
+            Check("维度开关假值隐藏",
+                !DisplayModeOptions.ShouldShowDisplayMode(new DeviceConfig())
+                && !DisplayModeOptions.ShouldShowDisplayMode(null));
             Check("缺省报表列空=预设", dc.ReportColumns == "");
             Check("缺省显示字典空=预设", dc.DisplayModes == "");
             Check("电流缺省NaN", float.IsNaN(new BarometerData().LoadCurrentA));
@@ -4927,16 +5108,19 @@ namespace AgingTestSystem.Tests
                     RuleExpr.TryEvalBool(exprCur, vars, out berr) == false);
             }
 
-            // —— 报表列：预设8列/解析/兜底/校验 ——
+            // —— 报表列：预设11列/解析/兜底/校验 ——
             List<ReportColumns.Column> presetCols;
             List<string> presetErrs;
             ReportColumns.Parse(ReportColumns.DefaultPreset, out presetCols, out presetErrs);
-            Check("预设解析8列零错", presetCols.Count == 8 && presetErrs.Count == 0);
-            Check("预设首列时间末列电流",
+            Check("预设解析11列零错", presetCols.Count == 11 && presetErrs.Count == 0);
+            Check("预设首列时间/身份事件列序/末列电流",
                 presetCols[0].Display == "时间" && presetCols[0].Field == "time"
-                && presetCols[7].Display == "电流(A)" && presetCols[7].Field == "current");
-            Check("空配置走预设", ReportColumns.Resolve("").Count == 8);
-            Check("全错配置走预设", ReportColumns.Resolve("xxx=yyy").Count == 8);
+                && presetCols[2].Display == "SN" && presetCols[2].Field == "sn"
+                && presetCols[3].Display == "配方" && presetCols[3].Field == "recipe"
+                && presetCols[6].Display == "结果" && presetCols[6].Field == "result"
+                && presetCols[10].Display == "电流(A)" && presetCols[10].Field == "current");
+            Check("空配置走预设", ReportColumns.Resolve("").Count == 11);
+            Check("全错配置走预设", ReportColumns.Resolve("xxx=yyy").Count == 11);
             List<ReportColumns.Column> customCols;
             List<string> customErrs;
             ReportColumns.Parse("时间=time;批号=lot", out customCols, out customErrs);
@@ -4958,6 +5142,69 @@ namespace AgingTestSystem.Tests
                     (bool)miValidate.Invoke(null, new object[] { "ReportColumns", "时间=nosuch", null }) == false);
             }
             else Check("反射找到 ValidateValue", false);
+
+            // —— 报表列弹窗直测（构造即填行；Confirm 私有，反射调，happy path 无弹窗） ——
+            var popEmpty = new Controls.ReportColumnsEditorPopup("");
+            try
+            {
+                var dgvF = typeof(Controls.ReportColumnsEditorPopup).GetField("_dgv",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                var dgv = dgvF != null ? dgvF.GetValue(popEmpty) as DataGridView : null;
+                Check("空配置弹窗显示预设11行", dgv != null && dgv.Rows.Count == 11);
+                var miConfirm = typeof(Controls.ReportColumnsEditorPopup).GetMethod("Confirm",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Check("反射找到 Confirm", miConfirm != null);
+                if (miConfirm != null && dgv != null)
+                {
+                    miConfirm.Invoke(popEmpty, null);
+                    Check("预设行确定回写预设串",
+                        Equals(popEmpty.ResultValue, ReportColumns.DefaultPreset));
+                }
+            }
+            finally { try { popEmpty.Dispose(); } catch { } }
+            var popCustom = new Controls.ReportColumnsEditorPopup("批号=lot;时间=time");
+            try
+            {
+                var dgvF2 = typeof(Controls.ReportColumnsEditorPopup).GetField("_dgv",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                var dgv2 = dgvF2 != null ? dgvF2.GetValue(popCustom) as DataGridView : null;
+                Check("自定义2行保序（批号首行）",
+                    dgv2 != null && dgv2.Rows.Count == 2
+                    && Equals(dgv2.Rows[0].Cells["colDisplay"].Value, "批号")
+                    && Equals(dgv2.Rows[0].Cells["colField"].Value, "lot"));
+            }
+            finally { try { popCustom.Dispose(); } catch { } }
+            // —— 显示字典弹窗直测（空=预设行；Confirm 回写；happy path 无弹窗） ——
+            var popModesEmpty = new Controls.DisplayModesEditorPopup("");
+            try
+            {
+                var dgvFM = typeof(Controls.DisplayModesEditorPopup).GetField("_dgv",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                var dgvM = dgvFM != null ? dgvFM.GetValue(popModesEmpty) as DataGridView : null;
+                Check("空字典弹窗显示预设8行", dgvM != null && dgvM.Rows.Count == 8);
+                var miConfirmM = typeof(Controls.DisplayModesEditorPopup).GetMethod("Confirm",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Check("反射找到字典Confirm", miConfirmM != null);
+                if (miConfirmM != null && dgvM != null)
+                {
+                    miConfirmM.Invoke(popModesEmpty, null);
+                    Check("预设行确定回写预设串",
+                        Equals(popModesEmpty.ResultValue, DisplayModeOptions.DefaultPreset));
+                }
+            }
+            finally { try { popModesEmpty.Dispose(); } catch { } }
+            var popModesCustom = new Controls.DisplayModesEditorPopup("红场,绿场");
+            try
+            {
+                var dgvFM2 = typeof(Controls.DisplayModesEditorPopup).GetField("_dgv",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                var dgvM2 = dgvFM2 != null ? dgvFM2.GetValue(popModesCustom) as DataGridView : null;
+                Check("自定义2行保序（红场首行）",
+                    dgvM2 != null && dgvM2.Rows.Count == 2
+                    && Equals(dgvM2.Rows[0].Cells[0].Value, "红场")
+                    && Equals(dgvM2.Rows[1].Cells[0].Value, "绿场"));
+            }
+            finally { try { popModesCustom.Dispose(); } catch { } }
 
             // —— 显示模式字典：预设/校验/规范写法/兜底 ——
             Check("缺省预设8项含白场与视频",
@@ -4983,6 +5230,12 @@ namespace AgingTestSystem.Tests
             var cfgModes = new DeviceConfig { DisplayModes = "红场,绿场" };
             var resolved = DisplayModeOptions.Resolve(cfgModes);
             Check("配置字典优先", resolved.Count == 2 && resolved[0] == "红场");
+            var legacyList = DisplayModeOptions.WithLegacy(dictOpts, "紫场旧值");
+            Check("遗留值追加末尾", legacyList.Count == 9 && legacyList[8] == "紫场旧值");
+            Check("字典内遗留不重复",
+                DisplayModeOptions.WithLegacy(dictOpts, "白场").Count == 8);
+            Check("空遗留不追加",
+                DisplayModeOptions.WithLegacy(dictOpts, "  ").Count == 8);
             if (miValidate != null)
             {
                 Check("字典空合法",
