@@ -1928,6 +1928,28 @@ namespace AgingTestSystem.Tests
             }
             Check("删除后指针仍在原项目", ProjectProfile.ActiveProfileName == delCur);
 
+            // ── V1.72.12：ApplyLoadedRecipes（删光配方后热切换不串数据） ──
+            // 复现：B 项目删光配方（文件=[]）→切走→切回，内存必须为空而非上个项目残留。
+            var memRecipes = new List<RecipeConfig>
+            {
+                new RecipeConfig { Id = 1, Name = "上个项目残留" }
+            };
+            MainForm.ApplyLoadedRecipes(memRecipes, new List<RecipeConfig>());
+            Check("空列表进内存=清空（删光后切回无残留）", memRecipes.Count == 0);
+            memRecipes.Add(new RecipeConfig { Id = 2, Name = "旧数据" });
+            MainForm.ApplyLoadedRecipes(memRecipes, null);
+            Check("null（无文件/损坏）同样清空不串项目", memRecipes.Count == 0);
+            var fresh = new List<RecipeConfig>
+            {
+                new RecipeConfig { Id = 7, Name = "新项目配方" }
+            };
+            List<RecipeConfig> aliasRecipes = memRecipes;
+            MainForm.ApplyLoadedRecipes(memRecipes, fresh);
+            Check("有数据正常替换", memRecipes.Count == 1 && memRecipes[0].Name == "新项目配方");
+            Check("就地换引用不变（自动完成源不受影响）", Object.ReferenceEquals(aliasRecipes, memRecipes));
+            MainForm.ApplyLoadedRecipes(null, fresh); // null 目标不抛
+            Check("目标null静默返回", true);
+
             // ── ProjectPolicyStore.Save/Load 往返（写当前项目 Policy.json，隔离目录） ──
             string policyPath = ProjectPolicyStore.PolicyFilePath;
             bool hadPolicy = File.Exists(policyPath);
@@ -2668,6 +2690,40 @@ namespace AgingTestSystem.Tests
                     }
                     Check("无参构造边框7件全建好", allBuilt);
                     try { bare.Dispose(); } catch { }
+                }
+            }
+
+            // ── 右栏重建先Dispose再Clear（V1.72.12：终结器跨线程崩溃锁） ──
+            // 复现：点节点→RebuildEditors→Controls.Clear()只摘不放，旧 UITextBox
+            // 进终结器线程Dispose，Sunny内部读原生TextBox.Handle即炸（堆栈终点
+            // TextBox.ResetAutoComplete←Dispose←Finalize）。修后旧控件当场释放。
+            {
+                Views.FlowCockpitForm bare2 = null;
+                try
+                {
+                    bare2 = new Views.FlowCockpitForm();
+                    var t2 = bare2.GetType();
+                    var miRebuild = t2.GetMethod("RebuildEditors",
+                        BindingFlags.NonPublic | BindingFlags.Instance);
+                    Check("反射找到 RebuildEditors", miRebuild != null);
+                    if (miRebuild != null)
+                    {
+                        var pnlF = t2.GetField("_pnlEditors",
+                            BindingFlags.NonPublic | BindingFlags.Instance);
+                        var pnl = (System.Windows.Forms.Control)pnlF.GetValue(bare2);
+                        miRebuild.Invoke(bare2, null);
+                        var firstHint = pnl.Controls.Count > 0 ? pnl.Controls[0] : null;
+                        Check("首次重建有提示控件", firstHint != null);
+                        miRebuild.Invoke(bare2, null);
+                        Check("重建后旧控件已释放（不进终结器）",
+                            firstHint != null && firstHint.IsDisposed);
+                        Check("重建后新控件是另一实例",
+                            pnl.Controls.Count > 0 && !Object.ReferenceEquals(pnl.Controls[0], firstHint));
+                    }
+                }
+                finally
+                {
+                    try { if (bare2 != null) bare2.Dispose(); } catch { }
                 }
             }
 

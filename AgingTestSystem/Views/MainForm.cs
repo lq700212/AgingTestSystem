@@ -2440,12 +2440,26 @@ namespace AgingTestSystem.Views
         /// </summary>
         private void LoadRecipes()
         {
-            var loaded = RecipeStorage.Load();
-            if (loaded != null && loaded.Count > 0)
-            {
-                _recipes.Clear();
-                _recipes.AddRange(loaded);
-            }
+            ApplyLoadedRecipes(_recipes, RecipeStorage.Load());
+        }
+
+        /// <summary>
+        /// 把刚从文件读到的配方列表换装进内存（【V1.72.12 纯函数】启动与热加载共用）。
+        ///
+        /// 【修什么 bug】原来这里是 `loaded != null && loaded.Count > 0` 才换：
+        /// 用户在 B 项目把配方删光（文件变成空数组 `[]`，Load 返回"非 null 空列表"），
+        /// 切到别的项目再切回，空列表被条件拦掉、内存还留着上个项目的数据——
+        /// "删掉的配方切一圈又回来了"。策略没这毛病（CopyFrom 全量覆盖无条件）。
+        /// 【语义】内存永远等于文件：文件无/损坏（null）= 空项目，同样清空，
+        /// 不留旧项目残留。target 为 null 防御性返回（调用方恒传 _recipes）。
+        /// </summary>
+        /// <param name="target">内存配方列表（就地换，引用不变，自动完成源不受影响）</param>
+        /// <param name="loaded">刚读到的文件内容（null=无文件/损坏）</param>
+        public static void ApplyLoadedRecipes(List<RecipeConfig> target, List<RecipeConfig> loaded)
+        {
+            if (target == null) return;
+            target.Clear();
+            if (loaded != null) target.AddRange(loaded);
         }
 
         #endregion

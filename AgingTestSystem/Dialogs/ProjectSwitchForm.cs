@@ -30,17 +30,9 @@ namespace AgingTestSystem.Dialogs
     ///   跑中的任务会读劈叉，等停机/完成再切。
     /// - 用户账号是全局的，不跟项目走（见 ProjectProfile 注释）。
     /// </summary>
-    public class ProjectSwitchForm : Sunny.UI.UIForm
+    public partial class ProjectSwitchForm : Sunny.UI.UIForm
     {
         private readonly DeviceManagerRef _deviceManager;
-
-        private Sunny.UI.UILabel _lblCurrent;
-        private ListBox _lstProjects;
-        private Sunny.UI.UITextBox _txtNewName;
-        private Sunny.UI.UIButton _btnCreate;
-        private Sunny.UI.UIButton _btnSwitch;
-        private Sunny.UI.UIButton _btnDelete;
-        private Sunny.UI.UIButton _btnClose;
 
         /// <summary>
         /// 对 DeviceManager 的最小引用（只为查"是否在测"；用接口隔离防窗体碰业务）。
@@ -62,76 +54,10 @@ namespace AgingTestSystem.Dialogs
         {
             _deviceManager = new CountAdapter(testingCountProvider);
 
-            // 【高 DPI 三要素】纯代码窗体：基准尺寸 + 挂起布局，末尾 ResumeLayout
-            this.AutoScaleDimensions = new SizeF(6F, 12F);
-            this.AutoScaleMode = AutoScaleMode.Font;
-            this.SuspendLayout();
-
-            this.Text = "项目切换（即时生效）";
-            this.StartPosition = FormStartPosition.CenterParent;
-            this.MaximizeBox = false;
-            this.MinimizeBox = false;
-            this.ClientSize = new Size(400, 415);
-            // 【V1.71】绝对布局：禁缩小（MinimumSize=ClientSize），防缩坏布局；可放大。
-            this.MinimumSize = new Size(400, 415);
-
-            int y = 47;   // 【V1.71】UIForm 标题区 35px，内容下移
-            _lblCurrent = new Sunny.UI.UILabel
-            {
-                Location = new Point(12, y),
-                Size = new Size(376, 24),
-                Font = new Font(this.Font, FontStyle.Bold)
-            };
-            this.Controls.Add(_lblCurrent);
-            y += 30;
-
-            _lstProjects = new ListBox { Location = new Point(12, y), Size = new Size(376, 180) };
-            _lstProjects.DoubleClick += (s, e) => BtnSwitch_Click(s, e);
-            this.Controls.Add(_lstProjects);
-            y += 190;
-
-            var lblNew = new Sunny.UI.UILabel { Location = new Point(12, y + 4), Size = new Size(48, 20), Text = "新建：" };
-            _txtNewName = new Sunny.UI.UITextBox { Location = new Point(64, y), Size = new Size(220, 24) };
-            _btnCreate = new Sunny.UI.UIButton { Location = new Point(292, y - 1), Size = new Size(96, 26), Text = "创建" };
-            _btnCreate.Click += BtnCreate_Click;
-            this.Controls.Add(lblNew);
-            this.Controls.Add(_txtNewName);
-            this.Controls.Add(_btnCreate);
-            y += 34;
-
-            // 【V1.72.11】操作行一排三按钮（各 120 宽、间距 8：12+120+8+120+8+120=388，右留 12）
-            _btnSwitch = new Sunny.UI.UIButton { Location = new Point(12, y), Size = new Size(120, 30), Text = "切换并生效" };
-            _btnSwitch.Click += BtnSwitch_Click;
-            _btnDelete = new Sunny.UI.UIButton { Location = new Point(140, y), Size = new Size(120, 30), Text = "删除项目" };
-            _btnDelete.Click += BtnDelete_Click;
-            _btnClose = new Sunny.UI.UIButton
-            {
-                Location = new Point(268, y),
-                Size = new Size(120, 30),
-                Text = "关闭",
-                DialogResult = DialogResult.Cancel,
-                FillColor = Color.DimGray,
-                RectColor = Color.DimGray,
-                ForeColor = Color.White,
-                Style = Sunny.UI.UIStyle.Custom
-            };
-            this.Controls.Add(_btnSwitch);
-            this.Controls.Add(_btnDelete);
-            this.Controls.Add(_btnClose);
-            y += 38;
-
-            var lblNote = new Sunny.UI.UILabel
-            {
-                Location = new Point(12, y),
-                Size = new Size(376, 40),
-                ForeColor = Color.Gray,
-                Text = "注：切换即时生效，无需重启；有工位在测时禁止切换。\r\n用户账号全局共享，不跟项目走。"
-            };
-            this.Controls.Add(lblNote);
-
-            this.CancelButton = _btnClose;
+            // 【V1.72.12 Designer 化】静态边框搬进 ProjectSwitchForm.Designer.cs，
+            // 这里只初填"要读服务"的那一项（项目列表依赖 ProjectProfile）。
+            InitializeComponent();
             RefreshList();
-            this.ResumeLayout(false);
         }
 
         /// <summary>Func 适配器（MainForm 传 () => 在测台数 即可，不用把 DeviceManager 整个交进来）。</summary>

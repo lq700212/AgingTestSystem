@@ -89,7 +89,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Dialogs/IdBindingForm.cs` / `InputLotForm.cs` | 录入批号 + 工位↔SN 绑定（扫码枪自动识别填充，生成 Excel） |
 | `Models/` | BarometerData / FanData(+FanRunState) / IoStatus / DeviceConfig / RecipeConfig / StationInfo / PanelLayoutConfig / HomeLayoutConfig / PolicyEnums（V1.67 工艺策略枚举） / 用户模型 |
 | `Services/ProjectProfile.cs` / `Services/ProjectPolicyStore.cs` | 项目档案（V1.67）：`Projects/<项目>/` 路径解析/迁移/切换（配方/工位设置/主页布局/策略跟项目，用户/快照/日志跟机器）；策略分流读写 Policy.json（PolicyKeys 唯一名单） |
-| `Dialogs/UnloadJudgeForm.cs` / `Dialogs/ProjectSwitchForm.cs` | 下料判定窗（V1.67，Q22 待判定配套）/ 项目切换窗（V1.67，仅管理员；纯代码窗体） |
+| `Dialogs/UnloadJudgeForm.cs` / `Dialogs/ProjectSwitchForm.cs` | 下料判定窗（V1.67，Q22 待判定配套）/ 项目切换窗（V1.67，仅管理员；V1.72.12 起 Designer 化，静态边框进 Designer.cs） |
 | `.opencode/skills/agingtest-regression/` | 项目最终测试验证技能（V1.58.23）：一键"构建→冒烟→1160+ 条回归断言（V1.72）"，用例源码 `tests/TestRunner.cs`，新测试用例一律沉淀于此（用法见其 SKILL.md） |
 
 > WinForms 视图均拆 `.cs` + `.Designer.cs` 两个 partial；**所有 .cs 必须 UTF-8 with BOM 编码**（否则设计器报"无法设计基类 System.Void"）。

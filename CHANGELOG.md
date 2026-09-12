@@ -1,7 +1,32 @@
 ﻿# CHANGELOG
 
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
-> 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
+> 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md).
+
+## V1.72.12 — 配方删光切回串数据 + 终结器跨线程崩溃 + 三窗Designer化（2026-09-12，用户点名）
+
+### 改动范围
+- 配方热切换 bug：`MainForm.LoadRecipes` 原来 `Count > 0` 才换内存——B 项目删光
+  配方（文件 `[]`）后切走切回，空列表被拦、旧项目数据残留（"删掉的配方又回来了"）。
+  抽纯函数 `ApplyLoadedRecipes`（内存永远等于文件，null/空都清空，就地换引用不变），
+  策略没这毛病（CopyFrom 全量覆盖）。
+- 终结器跨线程崩溃（用户堆栈定罪）：`FlowCockpitForm` 点/拖节点→`RebuildEditors`
+  的 `Controls.Clear()` 只摘不放，旧 Sunny 编辑器进终结器线程 Dispose，内部原生
+  `TextBox.Handle` 跨线程即炸（堆栈 `ResetAutoComplete←Dispose←Finalize`，Name=""
+  是动态控件都没设名；炸的时机看 GC，所以"拖的时候"只是巧合）。
+  新增 `DisposeEditorControls`（先逐个 Dispose 再 Clear，主窗 H5 同款），两处重建共用。
+  主页布局编辑器本身无 Clear，是被连累的（终结时机不定，炸时用户正在拖它）。
+- 三窗 Designer 化：`UnloadJudgeForm` / `ProjectSwitchForm` /
+  `HomeLayoutEditorForm` 静态边框搬进 Designer.cs（csproj DependentUpon 登记，
+  要吃构造参数的初值/回填留代码；HomeLayout 右下按钮坐标按 Panel 默认宽 200 写死，
+  Anchor 运行时贴右，与原来公式结果一致）。配对扫描 8/9/15 全齐，三窗改后截图
+  与基准像素一致。
+
+### 验证
+- harness 复现侧：Mock 跑采集 + 双窗 + 17 轮模拟拖动 15 秒零异常（常规路径干净，
+  定罪全靠用户堆栈——跨线程 bug 没有堆栈不硬修）。
+- `build_and_test.ps1`（用例改动兜底全量）：构建 + 冒烟 + **1229 全绿**
+  （1220 + 9：ApplyLoadedRecipes 空/null/替换/引用/null目标 5、重建释放旧控件 4）。
 
 ## V1.72.11 — 项目切换窗加"删除项目"（2026-09-12，用户点名）
 
