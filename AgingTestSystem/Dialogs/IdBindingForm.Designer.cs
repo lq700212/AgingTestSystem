@@ -101,7 +101,7 @@ namespace AgingTestSystem.Dialogs
             //
             // txtSn - SN输入框
             //
-            this.txtSn.Location = new System.Drawing.Point(85, 125);
+            this.txtSn.Location = new System.Drawing.Point(110, 125);
             this.txtSn.Name = "txtSn";
             this.txtSn.Size = new System.Drawing.Size(190, 29);
             this.txtSn.TabIndex = 5;
@@ -118,7 +118,7 @@ namespace AgingTestSystem.Dialogs
             //
             // txtStationNo - 工位编号输入框
             //
-            this.txtStationNo.Location = new System.Drawing.Point(85, 80);
+            this.txtStationNo.Location = new System.Drawing.Point(110, 80);
             this.txtStationNo.Name = "txtStationNo";
             this.txtStationNo.Size = new System.Drawing.Size(190, 29);
             this.txtStationNo.TabIndex = 3;
@@ -135,7 +135,7 @@ namespace AgingTestSystem.Dialogs
             //
             // txtLot - 批号输入框（只读）
             //
-            this.txtLot.Location = new System.Drawing.Point(85, 35);
+            this.txtLot.Location = new System.Drawing.Point(110, 35);
             this.txtLot.Name = "txtLot";
             this.txtLot.ReadOnly = true;
             this.txtLot.Size = new System.Drawing.Size(190, 29);
@@ -200,9 +200,11 @@ namespace AgingTestSystem.Dialogs
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             // 【V1.71】UIForm 标题占 35px 客户区：ClientSize 加高 35，保证 Dock 区内容高度与原来一致
             //（否则右侧保存按钮被挤出可视区，harness 实测抓获）。
-            this.ClientSize = new System.Drawing.Size(750, 485);
+            this.ClientSize = new System.Drawing.Size(780, 485);
             // 【V1.71】Dock 布局自适应放大；禁缩小（MinimumSize=ClientSize），防右下保存按钮被挤出。
-            this.MinimumSize = new System.Drawing.Size(750, 485);
+            // 【V1.72.7】标签"工位编号："实宽约 83px 与 X=85 输入框重叠，输入列右移 25
+            //（X 85→110，三行统一），窗加宽 30（左侧列 40% 跟着放宽，输入右缘不顶边）。
+            this.MinimumSize = new System.Drawing.Size(780, 485);
             this.Controls.Add(this.tableLayoutPanelMain);
             // 【V1.71】UIForm 自绘蓝标题：删 FormBorderStyle；Dock=Fill 布局加顶 Pad 避开标题区。
             this.Padding = new System.Windows.Forms.Padding(2, 38, 2, 2);

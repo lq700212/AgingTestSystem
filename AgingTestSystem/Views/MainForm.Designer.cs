@@ -49,6 +49,7 @@
             this.tableLayoutPanelMain = new System.Windows.Forms.TableLayoutPanel();
             this.tableLayoutPanelTop = new System.Windows.Forms.TableLayoutPanel();
             this.lblTitle = new Sunny.UI.UILabel();
+            this.lblProject = new Sunny.UI.UILabel();
             this.panelPermission = new System.Windows.Forms.FlowLayoutPanel();
             this.lblPermissionPrefix = new Sunny.UI.UILabel();
             this.lblPermissionRole = new Sunny.UI.UILabel();
@@ -140,16 +141,20 @@
             this.tableLayoutPanelMain.TabIndex = 0;
             // 
             // tableLayoutPanelTop
-            // 
-            this.tableLayoutPanelTop.ColumnCount = 4;
-            this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 40F));
-            this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
+            // 【V1.72.7】加"当前项目"列（切错项目=跑错工艺，首屏可见防呆）：标题 30% +
+            // 项目 22% + 权限 20% + 通讯标签 15% + 通讯状态 13%。
+            //
+            this.tableLayoutPanelTop.ColumnCount = 5;
+            this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 30F));
+            this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 22F));
             this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
             this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 15F));
+            this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 13F));
             this.tableLayoutPanelTop.Controls.Add(this.lblTitle, 0, 0);
-            this.tableLayoutPanelTop.Controls.Add(this.panelPermission, 1, 0);
-            this.tableLayoutPanelTop.Controls.Add(this.lblCommStatusLabel, 2, 0);
-            this.tableLayoutPanelTop.Controls.Add(this.lblCommStatus, 3, 0);
+            this.tableLayoutPanelTop.Controls.Add(this.lblProject, 1, 0);
+            this.tableLayoutPanelTop.Controls.Add(this.panelPermission, 2, 0);
+            this.tableLayoutPanelTop.Controls.Add(this.lblCommStatusLabel, 3, 0);
+            this.tableLayoutPanelTop.Controls.Add(this.lblCommStatus, 4, 0);
             this.tableLayoutPanelTop.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tableLayoutPanelTop.Location = new System.Drawing.Point(3, 3);
             this.tableLayoutPanelTop.Name = "tableLayoutPanelTop";
@@ -167,7 +172,21 @@
             this.lblTitle.Size = new System.Drawing.Size(113, 17);
             this.lblTitle.TabIndex = 0;
             this.lblTitle.Text = "老化测试系统V1.16";
-            // 
+            //
+            // lblProject - 当前项目显示（【V1.72.7 新增】切错项目=跑错工艺，顶栏首屏可见防呆；
+            // 项目名由 MainForm 构造里 UpdateProjectDisplay 回填，切换项目必须重启故只需设一次；
+            // Dock=Fill 占满 22% 列，超长项目名 AutoEllipsis 省略号不断行）。
+            //
+            this.lblProject.AutoEllipsis = true;
+            this.lblProject.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblProject.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Bold);
+            this.lblProject.Location = new System.Drawing.Point(385, 0);
+            this.lblProject.Name = "lblProject";
+            this.lblProject.Size = new System.Drawing.Size(274, 24);
+            this.lblProject.TabIndex = 4;
+            this.lblProject.Text = "当前项目：Default";
+            this.lblProject.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            //
             // panelPermission - 当前操作权限显示容器（V1.19.7：拆为"前缀 + 角色名"两个标签）
             // FlowLayoutPanel 水平排列：前缀标签固定黑色，角色名标签由
             // MainForm.UpdatePermissionDisplay 按权限设置 ForeColor（管理员=红/技术员=蓝/操作员=绿）。
@@ -641,6 +660,8 @@
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelTop;
         /// <summary>系统标题标签</summary>
         private Sunny.UI.UILabel lblTitle;
+        /// <summary>当前项目显示标签（【V1.72.7 新增】顶栏第 2 列，构造里回填项目名）</summary>
+        private Sunny.UI.UILabel lblProject;
         /// <summary>当前操作权限显示容器（V1.19.7：拆为前缀+角色名两个标签）</summary>
         private System.Windows.Forms.FlowLayoutPanel panelPermission;
         /// <summary>固定前缀"当前操作权限: "（默认黑字）</summary>

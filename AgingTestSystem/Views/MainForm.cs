@@ -203,6 +203,7 @@ namespace AgingTestSystem.Views
             // 首跑自动建 Default；【V1.68 改干净】不认程序目录下的散文件（无老用户，不搬家）。
             string activeProject = ProjectProfile.EnsureActiveProfile();
             System.Diagnostics.Debug.WriteLine($"[项目档案] 当前项目: {activeProject}");
+            UpdateProjectDisplay(activeProject);
 
             // 1.5 应用主页布局（从 HomeLayout.json 读取各区域尺寸；文件不存在则用内置默认）
             // 【V1.58】原来这里调用 AdjustRightPanelWidth 按内容自动算右侧宽度，
@@ -2269,6 +2270,18 @@ namespace AgingTestSystem.Views
 
             lblPermissionRole.Text = roleName;
             lblPermissionRole.ForeColor = roleColor;
+        }
+
+        /// <summary>
+        /// 顶栏显示当前项目（【V1.72.7 新增】切错项目=跑错工艺，首屏可见防呆）。
+        /// 项目切换后必须重启（路径启动时解析），故构造时设一次即可，无需订阅刷新。
+        /// 超长项目名由 lblProject.AutoEllipsis 省略号收尾不断行。
+        /// </summary>
+        /// <param name="projectName">生效的项目名（EnsureActiveProfile 返回，null 兜底 Default）</param>
+        private void UpdateProjectDisplay(string projectName)
+        {
+            if (lblProject == null) return;
+            lblProject.Text = "当前项目：" + (string.IsNullOrWhiteSpace(projectName) ? "Default" : projectName.Trim());
         }
 
         /// <summary>
