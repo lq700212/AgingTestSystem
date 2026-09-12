@@ -1,6 +1,6 @@
 ---
 name: agingtest-regression
-description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案热更删除/终结器释放/关窗竞态/MES映射上报/规则表达式/流程驾驶舱等全部核心逻辑类（1290 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
+description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案热更删除/终结器释放/关窗竞态/MES映射上报/规则表达式/流程驾驶舱等全部核心逻辑类（1300 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
 ---
 
 # AgingTestSystem 回归测试套件（冒烟 + 用例一体）
@@ -57,7 +57,7 @@ agingtest-regression/
     └── TestRunner.cs         ← 全部测试用例源码（加用例就改这里）
 ```
 
-## 三、测试覆盖范围（39 个模块，1290 断言）
+## 三、测试覆盖范围（39 个模块，1300 断言）
 
 | 模块 | 覆盖点 |
 | --- | --- |
@@ -95,7 +95,7 @@ agingtest-regression/
 | **DeviceManagerMes(V1.68)** | Fake抓包端到端：启动/完成(PASS+映射+静态+SN)/下料判定(不良代码)/报警(FAIL)四触发器各一条+发往配置地址 |
 | RuleExprV169(V1.69) | 四则优先级/括号/负号/取模/字面量、比较逻辑与或非、变量大小写、短路跳过除零、除零模零未知变量错、语法错位置、NaN恒false、规则表行格式/行号/上限20、执行器持续计时(假时钟/中断复位/同配置不清/换配置清/非在测复位/立即/求值错)、完成表达式(空禁用/到点/求值错)、缺省锁、ValidateValue规则分支 |
 | **DeviceManagerRules(V1.69)** | 自定义报警端到端(首轮触发FAIL+CSV规则名)、完成表达式提前完成(CSV原因)、跳过抽真空(直接上电+常压不误报+快照Aging+CSV)、各阶段台数R4(抽真空1/老化1/空闲2) |
-| FlowCockpitV170(V1.70) | 拓扑锁(7节点8边+端点全已知+节点挂key+key全真属性)、缺省文本锁、策略切换文本变、台数进文本、布局存取往返/钳制/损坏回空、驾驶舱构造不断言弹窗(V1.71)、检索框 SetCaretToEnd 原生/Sunny 双过(V1.71)、驾驶舱无参构造不抛+边框7件(V1.72 Designer 拆分)、右栏重建释放走 ControlDisposeHelper 快照(V1.72.16，旧 foreach 跳过实锤) |
+| FlowCockpitV170(V1.70) | 拓扑锁(7节点8边+端点全已知+节点挂key+key全真属性)、缺省文本锁、策略切换文本变、台数进文本、布局存取往返/钳制/损坏回空、驾驶舱构造不断言弹窗(V1.71)、检索框 SetCaretToEnd 原生/Sunny 双过(V1.71)、驾驶舱无参构造不抛+边框7件(V1.72 Designer 拆分)、右栏重建释放走 ControlDisposeHelper 快照(V1.72.16，旧 foreach 跳过实锤)、宽松缺省布局锁(V1.72.18：左右列同X/列距≥130/行距≥40/7节点不重叠/power-alarm与done-unload中心对齐/最小210×100，旧版文件回缺省) |
 | UiStyleV172_1(V1.72.1) | 弹窗主按钮蓝5窗(DodgerBlue+Custom+白字)、公共参数设计Y锁(lbl65/nud62/btn110)+CenterControls不动Y、公共参数标签输入框无重叠(V1.72.3：锁视觉间距≥8px；MeasureText比AutoSize实占小3px是根因，Designer残留Size 107过期勿用)、历史日期宽150+实测文本宽防叠、深浅下蓝保留 |
 | UiFinalizerV172_14(V1.72.14) | 关窗竞态静默丢弃（Comm/Fan _closed+句柄双查+BeginInvoke；无句柄/关后日志不炸；RemapNoticeForm自释反射存在）、判定窗预览（无参构造+_lblCode/_lblDisp具名+处置选项数+空快照文案+两按钮）、关于SunnyUI（反射调internal static：UIForm+只读多行+Y≥35+版本版权文案+确认蓝+Accept）；V1.72.15 追加全仓锁 14 条（公共参数/ID绑定/设置/主窗 _closed/_mainClosing 标记、关后完成/扫码/写寄存器/控制命令/补全释放过滤静默丢弃） |
 | LegacyRecipeGuard(V1.72.2) | V1.59老配方0值语义锁：缺字段读出0/null、下发0=定格0(0≠全局)/null=保持/清空回全局、批量窗新建默认全局、老配方回填显示0待人工复核（只构造不启采集） |

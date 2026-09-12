@@ -2641,6 +2641,10 @@ namespace AgingTestSystem.Tests
                 File.WriteAllText(layoutPath, "{broken json");
                 Check("损坏布局按空处理",
                     Views.FlowGraph.LayoutStore.Load().Count == 0);
+                // V2 迁移：旧版本文件直接丢弃、回新缺省（V1 按旧挤列摆的，沿用会继续挤）
+                File.WriteAllText(layoutPath, "{\"version\":1,\"nodes\":{\"start\":[11,22]}}");
+                Check("旧版本布局按空处理（回新缺省）",
+                    Views.FlowGraph.LayoutStore.Load().Count == 0);
             }
             finally
             {
@@ -2650,6 +2654,58 @@ namespace AgingTestSystem.Tests
                     else if (File.Exists(layoutPath)) File.Delete(layoutPath);
                 }
                 catch { }
+            }
+
+            // ── 缺省布局宽松锁（截图式两列：列距150/行距45+，节点不重叠） ──
+            {
+                Func<string, System.Drawing.Rectangle> rectOf = id =>
+                {
+                    var n = Views.FlowGraph.FindNode(id);
+                    return n != null ? n.DefaultRect : System.Drawing.Rectangle.Empty;
+                };
+                var rStart = rectOf("start");
+                var rVacuum = rectOf("vacuum");
+                var rPower = rectOf("power");
+                var rDone = rectOf("done");
+                var rAlarm = rectOf("alarm");
+                var rRecover = rectOf("recover");
+                var rUnload = rectOf("unload");
+                // 左列同 X、右列同 X（两列式，防漂）
+                Check("缺省左列同X",
+                    rStart.X == rVacuum.X && rVacuum.X == rPower.X && rPower.X == rDone.X);
+                Check("缺省右列同X",
+                    rAlarm.X == rRecover.X && rRecover.X == rUnload.X);
+                // 列间距≥130（之前 100 太挤，截图式 150）
+                Check("缺省列间距≥130",
+                    rRecover.Left - rStart.Right >= 130);
+                // 左列行间距≥40（标题+3行文本不顶框）
+                Check("缺省左列行距≥40",
+                    rVacuum.Top - rStart.Bottom >= 40
+                    && rPower.Top - rVacuum.Bottom >= 40
+                    && rDone.Top - rPower.Bottom >= 40);
+                // 报警底到下料顶留竖线位置≥40
+                Check("缺省报警到下料竖距≥40",
+                    rUnload.Top - rAlarm.Bottom >= 40);
+                // 两两不重叠（挤了当场红）
+                var all = new System.Drawing.Rectangle[]
+                    { rStart, rVacuum, rPower, rDone, rAlarm, rRecover, rUnload };
+                bool overlap = false;
+                for (int i = 0; i < all.Length && !overlap; i++)
+                    for (int j = i + 1; j < all.Length && !overlap; j++)
+                        if (all[i].IntersectsWith(all[j])) overlap = true;
+                Check("缺省7节点两两不重叠", !overlap);
+                // 横向边近水平：power↔alarm、done↔unload 中心Y差≤30（差多了线就斜得难看）
+                int pcY = rPower.Top + rPower.Height / 2;
+                int acY = rAlarm.Top + rAlarm.Height / 2;
+                int dcY = rDone.Top + rDone.Height / 2;
+                int ucY = rUnload.Top + rUnload.Height / 2;
+                Check("power与alarm中心对齐（横边水平）", Math.Abs(pcY - acY) <= 30);
+                Check("done与unload中心对齐（横边水平）", Math.Abs(dcY - ucY) <= 30);
+                // 节点最小尺寸（宽≥210/高≥100，之前 190×92 装3行太挤）
+                bool sizeOk = true;
+                foreach (var r in all)
+                    if (r.Width < 210 || r.Height < 100) sizeOk = false;
+                Check("缺省节点最小210×100", sizeOk);
             }
 
             // ── 驾驶舱窗体构造不断言弹窗（V1.71：构造即跑全部编辑器创建链，NRE 当场现形） ──

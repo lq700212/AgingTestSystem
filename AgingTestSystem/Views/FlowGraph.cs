@@ -84,12 +84,17 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>全部节点（顺序即绘制顺序，报警等侧栏后画，压边不断）。</summary>
+        // 【缺省布局】左列主链（启动→抽真空→老化→完成）+ 右列分支（恢复/报警/下料），
+        // 按截图式宽松两列摆：列间距 150px、行间距 45px+，节点加高到 110~150px
+        //（3 行文本 + 标题 + 内边距不挤）。power 与 alarm 中心对齐（横向边水平），
+        // done 与 unload 中心对齐（横向边水平），alarm 底到 unload 顶留 55px 走
+        // 竖向虚线。改坐标后“复位布局”即生效；老版本 FlowLayout.json 见 LayoutStore。
         public static readonly List<NodeDef> Nodes = new List<NodeDef>
         {
             new NodeDef
             {
                 Id = "start", Title = "启动开阀",
-                DefaultRect = new Rectangle(60, 30, 190, 92),
+                DefaultRect = new Rectangle(60, 30, 220, 110),
                 Keys = new List<NodeKey>
                 {
                     new NodeKey("ZeroDurationPolicy", "0时长策略", EditorKind.Enum),
@@ -99,7 +104,7 @@ namespace AgingTestSystem.Views
             new NodeDef
             {
                 Id = "vacuum", Title = "抽真空",
-                DefaultRect = new Rectangle(60, 162, 190, 104),
+                DefaultRect = new Rectangle(60, 185, 220, 130),
                 Keys = new List<NodeKey>
                 {
                     new NodeKey("SkipVacuum", "跳过抽真空", EditorKind.Bool),
@@ -110,7 +115,7 @@ namespace AgingTestSystem.Views
             new NodeDef
             {
                 Id = "power", Title = "上电老化",
-                DefaultRect = new Rectangle(60, 306, 190, 104),
+                DefaultRect = new Rectangle(60, 360, 220, 130),
                 Keys = new List<NodeKey>
                 {
                     new NodeKey("MaxTestDurationSeconds", "全局时长(秒)", EditorKind.Text),
@@ -120,7 +125,7 @@ namespace AgingTestSystem.Views
             new NodeDef
             {
                 Id = "done", Title = "完成下电",
-                DefaultRect = new Rectangle(60, 450, 190, 104),
+                DefaultRect = new Rectangle(60, 535, 220, 125),
                 Keys = new List<NodeKey>
                 {
                     new NodeKey("CompletionJudgePolicy", "完成判定", EditorKind.Enum),
@@ -131,7 +136,7 @@ namespace AgingTestSystem.Views
             new NodeDef
             {
                 Id = "alarm", Title = "报警联动",
-                DefaultRect = new Rectangle(350, 296, 210, 124),
+                DefaultRect = new Rectangle(430, 340, 240, 150),
                 Keys = new List<NodeKey>
                 {
                     new NodeKey("AgingPressureLossPolicy", "老化失压", EditorKind.Enum),
@@ -145,7 +150,7 @@ namespace AgingTestSystem.Views
             new NodeDef
             {
                 Id = "recover", Title = "断电恢复",
-                DefaultRect = new Rectangle(350, 40, 210, 92),
+                DefaultRect = new Rectangle(430, 30, 240, 105),
                 Keys = new List<NodeKey>
                 {
                     new NodeKey("PowerLossPolicy", "恢复策略", EditorKind.Enum),
@@ -154,7 +159,7 @@ namespace AgingTestSystem.Views
             new NodeDef
             {
                 Id = "unload", Title = "下料判定",
-                DefaultRect = new Rectangle(350, 460, 210, 92),
+                DefaultRect = new Rectangle(430, 545, 240, 115),
                 Info = "待判定模式下，主界面操作区【下料判定】按钮录 PASS/FAIL。\r\n判定口径在【完成下电】节点改。"
             },
         };
@@ -347,7 +352,11 @@ namespace AgingTestSystem.Views
         public static class LayoutStore
         {
             private const string FileName = "FlowLayout.json";
-            private const int Version = 1;
+            // V2（2026-09-13）：缺省布局从挤列（宽190/列距100/行距40）换成截图式宽松
+            // 两列（宽220~240/列距150/行距45+）。版本号递进即迁移：V1 存的坐标全是
+            // 按旧缺省摆的（没拖过的是复位存的旧缺省，拖过的也是相对旧缺省的），直接
+            // 沿用会继续挤，所以 V1 文件一律丢弃、回新缺省（拖一次即存 V2，下次接着用）。
+            private const int Version = 2;
 
             private class LayoutFile
             {
@@ -371,6 +380,8 @@ namespace AgingTestSystem.Views
                     if (!File.Exists(path)) return result;
                     var file = JsonConvert.DeserializeObject<LayoutFile>(File.ReadAllText(path));
                     if (file == null || file.nodes == null) return result;
+                    // 版本不一致按缺省（V1→V2 换宽松布局，老坐标继续用会挤；丢弃后拖一次即存 V2）
+                    if (file.version != Version) return result;
                     foreach (var kv in file.nodes)
                     {
                         if (string.IsNullOrEmpty(kv.Key) || kv.Value == null || kv.Value.Length < 2)
