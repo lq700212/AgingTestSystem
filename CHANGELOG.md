@@ -3,6 +3,45 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.72.9 — 缺省项目改"烧屏测试" + 状态字下移（2026-09-12，用户点名）
+
+### 改动范围
+- 缺省项目名 `Default`→`烧屏测试`（项目未上线，无老包袱，改干净不做迁移）：
+  `Services/ProjectProfile.cs`（缺省返回 + 3 处注释）、`App.config` 的
+  `ActiveProject` 初值、`MainForm` 顶栏兜底与 Designer 初值、
+  `ProjectSwitchForm` 头部 ASCII 图。回归 +1 条"缺省项目名=烧屏测试"（全量 1187→1188）。
+- `Views/MainForm.Designer.cs` — `lblRunStatus` Y 30→44（Sunny 组框标题占顶部
+  约 30px，原来贴着标题边；组框高 84，截图确认留白正常）。
+- 顶栏文本统一 9pt + 行内垂直居中：`lblPermissionPrefix`/`lblPermissionRole`/
+  `lblCommStatusLabel`/`lblCommStatus` 补 9F 字体（`lblProject` 本来就是 9F）；
+  通讯两标签改 `Dock=Fill` + 左中对齐（原来贴顶），权限两标签上边距 6px。
+  harness 断言五段全 9pt、中线互差 ≤1px，截图四段同高。
+- 项目切换权限：中途按用户要求放开给操作员过一次，随后用户改主意恢复
+  "仅管理员"原逻辑（`MenuParamProject_Click` 的 Administrator 检查原样回退，
+  无行为变化，不单独记版本）。
+
+### 验证
+- harness 直启主窗：顶栏回填"当前项目：烧屏测试"，状态组截图"空闲"离上缘正常。
+- 踩坑：bin 里残留旧探针 `UiProbe*.exe.config`（含 ActiveProject=Default）会污染
+  `ConfigurationManager` 读数导致假 FAIL——探针跑前先清 `UiProbe*.exe.config`。
+- `build_and_test.ps1 -Affected`（用例改动兜底全量）：构建 + 冒烟 + **1188 全绿**。
+
+## V1.72.8 — 顶栏标题删繁就简 + 运行状态字体统一（2026-09-12，用户点名）
+
+### 改动范围
+- `Views/MainForm.Designer.cs` — 删 `lblTitle`（"老化测试系统V1.16"与窗口标题栏
+  重复多余；new/属性/挂接/列/声明五处同步删，配对扫描通过）：`lblProject`
+  移到第 1 列（列宽回到 40/25/20/15），顶栏=项目 + 权限 + 通讯标签 + 通讯状态；
+  权限/通讯状态两组保留不动。版本说明发版提醒注释同步（标题只剩窗体标题栏）。
+- `Views/MainForm.Designer.cs` — `lblRunStatus` 删单写的微软雅黑 10F，
+  与 `lblFanState` 同走默认字体（同源不分叉，V1.72 血泪）；`lblFanState`
+  X 100→112，与"送风机状态"标签间隙 2→14px。
+
+### 验证
+- harness 直启主窗：`lblTitle` 字段已不存在，顶栏截图"当前项目：Default +
+  当前操作权限：操作员 + 通讯连接状态：未连接"三段无挤压、着色正常。
+- `build_and_test.ps1 -Affected` 构建 + 冒烟 + 回归子集 206 断言全绿。
+
 ## V1.72.7 — 顶栏显示当前项目 + 两弹窗标签输入防叠（2026-09-12，用户点名）
 
 ### 改动范围

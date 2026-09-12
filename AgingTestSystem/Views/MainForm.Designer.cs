@@ -48,7 +48,6 @@
             this.rootScrollPanel = new System.Windows.Forms.Panel();
             this.tableLayoutPanelMain = new System.Windows.Forms.TableLayoutPanel();
             this.tableLayoutPanelTop = new System.Windows.Forms.TableLayoutPanel();
-            this.lblTitle = new Sunny.UI.UILabel();
             this.lblProject = new Sunny.UI.UILabel();
             this.panelPermission = new System.Windows.Forms.FlowLayoutPanel();
             this.lblPermissionPrefix = new Sunny.UI.UILabel();
@@ -141,20 +140,19 @@
             this.tableLayoutPanelMain.TabIndex = 0;
             // 
             // tableLayoutPanelTop
-            // 【V1.72.7】加"当前项目"列（切错项目=跑错工艺，首屏可见防呆）：标题 30% +
-            // 项目 22% + 权限 20% + 通讯标签 15% + 通讯状态 13%。
+            // 【V1.72.7】顶栏显示当前项目（切错项目=跑错工艺，首屏可见防呆）；
+            // 【V1.72.8】删 lblTitle（软件名窗口标题栏已有，顶栏重复多余），当前项目
+            // 直接占第 1 列（列宽回到 40/25/20/15，权限/通讯状态两组保留不动）。
             //
-            this.tableLayoutPanelTop.ColumnCount = 5;
-            this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 30F));
-            this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 22F));
+            this.tableLayoutPanelTop.ColumnCount = 4;
+            this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 40F));
+            this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
             this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
             this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 15F));
-            this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 13F));
-            this.tableLayoutPanelTop.Controls.Add(this.lblTitle, 0, 0);
-            this.tableLayoutPanelTop.Controls.Add(this.lblProject, 1, 0);
-            this.tableLayoutPanelTop.Controls.Add(this.panelPermission, 2, 0);
-            this.tableLayoutPanelTop.Controls.Add(this.lblCommStatusLabel, 3, 0);
-            this.tableLayoutPanelTop.Controls.Add(this.lblCommStatus, 4, 0);
+            this.tableLayoutPanelTop.Controls.Add(this.lblProject, 0, 0);
+            this.tableLayoutPanelTop.Controls.Add(this.panelPermission, 1, 0);
+            this.tableLayoutPanelTop.Controls.Add(this.lblCommStatusLabel, 2, 0);
+            this.tableLayoutPanelTop.Controls.Add(this.lblCommStatus, 3, 0);
             this.tableLayoutPanelTop.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tableLayoutPanelTop.Location = new System.Drawing.Point(3, 3);
             this.tableLayoutPanelTop.Name = "tableLayoutPanelTop";
@@ -162,29 +160,20 @@
             this.tableLayoutPanelTop.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanelTop.Size = new System.Drawing.Size(1274, 24);
             this.tableLayoutPanelTop.TabIndex = 0;
-            // 
-            // lblTitle
-            // 
-            this.lblTitle.AutoSize = true;
-            this.lblTitle.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Bold);
-            this.lblTitle.Location = new System.Drawing.Point(3, 0);
-            this.lblTitle.Name = "lblTitle";
-            this.lblTitle.Size = new System.Drawing.Size(113, 17);
-            this.lblTitle.TabIndex = 0;
-            this.lblTitle.Text = "老化测试系统V1.16";
             //
             // lblProject - 当前项目显示（【V1.72.7 新增】切错项目=跑错工艺，顶栏首屏可见防呆；
             // 项目名由 MainForm 构造里 UpdateProjectDisplay 回填，切换项目必须重启故只需设一次；
-            // Dock=Fill 占满 22% 列，超长项目名 AutoEllipsis 省略号不断行）。
+            // Dock=Fill 占满第 1 列（【V1.72.8】标题删后项目移到该列，40% 宽），
+            // 超长项目名 AutoEllipsis 省略号不断行）。
             //
             this.lblProject.AutoEllipsis = true;
             this.lblProject.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblProject.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Bold);
-            this.lblProject.Location = new System.Drawing.Point(385, 0);
+            this.lblProject.Location = new System.Drawing.Point(3, 0);
             this.lblProject.Name = "lblProject";
-            this.lblProject.Size = new System.Drawing.Size(274, 24);
+            this.lblProject.Size = new System.Drawing.Size(503, 24);
             this.lblProject.TabIndex = 4;
-            this.lblProject.Text = "当前项目：Default";
+            this.lblProject.Text = "当前项目：烧屏测试";
             this.lblProject.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             //
             // panelPermission - 当前操作权限显示容器（V1.19.7：拆为"前缀 + 角色名"两个标签）
@@ -208,8 +197,9 @@
             // lblPermissionPrefix - 固定前缀"当前操作权限: "（始终默认黑字）
             // 
             this.lblPermissionPrefix.AutoSize = true;
+            this.lblPermissionPrefix.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.lblPermissionPrefix.Location = new System.Drawing.Point(3, 3);
-            this.lblPermissionPrefix.Margin = new System.Windows.Forms.Padding(0);
+            this.lblPermissionPrefix.Margin = new System.Windows.Forms.Padding(0, 6, 0, 0);
             this.lblPermissionPrefix.Name = "lblPermissionPrefix";
             this.lblPermissionPrefix.Size = new System.Drawing.Size(110, 17);
             this.lblPermissionPrefix.TabIndex = 0;
@@ -218,8 +208,9 @@
             // lblPermissionRole - 角色名（V1.19.7：运行时按权限着色）
             // 
             this.lblPermissionRole.AutoSize = true;
+            this.lblPermissionRole.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.lblPermissionRole.Location = new System.Drawing.Point(110, 3);
-            this.lblPermissionRole.Margin = new System.Windows.Forms.Padding(0);
+            this.lblPermissionRole.Margin = new System.Windows.Forms.Padding(0, 6, 0, 0);
             this.lblPermissionRole.Name = "lblPermissionRole";
             this.lblPermissionRole.Size = new System.Drawing.Size(40, 17);
             this.lblPermissionRole.TabIndex = 1;
@@ -228,21 +219,27 @@
             // lblCommStatusLabel
             // 
             this.lblCommStatusLabel.AutoSize = true;
+            this.lblCommStatusLabel.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblCommStatusLabel.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.lblCommStatusLabel.Location = new System.Drawing.Point(908, 0);
             this.lblCommStatusLabel.Name = "lblCommStatusLabel";
             this.lblCommStatusLabel.Size = new System.Drawing.Size(83, 12);
             this.lblCommStatusLabel.TabIndex = 2;
             this.lblCommStatusLabel.Text = "通讯连接状态:";
+            this.lblCommStatusLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // lblCommStatus
             // 
             this.lblCommStatus.AutoSize = true;
+            this.lblCommStatus.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblCommStatus.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.lblCommStatus.ForeColor = System.Drawing.Color.Red;
             this.lblCommStatus.Location = new System.Drawing.Point(1186, 0);
             this.lblCommStatus.Name = "lblCommStatus";
             this.lblCommStatus.Size = new System.Drawing.Size(41, 12);
             this.lblCommStatus.TabIndex = 3;
             this.lblCommStatus.Text = "未连接";
+            this.lblCommStatus.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // tableLayoutPanelMenu
             // 
@@ -349,8 +346,7 @@
             // lblRunStatus
             // 
             this.lblRunStatus.AutoSize = true;
-            this.lblRunStatus.Font = new System.Drawing.Font("微软雅黑", 10F);
-            this.lblRunStatus.Location = new System.Drawing.Point(15, 30);
+            this.lblRunStatus.Location = new System.Drawing.Point(15, 44);
             this.lblRunStatus.Name = "lblRunStatus";
             this.lblRunStatus.Size = new System.Drawing.Size(37, 20);
             this.lblRunStatus.TabIndex = 0;
@@ -419,7 +415,7 @@
             // 
             this.lblFanState.AutoSize = true;
             this.lblFanState.ForeColor = System.Drawing.Color.Red;
-            this.lblFanState.Location = new System.Drawing.Point(100, 34);
+            this.lblFanState.Location = new System.Drawing.Point(112, 34);
             this.lblFanState.Name = "lblFanState";
             this.lblFanState.Size = new System.Drawing.Size(44, 17);
             this.lblFanState.TabIndex = 7;
@@ -658,9 +654,7 @@
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelMain;
         /// <summary>顶部信息栏容器</summary>
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelTop;
-        /// <summary>系统标题标签</summary>
-        private Sunny.UI.UILabel lblTitle;
-        /// <summary>当前项目显示标签（【V1.72.7 新增】顶栏第 2 列，构造里回填项目名）</summary>
+        /// <summary>当前项目显示标签（【V1.72.7 新增】顶栏第 1 列，构造里回填项目名）</summary>
         private Sunny.UI.UILabel lblProject;
         /// <summary>当前操作权限显示容器（V1.19.7：拆为前缀+角色名两个标签）</summary>
         private System.Windows.Forms.FlowLayoutPanel panelPermission;

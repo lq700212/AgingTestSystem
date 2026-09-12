@@ -2281,7 +2281,7 @@ namespace AgingTestSystem.Views
         private void UpdateProjectDisplay(string projectName)
         {
             if (lblProject == null) return;
-            lblProject.Text = "当前项目：" + (string.IsNullOrWhiteSpace(projectName) ? "Default" : projectName.Trim());
+            lblProject.Text = "当前项目：" + (string.IsNullOrWhiteSpace(projectName) ? "烧屏测试" : projectName.Trim());
         }
 
         /// <summary>
@@ -2540,8 +2540,9 @@ namespace AgingTestSystem.Views
         /// （V1.19.12 更名：MenuHelpAbout_Click → MenuHelpVersionInfo_Click，菜单项"关于"改"版本说明"；
         ///  V1.58.4 起按商用软件"关于/版本说明"通用规范重写内容：
         ///  软件全称 → 版本号 → 用途简介 → 运行环境 → 功能特性（按业务分类）→ 版权声明）
-        /// 【发版提醒】版本号 V1.58.4 与主窗体标题 lblTitle / 窗体标题一致后，这里也要同步手改，
+        /// 【发版提醒】版本号 V1.58.4 与窗体标题一致后，这里也要同步手改，
         ///  否则版本说明会与实际版本脱节（曾长期停留在 V1.16 的教训）。
+        ///  （V1.72.8 顶栏 lblTitle 已删，标题只剩窗体标题栏，不用两处同步了）
         /// 【V1.60.4】MessageBox 换成普通窗体：系统弹窗跟不了深色主题，自定义窗才能 ApplyTo。
         /// </summary>
         private void MenuHelpVersionInfo_Click(object sender, EventArgs e)
