@@ -76,6 +76,8 @@
   GroupBox→UIGroupBox / DataGridView→UIDataGridView；日志框/CheckBox/NumericUpDown/
   ListBox/状态条保持原生。语义色经 Style=Custom+FillColor/RectColor（原生 BackColor
   在自绘按钮上画不出来）；默认灰主按钮走 Sunny 蓝，取消关闭走 Sunny 灰。
+  （V1.72.1 收敛：弹窗确认/保存/加入队列一律 DodgerBlue + 白字 + Custom，
+  与登录确认同色；主窗启动蓝/批量绿等操作语义色不动。）
   - UIForm 自绘标题占 35px 客户区：绝对布局整体下移 35px + 窗体加高 + MinimumSize
     锁缩小；Dock 布局加顶 Pad(38)；Dock 窗内容高度不够时窗体加高（ID 绑定血泪：
     保存按钮被挤出）。Y&lt;35 的控件 Add 时被静默搬到 35（harness 实测）。
@@ -96,6 +98,12 @@
   - 多行块编辑必须逐行核对：Edit 工具会模糊匹配吞掉间隔行（V1.71 实锤：27 行块吞掉
     3 个 `new`，构造即 NRE）。改完 Designer 必跑"声明/实例化配对"扫描 +
     harness 构造一次（NRE 当场现形）+ 截图目检。
+  - 运行时居中只调 X 不动 Y（V1.72.1 公共参数血泪）：Designer 的 Y 即运行 Y
+    （已含 35px 标题区），CenterControls 只算水平居中；连 Y 一起写会导致
+    "设计器看离标题太近、跑起来正常"，所见非所得。回归锁 CenterControls 调后 Y 不变。
+  - Sunny UILabel 默认宋体 12pt，"开始时间:"实测 79px（V1.72.1 历史窗血泪）：
+    标签 + 日期框间距按实测文本宽（`TextRenderer.MeasureText`，与生产同口径）留 ≥5px，
+    不要按 Designer 的 Width/肉眼估；未显示时 Width 未布局，断言走实测宽。
 - **流程驾驶舱约定（V1.70）**：拓扑画死（物理锁死，通用连线编辑器会让客户删掉安全联锁，
   参考 HJVision mFormFlowEdit 后否决）；节点只挂真实 key（ key 必须全是 DeviceConfig
   真属性，回归锁），连线只读；保存走 `SettingsForm.PersistChanges`（与设置表同一条路，
@@ -107,6 +115,9 @@
   自动检索回调 + 头部 ASCII 图）→ `SetStationRecipe` 下发 → `StationInfo`（+`Clone`）→
   `ApplyStationInfo` 叠加 → `BarometerData`（+`Clone`）。漏一处就是"存了用不上/下了传不到"，
   对照此链逐项打勾；`StationSettingsCache` 只在窗口需要回填时才加。
+  **负压 0 值语义（V1.72.2 血泪）**：`SetStationRecipe` 只认 null = 保持/回退全局，
+  下发 0 就是定格 0（阈值 0≈永远到位，真空保护形同虚设）；老配方文件缺字段读出 0，
+  回填框显示"0"待人工复核，不设"0=全局"魔法回退。上站前逐条复核 `Recipes.json` 的 0 值。
 - **SunnyUI 页签挂接红线（V1.63.2 血泪）**：`UITabControl` + `UIPage` 必须用
   `tabControl.AddPage(page)` 挂接（内部建 TabPage + Dock=Fill + 绑定 + Show()），
   禁止手写 `TabPage` 包裹 + `Controls.Add`——漏掉 `Show()` 会导致页面 `Visible=false`、

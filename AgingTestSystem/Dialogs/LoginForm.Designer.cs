@@ -116,7 +116,7 @@
             this.chkRemember.Text = "记住密码";
             this.chkRemember.UseVisualStyleBackColor = true;
             //
-            // btnOK - 确认按钮（语义绿：Sunny 自绘按钮走 Style=Custom+FillColor，原生 BackColor 画不出来）
+            // btnOK - 确认按钮（主按钮蓝：Sunny 自绘按钮走 Style=Custom+FillColor，原生 BackColor 画不出来）
             //
             this.btnOK.FillColor = System.Drawing.Color.DodgerBlue;
             this.btnOK.RectColor = System.Drawing.Color.DodgerBlue;

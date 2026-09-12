@@ -59,30 +59,31 @@
             this.lblStart.Name = "lblStart";
             this.lblStart.Text = "开始时间:";
             //
-            // dtpStart - 开始时间选择器
+            // dtpStart - 开始时间选择器（宽 150：Short 日期 + 下拉按钮完整显示；
+            // X=100：标签实测 79px（宋体12pt）+ 右缘留 5px，防 AutoSize 稍大即叠）
             //
             this.dtpStart.Format = System.Windows.Forms.DateTimePickerFormat.Short;
-            this.dtpStart.Location = new System.Drawing.Point(80, 14);
+            this.dtpStart.Location = new System.Drawing.Point(100, 14);
             this.dtpStart.Name = "dtpStart";
-            this.dtpStart.Size = new System.Drawing.Size(130, 21);
+            this.dtpStart.Size = new System.Drawing.Size(150, 21);
             //
             // lblEnd - 结束时间标签
             //
             this.lblEnd.AutoSize = true;
-            this.lblEnd.Location = new System.Drawing.Point(225, 18);
+            this.lblEnd.Location = new System.Drawing.Point(265, 18);
             this.lblEnd.Name = "lblEnd";
             this.lblEnd.Text = "结束时间:";
             //
-            // dtpEnd - 结束时间选择器
+            // dtpEnd - 结束时间选择器（同 dtpStart 加宽防裁剪；X=350 与标签留 5px）
             //
             this.dtpEnd.Format = System.Windows.Forms.DateTimePickerFormat.Short;
-            this.dtpEnd.Location = new System.Drawing.Point(290, 14);
+            this.dtpEnd.Location = new System.Drawing.Point(350, 14);
             this.dtpEnd.Name = "dtpEnd";
-            this.dtpEnd.Size = new System.Drawing.Size(130, 21);
+            this.dtpEnd.Size = new System.Drawing.Size(150, 21);
             //
             // btnQuery - 查询按钮
             //
-            this.btnQuery.Location = new System.Drawing.Point(440, 12);
+            this.btnQuery.Location = new System.Drawing.Point(520, 12);
             this.btnQuery.Name = "btnQuery";
             this.btnQuery.Size = new System.Drawing.Size(80, 28);
             this.btnQuery.Text = "查询";
@@ -90,7 +91,7 @@
             //
             // btnExport - 导出按钮（预留功能）
             //
-            this.btnExport.Location = new System.Drawing.Point(530, 12);
+            this.btnExport.Location = new System.Drawing.Point(610, 12);
             this.btnExport.Name = "btnExport";
             this.btnExport.Size = new System.Drawing.Size(80, 28);
             this.btnExport.Text = "导出";

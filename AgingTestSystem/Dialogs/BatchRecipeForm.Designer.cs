@@ -486,10 +486,10 @@ namespace AgingTestSystem.Dialogs
             // 
             // btnAddToQueue
             // 
-            // btnAddToQueue - 加入队列（语义绿，与保存同款）
+            // btnAddToQueue - 加入队列（主按钮蓝，与各弹窗确认按钮统一）
             //
-            this.btnAddToQueue.FillColor = System.Drawing.Color.LimeGreen;
-            this.btnAddToQueue.RectColor = System.Drawing.Color.LimeGreen;
+            this.btnAddToQueue.FillColor = System.Drawing.Color.DodgerBlue;
+            this.btnAddToQueue.RectColor = System.Drawing.Color.DodgerBlue;
             this.btnAddToQueue.ForeColor = System.Drawing.Color.White;
             this.btnAddToQueue.Style = Sunny.UI.UIStyle.Custom;
             this.btnAddToQueue.Location = new System.Drawing.Point(150, 10);

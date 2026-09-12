@@ -36,8 +36,11 @@ namespace AgingTestSystem.Dialogs
             // 
             // lblThreshold
             // 
+            // lblThreshold（Y=65：UIForm 自绘蓝标题占 35px 客户区，设计值即运行值，所见即所得；
+            // CenterControls 只调水平居中、不动 Y，见 .cs 注释）
+            //
             this.lblThreshold.AutoSize = true;
-            this.lblThreshold.Location = new System.Drawing.Point(54, 30);
+            this.lblThreshold.Location = new System.Drawing.Point(54, 65);
             this.lblThreshold.Name = "lblThreshold";
             this.lblThreshold.Size = new System.Drawing.Size(107, 12);
             this.lblThreshold.TabIndex = 4;
@@ -47,7 +50,7 @@ namespace AgingTestSystem.Dialogs
             // 
             this.nudThreshold.DecimalPlaces = 1;
             this.nudThreshold.Increment = 1m;
-            this.nudThreshold.Location = new System.Drawing.Point(167, 27);
+            this.nudThreshold.Location = new System.Drawing.Point(167, 62);
             this.nudThreshold.Maximum = 9999m;
             this.nudThreshold.Minimum = -9999m;
             this.nudThreshold.Name = "nudThreshold";
@@ -55,10 +58,10 @@ namespace AgingTestSystem.Dialogs
             this.nudThreshold.TabIndex = 3;
             this.nudThreshold.Value = -5m;
             // 
-            // btnSave - 保存按钮（语义绿；深色下绿底白字本来就清晰，无需 V1.60.4 的 DimGray 特例）
+            // btnSave - 保存按钮（主按钮蓝；深浅两色下蓝底白字都清晰）
             //
-            this.btnSave.FillColor = System.Drawing.Color.LimeGreen;
-            this.btnSave.RectColor = System.Drawing.Color.LimeGreen;
+            this.btnSave.FillColor = System.Drawing.Color.DodgerBlue;
+            this.btnSave.RectColor = System.Drawing.Color.DodgerBlue;
             this.btnSave.ForeColor = System.Drawing.Color.White;
             this.btnSave.Style = Sunny.UI.UIStyle.Custom;
             this.btnSave.Location = new System.Drawing.Point(112, 110);
@@ -78,7 +81,7 @@ namespace AgingTestSystem.Dialogs
             this.Controls.Add(this.btnSave);
             this.Controls.Add(this.nudThreshold);
             this.Controls.Add(this.lblThreshold);
-            // 【V1.71】UIForm 自绘蓝标题：删 FormBorderStyle；CenterControls 里 Y 坐标整体下移 35px。
+            // 【V1.71】UIForm 自绘蓝标题：删 FormBorderStyle；Y 已含 35px 标题区（CenterControls 只居中 X）。
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.Name = "CommonParameterForm";

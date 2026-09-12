@@ -162,10 +162,10 @@ namespace AgingTestSystem.Dialogs
             this.panelRight.Size = new System.Drawing.Size(444, 444);
             this.panelRight.TabIndex = 1;
             //
-            // btnSave - 保存按钮（语义绿，与其它弹窗确认按钮统一）
+            // btnSave - 保存按钮（主按钮蓝，与其它弹窗确认按钮统一）
             //
-            this.btnSave.FillColor = System.Drawing.Color.LimeGreen;
-            this.btnSave.RectColor = System.Drawing.Color.LimeGreen;
+            this.btnSave.FillColor = System.Drawing.Color.DodgerBlue;
+            this.btnSave.RectColor = System.Drawing.Color.DodgerBlue;
             this.btnSave.ForeColor = System.Drawing.Color.White;
             this.btnSave.Style = Sunny.UI.UIStyle.Custom;
             this.btnSave.Location = new System.Drawing.Point(330, 395);

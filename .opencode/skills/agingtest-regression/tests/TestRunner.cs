@@ -185,6 +185,8 @@ namespace AgingTestSystem.Tests
             Module("DeviceManagerMes", DeviceManagerMesTests);
             Module("DeviceManagerRules", DeviceManagerRulesTests);
             Module("FlowCockpitV170", FlowCockpitTests);
+            Module("UiStyleV172_1", UiStyleV172_1Tests);
+            Module("LegacyRecipeGuard", LegacyRecipeGuardTests);
 
             // 统一清理临时目录（尽力而为，删不掉不影响结果）
             foreach (string dir in _tempDirs)
@@ -3567,6 +3569,221 @@ namespace AgingTestSystem.Tests
 
             ThemeManager.SetMode(AppThemeMode.Light, false); // 收尾复位
             sPnl.Dispose();
+        }
+
+        // =====================================================================
+        // UiStyleV172_1 —— 主按钮蓝 + 历史日期布局 + 公共参数所见即所得（V1.72.1）
+        // 背景：登录窗确认按钮先换蓝（V1.72），剩余 5 个主按钮跟进统一 DodgerBlue；
+        // 历史窗日期框重叠/裁剪加宽修复；公共参数设计器 Y 与运行时对齐（只居中 X）。
+        // 全部构造真窗体断言（与 HistoryCsv/UiPureHelpers 同套路，不弹模态框）。
+        // =====================================================================
+        private static void UiStyleV172_1Tests()
+        {
+            // —— 主按钮蓝判定：DodgerBlue + Rect同色 + 白字 + Custom ——
+            Func<Sunny.UI.UIButton, bool> isMainBlue = btn =>
+                btn != null
+                && btn.FillColor.ToArgb() == Color.DodgerBlue.ToArgb()
+                && btn.RectColor.ToArgb() == Color.DodgerBlue.ToArgb()
+                && btn.ForeColor.ToArgb() == Color.White.ToArgb()
+                && btn.Style.ToString() == "Custom";
+
+            // —— 改密窗（需 UserManager：隔离目录防污染真实 Users.json） ——
+            EnterCleanDir();
+            var um = new UserManager();
+            var pwdForm = new ChangePasswordForm(um);
+            try
+            {
+                var btn = typeof(ChangePasswordForm).GetField("btnOK",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(pwdForm) as Sunny.UI.UIButton;
+                Check("改密窗确认钮主按钮蓝", isMainBlue(btn));
+            }
+            finally { pwdForm.Dispose(); }
+
+            // —— 批号窗（无参可构造） ——
+            var lotForm = new InputLotForm();
+            try
+            {
+                var btn = typeof(InputLotForm).GetField("btnOK",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(lotForm) as Sunny.UI.UIButton;
+                Check("批号窗确定钮主按钮蓝", isMainBlue(btn));
+            }
+            finally { lotForm.Dispose(); }
+
+            // —— 批量配方窗（dm=null 纯保存模式可构造） ——
+            var batchForm = new BatchRecipeForm(null, new List<RecipeConfig>(), new List<int>());
+            try
+            {
+                var btn = typeof(BatchRecipeForm).GetField("btnAddToQueue",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(batchForm) as Sunny.UI.UIButton;
+                Check("批量配方加入队列主按钮蓝", isMainBlue(btn));
+            }
+            finally { batchForm.Dispose(); }
+
+            // —— 公共参数窗（dm=null 可构造；只调 CenterControls 不点保存） ——
+            var pmForm = new CommonParameterForm(null);
+            try
+            {
+                var btn = typeof(CommonParameterForm).GetField("btnSave",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(pmForm) as Sunny.UI.UIButton;
+                Check("公共参数保存钮主按钮蓝", isMainBlue(btn));
+
+                // 设计器 Y 即运行 Y（lbl 65 / nud 62 / btn 110，含 35px 标题区）
+                var lbl = typeof(CommonParameterForm).GetField("lblThreshold",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(pmForm) as Control;
+                var nud = typeof(CommonParameterForm).GetField("nudThreshold",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(pmForm) as Control;
+                Check("公共参数设计Y含标题区(lbl65/nud62/btn110)",
+                    lbl != null && nud != null && btn != null
+                    && lbl.Top == 65 && nud.Top == 62 && btn.Top == 110);
+                // CenterControls 只居中 X、不动 Y（所见即所得锁：调两次 Y 不变）
+                var center = typeof(CommonParameterForm).GetMethod("CenterControls",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Check("反射找到 CenterControls", center != null);
+                if (center != null)
+                {
+                    int y0 = lbl.Top, y1 = nud.Top, y2 = btn.Top;
+                    center.Invoke(pmForm, null);
+                    Check("CenterControls不动Y(所见即所得)",
+                        lbl.Top == y0 && nud.Top == y1 && btn.Top == y2);
+                    Check("CenterControls后控件仍在窗内",
+                        lbl.Left >= 0 && nud.Left > lbl.Left && btn.Left >= 0
+                        && nud.Right <= pmForm.ClientSize.Width && btn.Right <= pmForm.ClientSize.Width);
+                }
+            }
+            finally { pmForm.Dispose(); }
+
+            // —— ID 绑定窗（lotNumber 即可构造，scanner/dm 均缺省 null） ——
+            var idForm = new IdBindingForm("LOT-1");
+            try
+            {
+                var btn = typeof(IdBindingForm).GetField("btnSave",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(idForm) as Sunny.UI.UIButton;
+                Check("ID绑定保存钮主按钮蓝", isMainBlue(btn));
+            }
+            finally { idForm.Dispose(); }
+
+            // —— 历史窗日期布局（加宽 150 + 间隙防重叠） ——
+            var hisForm = new HistoryRecordForm();
+            try
+            {
+                var t = typeof(HistoryRecordForm);
+                var lblS = t.GetField("lblStart", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(hisForm) as Control;
+                var dtpS = t.GetField("dtpStart", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(hisForm) as Control;
+                var lblE = t.GetField("lblEnd", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(hisForm) as Control;
+                var dtpE = t.GetField("dtpEnd", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(hisForm) as Control;
+                var btnQ = t.GetField("btnQuery", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(hisForm) as Control;
+                var btnX = t.GetField("btnExport", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(hisForm) as Control;
+                Check("历史窗6件全建好",
+                    lblS != null && dtpS != null && lblE != null && dtpE != null && btnQ != null && btnX != null);
+                if (dtpS != null && dtpE != null)
+                {
+                    Check("日期框加宽150防裁剪", dtpS.Width >= 150 && dtpE.Width >= 150);
+                }
+                if (lblS != null && dtpS != null && lblE != null && dtpE != null)
+                {
+                    // 标签 AutoSize 的 Width 在未显示时未布局，用实测文本宽判定
+                    //（与 CommonParameterForm.CenterControls 同口径）
+                    Func<Control, int> textW = c =>
+                        System.Windows.Forms.TextRenderer.MeasureText(c.Text, c.Font).Width;
+                    // 标签右缘与日期框左缘留 ≥3px（原来 80-15=65 紧贴，字体稍大即叠）
+                    Check("开始组无重叠",
+                        dtpS.Left >= lblS.Left + textW(lblS) + 3);
+                    Check("结束组无重叠",
+                        dtpE.Left >= lblE.Left + textW(lblE) + 3);
+                    Check("两组先后不碰",
+                        lblE.Left >= dtpS.Left + dtpS.Width + 3);
+                }
+            }
+            finally { hisForm.Dispose(); }
+
+            // —— 语义保护：深色 ApplyTo 不改主按钮蓝（ThemeManager 只动中性色） ——
+            var guard = new Sunny.UI.UIButton();
+            ThemeManager.ApplyButtonColors(guard, Color.DodgerBlue, Color.White);
+            var pnl = new Panel();
+            pnl.Controls.Add(guard);
+            ThemeManager.SetMode(AppThemeMode.Dark, false);
+            ThemeManager.ApplyTo(pnl);
+            Check("深色下主按钮蓝保留", guard.FillColor.ToArgb() == Color.DodgerBlue.ToArgb());
+            ThemeManager.SetMode(AppThemeMode.Light, false);
+            ThemeManager.ApplyTo(pnl);
+            Check("浅色下主按钮蓝保留", guard.FillColor.ToArgb() == Color.DodgerBlue.ToArgb());
+            ThemeManager.SetMode(AppThemeMode.Light, false);
+            pnl.Dispose();
+        }
+
+        // =====================================================================
+        // LegacyRecipeGuard —— V1.59 老配方 0 值语义锁（V1.72.2）
+        // 背景：V1.59 起 RecipeConfig.NegativePressure 字段就存在，但三录入窗无此输入框，
+        // 新建配方该字段恒为 decimal 缺省 0（死数据）；批量窗/工位窗下发时原样传入 0，
+        // SetStationRecipe 里 0 = 有值（只认 null = 保持/回退全局），于是阈值定格 0，
+        // 在负压域里≈永远到位，真空保护形同虚设。V1.66 只是让它可见（框里显示 0）+
+        // 新建默认填全局，不敢设"0=全局"魔法回退（存什么下什么，所见即所得）。
+        // 本模块把"0≠全局、null=回退、老文件读出 0、新建默认全局"四条语义锁死：
+        // 以后谁动下发语义必须先过这里；现场老 Recipes.json 的 0 值须人工复核工艺值。
+        // 全程只构造对象不断言弹窗不启采集（DeviceManager 不 Start，无线程无时序）。
+        // =====================================================================
+        private static void LegacyRecipeGuardTests()
+        {
+            // —— 老文件（V1.59 时代：无 NegativePressure/DisplayMode 字段）能读 ——
+            EnterCleanDir();
+            string legacyJson = "[{\"Id\":1,\"Name\":\"老配方A\",\"DelayTime\":\"00:01:30\","
+                + "\"StartTime\":\"08:30:00\",\"LimitTemperature\":75.5,"
+                + "\"CreateTime\":\"2026-08-25T10:00:00\",\"IsEnabled\":true}]";
+            File.WriteAllText(ProjectProfile.ResolveDataPath("Recipes.json", true), legacyJson);
+            var legacy = RecipeStorage.Load();
+            Check("老配方文件加载成功", legacy != null && legacy.Count == 1);
+            if (legacy == null || legacy.Count != 1) return;
+            Check("缺字段NegativePressure反序列化=0(死数据)",
+                legacy[0].NegativePressure == 0m);
+            Check("缺字段DisplayMode反序列化=null", legacy[0].DisplayMode == null);
+
+            // —— 下发语义：0 = 有值（定格 0），null = 保持（新工位=回退全局） ——
+            var dm = new DeviceManager(new DeviceConfig());
+            try
+            {
+                dm.SetStationRecipe(1, "老配方A", 0m, null);
+                var info0 = dm.GetStationInfo(1);
+                Check("下发0则工位负压=0(0≠全局)",
+                    info0 != null && info0.RecipeNegativePressure == 0m);
+
+                dm.SetStationRecipeName(2, "只改名");
+                var infoNull = dm.GetStationInfo(2);
+                Check("只改名不碰负压(null保持,新工位=null走全局兜底)",
+                    infoNull != null && infoNull.RecipeName == "只改名"
+                    && infoNull.RecipeNegativePressure == null);
+
+                dm.SetStationRecipe(1, "老配方A", null, null);
+                var infoKeep = dm.GetStationInfo(1);
+                Check("传null保持已有值(0不被洗掉)",
+                    infoKeep != null && infoKeep.RecipeNegativePressure == 0m);
+
+                dm.SetStationRecipe(1, "", null, null);
+                var infoClear = dm.GetStationInfo(1);
+                Check("清空配方名同步清负压(回全局,防残留旧工艺)",
+                    infoClear != null && infoClear.RecipeNegativePressure == null);
+            }
+            finally { try { dm.Dispose(); } catch { } }
+
+            // —— 录入窗：新建默认=全局（V1.66 修复锁），老配方回填显示 0（可见不悄悄） ——
+            var batchForm = new BatchRecipeForm(null, new List<RecipeConfig>(), new List<int>());
+            try
+            {
+                var txtNeg = typeof(BatchRecipeForm).GetField("txtNegativePressure",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(batchForm) as Sunny.UI.UITextBox;
+                Check("批量窗新建负压框默认=全局阈值",
+                    txtNeg != null && txtNeg.Text == new DeviceConfig().AlarmPressureThresholdKPa.ToString("0.#"));
+
+                var onSel = typeof(BatchRecipeForm).GetMethod("OnRecipeSelected",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Check("反射找到 OnRecipeSelected", onSel != null);
+                if (onSel != null)
+                {
+                    onSel.Invoke(batchForm, new object[] { legacy[0] });
+                    Check("老配方回填框显示0(操作员看得见,须人工复核)",
+                        txtNeg != null && txtNeg.Text == "0");
+                }
+            }
+            finally { batchForm.Dispose(); }
         }
 
     }

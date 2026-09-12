@@ -3,6 +3,54 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.72.2 — 老配方 0 值语义锁（2026-09-12，无产品改动，纯回归）
+
+### 改动范围
+- 新增 `LegacyRecipeGuard` 用例 10 条（`TestRunner.cs`，全量 1176→1186）。
+- 锁死四条语义：老文件缺字段读出 `NegativePressure=0`/`DisplayMode=null`；
+  下发 0 = 定格 0（0≠全局）、null = 保持、清空名回全局；
+  批量窗新建框默认=全局阈值；老配方回填框显示"0"待人工复核。
+
+### 为什么这么改（澄清此前排查结论）
+- V1.72.1 称"V1.59 三窗无此框、下发 null 走全局"是不准确的：
+  实查 V1.59 代码，批量窗与工位窗当年就原样下发 `recipe.NegativePressure`
+  （老配方恒 0 → 定格 0），只有配方管理窗不碰下发。
+  所以 0 值 bypass 真空保护是 **V1.59 遗留**，不是 V1.66 引入；
+  V1.66 只是让它可见（框里显示 0）+ 新建默认全局。
+- 现场 `Recipes.json` 里 `NegativePressure: 0` 的配方，上站前必须逐条复核改成实际工艺值；
+  改完本用例即是"已复核"的锁：以后谁动下发语义必须先过这里。
+
+## V1.72.1 — 弹窗主按钮统一蓝 + 历史日期防叠 + 公共参数所见即所得 + V1.71 通讯无损验证（2026-09-12）
+
+### 改动范围
+- 5 个弹窗主按钮绿改风格蓝（DodgerBlue + Custom + 白字，与 V1.72 登录确认同色）：
+  改密窗 btnOK、批号窗 btnOK、批量配方 btnAddToQueue、公共参数 btnSave、ID 绑定 btnSave；
+  取消/关闭保持 Sunny 灰不动；登录窗确认按钮注释"语义绿"顺手纠为"主按钮蓝"。
+- 历史记录窗顶部查询条重排防叠防裁：日期框宽 130→150，dtpStart X 80→100、
+  lblEnd X 225→265、dtpEnd X 290→350、查询 X 440→520、导出 X 530→610；
+  根因是 Sunny UILabel 默认宋体 12pt 实测"开始时间:"宽 79px，原 65px 间隙必叠。
+- 公共参数窗所见即所得：Designer 里 lbl/nud Y 30/27 改为运行值 65/62
+  （含 35px 自绘标题区），CenterControls 改为只居中 X、不动 Y，
+  以后改纵向位置只改 Designer，两边永不分叉。
+- V1.71 重构通讯影响核查：`git diff V1.70..HEAD --name-only` 确认
+  Modbus/Scanner/Fan/DeviceManager/SerialPort/IoMap/Mock 零文件改动；
+  有改动的仅 UI 类型替换（Form→UIForm 等）+ ThemeManager Sunny 分支 +
+  RecipeAutoComplete 泛化 Control + PersistChanges 提 public + 驾驶舱 Designer 拆分。
+
+### 为什么这么改
+- 用户点名：弹窗确认还绿着，与登录蓝不一致；历史窗日期叠在一起且显示不全；
+  公共参数设计器看离标题太近、跑起来又正常（CenterControls 运行时搬 Y）。
+- V1.71 touches 16 窗，用户担心动到设备通讯，必须拿 diff + 全量 mock 回归自证无损。
+
+### 验证
+- 构建 + 冒烟 + **1176 回归全绿**（V1.72 计 1160 + 新增 16：UiStyleV172_1
+  主按钮蓝 5 + 公共参数 Y 锁 4 + 历史布局 5 + 深浅蓝保留 2）；
+  新用例先红后绿：首版历史 X=85 仍叠（探针实测标签 79px 抓获），改 X=100/350 后绿。
+- P5 破空 CSV 曾出现一次偶发红（2s 轮询超时，重跑即绿，属负载抖动非产品 bug）。
+- 通讯侧：ModbusConvert/ScannerParse/FanParse 纯函数 + DeviceManagerIntegration/
+  Extended/Policy/Mes/Rules 全套 Fake 端到端（MockIo/Mock气压/Mock风机）全绿，
+  真串口/真设备按 skill 边界仍靠现场联调。
+
 ## V1.72 — 驾驶舱边框 Designer 化 + 操作组/监视区避标题 + 登录确认换蓝（2026-09-12）
 
 ### 改动范围
