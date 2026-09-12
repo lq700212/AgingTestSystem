@@ -356,7 +356,7 @@
             // lblUpperTempLabel
             //
             this.lblUpperTempLabel.AutoSize = true;
-            this.lblUpperTempLabel.Location = new System.Drawing.Point(15, 81);
+            this.lblUpperTempLabel.Location = new System.Drawing.Point(15, 86);
             this.lblUpperTempLabel.Name = "lblUpperTempLabel";
             this.lblUpperTempLabel.Size = new System.Drawing.Size(53, 12);
             this.lblUpperTempLabel.TabIndex = 3;
@@ -365,7 +365,7 @@
             // lblUpperTemp
             //
             this.lblUpperTemp.AutoSize = true;
-            this.lblUpperTemp.Location = new System.Drawing.Point(100, 81);
+            this.lblUpperTemp.Location = new System.Drawing.Point(100, 86);
             this.lblUpperTemp.Name = "lblUpperTemp";
             this.lblUpperTemp.TabIndex = 2;
             this.lblUpperTemp.Text = "---";
@@ -373,7 +373,7 @@
             // lblSetTempLabel
             //
             this.lblSetTempLabel.AutoSize = true;
-            this.lblSetTempLabel.Location = new System.Drawing.Point(15, 55);
+            this.lblSetTempLabel.Location = new System.Drawing.Point(15, 60);
             this.lblSetTempLabel.Name = "lblSetTempLabel";
             this.lblSetTempLabel.Size = new System.Drawing.Size(53, 12);
             this.lblSetTempLabel.TabIndex = 1;
@@ -382,7 +382,7 @@
             // lblSetTemp
             //
             this.lblSetTemp.AutoSize = true;
-            this.lblSetTemp.Location = new System.Drawing.Point(100, 55);
+            this.lblSetTemp.Location = new System.Drawing.Point(100, 60);
             this.lblSetTemp.Name = "lblSetTemp";
             this.lblSetTemp.TabIndex = 0;
             this.lblSetTemp.Text = "---";
@@ -390,7 +390,7 @@
             // lblFanStateLabel
             // 
             this.lblFanStateLabel.AutoSize = true;
-            this.lblFanStateLabel.Location = new System.Drawing.Point(15, 24);
+            this.lblFanStateLabel.Location = new System.Drawing.Point(15, 34);
             this.lblFanStateLabel.Name = "lblFanStateLabel";
             this.lblFanStateLabel.Size = new System.Drawing.Size(65, 12);
             this.lblFanStateLabel.TabIndex = 6;
@@ -399,9 +399,8 @@
             // lblFanState
             // 
             this.lblFanState.AutoSize = true;
-            this.lblFanState.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Bold);
             this.lblFanState.ForeColor = System.Drawing.Color.Red;
-            this.lblFanState.Location = new System.Drawing.Point(100, 21);
+            this.lblFanState.Location = new System.Drawing.Point(100, 34);
             this.lblFanState.Name = "lblFanState";
             this.lblFanState.Size = new System.Drawing.Size(44, 17);
             this.lblFanState.TabIndex = 7;
@@ -431,7 +430,7 @@
             this.btnBatchRecipe.RectColor = System.Drawing.Color.LimeGreen;
             this.btnBatchRecipe.ForeColor = System.Drawing.Color.White;
             this.btnBatchRecipe.Style = Sunny.UI.UIStyle.Custom;
-            this.btnBatchRecipe.Location = new System.Drawing.Point(15, 18);
+            this.btnBatchRecipe.Location = new System.Drawing.Point(15, 34);
             this.btnBatchRecipe.Name = "btnBatchRecipe";
             this.btnBatchRecipe.Size = new System.Drawing.Size(256, 28);
             this.btnBatchRecipe.TabIndex = 0;
@@ -444,7 +443,7 @@
             this.btnInputLot.RectColor = System.Drawing.Color.LimeGreen;
             this.btnInputLot.ForeColor = System.Drawing.Color.White;
             this.btnInputLot.Style = Sunny.UI.UIStyle.Custom;
-            this.btnInputLot.Location = new System.Drawing.Point(15, 47);
+            this.btnInputLot.Location = new System.Drawing.Point(15, 63);
             this.btnInputLot.Name = "btnInputLot";
             this.btnInputLot.Size = new System.Drawing.Size(256, 28);
             this.btnInputLot.TabIndex = 1;
@@ -457,7 +456,7 @@
             this.btnStartRun.RectColor = System.Drawing.Color.DodgerBlue;
             this.btnStartRun.ForeColor = System.Drawing.Color.White;
             this.btnStartRun.Style = Sunny.UI.UIStyle.Custom;
-            this.btnStartRun.Location = new System.Drawing.Point(15, 76);
+            this.btnStartRun.Location = new System.Drawing.Point(15, 92);
             this.btnStartRun.Name = "btnStartRun";
             this.btnStartRun.Size = new System.Drawing.Size(256, 28);
             this.btnStartRun.TabIndex = 2;
@@ -469,7 +468,7 @@
             // 【V1.71】无语义默认灰走 Sunny Gray 档（深色换肤经 ApplyOperationButtonsTheme+ApplyButtonColors）
             //
             this.btnStopRun.Style = Sunny.UI.UIStyle.Gray;
-            this.btnStopRun.Location = new System.Drawing.Point(15, 105);
+            this.btnStopRun.Location = new System.Drawing.Point(15, 121);
             this.btnStopRun.Name = "btnStopRun";
             this.btnStopRun.Size = new System.Drawing.Size(256, 28);
             this.btnStopRun.TabIndex = 3;
@@ -479,7 +478,7 @@
             // btnResetAlarm
             //
             this.btnResetAlarm.Style = Sunny.UI.UIStyle.Gray;
-            this.btnResetAlarm.Location = new System.Drawing.Point(15, 134);
+            this.btnResetAlarm.Location = new System.Drawing.Point(15, 150);
             this.btnResetAlarm.Name = "btnResetAlarm";
             this.btnResetAlarm.Size = new System.Drawing.Size(256, 28);
             this.btnResetAlarm.TabIndex = 4;
@@ -490,7 +489,7 @@
             // 常驻但 AutoPass 下点它只提示，无操作员误触风险；位置在复位下、急停上，29px 步进）
             //
             this.btnUnloadJudge.Style = Sunny.UI.UIStyle.Gray;
-            this.btnUnloadJudge.Location = new System.Drawing.Point(15, 192);
+            this.btnUnloadJudge.Location = new System.Drawing.Point(15, 208);
             this.btnUnloadJudge.Name = "btnUnloadJudge";
             this.btnUnloadJudge.Size = new System.Drawing.Size(256, 28);
             this.btnUnloadJudge.TabIndex = 6;
@@ -503,7 +502,7 @@
             this.btnStopAll.RectColor = System.Drawing.Color.Crimson;
             this.btnStopAll.ForeColor = System.Drawing.Color.White;
             this.btnStopAll.Style = Sunny.UI.UIStyle.Custom;
-            this.btnStopAll.Location = new System.Drawing.Point(15, 221);
+            this.btnStopAll.Location = new System.Drawing.Point(15, 237);
             this.btnStopAll.Name = "btnStopAll";
             this.btnStopAll.Size = new System.Drawing.Size(256, 28);
             this.btnStopAll.TabIndex = 7;

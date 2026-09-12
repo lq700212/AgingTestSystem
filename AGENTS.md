@@ -79,6 +79,11 @@
   - UIForm 自绘标题占 35px 客户区：绝对布局整体下移 35px + 窗体加高 + MinimumSize
     锁缩小；Dock 布局加顶 Pad(38)；Dock 窗内容高度不够时窗体加高（ID 绑定血泪：
     保存按钮被挤出）。Y&lt;35 的控件 Add 时被静默搬到 35（harness 实测）。
+  - UIGroupBox 内容首控件 Y≥34：Sunny 组框标题约占顶部 30px，首按钮 Y=18 会上半
+    压进标题区（V1.72 用户目检：主窗操作组整列下移 16px 解决，间距/分组不动）。
+  - Sunny 控件默认 Style=Inherited，吃样式字体：名/值两套标签要么都不写 Font
+    （同源永不分叉），要么两边写死同一套——只写一边必大小眼（V1.72 实锤：
+    lblFanState 单写 9Bold，与继承 12 的名标签对不上，删字解决）。
   - `is Button/TextBox/ComboBox` 认不出 Sunny 自绘控件（UIButton/UITextBox/
     UIComboBox 不是原生子类；UILabel 是 Label 子类无碍）：类型判断改 Sunny 类型，
     ThemeManager 按类型名走分支；按钮改色走 `ApplyButtonColors`，读显示色走
