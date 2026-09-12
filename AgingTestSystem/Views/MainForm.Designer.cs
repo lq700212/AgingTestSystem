@@ -168,7 +168,6 @@
             //
             this.lblProject.AutoEllipsis = true;
             this.lblProject.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblProject.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Bold);
             this.lblProject.Location = new System.Drawing.Point(3, 0);
             this.lblProject.Name = "lblProject";
             this.lblProject.Size = new System.Drawing.Size(503, 24);
@@ -197,7 +196,6 @@
             // lblPermissionPrefix - 固定前缀"当前操作权限: "（始终默认黑字）
             // 
             this.lblPermissionPrefix.AutoSize = true;
-            this.lblPermissionPrefix.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.lblPermissionPrefix.Location = new System.Drawing.Point(3, 3);
             this.lblPermissionPrefix.Margin = new System.Windows.Forms.Padding(0, 6, 0, 0);
             this.lblPermissionPrefix.Name = "lblPermissionPrefix";
@@ -208,7 +206,6 @@
             // lblPermissionRole - 角色名（V1.19.7：运行时按权限着色）
             // 
             this.lblPermissionRole.AutoSize = true;
-            this.lblPermissionRole.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.lblPermissionRole.Location = new System.Drawing.Point(110, 3);
             this.lblPermissionRole.Margin = new System.Windows.Forms.Padding(0, 6, 0, 0);
             this.lblPermissionRole.Name = "lblPermissionRole";
@@ -220,7 +217,6 @@
             // 
             this.lblCommStatusLabel.AutoSize = true;
             this.lblCommStatusLabel.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblCommStatusLabel.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.lblCommStatusLabel.Location = new System.Drawing.Point(908, 0);
             this.lblCommStatusLabel.Name = "lblCommStatusLabel";
             this.lblCommStatusLabel.Size = new System.Drawing.Size(83, 12);
@@ -232,7 +228,6 @@
             // 
             this.lblCommStatus.AutoSize = true;
             this.lblCommStatus.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblCommStatus.Font = new System.Drawing.Font("微软雅黑", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.lblCommStatus.ForeColor = System.Drawing.Color.Red;
             this.lblCommStatus.Location = new System.Drawing.Point(1186, 0);
             this.lblCommStatus.Name = "lblCommStatus";
