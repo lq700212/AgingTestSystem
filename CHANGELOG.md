@@ -3,6 +3,41 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.72.10 — 项目切换热更免重启 + Default 改干净（2026-09-12，用户点名）
+
+### 改动范围
+- 项目切换免重启（热更）：`Dialogs/ProjectSwitchForm.cs` — 按钮"切换并重启"→
+  "切换并生效"，删 `Application.Restart` 重启确认框，成功带回 `SwitchedProjectName`；
+  `Views/MainForm.cs` 新增 `ReloadActiveProject`（在测复查→暂停主采集→
+  `LoadConfig` 重读新项目 Policy 叠加→`DeviceConfig.CopyFrom` 就地换血→
+  `StationSettingsCache.Reload`→`DeviceManager.ClearProjectScopedState`→
+  `LoadRecipes`→`ApplyHomeLayout`+顶栏刷新→恢复采集+立即刷一帧，失败提示重启兜底）。
+  硬件连接不断（串口/耦合器/送风机/扫码枪跟机器），在测禁切保留。
+- 新增热更支撑：`DeviceConfig.CopyFrom`（反射全量拷，_config 是 readonly 引用，
+  就地换血持别名的 DeviceManager/MES 才都生效）、`StationSettingsCache.Reload`、
+  `DeviceManager.PauseCollection/ResumeCollection`（只停主采集，送风机不动）+
+  `ClearProjectScopedState`（清旧工位指派+规则计时，不清压力缓存、不碰硬件，
+  区别于 StopAll 的急停语义）。
+- Default 改干净：`ProjectProfile.CleanupLegacyDefault`（启动幂等：正主不在则
+  Default 整体改名保数据，正主在则补拷独有文件后删除，重名不覆盖；清不掉记日志
+  下次再试）+ 缺省名收拢为 `DefaultProfileName` 常量；`README` 的 ActiveProject
+  缺省/菜单行为、App.config 指针注释、两处 Designer/MainForm 注释同步。
+  本地 `bin/Debug/Projects/Default` 空目录已删，构建产物 exe.config 已是烧屏测试。
+
+### 为什么这么改
+- 用户体验：每次切项目重启（等设备超时 10~15s + 重进登录）太烦；项目未上线，
+  无需兼容"重启生效"老习惯，一步到位热更。
+- 根因：跟项目走的四份数据启动时一次性进内存，旧逻辑只改指针不换内存，
+  不重启必读劈叉——热更就是把启动加载原样重放一遍（暂停采集防半新半旧）。
+- Default 阴魂不散：V1.72.9 只改了缺省名，老版本跑过的机器上空 Default 目录还在，
+  列表照样能看到；启动自愈保证"列表里永远没有 Default"。
+
+### 验证
+- `build_and_test.ps1`（用例改动兜底全量）：构建 + 冒烟（存活 18s）+ **1211 全绿**
+  （1188 + 23：热更指针往返 12、Default 自愈 3、CopyFrom 4、清状态+暂停 4）。
+- 待现场手工：参数设置→项目切换→新建一个项目切过去，看"即时生效"提示+顶栏
+  项目名+配方列表是否当场换（harness 覆盖了逻辑层，窗体跳转靠人眼）。
+
 ## V1.72.9 — 缺省项目改"烧屏测试" + 状态字下移（2026-09-12，用户点名）
 
 ### 改动范围

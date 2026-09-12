@@ -16,13 +16,14 @@ namespace AgingTestSystem.Dialogs
     /// │ │ 项目列表（ListBox，★=当前）   │ │
     /// │ └──────────────────────────────┘ │
     /// │ 新建：[________] [创建]          │
-    /// │ [切换并重启] [关闭]              │
+    /// │ [切换并生效] [关闭]              │
     /// │ 注：测试中有在测工位时禁切       │
     /// └──────────────────────────────────┘
     ///
     /// 【规则】
     /// - 新建=以当前项目为模板复制（配方/策略/布局全带过去，回来改差异项即可）；
-    /// - 切换=改机器指针 ActiveProject，【必须重启】（运行时路径启动时解析）；
+    /// - 切换=改机器指针 ActiveProject，主窗体随后热加载（配方/工位设置/策略/
+    ///   布局即时换装，【V1.72.10】无需重启；成功后 SwitchedProjectName 带回项目名）；
     /// - 有工位在测（Testing/Vacuuming/Aging）时禁切：切项目=换配方换策略，
     ///   跑中的任务会读劈叉，等停机/完成再切。
     /// - 用户账号是全局的，不跟项目走（见 ProjectProfile 注释）。
@@ -47,6 +48,12 @@ namespace AgingTestSystem.Dialogs
             int TestingCount { get; }
         }
 
+        /// <summary>
+        /// 本次成功切换到的项目名（【V1.72.10】主窗体凭此做热加载；null=没切换，
+        /// 主窗体什么都不做。原来这里是"切换并重启"，现在即时生效不重启了）。
+        /// </summary>
+        public string SwitchedProjectName { get; private set; }
+
         /// <param name="testingCount">在测工位数（主窗体传入 () => _deviceManager.GetTestingDeviceIds().Length）</param>
         public ProjectSwitchForm(Func<int> testingCountProvider)
         {
@@ -57,7 +64,7 @@ namespace AgingTestSystem.Dialogs
             this.AutoScaleMode = AutoScaleMode.Font;
             this.SuspendLayout();
 
-            this.Text = "项目切换（需重启生效）";
+            this.Text = "项目切换（即时生效）";
             this.StartPosition = FormStartPosition.CenterParent;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
@@ -89,7 +96,7 @@ namespace AgingTestSystem.Dialogs
             this.Controls.Add(_btnCreate);
             y += 34;
 
-            _btnSwitch = new Sunny.UI.UIButton { Location = new Point(12, y), Size = new Size(188, 30), Text = "切换并重启" };
+            _btnSwitch = new Sunny.UI.UIButton { Location = new Point(12, y), Size = new Size(188, 30), Text = "切换并生效" };
             _btnSwitch.Click += BtnSwitch_Click;
             _btnClose = new Sunny.UI.UIButton
             {
@@ -111,7 +118,7 @@ namespace AgingTestSystem.Dialogs
                 Location = new Point(12, y),
                 Size = new Size(376, 40),
                 ForeColor = Color.Gray,
-                Text = "注：切换后自动重启生效；有工位在测时禁止切换。\r\n用户账号全局共享，不跟项目走。"
+                Text = "注：切换即时生效，无需重启；有工位在测时禁止切换。\r\n用户账号全局共享，不跟项目走。"
             };
             this.Controls.Add(lblNote);
 
@@ -169,7 +176,7 @@ namespace AgingTestSystem.Dialogs
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-            MessageBox.Show($"项目 [{name}] 已创建（以当前项目为模板复制）。\n选中它再点\"切换并重启\"即生效。",
+            MessageBox.Show($"项目 [{name}] 已创建（以当前项目为模板复制）。\n选中它再点\"切换并生效\"即切换。",
                 "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
             _txtNewName.Text = "";
             RefreshList();
@@ -204,12 +211,9 @@ namespace AgingTestSystem.Dialogs
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
-            DialogResult r = MessageBox.Show($"已切换到项目 [{name}]，现在重启生效？",
-                "项目切换", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-            if (r == DialogResult.Yes)
-            {
-                Application.Restart();
-            }
+            // 【V1.72.10 热更】指针已改即返回，主窗体凭 SwitchedProjectName 热加载，
+            // 不再弹窗问重启（原来 Application.Restart，已删）。
+            SwitchedProjectName = name;
             this.DialogResult = DialogResult.OK;
             this.Close();
         }

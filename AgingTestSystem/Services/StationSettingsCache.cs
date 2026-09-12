@@ -50,12 +50,16 @@ namespace AgingTestSystem.Services
     ///
     /// 【存储说明】
     /// - 按工位编号（DeviceId）索引，一个工位一条缓存；
-    /// - 持久化到程序运行目录下的 StationSettings.json（与 Recipes.json / Users.json 同级），
+    /// - 持久化到当前项目目录下的 StationSettings.json（【V1.67】跟项目走），
     ///   重启程序后仍能自动回填；
     /// - 文件不存在 / 损坏时按空缓存处理（不抛异常，不阻塞界面）。
     ///
     /// 【线程安全】
     /// 所有读写通过 _lock 串行化；返回给调用方的条目都是副本，避免外部修改污染内部存储。
+    ///
+    /// 【热更】内存是"当前项目文件"的快照：切换项目后必须调一次 <see cref="Reload"/>，
+    /// 丢掉旧项目的内存数据、从新项目文件重载，否则读到的还是旧项目的回填
+    /// （路径是动态解析的，但内存不会自己换——这就是 V1.72.10 之前必须重启的根因之一）。
     /// </summary>
     public static class StationSettingsCache
     {
@@ -110,6 +114,24 @@ namespace AgingTestSystem.Services
                 EnsureLoaded();
                 _cache[entry.DeviceId] = Clone(entry);
                 WriteToFile();
+            }
+        }
+
+        /// <summary>
+        /// 重新从"当前项目"文件加载内存缓存（【V1.72.10 热更】项目切换后调用）。
+        ///
+        /// 【为什么需要】_cache 是静态内存，第一次 Get/Save 时从"当时的项目目录"
+        /// 一次性装入；切换项目只是改了 ActiveProject 指针（路径变了），内存还是
+        /// 旧项目的数据。不 Reload 的话，新项目窗口回填会串成旧项目的内容。
+        /// 实现 = 丢掉整份内存、按当前指针重新走一遍 LoadFromFile（文件缺失/损坏
+        /// 即空缓存，与启动行为一致）。线程安全：整段持 _lock，调用方（MainForm
+        /// 热更）已暂停主采集，采集线程不会并发卡在 EnsureLoaded。
+        /// </summary>
+        public static void Reload()
+        {
+            lock (_lock)
+            {
+                LoadFromFile();
             }
         }
 

@@ -673,5 +673,33 @@ namespace AgingTestSystem.Models
         /// 通过状态事件打到 LOG，用于现场排查"断连识别不到"问题。
         /// </summary>
         public bool ScannerDebugLog { get; set; } = false;
+
+        /// <summary>
+        /// 把另一份配置的全部可写属性原样拷进本实例（【V1.72.10 热更】项目切换用）。
+        ///
+        /// 【为什么不用"换引用"】MainForm._config 是 readonly，DeviceManager/MesReporter/
+        /// MesReporter 持的是同一引用的"别名"——换引用只换了 MainForm 手里的，
+        /// 干活的服务还捏着旧对象。用 CopyFrom 就地换血，所有持引用方下个周期
+        /// 自动读到新值（读引用是原子的，单属性读写不撕裂；整批拷贝期间调用方
+        /// 已暂停主采集，不会有"半新半旧"的一帧）。
+        /// 【为什么用反射】配置项 60+ 个且还在涨，手写逐项赋值漏一项就是"切了项目
+        /// 策略没换"的灵异 bug；反射按"公开可写实例属性"全量拷，新增属性零维护。
+        /// 只读/计算属性（无 setter）自动跳过；拷贝失败（理论上不会）抛异常，
+        /// 调用方热更失败走"提示重启"兜底。
+        /// </summary>
+        /// <param name="source">源配置（一般是 LoadConfig 刚读出来的新项目叠加结果）</param>
+        public void CopyFrom(DeviceConfig source)
+        {
+            if (source == null) throw new System.ArgumentNullException("source");
+            var props = typeof(DeviceConfig).GetProperties(
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            foreach (var p in props)
+            {
+                if (!p.CanRead || !p.CanWrite) continue;
+                if (p.GetIndexParameters().Length > 0) continue;   // 索引器跳过（本类没有，防以后）
+                object v = p.GetValue(source, null);
+                p.SetValue(this, v, null);
+            }
+        }
     }
 }

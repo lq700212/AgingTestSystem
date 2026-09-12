@@ -177,7 +177,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `PowerLossPolicy` | RestartFull | 断电恢复(V1.67：RestartFull=整台重测 / ResumeRemaining=续跑剩余） |
 | `AgingPressureLossPolicy` | StopOnLoss | 老化中失压(V1.67：StopOnLoss=停机报警 / KeepRunning=只记不停） |
 | `CompletionAction` / `VentValveDoPoint` | PowerOffOnly / 0 | 完成动作(V1.67：蜂鸣/破空泄压；点位0=未接硬件，选泄压只记日志） |
-| `ActiveProject` | Default | 当前项目指针(V1.67：机器级，项目切换改，配方/策略/布局跟项目走 `Projects/<项目>/`） |
+| `ActiveProject` | 烧屏测试 | 当前项目指针(V1.67：机器级，项目切换改，配方/策略/布局跟项目走 `Projects/<项目>/`；V1.72.10 起切换即时生效无需重启） |
 | `MesEnabled` / `MesMockEnabled` | false / false | MES 上报总开关(V1.68：默认零行为；Mock=只写 CSV 不发 HTTP） |
 | `MesEndpoint` / `MesTimeoutMs` | 空 / 5000 | MES 接收 URL（单入口；留空不发）/ HTTP 超时 ms |
 | `MesAuthType` / `MesAuthToken` / `MesAuthUser` / `MesAuthPassword` | None / 空 / 空 / 空 | 鉴权(V1.68：None/Bearer/Basic；token 与密码 DPAPI 加密落盘，明文不兼容） |
@@ -193,7 +193,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | 按钮 | 下拉项 | 权限 |
 | :--- | :--- | :--- |
 | 用户权限 | 操作员 / 技术员 / 管理员 / 用户管理* | *仅管理员（dev 登录时用户管理多出"管理员"角色，可删改业务管理员） |
-| 参数设置 | 公共参数（批量写气压表阈值）/ 配方管理 / 流程驾驶舱（V1.70：点节点改配置，只读看图人人可看，改配置限管理员）/ 项目切换*（V1.67：新建/切换项目档案，切换必重启，在测禁切） | 技术员+（*仅管理员） |
+| 参数设置 | 公共参数（批量写气压表阈值）/ 配方管理 / 流程驾驶舱（V1.70：点节点改配置，只读看图人人可看，改配置限管理员）/ 项目切换*（V1.67：新建/切换项目档案；V1.72.10 起切换即时生效无需重启，在测禁切） | 技术员+（*仅管理员） |
 | 日志记录 | 历史记录（读 CSV） | 任意 |
 | 关于 | 设置* / 通讯测试** / 送风机测试** / 版本说明 / 深浅模式切换*** | *仅管理员；**技术员+；***仅 dev |
 

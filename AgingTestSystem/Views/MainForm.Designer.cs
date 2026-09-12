@@ -162,7 +162,7 @@
             this.tableLayoutPanelTop.TabIndex = 0;
             //
             // lblProject - 当前项目显示（【V1.72.7 新增】切错项目=跑错工艺，顶栏首屏可见防呆；
-            // 项目名由 MainForm 构造里 UpdateProjectDisplay 回填，切换项目必须重启故只需设一次；
+            // 项目名由 UpdateProjectDisplay 回填（构造一次 + 每次热加载刷新一次，【V1.72.10】切换无需重启）；
             // Dock=Fill 占满第 1 列（【V1.72.8】标题删后项目移到该列，40% 宽），
             // 超长项目名 AutoEllipsis 省略号不断行）。
             //
