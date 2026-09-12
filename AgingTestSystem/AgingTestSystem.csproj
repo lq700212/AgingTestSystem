@@ -131,6 +131,9 @@
     <Compile Include="Views\FlowCockpitForm.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="Views\FlowCockpitForm.Designer.cs">
+      <DependentUpon>FlowCockpitForm.cs</DependentUpon>
+    </Compile>
     <Compile Include="Views\FlowGraph.cs" />
     <Compile Include="Controls\IpListEditorPopup.cs">
       <SubType>Form</SubType>

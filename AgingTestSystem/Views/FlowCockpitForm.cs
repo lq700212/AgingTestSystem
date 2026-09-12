@@ -19,6 +19,10 @@ namespace AgingTestSystem.Views
     /// 通用编辑器会让客户能删掉安全联锁（删个节点=删真空保护），违反"规则只能加严"家规。
     /// 所以这里拓扑画死、节点可拖（纯视图）、点谁改谁的真实配置，存 Policy.json。
     ///
+    /// 【V1.72】静态边框 Designer 化：右栏空壳/状态条/窗体属性搬进
+    /// FlowCockpitForm.Designer.cs；自绘画布（要吃真实参数）+ 动态编辑器 +
+    /// 定时器仍在代码里。无参构造只装边框（构造冒烟/以后 VS 可视编辑用）。
+    ///
     /// 【界面布局】
     /// ┌──────────────────────────────────────────────┬───────────────┐
     /// │ 画布（自绘，可缩放/平移/拖节点）               │ 右栏 320px    │
@@ -46,17 +50,14 @@ namespace AgingTestSystem.Views
     /// 缩放是纯视图态（不进存盘）；字体用 pt（自动随 DPI 放大）×zoom 缓存两档；
     /// 禁用 Graphics.ScaleTransform（TextRenderer/GDI 与变换矩阵行为不一致，家规）。
     /// </summary>
-    public class FlowCockpitForm : Sunny.UI.UIForm, IMessageFilter
+    public partial class FlowCockpitForm : Sunny.UI.UIForm, IMessageFilter
     {
-        private readonly DeviceConfig _config;
-        private readonly DeviceManager _deviceManager;
+        private DeviceConfig _config;
+        private DeviceManager _deviceManager;
 
-        private FlowCanvas _canvas;
-        private Panel _pnlRight;
-        private Sunny.UI.UILabel _lblNodeTitle;
-        private Panel _pnlEditors;
-        private Sunny.UI.UIButton _btnSaveNode;
-        private Sunny.UI.UILabel _lblStatus;
+        // 注：_canvas/_pnlRight/_lblNodeTitle/_pnlEditors/_btnSaveNode/_btnResetLayout/
+        // _btnClose/_lblStatus 全在 FlowCockpitForm.Designer.cs 里声明并静态装配。
+        // 这里只留运行时态（选中/脏标记/编辑器表/定时器）+ 动态内容逻辑。
 
         private string _selectedId;
         private readonly Dictionary<string, Control> _editorControls = new Dictionary<string, Control>();
@@ -67,109 +68,40 @@ namespace AgingTestSystem.Views
         /// <summary>本次会话保存过的 key（主窗体按需热生效，SettingsForm.SavedKeys 同款语义）</summary>
         public HashSet<string> SavedKeys { get; private set; }
 
+        /// <summary>
+        /// 无参构造（Designer/构造冒烟用：只装静态边框，不建画布不读配置，
+        /// 所有画布调用处均判空，构造永不抛）。
+        /// </summary>
+        public FlowCockpitForm()
+        {
+            SavedKeys = new HashSet<string>();
+            InitializeComponent();
+            UpdateStatus("就绪：点击节点查看/修改配置。滚轮缩放 · 中键平移 · 拖节点移动。");
+        }
+
         /// <param name="config">内存中的设备配置（主窗体同一引用，保存后热回写）</param>
         /// <param name="deviceManager">设备管理器（读实时台数；可为 null，此时计数全 0）</param>
         /// <param name="canEdit">是否可编辑（仅管理员 true；技术员/操作员只读看图。
         /// 与系统设置"仅管理员可改"同级——驾驶舱改的是同一批 key，不能开后门）</param>
         public FlowCockpitForm(DeviceConfig config, DeviceManager deviceManager, bool canEdit)
+            : this()
         {
             _config = config;
             _deviceManager = deviceManager;
             _canEdit = canEdit;
-            SavedKeys = new HashSet<string>();
 
-            // 【高 DPI 三要素】纯代码窗体：基准尺寸 + 挂起布局，末尾 ResumeLayout
-            this.AutoScaleDimensions = new SizeF(6F, 12F);
-            this.AutoScaleMode = AutoScaleMode.Font;
-            this.SuspendLayout();
+            // 静态边框（右栏空壳/状态条）已由 InitializeComponent 装好（见 Designer）。
+            // 这里只建自绘画布：构造要吃真实 config/dm，Designer 给不了，只能代码 new；
+            // Dock=Fill 最后加（右栏 Right、状态条 Bottom 先加，Z 序不能反）。
 
-            this.Text = "流程驾驶舱（点节点改配置）";
-            this.StartPosition = FormStartPosition.CenterParent;
-            this.Size = new Size(1080, 700);
-            this.MinimumSize = new Size(860, 560);
-            // 【V1.71】UIForm 自绘蓝标题：Dock 布局加顶 Pad 避开标题区。
-            this.Padding = new Padding(2, 38, 2, 2);
-
-            // 右栏（固定 320px，Dock=Right 先加，画布 Fill 后加）
-            _pnlRight = new Panel { Dock = DockStyle.Right, Width = 320 };
-            this.Controls.Add(_pnlRight);
-
-            _lblNodeTitle = new Sunny.UI.UILabel
-            {
-                Location = new Point(12, 12),
-                Size = new Size(296, 28),
-                Font = new Font(this.Font.FontFamily, 11F, FontStyle.Bold)
-            };
-            _pnlRight.Controls.Add(_lblNodeTitle);
-
-            _pnlEditors = new Panel
-            {
-                Location = new Point(12, 48),
-                Size = new Size(296, 480),
-                AutoScroll = true
-            };
-            _pnlRight.Controls.Add(_pnlEditors);
-
-            _btnSaveNode = new Sunny.UI.UIButton
-            {
-                Location = new Point(12, 540),
-                Size = new Size(296, 32),
-                Text = "保存本节点",
-                Enabled = false
-            };
-            _btnSaveNode.Click += BtnSaveNode_Click;
-            _pnlRight.Controls.Add(_btnSaveNode);
-
-            var btnResetLayout = new Sunny.UI.UIButton
-            {
-                Location = new Point(12, 578),
-                Size = new Size(144, 30),
-                Text = "复位布局"
-            };
-            btnResetLayout.Click += (s, e) =>
-            {
-                _canvas.ResetLayout();
-                UpdateStatus("布局已复位。");
-            };
-            _pnlRight.Controls.Add(btnResetLayout);
-
-            var btnClose = new Sunny.UI.UIButton
-            {
-                Location = new Point(164, 578),
-                Size = new Size(144, 30),
-                Text = "关闭",
-                FillColor = Color.DimGray,
-                RectColor = Color.DimGray,
-                ForeColor = Color.White,
-                Style = Sunny.UI.UIStyle.Custom
-            };
-            btnClose.Click += (s, e) =>
-            {
-                this.DialogResult = SavedKeys.Count > 0
-                    ? DialogResult.OK : DialogResult.Cancel;
-                this.Close();
-            };
-            _pnlRight.Controls.Add(btnClose);
-
-            // 状态条
-            _lblStatus = new Sunny.UI.UILabel
-            {
-                Dock = DockStyle.Bottom,
-                Height = 26,
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-            this.Controls.Add(_lblStatus);
-
-            // 画布（Fill，最后加，占剩余全部）
+            // 【高 DPI 三要素】剩余一条：画布是自绘 Panel（AutoScaleMode.None），
+            // 内部用 CreateGraphics().DpiX 手动缩放（见 FlowCanvas.Scale，家规）。
             _canvas = new FlowCanvas(_config, _deviceManager);
             _canvas.Dock = DockStyle.Fill;
             _canvas.NodeSelected += (id) => SelectNode(id, true);
             _canvas.EdgeSelected += (edgeId) => SelectEdge(edgeId);
             this.Controls.Add(_canvas);
 
-            this.ResumeLayout(false);
-
-            UpdateStatus("就绪：点击节点查看/修改配置。滚轮缩放 · 中键平移 · 拖节点移动。");
             SelectNode(null, false);
         }
 
@@ -240,19 +172,19 @@ namespace AgingTestSystem.Views
                 if (r == DialogResult.Cancel)
                 {
                     // 留在原节点：画布选中弹回（直接重设，不触发二次确认）
-                    _canvas.SetSelected(_selectedId, null);
+                    if (_canvas != null) _canvas.SetSelected(_selectedId, null);
                     return;
                 }
                 if (r == DialogResult.Yes && !SaveCurrentNode())
                 {
                     // 保存失败（校验拦）：留在原节点
-                    _canvas.SetSelected(_selectedId, null);
+                    if (_canvas != null) _canvas.SetSelected(_selectedId, null);
                     return;
                 }
                 _dirty = false;
             }
             _selectedId = id;
-            _canvas.SetSelected(_selectedId, null);
+            if (_canvas != null) _canvas.SetSelected(_selectedId, null);
             RebuildEditors();
         }
 
@@ -475,6 +407,21 @@ namespace AgingTestSystem.Views
             SaveCurrentNode();
         }
 
+        /// <summary>复位布局按钮（Designer 命名处理器，原匿名 lambda 落袋）。</summary>
+        private void BtnResetLayout_Click(object sender, EventArgs e)
+        {
+            if (_canvas != null) _canvas.ResetLayout();
+            UpdateStatus("布局已复位。");
+        }
+
+        /// <summary>关闭按钮（Designer 命名处理器，原匿名 lambda 落袋）。</summary>
+        private void BtnClose_Click(object sender, EventArgs e)
+        {
+            this.DialogResult = SavedKeys.Count > 0
+                ? DialogResult.OK : DialogResult.Cancel;
+            this.Close();
+        }
+
         /// <summary>
         /// 保存当前节点：逐项 ValidateValue → 统一 PersistChanges（与系统设置同一条路：
         /// 组合校验 + 分流写文件 + 热回写全在里面）。
@@ -519,7 +466,7 @@ namespace AgingTestSystem.Views
 
             foreach (string k in presult.SavedKeys) SavedKeys.Add(k);
             _dirty = false;
-            _canvas.RefreshCounts();
+            if (_canvas != null) _canvas.RefreshCounts();
             string msg = "已保存并即时生效。";
             if (presult.StructuralChanged.Count > 0) msg += "（含重启生效项）";
             if (presult.SecretFallbackPlain) msg += "（注：密钥加密失败，已明文保存）";

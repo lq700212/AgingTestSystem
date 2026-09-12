@@ -2412,6 +2412,29 @@ namespace AgingTestSystem.Tests
                 }
             }
 
+            // ── 驾驶舱无参构造（V1.72 Designer 拆分：只装边框不建画布，构造永不抛） ──
+            {
+                Views.FlowCockpitForm bare = null;
+                bool bareOk = true;
+                try { bare = new Views.FlowCockpitForm(); }
+                catch { bareOk = false; }
+                Check("驾驶舱无参构造不抛", bareOk && bare != null);
+                if (bare != null)
+                {
+                    var t = bare.GetType();
+                    string[] chrome = { "_pnlRight", "_lblNodeTitle", "_pnlEditors",
+                        "_btnSaveNode", "_btnResetLayout", "_btnClose", "_lblStatus" };
+                    bool allBuilt = true;
+                    foreach (var n in chrome)
+                    {
+                        var f = t.GetField(n, BindingFlags.NonPublic | BindingFlags.Instance);
+                        if (f == null || f.GetValue(bare) == null) { allBuilt = false; break; }
+                    }
+                    Check("无参构造边框7件全建好", allBuilt);
+                    try { bare.Dispose(); } catch { }
+                }
+            }
+
             // ── 检索框光标定位（V1.71 provider 泛化 Control：原生与 Sunny 同名属性） ──
             // provider 是 internal 类，走程序集按名取类型（与 ValidateValue 反射同套路）
             {

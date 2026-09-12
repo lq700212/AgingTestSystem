@@ -79,7 +79,7 @@ agingtest-regression/
 | **DeviceManagerMes(V1.68)** | Fake抓包端到端：启动/完成(PASS+映射+静态+SN)/下料判定(不良代码)/报警(FAIL)四触发器各一条+发往配置地址 |
 | RuleExprV169(V1.69) | 四则优先级/括号/负号/取模/字面量、比较逻辑与或非、变量大小写、短路跳过除零、除零模零未知变量错、语法错位置、NaN恒false、规则表行格式/行号/上限20、执行器持续计时(假时钟/中断复位/同配置不清/换配置清/非在测复位/立即/求值错)、完成表达式(空禁用/到点/求值错)、缺省锁、ValidateValue规则分支 |
 | **DeviceManagerRules(V1.69)** | 自定义报警端到端(首轮触发FAIL+CSV规则名)、完成表达式提前完成(CSV原因)、跳过抽真空(直接上电+常压不误报+快照Aging+CSV)、各阶段台数R4(抽真空1/老化1/空闲2) |
-| FlowCockpitV170(V1.70) | 拓扑锁(7节点8边+端点全已知+节点挂key+key全真属性)、缺省文本锁、策略切换文本变、台数进文本、布局存取往返/钳制/损坏回空、驾驶舱构造不断言弹窗(V1.71)、检索框 SetCaretToEnd 原生/Sunny 双过(V1.71) |
+| FlowCockpitV170(V1.70) | 拓扑锁(7节点8边+端点全已知+节点挂key+key全真属性)、缺省文本锁、策略切换文本变、台数进文本、布局存取往返/钳制/损坏回空、驾驶舱构造不断言弹窗(V1.71)、检索框 SetCaretToEnd 原生/Sunny 双过(V1.71)、驾驶舱无参构造不抛+边框7件(V1.72 Designer 拆分) |
 
 **不在覆盖范围**（明确边界）：真串口/真设备通讯（ModbusRtuBarometerReader /
 ScannerService / FanControllerClient / ModbusTcpIoController，靠现场联调）、

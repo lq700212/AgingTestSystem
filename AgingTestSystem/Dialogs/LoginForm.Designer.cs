@@ -118,8 +118,8 @@
             //
             // btnOK - 确认按钮（语义绿：Sunny 自绘按钮走 Style=Custom+FillColor，原生 BackColor 画不出来）
             //
-            this.btnOK.FillColor = System.Drawing.Color.LimeGreen;
-            this.btnOK.RectColor = System.Drawing.Color.LimeGreen;
+            this.btnOK.FillColor = System.Drawing.Color.DodgerBlue;
+            this.btnOK.RectColor = System.Drawing.Color.DodgerBlue;
             this.btnOK.ForeColor = System.Drawing.Color.White;
             this.btnOK.Style = Sunny.UI.UIStyle.Custom;
             this.btnOK.Font = new System.Drawing.Font("微软雅黑", 9F);
