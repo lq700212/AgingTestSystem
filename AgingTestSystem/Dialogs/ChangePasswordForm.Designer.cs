@@ -141,10 +141,10 @@ namespace AgingTestSystem.Dialogs
             this.txtConfirmPassword.TabIndex = 8;
             this.txtConfirmPassword.PasswordChar = '*';
             //
-            // btnOK - 确认按钮
+            // btnOK - 确认按钮（主按钮蓝，与登录窗确认按钮统一走 Custom+FillColor）
             //
-            this.btnOK.FillColor = System.Drawing.Color.LimeGreen;
-            this.btnOK.RectColor = System.Drawing.Color.LimeGreen;
+            this.btnOK.FillColor = System.Drawing.Color.DodgerBlue;
+            this.btnOK.RectColor = System.Drawing.Color.DodgerBlue;
             this.btnOK.ForeColor = System.Drawing.Color.White;
             this.btnOK.Style = Sunny.UI.UIStyle.Custom;
             this.btnOK.Font = new System.Drawing.Font("微软雅黑", 9F);

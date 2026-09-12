@@ -67,7 +67,7 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 打开后调一次：整窗按当前主题着色。
-        /// 【V1.71】保存按钮已是语义绿（两边都清晰），V1.60.4 的 DimGray 特例已删除。
+        /// 【V1.71】保存按钮已是主按钮蓝（两边都清晰），V1.60.4 的 DimGray 特例已删除。
         /// （窗体每次 new 的新实例，无需恢复。）
         /// </summary>
         public void ApplyTheme()
@@ -83,6 +83,13 @@ namespace AgingTestSystem.Dialogs
         /// 再根据窗体的 ClientSize 动态算一次位置，保证任何分辨率下都水平居中。
         /// 输入框和标签是"一组"（标签在左、输入框在右），这组整体水平居中；
         /// 保存按钮单独水平居中。
+        ///
+        /// 【所见即所得约定（V1.72.1）】
+        /// UIForm 自绘蓝标题占 35px 客户区，设计器里看到的 Y（lbl 65 / nud 62 / btn 110）
+        /// 就是运行时的 Y——这里只调 X（水平居中），不动 Y。
+        /// 以前这里连 Y 一起写（30→65），设计器看的是旧值、运行时被搬走，
+        /// 所以"设计器里离标题太近、跑起来又正常"。以后改纵向位置只改 Designer，
+        /// 不要在这里写 Y，两边就永远一致。
         /// </summary>
         private void CenterControls()
         {
@@ -94,16 +101,15 @@ namespace AgingTestSystem.Dialogs
             const int gap = 8;                      // 标签与数值框之间的间距
             int groupWidth = labelWidth + gap + nudThreshold.Width;
 
-            // 整组水平居中：左边距 = (窗体宽度 - 整组宽度) / 2
+            // 整组水平居中：左边距 = (窗体宽度 - 整组宽度) / 2（只动 X，Y 以 Designer 为准）
             int groupLeft = (ClientSize.Width - groupWidth) / 2;
 
-            // 第一行：标签在上、数值框微调垂直对齐（标签高 12，数值框高 21，y 差 3 即居中）
-            // 【V1.71】Y 坐标整体下移 35px（UIForm 自绘蓝标题区）
-            lblThreshold.Location = new System.Drawing.Point(groupLeft, 65);
-            nudThreshold.Location = new System.Drawing.Point(groupLeft + labelWidth + gap, 62);
+            // 第一行：只居中 X，Y 保持设计值（lbl 65 / nud 62，已含 35px 标题区）
+            lblThreshold.Left = groupLeft;
+            nudThreshold.Left = groupLeft + labelWidth + gap;
 
-            // 第二行：保存按钮水平居中
-            btnSave.Location = new System.Drawing.Point((ClientSize.Width - btnSave.Width) / 2, 110);
+            // 第二行：保存按钮水平居中（Y 保持设计值 110）
+            btnSave.Left = (ClientSize.Width - btnSave.Width) / 2;
         }
 
         /// <summary>

@@ -60,10 +60,10 @@ namespace AgingTestSystem.Dialogs
             this.txtLot.TabIndex = 2;
             this.txtLot.KeyDown += new System.Windows.Forms.KeyEventHandler(this.txtLot_KeyDown);
             // 
-            // btnOK - 确定（语义绿，与其它弹窗确认按钮统一走 Custom+FillColor）
+            // btnOK - 确定（主按钮蓝，与其它弹窗确认按钮统一走 Custom+FillColor）
             //
-            this.btnOK.FillColor = System.Drawing.Color.LimeGreen;
-            this.btnOK.RectColor = System.Drawing.Color.LimeGreen;
+            this.btnOK.FillColor = System.Drawing.Color.DodgerBlue;
+            this.btnOK.RectColor = System.Drawing.Color.DodgerBlue;
             this.btnOK.ForeColor = System.Drawing.Color.White;
             this.btnOK.Style = Sunny.UI.UIStyle.Custom;
             this.btnOK.Location = new System.Drawing.Point(80, 180);
