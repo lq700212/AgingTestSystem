@@ -19,7 +19,10 @@
 #  事件订阅）后必跑；HIGH > 0 即 exit 1（先修再提交），只有 INFO 即 exit 0。
 #
 #  规则（宁误报不漏报，误报进白名单）：
-#    R1 Controls.Clear() 前 15 行无 Dispose()                      → HIGH
+#    R1 Controls.Clear() 前 15 行无 ControlDisposeHelper            → HIGH
+#       （V1.72.16 收紧：以前只认 Dispose()，但 foreach 直接枚举逐个 Dispose
+#       会因 Dispose 摘除父集合导致跳过 → 孤儿 → 终结器跨线程炸；
+#       一律走快照 helper。白名单已删，靠行为检查，人人平等）
 #    R2 非模态 .Show(（排除 ShowDialog），无释放关联              → HIGH
 #    R3 Controls.Remove( 后 10 行无 Dispose()                      → HIGH
 #    R4 非 Designer.cs 里 new 输入类控件                          → INFO（人工确认随树/释放）
@@ -32,6 +35,17 @@
 #    R7 UI 文件里自定义 On* 事件 += 无同文件 -=                  → HIGH
 #       （长生命周期的事件源抓着窗体不放 = 泄漏 + 关后回调；
 #       V1.72.15：ID 绑定窗扫码/MainForm 五事件即此锁）
+#    R8 Designer.cs 可序列化锁（V1.72.16：预览即脏/预览失败/量程丢失三连） → HIGH
+#       a) AddRange(静态字段)——设计器 CodeDom 在实例上找不到静态成员，
+#          加载直接失败（判定窗 Dispositions 实锤）；只许 new 数组/字面；
+#       b) = xxx.Range.Min/Max 元组成员表达式——序列化器认不出，存盘整行删，
+#          输入框变回 0~100，拖动赋值 340 即 ArgumentOutOfRange（主页布局实锤）；
+#          量程一律写字面值，改常量同步改 Designer（注释写文件头，方法体内注释
+#          VS 重写全删，批量窗中文说明就是这么没的）；
+#       c) ZoomScaleRect + AutoScaleMode.Font 混搭——Zoom 的 setter 把模式掰回
+#          None，活值与代码对不上，打开即脏甚至加载失败；Sunny 窗一律 None
+#          且无 AutoScaleDimensions（运行时零影响，终值本来就是 None）。
+#       注释行（// 开头）不扫，说明文字里提这些词不算犯规。
 # ============================================================================
 
 param(
@@ -48,10 +62,8 @@ $info = @()
 #   无第三段   → 该方法体 150 行内必须含 .Dispose()（行为检查，注掉即报警）；
 #   方法名     → 配对方法体含 .Dispose()（Show/释放分两个方法）；
 #   reuse:字段 → 字段复用单例（有根不进终结），文件须含该字段声明。
-$SafeClearFiles = @(
-    "Views\MainForm.cs",                        # H5：逐个 Dispose 后 Clear
-    "Views\FlowCockpitForm.cs"                  # V1.72.12：DisposeEditorControls
-)
+# 【V1.72.16】$SafeClearFiles 已删：R1 现在认 ControlDisposeHelper 行为，
+# 主窗 H5 与驾驶舱都已改走 helper，靠行为检查通过，不再靠名单放行。
 $SafeShowKeys = @(
     "ShowDropdownPopup|MainForm.cs",             # V1.72.13：FormClosed 里 Dispose
     "ShowIpListPopup|SettingsForm.cs",           # V1.72.13：finally Dispose
@@ -104,13 +116,14 @@ foreach ($file in $files) {
     for ($i = 0; $i -lt $lines.Count; $i++) {
         $ln = $lines[$i]
 
-        # ── R1：Controls.Clear() ──
+        # ── R1：Controls.Clear()（V1.72.16 收紧：只认快照 helper） ──
+        # foreach 直接枚举逐个 Dispose 会跳过（Dispose 摘除父集合，枚举器下标错位），
+        # 漏掉的孩子变孤儿，GC 时终结器线程炸。15 行内必须出现 ControlDisposeHelper。
         if ($ln -match "\.Controls\.Clear\(\)") {
-            if ($SafeClearFiles -contains $rel) { continue }
             $from = [Math]::Max(0, $i - 15)
             $window = ($lines[$from..$i] -join "`n")
-            if ($window -notmatch "Dispose\(\)") {
-                $high += "R1 HIGH $($rel):$($i + 1) Controls.Clear() 前15行无 Dispose()"
+            if ($window -notmatch "ControlDisposeHelper") {
+                $high += "R1 HIGH $($rel):$($i + 1) Controls.Clear() 前15行无 ControlDisposeHelper（改走快照释放，foreach直释会跳过）"
             }
         }
 
@@ -184,6 +197,27 @@ foreach ($file in $files) {
             if ($body -notmatch [regex]::Escape("$src.$evt") + "\s*-=") {
                 $high += "R7 HIGH $($rel):$($i + 1) 长生命周期 $src.$evt 只有 += 无 -=（OnFormClosed/FormClosing 里退订）"
             }
+        }
+
+        # ── R8：Designer.cs 可序列化锁（V1.72.16） ──
+        # 注释行不扫（说明文字里提 AddRange/Range.Min 不算犯规）。
+        if ($isDesigner -and $ln -notmatch "^\s*//") {
+            # a) AddRange(静态字段/变量)：只许 new 数组，裸标识符即静态引用，设计器加载失败。
+            if ($ln -match "\.AddRange\(\s*(?!new\b)([A-Za-z_]\w*)") {
+                $high += "R8a HIGH $($rel):$($i + 1) Designer 里 AddRange($($Matches[1])) 非 new 数组（静态引用设计器认不出，改构造代码填）"
+            }
+            # b) = xxx.Range.Min/Max：元组成员表达式序列化器认不出，存盘整行删。
+            if ($ln -match "=\s*[\w\.]+\.(Min|Max)\s*;") {
+                $high += "R8b HIGH $($rel):$($i + 1) Designer 里量程写成员表达式（改字面值，与常量文件同步）"
+            }
+        }
+    }
+
+    # ── R8c：ZoomScaleRect + AutoScaleMode.Font 混搭（文件级，每文件报一次） ──
+    if ($rel -like "*.Designer.cs") {
+        $full = ($lines -join "`n")
+        if ($full -match "ZoomScaleRect" -and $full -match "AutoScaleMode\s*=\s*[\w\.]*Font") {
+            $high += "R8c HIGH $($rel) ZoomScaleRect 与 AutoScaleMode.Font 混搭（改 None 并删 AutoScaleDimensions）"
         }
     }
 

@@ -12,11 +12,16 @@ namespace AgingTestSystem.Dialogs
     /// ②判定执行逻辑（BtnExecute_Click 调 DeviceManager 落盘）。
     /// 【布局】绝对定位（UIForm 自绘蓝标题占 35px，内容从 y=47 起排）；
     /// MinimumSize=ClientSize 锁缩小（V1.71 绝对布局窗统一做法）。
-    /// 【V1.72.14】设计器可预览修复：①补无参构造（见 UnloadJudgeForm.cs，VS 设计器实例化必需，
-    /// 原先只有带参构造，预览报"没有无参数构造函数"）；②静态文本标签由 var 局部改为具名字段
-    /// （_lblCode/_lblDisp，设计器序列化认字段，局部下次存盘即丢）；③全控件补 Name/字体/样式，
-    /// 与 ProjectSwitchForm.Designer 同口径，SunnyUI 换肤（ThemeManager.ApplyTo）按类型名走分支，
-    /// 具名后审计也不再"Name 全空"。
+    /// 【V1.72.16 设计器可预览二次修复（上次没修住，教训）】
+    /// 上次只补了无参构造 + 标签具名，漏了两个设计器认不出的东西，预览照样坏：
+    /// ①_cmbDisposition.Items.AddRange(Dispositions) 引了另一个 partial 里的静态字段，
+    /// 设计器的 CodeDom 反序列化在实例上找不到静态成员，直接加载失败。
+    /// 处置选项改由构造在 InitializeComponent 之后用代码填（见 .cs），Designer 里不留；
+    /// ②AutoScaleMode.Font + AutoScaleDimensions：在带 ZoomScaleRect 的 Sunny 窗上，
+    /// ZoomScaleRect 的 setter 会把 AutoScaleMode 掰回 None（Sunny 自己做缩放），
+    /// 设计器加载完发现活值（None）与代码（Font）对不上，打开即标脏甚至加载失败。
+    /// 全仓带 ZoomScaleRect 且预览正常的窗（批量/通讯/风扇/主页布局）一律 None 无 Dimensions，
+    /// 本窗是最后一个 Font+Zoom 混搭，改齐。运行时零影响（终值本来就是 None）。
     /// </summary>
     partial class UnloadJudgeForm
     {
@@ -80,8 +85,7 @@ namespace AgingTestSystem.Dialogs
             //
             // UnloadJudgeForm（UIForm 蓝标题；绝对布局内容从 y=47 起排）
             //
-            this.AutoScaleDimensions = new SizeF(6F, 12F);
-            this.AutoScaleMode = AutoScaleMode.Font;
+            this.AutoScaleMode = AutoScaleMode.None;
             this.Text = "下料判定";
             this.Name = "UnloadJudgeForm";
             this.StartPosition = FormStartPosition.CenterParent;
@@ -148,7 +152,8 @@ namespace AgingTestSystem.Dialogs
             this._cmbDisposition.Location = new Point(96, 155);
             this._cmbDisposition.Size = new Size(332, 24);
             this._cmbDisposition.DropDownStyle = Sunny.UI.UIDropDownStyle.DropDownList;
-            this._cmbDisposition.Items.AddRange(Dispositions);
+            // 处置选项不在这里填：Items.AddRange(Dispositions) 引静态字段，设计器加载失败，
+            // 改由构造在 InitializeComponent 后用代码填（运行时 4 项，预览空下拉，不影响）。
             //
             // _btnExecute（Sunny 默认蓝，主操作）
             //

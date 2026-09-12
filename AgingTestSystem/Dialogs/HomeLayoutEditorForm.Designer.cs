@@ -11,6 +11,15 @@ namespace AgingTestSystem.Dialogs
     /// ②四个 nud 初值回填（同上，依赖 layout；范围 Minimum/Maximum 在这里按
     /// HomeLayoutConfig.Range 常量设，初值 Value 在代码里设）；
     /// ③自绘预览控件本体 HomeLayoutPreviewControl（GDI 自绘类，留 .cs 不进 Designer）。
+    /// 【V1.72.16 设计器稳定性三条军规（两次被 VS 重写后沉淀，违者预览即脏/运行即炸）】
+    /// ①量程必须写字面值（如 15/80），禁止写 HomeLayoutConfig.TopBarRange.Min 这类
+    /// 元组成员表达式——设计器序列化器认不出，打开预览就标脏，存盘时整行删掉，
+    /// 输入框变回 0~100，拖预览边缘给 240/340 直接 ArgumentOutOfRangeException，
+    /// 整个可视调尺寸功能全坏（本次实锤）。改 Range 常量必须同步改这里四个数；
+    /// ②InitializeComponent 方法体里禁止写任何 // 注释——VS 重写时整段再生，
+    /// 注释全删（BatchRecipe 的中文说明就是这么没的），说明一律写文件头/对应 .cs；
+    /// ③本窗的 .resx 是 VS 预览自动建的空模板（无真实资源），别手删，
+    /// 删了下次预览重建 + csproj 加条目，反而更脏。
     /// 【布局】Dock 布局 + 顶 Pad 38 避开 UIForm 自绘蓝标题（V1.71 姿势）；
     /// 数值面板 4 行 Percent 等分（高 DPI 行高自适应）；
     /// 右下两按钮 Location 按 Panel 默认宽 200 算出（2,10)/(98,10)，Anchor=Right
@@ -57,93 +66,45 @@ namespace AgingTestSystem.Dialogs
 
         private void InitializeComponent()
         {
-            this._preview = new HomeLayoutPreviewControl();
-            this._pnlValues = new TableLayoutPanel();
+            this._preview = new AgingTestSystem.Dialogs.HomeLayoutPreviewControl();
+            this._pnlValues = new System.Windows.Forms.TableLayoutPanel();
             this._lblTop = new Sunny.UI.UILabel();
-            this._nudTop = new NumericUpDown();
+            this._nudTop = new System.Windows.Forms.NumericUpDown();
             this._lblMenu = new Sunny.UI.UILabel();
-            this._nudMenu = new NumericUpDown();
+            this._nudMenu = new System.Windows.Forms.NumericUpDown();
             this._lblRight = new Sunny.UI.UILabel();
-            this._nudRight = new NumericUpDown();
+            this._nudRight = new System.Windows.Forms.NumericUpDown();
             this._lblStatus = new Sunny.UI.UILabel();
-            this._nudStatus = new NumericUpDown();
-            this._pnlBottom = new Panel();
+            this._nudStatus = new System.Windows.Forms.NumericUpDown();
+            this._pnlBottom = new System.Windows.Forms.Panel();
             this._btnRestore = new Sunny.UI.UIButton();
             this._btnCancel = new Sunny.UI.UIButton();
             this._btnSave = new Sunny.UI.UIButton();
             this._lblTip = new Sunny.UI.UILabel();
             this._pnlValues.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this._nudTop)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this._nudMenu)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this._nudRight)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this._nudStatus)).BeginInit();
             this._pnlBottom.SuspendLayout();
             this.SuspendLayout();
-            //
-            // HomeLayoutEditorForm（UIForm 蓝标题；Dock 布局加顶 Pad 避开标题区）
-            //
-            this.AutoScaleDimensions = new SizeF(6F, 12F);
-            this.AutoScaleMode = AutoScaleMode.Font;
-            this.Text = "主页区域调整";
-            this.StartPosition = FormStartPosition.CenterParent;
-            this.Padding = new Padding(2, 38, 2, 2);
-            this.MinimumSize = new Size(560, 460);
-            this.ClientSize = new Size(640, 520);
-            //
-            // _preview（Dock=Fill 最后加之前的占位；Layout 代码赋值）
-            //
-            this._preview.Dock = DockStyle.Fill;
-            this._preview.BackColor = Color.White;
+            // 
+            // _preview
+            // 
+            this._preview.BackColor = System.Drawing.Color.White;
+            this._preview.Dock = System.Windows.Forms.DockStyle.Fill;
+            this._preview.Layout = null;
+            this._preview.Location = new System.Drawing.Point(2, 212);
+            this._preview.Name = "_preview";
+            this._preview.Size = new System.Drawing.Size(636, 254);
+            this._preview.TabIndex = 0;
             this._preview.LayoutChanged += new System.EventHandler(this.Preview_LayoutChanged);
-            //
-            // _pnlValues（Dock=Top，高 148；4 行 Percent 等分，行高随 DPI 缩放）
-            //
-            this._pnlValues.Dock = DockStyle.Top;
-            this._pnlValues.Height = 148;
+            // 
+            // _pnlValues
+            // 
             this._pnlValues.ColumnCount = 2;
-            this._pnlValues.RowCount = 4;
-            this._pnlValues.Padding = new Padding(12, 6, 12, 6);
-            this._pnlValues.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            this._pnlValues.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-            this._pnlValues.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
-            this._pnlValues.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
-            this._pnlValues.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
-            this._pnlValues.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
-            //
-            // 四组标签 + 输入框（范围与 HomeLayoutConfig.Range 常量同步；Value 初值代码回填）
-            //
-            this._lblTop.Text = "顶部标题栏高 (px)";
-            this._lblTop.AutoSize = true;
-            this._lblTop.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom;
-            this._lblTop.TextAlign = ContentAlignment.MiddleLeft;
-            this._nudTop.Minimum = Models.HomeLayoutConfig.TopBarRange.Min;
-            this._nudTop.Maximum = Models.HomeLayoutConfig.TopBarRange.Max;
-            this._nudTop.Width = 120;
-            this._nudTop.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom;
-            this._nudTop.ValueChanged += new System.EventHandler(this.Nud_ValueChanged);
-            this._lblMenu.Text = "菜单栏高 (px)";
-            this._lblMenu.AutoSize = true;
-            this._lblMenu.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom;
-            this._lblMenu.TextAlign = ContentAlignment.MiddleLeft;
-            this._nudMenu.Minimum = Models.HomeLayoutConfig.MenuRange.Min;
-            this._nudMenu.Maximum = Models.HomeLayoutConfig.MenuRange.Max;
-            this._nudMenu.Width = 120;
-            this._nudMenu.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom;
-            this._nudMenu.ValueChanged += new System.EventHandler(this.Nud_ValueChanged);
-            this._lblRight.Text = "右侧区域宽 (px)";
-            this._lblRight.AutoSize = true;
-            this._lblRight.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom;
-            this._lblRight.TextAlign = ContentAlignment.MiddleLeft;
-            this._nudRight.Minimum = Models.HomeLayoutConfig.RightPanelRange.Min;
-            this._nudRight.Maximum = Models.HomeLayoutConfig.RightPanelRange.Max;
-            this._nudRight.Width = 120;
-            this._nudRight.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom;
-            this._nudRight.ValueChanged += new System.EventHandler(this.Nud_ValueChanged);
-            this._lblStatus.Text = "状态栏高 (px)";
-            this._lblStatus.AutoSize = true;
-            this._lblStatus.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom;
-            this._lblStatus.TextAlign = ContentAlignment.MiddleLeft;
-            this._nudStatus.Minimum = Models.HomeLayoutConfig.StatusBarRange.Min;
-            this._nudStatus.Maximum = Models.HomeLayoutConfig.StatusBarRange.Max;
-            this._nudStatus.Width = 120;
-            this._nudStatus.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom;
-            this._nudStatus.ValueChanged += new System.EventHandler(this.Nud_ValueChanged);
+            this._pnlValues.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 50F));
+            this._pnlValues.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 50F));
             this._pnlValues.Controls.Add(this._lblTop, 0, 0);
             this._pnlValues.Controls.Add(this._nudTop, 1, 0);
             this._pnlValues.Controls.Add(this._lblMenu, 0, 1);
@@ -152,70 +113,250 @@ namespace AgingTestSystem.Dialogs
             this._pnlValues.Controls.Add(this._nudRight, 1, 2);
             this._pnlValues.Controls.Add(this._lblStatus, 0, 3);
             this._pnlValues.Controls.Add(this._nudStatus, 1, 3);
-            //
-            // _pnlBottom（Dock=Bottom，高 52）
-            //
-            this._pnlBottom.Dock = DockStyle.Bottom;
-            this._pnlBottom.Height = 52;
-            this._pnlBottom.Padding = new Padding(12, 6, 12, 6);
-            //
-            // _btnRestore（左下）
-            //
-            this._btnRestore.Text = "恢复默认";
-            this._btnRestore.Width = 96;
-            this._btnRestore.Height = 32;
-            this._btnRestore.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-            this._btnRestore.Location = new Point(12, 10);
-            this._btnRestore.Click += new System.EventHandler(this.BtnRestore_Click);
-            //
-            // _btnCancel（右下灰；Location 按 Panel 默认宽 200 算出，Anchor 运行时贴右）
-            //
-            this._btnCancel.Text = "取消";
-            this._btnCancel.Width = 90;
-            this._btnCancel.Height = 32;
-            this._btnCancel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            this._btnCancel.FillColor = Color.DimGray;
-            this._btnCancel.RectColor = Color.DimGray;
-            this._btnCancel.ForeColor = Color.White;
-            this._btnCancel.Style = Sunny.UI.UIStyle.Custom;
-            this._btnCancel.Location = new Point(2, 10);
-            this._btnCancel.Click += new System.EventHandler(this.BtnCancel_Click);
-            //
-            // _btnSave（右下绿）
-            //
-            this._btnSave.Text = "保存";
-            this._btnSave.Width = 90;
-            this._btnSave.Height = 32;
-            this._btnSave.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            this._btnSave.FillColor = Color.LimeGreen;
-            this._btnSave.RectColor = Color.LimeGreen;
-            this._btnSave.ForeColor = Color.White;
-            this._btnSave.Style = Sunny.UI.UIStyle.Custom;
-            this._btnSave.Location = new Point(98, 10);
-            this._btnSave.Click += new System.EventHandler(this.BtnSave_Click);
+            this._pnlValues.Dock = System.Windows.Forms.DockStyle.Top;
+            this._pnlValues.Location = new System.Drawing.Point(2, 64);
+            this._pnlValues.Name = "_pnlValues";
+            this._pnlValues.Padding = new System.Windows.Forms.Padding(12, 6, 12, 6);
+            this._pnlValues.RowCount = 4;
+            this._pnlValues.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 25F));
+            this._pnlValues.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 25F));
+            this._pnlValues.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 25F));
+            this._pnlValues.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 25F));
+            this._pnlValues.Size = new System.Drawing.Size(636, 148);
+            this._pnlValues.TabIndex = 1;
+            // 
+            // _lblTop
+            // 
+            this._lblTop.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left)));
+            this._lblTop.AutoSize = true;
+            this._lblTop.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this._lblTop.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this._lblTop.Location = new System.Drawing.Point(15, 6);
+            this._lblTop.Name = "_lblTop";
+            this._lblTop.Size = new System.Drawing.Size(143, 34);
+            this._lblTop.TabIndex = 0;
+            this._lblTop.Text = "顶部标题栏高 (px)";
+            this._lblTop.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
+            // _nudTop
+            // 
+            this._nudTop.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left)));
+            this._nudTop.Location = new System.Drawing.Point(321, 9);
+            this._nudTop.Maximum = new decimal(new int[] {
+            80,
+            0,
+            0,
+            0});
+            this._nudTop.Minimum = new decimal(new int[] {
+            15,
+            0,
+            0,
+            0});
+            this._nudTop.Name = "_nudTop";
+            this._nudTop.Size = new System.Drawing.Size(120, 26);
+            this._nudTop.TabIndex = 1;
+            this._nudTop.ValueChanged += new System.EventHandler(this.Nud_ValueChanged);
+            // 
+            // _lblMenu
+            // 
+            this._lblMenu.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left)));
+            this._lblMenu.AutoSize = true;
+            this._lblMenu.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this._lblMenu.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this._lblMenu.Location = new System.Drawing.Point(15, 40);
+            this._lblMenu.Name = "_lblMenu";
+            this._lblMenu.Size = new System.Drawing.Size(111, 34);
+            this._lblMenu.TabIndex = 2;
+            this._lblMenu.Text = "菜单栏高 (px)";
+            this._lblMenu.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
+            // _nudMenu
+            // 
+            this._nudMenu.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left)));
+            this._nudMenu.Location = new System.Drawing.Point(321, 43);
+            this._nudMenu.Maximum = new decimal(new int[] {
+            100,
+            0,
+            0,
+            0});
+            this._nudMenu.Minimum = new decimal(new int[] {
+            25,
+            0,
+            0,
+            0});
+            this._nudMenu.Name = "_nudMenu";
+            this._nudMenu.Size = new System.Drawing.Size(120, 26);
+            this._nudMenu.TabIndex = 3;
+            this._nudMenu.ValueChanged += new System.EventHandler(this.Nud_ValueChanged);
+            // 
+            // _lblRight
+            // 
+            this._lblRight.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left)));
+            this._lblRight.AutoSize = true;
+            this._lblRight.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this._lblRight.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this._lblRight.Location = new System.Drawing.Point(15, 74);
+            this._lblRight.Name = "_lblRight";
+            this._lblRight.Size = new System.Drawing.Size(127, 34);
+            this._lblRight.TabIndex = 4;
+            this._lblRight.Text = "右侧区域宽 (px)";
+            this._lblRight.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
+            // _nudRight
+            // 
+            this._nudRight.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left)));
+            this._nudRight.Location = new System.Drawing.Point(321, 77);
+            this._nudRight.Maximum = new decimal(new int[] {
+            600,
+            0,
+            0,
+            0});
+            this._nudRight.Minimum = new decimal(new int[] {
+            180,
+            0,
+            0,
+            0});
+            this._nudRight.Name = "_nudRight";
+            this._nudRight.Size = new System.Drawing.Size(120, 26);
+            this._nudRight.TabIndex = 5;
+            this._nudRight.ValueChanged += new System.EventHandler(this.Nud_ValueChanged);
+            // 
+            // _lblStatus
+            // 
+            this._lblStatus.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left)));
+            this._lblStatus.AutoSize = true;
+            this._lblStatus.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this._lblStatus.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this._lblStatus.Location = new System.Drawing.Point(15, 108);
+            this._lblStatus.Name = "_lblStatus";
+            this._lblStatus.Size = new System.Drawing.Size(111, 34);
+            this._lblStatus.TabIndex = 6;
+            this._lblStatus.Text = "状态栏高 (px)";
+            this._lblStatus.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
+            // _nudStatus
+            // 
+            this._nudStatus.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left)));
+            this._nudStatus.Location = new System.Drawing.Point(321, 111);
+            this._nudStatus.Maximum = new decimal(new int[] {
+            60,
+            0,
+            0,
+            0});
+            this._nudStatus.Minimum = new decimal(new int[] {
+            15,
+            0,
+            0,
+            0});
+            this._nudStatus.Name = "_nudStatus";
+            this._nudStatus.Size = new System.Drawing.Size(120, 26);
+            this._nudStatus.TabIndex = 7;
+            this._nudStatus.ValueChanged += new System.EventHandler(this.Nud_ValueChanged);
+            // 
+            // _pnlBottom
+            // 
             this._pnlBottom.Controls.Add(this._btnRestore);
             this._pnlBottom.Controls.Add(this._btnCancel);
             this._pnlBottom.Controls.Add(this._btnSave);
-            //
-            // _lblTip（Dock=Top，高 26）
-            //
-            this._lblTip.Dock = DockStyle.Top;
-            this._lblTip.Height = 26;
+            this._pnlBottom.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this._pnlBottom.Location = new System.Drawing.Point(2, 466);
+            this._pnlBottom.Name = "_pnlBottom";
+            this._pnlBottom.Padding = new System.Windows.Forms.Padding(12, 6, 12, 6);
+            this._pnlBottom.Size = new System.Drawing.Size(636, 52);
+            this._pnlBottom.TabIndex = 3;
+            // 
+            // _btnRestore
+            // 
+            this._btnRestore.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this._btnRestore.Cursor = System.Windows.Forms.Cursors.Hand;
+            this._btnRestore.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this._btnRestore.Location = new System.Drawing.Point(12, 10);
+            this._btnRestore.MinimumSize = new System.Drawing.Size(1, 1);
+            this._btnRestore.Name = "_btnRestore";
+            this._btnRestore.Size = new System.Drawing.Size(96, 32);
+            this._btnRestore.TabIndex = 0;
+            this._btnRestore.Text = "恢复默认";
+            this._btnRestore.TipsFont = new System.Drawing.Font("宋体", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this._btnRestore.Click += new System.EventHandler(this.BtnRestore_Click);
+            // 
+            // _btnCancel
+            // 
+            this._btnCancel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
+            this._btnCancel.Cursor = System.Windows.Forms.Cursors.Hand;
+            this._btnCancel.FillColor = System.Drawing.Color.DimGray;
+            this._btnCancel.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this._btnCancel.Location = new System.Drawing.Point(438, 10);
+            this._btnCancel.MinimumSize = new System.Drawing.Size(1, 1);
+            this._btnCancel.Name = "_btnCancel";
+            this._btnCancel.RectColor = System.Drawing.Color.DimGray;
+            this._btnCancel.Size = new System.Drawing.Size(90, 32);
+            this._btnCancel.Style = Sunny.UI.UIStyle.Custom;
+            this._btnCancel.TabIndex = 1;
+            this._btnCancel.Text = "取消";
+            this._btnCancel.TipsFont = new System.Drawing.Font("宋体", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this._btnCancel.Click += new System.EventHandler(this.BtnCancel_Click);
+            // 
+            // _btnSave
+            // 
+            this._btnSave.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
+            this._btnSave.Cursor = System.Windows.Forms.Cursors.Hand;
+            this._btnSave.FillColor = System.Drawing.Color.LimeGreen;
+            this._btnSave.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this._btnSave.Location = new System.Drawing.Point(534, 10);
+            this._btnSave.MinimumSize = new System.Drawing.Size(1, 1);
+            this._btnSave.Name = "_btnSave";
+            this._btnSave.RectColor = System.Drawing.Color.LimeGreen;
+            this._btnSave.Size = new System.Drawing.Size(90, 32);
+            this._btnSave.Style = Sunny.UI.UIStyle.Custom;
+            this._btnSave.TabIndex = 2;
+            this._btnSave.Text = "保存";
+            this._btnSave.TipsFont = new System.Drawing.Font("宋体", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this._btnSave.Click += new System.EventHandler(this.BtnSave_Click);
+            // 
+            // _lblTip
+            // 
+            this._lblTip.Dock = System.Windows.Forms.DockStyle.Top;
+            this._lblTip.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this._lblTip.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(80)))), ((int)(((byte)(80)))), ((int)(((byte)(80)))));
+            this._lblTip.Location = new System.Drawing.Point(2, 38);
+            this._lblTip.Name = "_lblTip";
+            this._lblTip.Padding = new System.Windows.Forms.Padding(12, 0, 0, 0);
+            this._lblTip.Size = new System.Drawing.Size(636, 26);
+            this._lblTip.TabIndex = 2;
             this._lblTip.Text = "将鼠标移到区域边缘，光标变为双向箭头后按住拖动即可调整尺寸（单位：px）";
-            this._lblTip.ForeColor = Color.FromArgb(80, 80, 80);
-            this._lblTip.TextAlign = ContentAlignment.MiddleLeft;
-            this._lblTip.Padding = new Padding(12, 0, 0, 0);
-            //
-            // 挂接（Dock 顺序：Fill 的 _preview 最先加，Top/Bottom 后加按 Z 序反排；
-            // 与原来 Controls.Add(_preview/_pnlValues/_lblTip/_pnlBottom) 顺序一致）
-            //
+            this._lblTip.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
+            // HomeLayoutEditorForm
+            // 
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
+            this.ClientSize = new System.Drawing.Size(640, 520);
             this.Controls.Add(this._preview);
             this.Controls.Add(this._pnlValues);
             this.Controls.Add(this._lblTip);
             this.Controls.Add(this._pnlBottom);
+            this.MinimumSize = new System.Drawing.Size(560, 460);
+            this.Name = "HomeLayoutEditorForm";
+            this.Padding = new System.Windows.Forms.Padding(2, 38, 2, 2);
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
+            this.Text = "主页区域调整";
+            this.ZoomScaleRect = new System.Drawing.Rectangle(15, 15, 640, 520);
             this._pnlValues.ResumeLayout(false);
+            this._pnlValues.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this._nudTop)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this._nudMenu)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this._nudRight)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this._nudStatus)).EndInit();
             this._pnlBottom.ResumeLayout(false);
             this.ResumeLayout(false);
+
         }
     }
 }

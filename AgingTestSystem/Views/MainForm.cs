@@ -1249,12 +1249,10 @@ namespace AgingTestSystem.Views
             // 【修复 H5】清空前先 Dispose 旧控件，避免控件资源泄漏
             // Controls.Clear() 只移除父子关系，不会释放控件资源
             // 旧控件（含子控件）会成为孤儿，等待 GC 回收，可能耗尽 GDI 句柄
-            foreach (Control c in splitContainerMain.Panel1.Controls)
-            {
-                c.Dispose();
-            }
-            // 清空左侧面板容器
-            splitContainerMain.Panel1.Controls.Clear();
+            // 【V1.72.16】foreach 直接枚举逐个 Dispose 是错的：Dispose 会把自己从父集合摘除，
+            // 枚举中集合被改会导致跳过（漏释放→孤儿→终结器跨线程炸，流程驾驶舱已实锤），
+            // 一律走 ControlDisposeHelper（快照数组后释放，最后 Clear），不要手写 foreach。
+            ControlDisposeHelper.DisposeAllAndClear(splitContainerMain.Panel1.Controls);
 
             // 外层滚动容器：网格画布尺寸=内容总尺寸，由本容器托管滚动条
             var scrollContainer = new Panel();

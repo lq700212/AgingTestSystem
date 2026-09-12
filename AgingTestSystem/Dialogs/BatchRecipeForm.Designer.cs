@@ -115,12 +115,12 @@ namespace AgingTestSystem.Dialogs
             this.tableLayoutPanelMain.Controls.Add(this.tableLayoutPanelInput, 0, 0);
             this.tableLayoutPanelMain.Controls.Add(this.panelButtons, 0, 1);
             this.tableLayoutPanelMain.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.tableLayoutPanelMain.Location = new System.Drawing.Point(0, 0);
+            this.tableLayoutPanelMain.Location = new System.Drawing.Point(2, 38);
             this.tableLayoutPanelMain.Name = "tableLayoutPanelMain";
             this.tableLayoutPanelMain.RowCount = 2;
             this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 80F));
-            this.tableLayoutPanelMain.Size = new System.Drawing.Size(480, 400);
+            this.tableLayoutPanelMain.Size = new System.Drawing.Size(476, 320);
             this.tableLayoutPanelMain.TabIndex = 0;
             // 
             // tableLayoutPanelInput
@@ -151,12 +151,14 @@ namespace AgingTestSystem.Dialogs
             this.tableLayoutPanelInput.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 40F));
             this.tableLayoutPanelInput.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 40F));
             this.tableLayoutPanelInput.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelInput.Size = new System.Drawing.Size(474, 317);
+            this.tableLayoutPanelInput.Size = new System.Drawing.Size(470, 237);
             this.tableLayoutPanelInput.TabIndex = 0;
             // 
             // lblRecipeNameLabel
             // 
             this.lblRecipeNameLabel.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblRecipeNameLabel.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblRecipeNameLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
             this.lblRecipeNameLabel.Location = new System.Drawing.Point(3, 0);
             this.lblRecipeNameLabel.Name = "lblRecipeNameLabel";
             this.lblRecipeNameLabel.Size = new System.Drawing.Size(94, 40);
@@ -167,14 +169,24 @@ namespace AgingTestSystem.Dialogs
             // txtRecipeName
             // 
             this.txtRecipeName.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtRecipeName.Location = new System.Drawing.Point(103, 9);
+            this.txtRecipeName.Cursor = System.Windows.Forms.Cursors.IBeam;
+            this.txtRecipeName.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.txtRecipeName.Location = new System.Drawing.Point(104, 5);
+            this.txtRecipeName.Margin = new System.Windows.Forms.Padding(4, 5, 4, 5);
+            this.txtRecipeName.MinimumSize = new System.Drawing.Size(1, 16);
             this.txtRecipeName.Name = "txtRecipeName";
-            this.txtRecipeName.Size = new System.Drawing.Size(368, 29);
+            this.txtRecipeName.Padding = new System.Windows.Forms.Padding(5);
+            this.txtRecipeName.ShowText = false;
+            this.txtRecipeName.Size = new System.Drawing.Size(362, 29);
             this.txtRecipeName.TabIndex = 1;
+            this.txtRecipeName.TextAlignment = System.Drawing.ContentAlignment.MiddleLeft;
+            this.txtRecipeName.Watermark = "";
             // 
             // lblDelayTime1Label
             // 
             this.lblDelayTime1Label.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblDelayTime1Label.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblDelayTime1Label.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
             this.lblDelayTime1Label.Location = new System.Drawing.Point(3, 40);
             this.lblDelayTime1Label.Name = "lblDelayTime1Label";
             this.lblDelayTime1Label.Size = new System.Drawing.Size(94, 40);
@@ -200,7 +212,7 @@ namespace AgingTestSystem.Dialogs
             this.tableLayoutPanelDelay1.Name = "tableLayoutPanelDelay1";
             this.tableLayoutPanelDelay1.RowCount = 1;
             this.tableLayoutPanelDelay1.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelDelay1.Size = new System.Drawing.Size(368, 30);
+            this.tableLayoutPanelDelay1.Size = new System.Drawing.Size(364, 30);
             this.tableLayoutPanelDelay1.TabIndex = 3;
             // 
             // nudDelayHours
@@ -213,7 +225,7 @@ namespace AgingTestSystem.Dialogs
             0,
             0});
             this.nudDelayHours.Name = "nudDelayHours";
-            this.nudDelayHours.Size = new System.Drawing.Size(103, 21);
+            this.nudDelayHours.Size = new System.Drawing.Size(102, 26);
             this.nudDelayHours.TabIndex = 0;
             this.nudDelayHours.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             // 
@@ -221,23 +233,25 @@ namespace AgingTestSystem.Dialogs
             // 
             this.lblDelay1Colon1.Anchor = System.Windows.Forms.AnchorStyles.None;
             this.lblDelay1Colon1.AutoSize = true;
-            this.lblDelay1Colon1.Location = new System.Drawing.Point(113, 7);
+            this.lblDelay1Colon1.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblDelay1Colon1.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this.lblDelay1Colon1.Location = new System.Drawing.Point(111, 7);
             this.lblDelay1Colon1.Name = "lblDelay1Colon1";
-            this.lblDelay1Colon1.Size = new System.Drawing.Size(11, 12);
+            this.lblDelay1Colon1.Size = new System.Drawing.Size(14, 16);
             this.lblDelay1Colon1.TabIndex = 1;
             this.lblDelay1Colon1.Text = ":";
             // 
             // nudDelayMinutes
             // 
             this.nudDelayMinutes.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.nudDelayMinutes.Location = new System.Drawing.Point(132, 3);
+            this.nudDelayMinutes.Location = new System.Drawing.Point(131, 3);
             this.nudDelayMinutes.Maximum = new decimal(new int[] {
             59,
             0,
             0,
             0});
             this.nudDelayMinutes.Name = "nudDelayMinutes";
-            this.nudDelayMinutes.Size = new System.Drawing.Size(103, 21);
+            this.nudDelayMinutes.Size = new System.Drawing.Size(102, 26);
             this.nudDelayMinutes.TabIndex = 2;
             this.nudDelayMinutes.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             // 
@@ -245,29 +259,33 @@ namespace AgingTestSystem.Dialogs
             // 
             this.lblDelay1Colon2.Anchor = System.Windows.Forms.AnchorStyles.None;
             this.lblDelay1Colon2.AutoSize = true;
-            this.lblDelay1Colon2.Location = new System.Drawing.Point(242, 7);
+            this.lblDelay1Colon2.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblDelay1Colon2.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this.lblDelay1Colon2.Location = new System.Drawing.Point(239, 7);
             this.lblDelay1Colon2.Name = "lblDelay1Colon2";
-            this.lblDelay1Colon2.Size = new System.Drawing.Size(11, 12);
+            this.lblDelay1Colon2.Size = new System.Drawing.Size(14, 16);
             this.lblDelay1Colon2.TabIndex = 3;
             this.lblDelay1Colon2.Text = ":";
             // 
             // nudDelaySeconds
             // 
             this.nudDelaySeconds.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.nudDelaySeconds.Location = new System.Drawing.Point(261, 3);
+            this.nudDelaySeconds.Location = new System.Drawing.Point(259, 3);
             this.nudDelaySeconds.Maximum = new decimal(new int[] {
             59,
             0,
             0,
             0});
             this.nudDelaySeconds.Name = "nudDelaySeconds";
-            this.nudDelaySeconds.Size = new System.Drawing.Size(104, 21);
+            this.nudDelaySeconds.Size = new System.Drawing.Size(102, 26);
             this.nudDelaySeconds.TabIndex = 4;
             this.nudDelaySeconds.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             // 
             // lblStartTimeLabel
             // 
             this.lblStartTimeLabel.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblStartTimeLabel.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblStartTimeLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
             this.lblStartTimeLabel.Location = new System.Drawing.Point(3, 80);
             this.lblStartTimeLabel.Name = "lblStartTimeLabel";
             this.lblStartTimeLabel.Size = new System.Drawing.Size(94, 40);
@@ -293,7 +311,7 @@ namespace AgingTestSystem.Dialogs
             this.tableLayoutPanelStart.Name = "tableLayoutPanelStart";
             this.tableLayoutPanelStart.RowCount = 1;
             this.tableLayoutPanelStart.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelStart.Size = new System.Drawing.Size(368, 30);
+            this.tableLayoutPanelStart.Size = new System.Drawing.Size(364, 30);
             this.tableLayoutPanelStart.TabIndex = 7;
             // 
             // nudStartHours
@@ -306,7 +324,7 @@ namespace AgingTestSystem.Dialogs
             0,
             0});
             this.nudStartHours.Name = "nudStartHours";
-            this.nudStartHours.Size = new System.Drawing.Size(103, 21);
+            this.nudStartHours.Size = new System.Drawing.Size(102, 26);
             this.nudStartHours.TabIndex = 0;
             this.nudStartHours.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             // 
@@ -314,23 +332,25 @@ namespace AgingTestSystem.Dialogs
             // 
             this.lblStartColon1.Anchor = System.Windows.Forms.AnchorStyles.None;
             this.lblStartColon1.AutoSize = true;
-            this.lblStartColon1.Location = new System.Drawing.Point(113, 7);
+            this.lblStartColon1.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblStartColon1.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this.lblStartColon1.Location = new System.Drawing.Point(111, 7);
             this.lblStartColon1.Name = "lblStartColon1";
-            this.lblStartColon1.Size = new System.Drawing.Size(11, 12);
+            this.lblStartColon1.Size = new System.Drawing.Size(14, 16);
             this.lblStartColon1.TabIndex = 1;
             this.lblStartColon1.Text = ":";
             // 
             // nudStartMinutes
             // 
             this.nudStartMinutes.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.nudStartMinutes.Location = new System.Drawing.Point(132, 3);
+            this.nudStartMinutes.Location = new System.Drawing.Point(131, 3);
             this.nudStartMinutes.Maximum = new decimal(new int[] {
             59,
             0,
             0,
             0});
             this.nudStartMinutes.Name = "nudStartMinutes";
-            this.nudStartMinutes.Size = new System.Drawing.Size(103, 21);
+            this.nudStartMinutes.Size = new System.Drawing.Size(102, 26);
             this.nudStartMinutes.TabIndex = 2;
             this.nudStartMinutes.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             // 
@@ -338,29 +358,33 @@ namespace AgingTestSystem.Dialogs
             // 
             this.lblStartColon2.Anchor = System.Windows.Forms.AnchorStyles.None;
             this.lblStartColon2.AutoSize = true;
-            this.lblStartColon2.Location = new System.Drawing.Point(242, 7);
+            this.lblStartColon2.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblStartColon2.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this.lblStartColon2.Location = new System.Drawing.Point(239, 7);
             this.lblStartColon2.Name = "lblStartColon2";
-            this.lblStartColon2.Size = new System.Drawing.Size(11, 12);
+            this.lblStartColon2.Size = new System.Drawing.Size(14, 16);
             this.lblStartColon2.TabIndex = 3;
             this.lblStartColon2.Text = ":";
             // 
             // nudStartSeconds
             // 
             this.nudStartSeconds.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.nudStartSeconds.Location = new System.Drawing.Point(261, 3);
+            this.nudStartSeconds.Location = new System.Drawing.Point(259, 3);
             this.nudStartSeconds.Maximum = new decimal(new int[] {
             59,
             0,
             0,
             0});
             this.nudStartSeconds.Name = "nudStartSeconds";
-            this.nudStartSeconds.Size = new System.Drawing.Size(104, 21);
+            this.nudStartSeconds.Size = new System.Drawing.Size(102, 26);
             this.nudStartSeconds.TabIndex = 4;
             this.nudStartSeconds.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             // 
             // lblLimitTempLabel
             // 
             this.lblLimitTempLabel.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblLimitTempLabel.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblLimitTempLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
             this.lblLimitTempLabel.Location = new System.Drawing.Point(3, 120);
             this.lblLimitTempLabel.Name = "lblLimitTempLabel";
             this.lblLimitTempLabel.Size = new System.Drawing.Size(94, 40);
@@ -380,36 +404,46 @@ namespace AgingTestSystem.Dialogs
             this.tableLayoutPanelTemp.Name = "tableLayoutPanelTemp";
             this.tableLayoutPanelTemp.RowCount = 1;
             this.tableLayoutPanelTemp.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelTemp.Size = new System.Drawing.Size(368, 34);
+            this.tableLayoutPanelTemp.Size = new System.Drawing.Size(364, 34);
             this.tableLayoutPanelTemp.TabIndex = 9;
             // 
             // txtLimitTemp
             // 
+            this.txtLimitTemp.Cursor = System.Windows.Forms.Cursors.IBeam;
             this.txtLimitTemp.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.txtLimitTemp.Location = new System.Drawing.Point(3, 3);
+            this.txtLimitTemp.DoubleValue = 50D;
+            this.txtLimitTemp.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.txtLimitTemp.IntValue = 50;
+            this.txtLimitTemp.Location = new System.Drawing.Point(4, 5);
+            this.txtLimitTemp.Margin = new System.Windows.Forms.Padding(4, 5, 4, 5);
             this.txtLimitTemp.MaxLength = 3;
+            this.txtLimitTemp.MinimumSize = new System.Drawing.Size(1, 16);
             this.txtLimitTemp.Name = "txtLimitTemp";
-            this.txtLimitTemp.Size = new System.Drawing.Size(214, 29);
+            this.txtLimitTemp.Padding = new System.Windows.Forms.Padding(5);
+            this.txtLimitTemp.ShowText = false;
+            this.txtLimitTemp.Size = new System.Drawing.Size(210, 24);
             this.txtLimitTemp.TabIndex = 0;
             this.txtLimitTemp.Text = "50";
+            this.txtLimitTemp.TextAlignment = System.Drawing.ContentAlignment.MiddleLeft;
+            this.txtLimitTemp.Watermark = "";
             // 
             // lblTempUnit
             // 
             this.lblTempUnit.Anchor = System.Windows.Forms.AnchorStyles.Left;
             this.lblTempUnit.AutoSize = true;
-            this.lblTempUnit.Location = new System.Drawing.Point(223, 7);
+            this.lblTempUnit.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblTempUnit.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this.lblTempUnit.Location = new System.Drawing.Point(221, 9);
             this.lblTempUnit.Name = "lblTempUnit";
-            this.lblTempUnit.Size = new System.Drawing.Size(23, 12);
+            this.lblTempUnit.Size = new System.Drawing.Size(31, 16);
             this.lblTempUnit.TabIndex = 1;
             this.lblTempUnit.Text = "°C";
             // 
             // lblNegativePressureLabel
             // 
-            // 【V1.66】配方负压阈值（kPa）：以前本窗没有这个框，新建配方 NegativePressure 恒 0，
-            // 下发后阈值≈0（负压域里≈永远到位），等于悄悄关掉真空保护。现在必填实数，
-            // 新建默认=全局 AlarmPressureThresholdKPa，存什么定格什么，无魔法值。
-            // 
             this.lblNegativePressureLabel.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblNegativePressureLabel.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblNegativePressureLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
             this.lblNegativePressureLabel.Location = new System.Drawing.Point(3, 160);
             this.lblNegativePressureLabel.Name = "lblNegativePressureLabel";
             this.lblNegativePressureLabel.Size = new System.Drawing.Size(94, 40);
@@ -429,37 +463,46 @@ namespace AgingTestSystem.Dialogs
             this.tableLayoutPanelPressure.Name = "tableLayoutPanelPressure";
             this.tableLayoutPanelPressure.RowCount = 1;
             this.tableLayoutPanelPressure.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelPressure.Size = new System.Drawing.Size(368, 34);
+            this.tableLayoutPanelPressure.Size = new System.Drawing.Size(364, 34);
             this.tableLayoutPanelPressure.TabIndex = 11;
             // 
             // txtNegativePressure
             // 
+            this.txtNegativePressure.Cursor = System.Windows.Forms.Cursors.IBeam;
             this.txtNegativePressure.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.txtNegativePressure.Location = new System.Drawing.Point(3, 3);
+            this.txtNegativePressure.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.txtNegativePressure.Location = new System.Drawing.Point(4, 5);
+            this.txtNegativePressure.Margin = new System.Windows.Forms.Padding(4, 5, 4, 5);
             this.txtNegativePressure.MaxLength = 7;
+            this.txtNegativePressure.MinimumSize = new System.Drawing.Size(1, 16);
             this.txtNegativePressure.Name = "txtNegativePressure";
-            this.txtNegativePressure.Size = new System.Drawing.Size(214, 29);
+            this.txtNegativePressure.Padding = new System.Windows.Forms.Padding(5);
+            this.txtNegativePressure.ShowText = false;
+            this.txtNegativePressure.Size = new System.Drawing.Size(210, 24);
             this.txtNegativePressure.TabIndex = 0;
+            this.txtNegativePressure.TextAlignment = System.Drawing.ContentAlignment.MiddleLeft;
+            this.txtNegativePressure.Watermark = "";
             // 
             // lblPressureUnit
             // 
             this.lblPressureUnit.Anchor = System.Windows.Forms.AnchorStyles.Left;
             this.lblPressureUnit.AutoSize = true;
-            this.lblPressureUnit.Location = new System.Drawing.Point(223, 7);
+            this.lblPressureUnit.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblPressureUnit.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this.lblPressureUnit.Location = new System.Drawing.Point(221, 9);
             this.lblPressureUnit.Name = "lblPressureUnit";
-            this.lblPressureUnit.Size = new System.Drawing.Size(23, 12);
+            this.lblPressureUnit.Size = new System.Drawing.Size(31, 16);
             this.lblPressureUnit.TabIndex = 1;
             this.lblPressureUnit.Text = "kPa";
             // 
             // lblDisplayModeLabel
             // 
-            // 【V1.66】烧屏画面记录（自由文本如"白场/RGB循环/棋盘格"）：只存配方追溯，
-            // 不参与任何判定；下发工位走 SetStationRecipe（见 DeviceManager）。
-            // 
             this.lblDisplayModeLabel.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblDisplayModeLabel.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblDisplayModeLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
             this.lblDisplayModeLabel.Location = new System.Drawing.Point(3, 200);
             this.lblDisplayModeLabel.Name = "lblDisplayModeLabel";
-            this.lblDisplayModeLabel.Size = new System.Drawing.Size(94, 40);
+            this.lblDisplayModeLabel.Size = new System.Drawing.Size(94, 37);
             this.lblDisplayModeLabel.TabIndex = 12;
             this.lblDisplayModeLabel.Text = "显示模式：";
             this.lblDisplayModeLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
@@ -467,11 +510,19 @@ namespace AgingTestSystem.Dialogs
             // txtDisplayMode
             // 
             this.txtDisplayMode.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtDisplayMode.Location = new System.Drawing.Point(103, 207);
+            this.txtDisplayMode.Cursor = System.Windows.Forms.Cursors.IBeam;
+            this.txtDisplayMode.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.txtDisplayMode.Location = new System.Drawing.Point(104, 205);
+            this.txtDisplayMode.Margin = new System.Windows.Forms.Padding(4, 5, 4, 5);
             this.txtDisplayMode.MaxLength = 50;
+            this.txtDisplayMode.MinimumSize = new System.Drawing.Size(1, 16);
             this.txtDisplayMode.Name = "txtDisplayMode";
-            this.txtDisplayMode.Size = new System.Drawing.Size(368, 29);
+            this.txtDisplayMode.Padding = new System.Windows.Forms.Padding(5);
+            this.txtDisplayMode.ShowText = false;
+            this.txtDisplayMode.Size = new System.Drawing.Size(362, 27);
             this.txtDisplayMode.TabIndex = 13;
+            this.txtDisplayMode.TextAlignment = System.Drawing.ContentAlignment.MiddleLeft;
+            this.txtDisplayMode.Watermark = "";
             // 
             // panelButtons
             // 
@@ -481,57 +532,54 @@ namespace AgingTestSystem.Dialogs
             this.panelButtons.Location = new System.Drawing.Point(3, 240);
             this.panelButtons.Margin = new System.Windows.Forms.Padding(3, 0, 3, 3);
             this.panelButtons.Name = "panelButtons";
-            this.panelButtons.Size = new System.Drawing.Size(474, 77);
+            this.panelButtons.Size = new System.Drawing.Size(470, 77);
             this.panelButtons.TabIndex = 1;
             // 
             // btnAddToQueue
             // 
-            // btnAddToQueue - 加入队列（主按钮蓝，与各弹窗确认按钮统一）
-            //
+            this.btnAddToQueue.Cursor = System.Windows.Forms.Cursors.Hand;
             this.btnAddToQueue.FillColor = System.Drawing.Color.DodgerBlue;
-            this.btnAddToQueue.RectColor = System.Drawing.Color.DodgerBlue;
-            this.btnAddToQueue.ForeColor = System.Drawing.Color.White;
-            this.btnAddToQueue.Style = Sunny.UI.UIStyle.Custom;
+            this.btnAddToQueue.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.btnAddToQueue.Location = new System.Drawing.Point(150, 10);
+            this.btnAddToQueue.MinimumSize = new System.Drawing.Size(1, 1);
             this.btnAddToQueue.Name = "btnAddToQueue";
+            this.btnAddToQueue.RectColor = System.Drawing.Color.DodgerBlue;
             this.btnAddToQueue.Size = new System.Drawing.Size(170, 30);
+            this.btnAddToQueue.Style = Sunny.UI.UIStyle.Custom;
             this.btnAddToQueue.TabIndex = 0;
             this.btnAddToQueue.Text = "加入队列";
+            this.btnAddToQueue.TipsFont = new System.Drawing.Font("宋体", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.btnAddToQueue.Click += new System.EventHandler(this.btnAddToQueue_Click);
             // 
             // btnClose
             // 
-            // btnClose - 关闭窗口（语义灰）
-            //
+            this.btnClose.Cursor = System.Windows.Forms.Cursors.Hand;
             this.btnClose.FillColor = System.Drawing.Color.DimGray;
-            this.btnClose.RectColor = System.Drawing.Color.DimGray;
-            this.btnClose.ForeColor = System.Drawing.Color.White;
-            this.btnClose.Style = Sunny.UI.UIStyle.Custom;
+            this.btnClose.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.btnClose.Location = new System.Drawing.Point(150, 46);
+            this.btnClose.MinimumSize = new System.Drawing.Size(1, 1);
             this.btnClose.Name = "btnClose";
+            this.btnClose.RectColor = System.Drawing.Color.DimGray;
             this.btnClose.Size = new System.Drawing.Size(170, 30);
+            this.btnClose.Style = Sunny.UI.UIStyle.Custom;
             this.btnClose.TabIndex = 1;
             this.btnClose.Text = "关闭窗口";
+            this.btnClose.TipsFont = new System.Drawing.Font("宋体", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.btnClose.Click += new System.EventHandler(this.btnClose_Click);
             // 
             // BatchRecipeForm
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
             this.ClientSize = new System.Drawing.Size(480, 360);
-            // 【V1.71】Dock 布局自适应放大；禁缩小（MinimumSize=ClientSize），防挤坏。
-            // 【V1.72.6】320 高时第 6 行（显示模式，Percent）被 5×40 挤到 0 高整行消失，
-            // 窗加高 40（内容区 280→320 = 5×40 + 显示行 40 + 按钮 80），显示行回到 40。
-            this.MinimumSize = new System.Drawing.Size(480, 360);
-            // 【V1.71】UIForm 自绘蓝标题：Dock=Fill 布局加顶 Pad 避开标题区。
-            this.Padding = new System.Windows.Forms.Padding(2, 38, 2, 2);
             this.Controls.Add(this.tableLayoutPanelMain);
+            this.MinimumSize = new System.Drawing.Size(480, 360);
             this.Name = "BatchRecipeForm";
+            this.Padding = new System.Windows.Forms.Padding(2, 38, 2, 2);
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "批量设置设置配方窗口";
+            this.ZoomScaleRect = new System.Drawing.Rectangle(15, 15, 480, 360);
             this.tableLayoutPanelMain.ResumeLayout(false);
             this.tableLayoutPanelInput.ResumeLayout(false);
-            this.tableLayoutPanelInput.PerformLayout();
             this.tableLayoutPanelDelay1.ResumeLayout(false);
             this.tableLayoutPanelDelay1.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.nudDelayHours)).EndInit();

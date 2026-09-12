@@ -164,6 +164,11 @@
   内部读 Handle 即跨线程崩溃（堆栈终点 `ResetAutoComplete←Dispose←Finalize`，Name 全空、
   时机随机是三特征）。动态重建处一律先逐个 `Dispose()` 再 `Clear()`（主窗 H5 先例），
   用例锁"重建后旧控件 IsDisposed"。
+  **快照后释放（V1.72.16 血泪：V1.72.12 只修对一半）**：`foreach` 直接枚举 `Controls`
+  逐个 `Dispose()` 是错的——`Dispose()` 会把自己从父集合摘除，枚举器下标错位跳过一个，
+  被跳过的 `Clear()` 后变孤儿，终结器线程照炸（驾驶舱拖业务框实锤：炸在拖时、漏在切节点时）。
+  一律走 `Services/ControlDisposeHelper.DisposeAllAndClear`（`CopyTo` 快照数组后释放，
+  最后 `Clear`），禁手写 `foreach`；R1 只认 helper（白名单已删，靠行为检查）。
   **非模态弹窗同罪（V1.72.13）**：`Form.Close()` 不释放非模态窗体，设置窗 IP/IO/规则
   三 popup 的 FormClosed 只回写不释放就是第二案发现场——handler 里
   `finally { popup.Dispose(); }`，用例走生产挂接（反射 ShowXxxPopup→OpenForms 找窗→
@@ -185,11 +190,22 @@
   主窗（活到退出）用 `_mainClosing` 同款（`FormClosing` 首行置位，`WriteLog` 改 UI 丢弃文件照写）。
   **审计 R5/R6/R7 就是这四条的机器版**：R5 禁 UI 文件同步 `Control.Invoke(`、
   R6 锁 Timer 字段同文件 `Dispose()`、R7 锁长生命周期 `On*` 事件同文件 `-=`，HIGH 拦提交。
+  **审计 R8 是 Designer 可序列化锁（V1.72.16）**：R8a 禁 Designer 里 `AddRange(裸标识符)`
+  （只许 `new` 数组；静态字段引用 CodeDom 认不出，判定窗 `Dispositions` 实锤加载失败，
+  改构造代码填）、R8b 禁 `= xxx.Range.Min/Max` 成员表达式（存盘整行删，量程写字面值，
+  改常量同步改 Designer，主页布局 340 越界实锤）、R8c 禁 `ZoomScaleRect`+
+  `AutoScaleMode.Font` 混搭（改 `None` 并删 `AutoScaleDimensions`，终值本来就是 `None`）。
+  **Designer 三条军规（V1.72.16，两次被 VS 重写后沉淀）**：
+  ①`InitializeComponent` 方法体内禁写任何注释（VS 重写整段再生全删，说明写文件头/.cs）；
+  ②手写 Designer 与 VS 口径不一致（坐标/字体/模式）时，以 VS 重写版为 canonical 基线接受，
+  不手改回去，否则每次预览都脏；③`.resx` 别手删（VS 预览建的空模板也留着入库，
+  删了下次重建 + csproj 加条目更脏）。
   **纯代码窗设计器可预览（V1.72.14）**：只有带参构造的窗 VS 预览报"没有无参数构造函数"——
   补公有无参构造（空快照占位，执行键加 null-manager 守卫）；静态文本禁 `var` 局部，
   一律具名字段（设计器序列化认字段，局部下次存盘即丢；Name 全空也是终结器案发的辨认特征）。
   **改 UI 代码后必跑终结器审计**：`scripts/audit_finalizer_risk.ps1`
-  （R1 Clear/R2 非模态 Show/R3 Remove/R4 动态创建，HIGH 拦提交）；
+  （R1 快照释放/R2 非模态 Show/R3 Remove/R4 动态创建/R5 同步 Invoke/R6 Timer 释放/
+  R7 长事件退订/R8 Designer 可序列化，HIGH 拦提交）；
   新增非模态弹窗在 `$SafeShowKeys` 登记（方法|文件|配对），R2 验行为不认空登记。
 - **自绘性能大坑（V1.57.3 血泪教训）**：**禁止用"离屏 Bitmap 整幅预渲染 + OnPaint DrawImage 拷贝"来优化自绘控件**。实测离屏大图（2040×2025）上 `TextRenderer.DrawText` 每处约 **2.2ms**（屏幕 DC 上近 0ms），全量渲染 72 面板一次高达 2247ms，而 `UpdateAll` 每秒全量刷新 → 整个软件每 1 秒卡死。且 `g.Clear(白色)` 会把面板间隙刷白导致"面板连成一片"。**正确做法**：OnPaint 只重绘可见区面板（`e.ClipRectangle` 算行列范围），数据/选中变化仅 `Invalidate`；滚动卡顿用"16ms 定时器节流 AutoScrollPosition + 画刷/画笔缓存字段"解决，不要预渲染。判断优化效果务必用**真实屏幕 DC**（`CreateGraphics`）测，离屏 Graphics 的 TextRenderer 慢是 GDI+ 固有行为、不代表真实帧速。
 

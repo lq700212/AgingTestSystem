@@ -3,6 +3,53 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md).
 
+## V1.72.16 — 快照释放 + 设计器可序列化 + 布局量程（2026-09-13，用户一次报四个）
+
+### 改动范围
+- 流程驾驶舱拖业务框终结器跨线程炸（`UIScrollBar←UITextBox←Finalize`，Name 全空）：
+  V1.72.12 的 `foreach` 直接枚举 `Controls` 逐个 `Dispose` 是错的——`Dispose`
+  会把自己从父集合摘除，枚举器下标错位跳过一个，被跳过的 `Clear` 后变孤儿，
+  GC 时终结器线程炸（炸在拖的时候，漏在早先切节点的时候）。新增
+  `Services/ControlDisposeHelper.cs`（先 `CopyTo` 快照成数组再逐个释放，最后
+  `Clear`），驾驶舱 `DisposeEditorControls` 与主窗 H5（`CreateWorkstationPanels`）
+  改走它；回归用"旧写法复现抛异常/漏释放"红证据锁死。
+- 批量窗/主页布局窗双击预览即脏：手写 Designer 与 VS 序列化口径不一致
+  （`AutoScale.Font`+`ZoomScaleRect` 混搭、AI 估的坐标与真实布局差几像素），
+  以用户 VS 重写版为 canonical 基线接受（全限定名/坐标/字体以 VS 为准），不再手改回去；
+  主页布局窗的 `.resx`（VS 预览建的空模板）与 csproj 条目一并入库，删了反而重建更脏。
+- 主页布局窗拖预览边缘 `ArgumentOutOfRangeException`（"340 对 Value 无效"，
+  可视调尺寸全坏）：VS 重写时删掉了元组表达式写的 `Minimum`/`Maximum`
+  （`HomeLayoutConfig.TopBarRange.Min` 序列化器认不出），输入框变回 0~100。
+  四个 nud 量程改字面值（顶部 15~80/菜单 25~100/右侧 180~600/状态栏 15~60，
+  与 `HomeLayoutConfig.Range` 同步，改常量必同步改 Designer）；`Preview_LayoutChanged`/
+  `BtnRestore_Click`/构造初值三处赋值前一律 `ClampNud`（旧文件越界值也钳住不炸）。
+- 判定窗预览还是坏（上次漏两处）：Designer 里 `Items.AddRange(Dispositions)`
+  引用了另一个 partial 的静态字段（CodeDom 在实例上找不到静态成员，加载失败），
+  选项改由构造在 `InitializeComponent` 后代码填；`AutoScaleMode.Font`+
+  `ZoomScaleRect` 混搭改 `None` 并删 `AutoScaleDimensions`（全仓带 Zoom 且预览正常
+  的窗一律此口径，运行时零影响，终值本来就是 `None`）。
+- 审计脚本加 R8（Designer 可序列化锁，HIGH 拦提交）：R8a 禁 Designer 里
+  `AddRange(裸标识符)`（只许 `new` 数组）、R8b 禁 `= xxx.Range.Min/Max` 成员表达式
+  （量程写字面值）、R8c 禁 `ZoomScaleRect`+`AutoScaleMode.Font` 混搭（注释行不扫）；
+  R1 收紧为只认 `ControlDisposeHelper`（`$SafeClearFiles` 白名单删除，靠行为检查）。
+  反向验证：旧 `foreach` 写法与旧 `Font`+`Zoom` 都会报警。
+
+### 为什么这么改
+- 四个问题全是"释放/加载路径看着对、但差一层"：枚举中集合被改、序列化器认不出
+  的表达式、setter 偷偷改掉的值（Zoom 掰回 `None`）。修法都是"顺着框架的脾气来"：
+  快照后释放、只写设计器认得的字面值、不跟 Zoom 抢模式。
+- Designer 文件新军规（已进 AGENTS）：`InitializeComponent` 方法体内禁写注释
+  （VS 重写整段再生全删）、量程写字面值、静态引用移出 Designer、Sunny 窗一律
+  `None` 无 `Dimensions`、`.resx` 别手删。
+
+### 验证
+- 构建一次过；审计 HIGH=0 INFO=14；全量回归 1290 断言全绿（新增
+  `DesignerStabilityV172_16` 模块 17 条：helper 全释放/null 安全/旧写法红证据/
+  驾驶舱真方法反射释放/四量程字面值/340 拖动同步/越界钳制/构造期越界/三窗 None 锁）；
+  增量映射已登记（`ControlDisposeHelper` 新文件 + 四窗新模块）。
+- 预览即脏/判定窗预览需用户在 VS 里亲验（手头无 VS 设计器）：若仍脏，把 VS 改的文件
+  diff 贴回来，即是新的 canonical 增量。
+
 ## V1.72.15 — 全仓关窗竞态排查 + 审计 R5/R6/R7（2026-09-13，用户点名"全局检查+经验固化"）
 
 ### 改动范围
