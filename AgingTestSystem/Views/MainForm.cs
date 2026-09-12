@@ -200,7 +200,8 @@ namespace AgingTestSystem.Views
 
             // 【V1.67】项目档案就位（必须在 ApplyHomeLayout/LoadConfig/LoadRecipes 之前：
             // HomeLayout/配方/策略文件的路径都依赖当前项目目录）。
-            // 首跑自动建 Default；【V1.68 改干净】不认程序目录下的散文件（无老用户，不搬家）。
+            // 首跑自动建"烧屏测试"；【V1.68 改干净】不认程序目录下的散文件（无老用户，不搬家）；
+            // 【V1.72.10】EnsureActiveProfile 顺手清掉遗留的 Default 目录（列表里不再有 Default）。
             string activeProject = ProjectProfile.EnsureActiveProfile();
             System.Diagnostics.Debug.WriteLine($"[项目档案] 当前项目: {activeProject}");
             UpdateProjectDisplay(activeProject);
@@ -1969,7 +1970,8 @@ namespace AgingTestSystem.Views
         /// <summary>
         /// 项目切换 → 弹出项目档案窗体（【V1.67 新增】仅管理员：项目=工艺归属，
         /// 切错项目=跑错工艺，所以与系统设置同级管控；技术员/操作员点此直接提示）。
-        /// 切换后必须重启（运行时文件路径在启动时解析，运行中切换会读劈叉）。
+        /// 【V1.72.10 热更】窗体只改指针并带回项目名，真正的换装在这里做
+        /// （ReloadActiveProject：配方/工位设置/策略/布局即时生效，无需重启）。
         /// </summary>
         private void MenuParamProject_Click(object sender, EventArgs e)
         {
@@ -1982,7 +1984,95 @@ namespace AgingTestSystem.Views
             using (var form = new ProjectSwitchForm(() => _deviceManager.GetTestingDeviceIds().Length))
             {
                 ThemeManager.ApplyTo(form);
-                form.ShowDialog(this);
+                if (form.ShowDialog(this) == DialogResult.OK && !string.IsNullOrWhiteSpace(form.SwitchedProjectName))
+                {
+                    ReloadActiveProject(form.SwitchedProjectName.Trim());
+                }
+            }
+        }
+
+        /// <summary>
+        /// 项目热加载（【V1.72.10 新增】切换项目后即时生效，无需重启）。
+        ///
+        /// 【为什么以前必须重启】跟项目走的四个文件（配方/工位设置/主页布局/策略）
+        /// 在启动时一次性读进内存（_recipes 列表/StationSettingsCache/DeviceConfig/
+        /// 当前布局），运行中只改 ActiveProject 指针，内存还是旧项目的数据，
+        /// 继续跑就会"一半读旧目录一半读新目录"。本方法把启动时那一套加载动作
+        /// 原样重放一遍，数据源换成新项目：
+        /// 1) 在测复查（双保险：切换窗已拦，这里再查一次，防竞态）；
+        /// 2) 暂停主采集（拷配置时不让采集线程读到"半新半旧"）；
+        /// 3) LoadConfig 重读（App.config 机器缺省 + 新项目 Policy.json 叠加）
+        ///    → CopyFrom 就地换血（_config 是 readonly 引用，DeviceManager/MES
+        ///    持同一别名，就地拷才都生效；换引用只换自己手里的）；
+        /// 4) StationSettingsCache.Reload（丢掉旧项目回填，读新项目文件）；
+        /// 5) DeviceManager.ClearProjectScopedState（清旧工位指派 + 规则计时）；
+        /// 6) LoadRecipes（同一 List 就地换数据，自动完成源引用不变）；
+        /// 7) ApplyHomeLayout（新项目布局立即重排）+ 顶栏项目名刷新；
+        /// 8) 恢复采集 + 立即刷一帧面板（不等下个 1 秒周期，SN/配方当场清空）。
+        /// 【不动什么】硬件连接不断（串口/耦合器/送风机/扫码枪是跟机器的）；
+        /// 结构型配置（设备数/Mock 等）本就跟机器，LoadConfig 读出来与原来一致。
+        /// 失败兜底：任何一步抛异常 → 恢复采集 + 提示"热加载失败请重启"，
+        /// 不让程序停在"采集停了但数据没换完"的半截状态。
+        /// </summary>
+        /// <param name="newName">刚切换到的项目名（ProjectSwitchForm.SwitchedProjectName）</param>
+        private void ReloadActiveProject(string newName)
+        {
+            // 1) 在测复查：跑中任务禁切（窗体里拦过，这里防"选完到点切换之间刚好点了启动"）
+            int testing = 0;
+            try { testing = _deviceManager.GetTestingDeviceIds().Length; }
+            catch { testing = 0; }
+            if (testing > 0)
+            {
+                MessageBox.Show($"指针已指到项目 [{newName}]，但当前有 {testing} 台在测，" +
+                    "热加载已取消（防跑中任务读劈叉）。\n请等待完成/停止并复位后重新切换。",
+                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                WriteLog($"[项目切换] 热加载取消：在测 {testing} 台，指针={newName}");
+                return;
+            }
+
+            // 2) 暂停主采集（记住原状态，finally 按原样恢复）
+            bool wasRunning = false;
+            try { wasRunning = _deviceManager.PauseCollection(); }
+            catch { wasRunning = false; }
+
+            try
+            {
+                // 3) 配置换血：重读（含新项目 Policy 叠加）→ 就地拷进 _config
+                DeviceConfig fresh = LoadConfig();
+                _config.CopyFrom(fresh);
+
+                // 4) 工位回填缓存：读新项目 StationSettings.json
+                StationSettingsCache.Reload();
+
+                // 5) 编排层项目状态：清旧指派 + 规则计时（idle 台，无硬件动作）
+                _deviceManager.ClearProjectScopedState();
+
+                // 6) 配方列表：同一 List 就地换（自动完成源/各录入窗引用不变）
+                LoadRecipes();
+
+                // 7) 主页布局 + 顶栏项目名
+                ApplyHomeLayout();
+                UpdateProjectDisplay(newName);
+
+                // 8) 立即刷一帧（SN/配方当场换新，不等下个采集周期）
+                try { UpdateAllPanels(_deviceManager.GetAllBarometerData()); }
+                catch { /* 刷帧失败不影响切换，下个周期自动刷 */ }
+
+                WriteLog($"[项目切换] 已热加载项目 [{newName}]（配方/工位设置/策略/布局即时生效，无需重启）");
+                MessageBox.Show($"已切换到项目 [{newName}]，配方/策略/布局已即时生效，无需重启。",
+                    "项目切换", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                WriteLog($"[项目切换] 热加载项目 [{newName}] 失败：{ex.Message}（采集已恢复，建议重启程序）");
+                MessageBox.Show($"切换到项目 [{newName}] 后热加载失败：{ex.Message}\n" +
+                    "为防新旧数据混用，请重启程序。",
+                    "项目切换", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                try { _deviceManager.ResumeCollection(wasRunning); }
+                catch { /* 恢复失败下个周期自愈（定时器自启逻辑在 DeviceManager 内部） */ }
             }
         }
 
@@ -2274,10 +2364,10 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 顶栏显示当前项目（【V1.72.7 新增】切错项目=跑错工艺，首屏可见防呆）。
-        /// 项目切换后必须重启（路径启动时解析），故构造时设一次即可，无需订阅刷新。
-        /// 超长项目名由 lblProject.AutoEllipsis 省略号收尾不断行。
+        /// 【V1.72.10 热更】构造时设一次 + 每次热加载后刷新一次（两处调用，
+        /// 无需订阅事件）。超长项目名由 lblProject.AutoEllipsis 省略号收尾不断行。
         /// </summary>
-        /// <param name="projectName">生效的项目名（EnsureActiveProfile 返回，null 兜底 Default）</param>
+        /// <param name="projectName">生效的项目名（EnsureActiveProfile/热加载传入，null 兜底烧屏测试）</param>
         private void UpdateProjectDisplay(string projectName)
         {
             if (lblProject == null) return;

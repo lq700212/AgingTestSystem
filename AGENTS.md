@@ -55,6 +55,14 @@
   （`ProjectProfile.ResolveDataPath(file, true)`，`Projects/<项目>/`）；用户/快照/
   面板布局/日志/连接参数跟机器（程序目录）。改存储路径必须 rg 全仓扫字面文件名，
   老用例的字面路径会批量红（V1.67 实锤）；`Projects/` 住运行目录（bin/ 下，天然 gitignore）。
+- **项目切换热更免重启（V1.72.10）**：`SwitchTo` 只写指针，换装走
+  `MainForm.ReloadActiveProject` 八步（在测复查→暂停主采集→LoadConfig 重读→
+  `CopyFrom` 就地换血→`StationSettingsCache.Reload`→`ClearProjectScopedState`→
+  `LoadRecipes`→`ApplyHomeLayout`+顶栏+刷帧，失败提示重启）。
+  铁律：`_config` 是 readonly 引用一律 `CopyFrom`（换引用服务侧不生效）；
+  静态内存（工位缓存）切项目必须 `Reload`；清状态禁调 `StopAll`
+ （那是写 IO 全 OFF 的急停语义）；历史项目目录的改名/删除收进
+  `EnsureActiveProfile` 启动自愈，列表里永远干净。
 - **设置表 tooltip 全覆盖（V1.67 用户原则）**：配置项说明悬停可见，超 40 字按
   `WrapTooltip` 换行（断点优先标点，不断英文单词）；新增配置项的 `_descriptions`
   写清"现状是什么/改了会怎样"，别只写名字。

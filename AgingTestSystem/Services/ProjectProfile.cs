@@ -14,7 +14,7 @@ namespace AgingTestSystem.Services
     /// 就得手动备份一堆 json，出差现场极易弄混。现在按"项目"隔离：
     ///   程序目录/Projects/&lt;项目名&gt;/  =  Recipes.json + StationSettings.json
     ///                              + HomeLayout.json + Policy.json（策略）
-    /// 出差切项目 = 下拉选个名字 + 重启，30 秒搞定，不动代码。
+    /// 出差切项目 = 下拉选个名字即时生效（【V1.72.10 热更】无需重启），30 秒搞定，不动代码。
     ///
     /// 【跟项目的 vs 跟机器的：为什么这样分】
     /// - 跟项目（进 Profile 目录）：配方、工位设置、主页布局、工艺策略——换客户就换这套。
@@ -58,6 +58,16 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
+        /// <summary>缺省项目名（首跑/指针缺失时用；【V1.72.9】Default 改名而来，列表里不再有 Default）。</summary>
+        public const string DefaultProfileName = "烧屏测试";
+
+        /// <summary>
+        /// 历史遗留目录名（V1.72.9 之前的缺省项目名）。项目未上线、无老用户，
+        /// 启动自愈见 <see cref="CleanupLegacyDefault"/>：只做"改名/删除"，不做数据迁移。
+        /// </summary>
+        private const string LegacyDefaultProfileName = "Default";
+
+        /// <summary>
         /// 当前生效的项目名（读 App.config 的 ActiveProject；为空/缺省回 "烧屏测试"）。
         /// 大小写保留原样，目录名即项目名。
         /// </summary>
@@ -68,7 +78,7 @@ namespace AgingTestSystem.Services
                 string raw = null;
                 try { raw = ConfigurationManager.AppSettings["ActiveProject"]; }
                 catch { raw = null; }
-                if (string.IsNullOrWhiteSpace(raw)) return "烧屏测试";
+                if (string.IsNullOrWhiteSpace(raw)) return DefaultProfileName;
                 return raw.Trim();
             }
         }
@@ -92,7 +102,8 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 启动时确保档案就绪（MainForm 读任何运行时文件之前调用）：
         /// 1) 无 ActiveProject → 指向 烧屏测试 并写回 exe.config（机器指针初始化）；
-        /// 2) 项目目录不存在 → 创建。
+        /// 2) 清掉历史遗留的 Default 目录（见 CleanupLegacyDefault，项目未上线、改干净）；
+        /// 3) 项目目录不存在 → 创建。
         /// 【V1.68 改干净】删掉了"老文件搬家"：项目未上线，没有 V1.67 前的老用户，
         /// 程序目录下的散文件一律视为垃圾不再认——要是启动后配方空了，去 Projects/烧屏测试
         /// 里建，不要从根目录捡（两份数据源是 Suspicion 之源）。
@@ -100,6 +111,10 @@ namespace AgingTestSystem.Services
         /// <returns>生效的项目名</returns>
         public static string EnsureActiveProfile()
         {
+            // 0) 先清遗留 Default（必须在 ActiveProfileDir 建目录之前：若 Default 里有货，
+            //    直接整体改名成 烧屏测试，后面第 3 步就不用再建空目录，数据一次到位）
+            CleanupLegacyDefault();
+
             string name = ActiveProfileName;
 
             // 1) 指针初始化：没配过就写 烧屏测试（只写一次，以后用户在"项目切换"里改）
@@ -125,6 +140,54 @@ namespace AgingTestSystem.Services
             Directory.CreateDirectory(ActiveProfileDir);
 
             return name;
+        }
+
+        /// <summary>
+        /// 清掉历史遗留的 Default 目录（【V1.72.10 改干净】V1.72.9 把缺省项目改名
+        /// "烧屏测试"，但老版本跑过的机器上还留着空的 Projects/Default，项目列表里
+        /// 阴魂不散。本方法在每次启动时幂等执行，保证列表里永远没有 Default）。
+        ///
+        /// 【规则】项目未上线、无老用户包袱，只认"目录里有没有货"：
+        /// - Default 不存在 → 直接返回（大多数机器走这里，零开销）；
+        /// - Default 存在、而 烧屏测试 不存在 → 整体改名（Move，里面若有配方一个不少）；
+        /// - 两个都存在 → 把 Default 里"烧屏测试没有"的文件拷过去补齐，然后删掉 Default
+        ///   （重名文件以 烧屏测试 为准，不覆盖——新名字是正主）；
+        /// - 空的 Default → 直接删。
+        /// 全程 try/catch：清不掉（如文件被占用）只记 Debug 日志、不阻塞启动，
+        /// 下次启动再试一次。
+        /// </summary>
+        public static void CleanupLegacyDefault()
+        {
+            try
+            {
+                string root = ProjectsRoot;
+                string legacy = Path.Combine(root, LegacyDefaultProfileName);
+                if (!Directory.Exists(legacy)) return;
+                string target = Path.Combine(root, DefaultProfileName);
+                if (!Directory.Exists(target))
+                {
+                    // 正主还没建：整体改名，一步到位（目录非空也照搬，数据不丢）
+                    Directory.Move(legacy, target);
+                    return;
+                }
+                // 两个都在：Default 里独有的文件补拷给正主（重名不覆盖），然后删 Default
+                foreach (string f in ProjectScopedFiles)
+                {
+                    try
+                    {
+                        string src = Path.Combine(legacy, f);
+                        string dst = Path.Combine(target, f);
+                        if (File.Exists(src) && !File.Exists(dst)) File.Copy(src, dst);
+                    }
+                    catch { /* 单个文件失败跳过，继续清别的 */ }
+                }
+                try { Directory.Delete(legacy, true); }
+                catch { /* 被占用下次启动再清 */ }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[项目档案] 清理遗留 Default 失败: {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -204,11 +267,14 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 切换当前项目（写机器指针；调用方负责提示重启——运行时文件路径在启动时解析，
-        /// 运行中切换会导致"一半读旧目录一半读新目录"，所以必须重启生效）。
+        /// 切换当前项目（只写机器指针 ActiveProject + 刷 appSettings 缓存）。
+        /// 【V1.72.10 热更】写完指针即返回，内存数据的换装由调用方
+        /// （MainForm.ReloadActiveProject）接力完成：重载配方/工位缓存/策略叠加/
+        /// 主页布局 + 清工位指派 + 刷面板，全程无需重启。
+        /// 约束：调用前必须确认无工位在测（ProjectSwitchForm 已拦，MainForm 双保险复查）。
         /// </summary>
         /// <param name="name">已存在的项目名</param>
-        /// <returns>true=指针已改（待重启），false=项目不存在或写入失败</returns>
+        /// <returns>true=指针已改（待热加载），false=项目不存在或写入失败</returns>
         public static bool SwitchTo(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) return false;

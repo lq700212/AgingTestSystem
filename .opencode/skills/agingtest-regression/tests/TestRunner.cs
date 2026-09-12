@@ -1756,6 +1756,156 @@ namespace AgingTestSystem.Tests
             // 【V1.72.9】缺省项目名=烧屏测试（harness 无 ActiveProject 配置，稳定回缺省）
             Check("缺省项目名=烧屏测试", ProjectProfile.ActiveProfileName == "烧屏测试");
 
+            // ── V1.72.10 热更：切换指针往返 + 工位缓存跨项目隔离 ──
+            // 场景 = 用户在"项目切换"里选 A→切→选 B→切回：指针、路径、回填缓存必须跟人走。
+            // 约束：harness 与其它用例共享 run 目录，tmp 名唯一、finally 必恢复指针并删目录。
+            string hotOrig = ProjectProfile.ActiveProfileName;
+            string hotOrigDir = Path.Combine(ProjectProfile.ProjectsRoot, hotOrig);
+            bool hotHadOrigDir = Directory.Exists(hotOrigDir);
+            string hotA = "UT_热更_A";
+            string hotB = "UT_热更_B";
+            try
+            {
+                if (!hotHadOrigDir) Directory.CreateDirectory(hotOrigDir);
+                Check("热更项目A可建", ProjectProfile.CreateProfile(hotA));
+                Check("热更项目B可建", ProjectProfile.CreateProfile(hotB));
+                Check("切到A成功", ProjectProfile.SwitchTo(hotA));
+                Check("指针已指A", ProjectProfile.ActiveProfileName == hotA);
+                Check("项目文件路径落在A目录下",
+                    ProjectProfile.ResolveDataPath("StationSettings.json", true).Contains(hotA));
+                StationSettingsCache.Reload();
+                StationSettingsCache.Save(new StationCacheEntry { DeviceId = 1, SerialNumber = "SN-热更A" });
+                Check("A项目缓存写入可读",
+                    StationSettingsCache.Get(1) != null && StationSettingsCache.Get(1).SerialNumber == "SN-热更A");
+                Check("切到B成功", ProjectProfile.SwitchTo(hotB));
+                StationSettingsCache.Reload();
+                Check("切项目Reload后旧项目缓存不可见", StationSettingsCache.Get(1) == null);
+                StationSettingsCache.Save(new StationCacheEntry { DeviceId = 1, SerialNumber = "SN-热更B" });
+                Check("切回A成功", ProjectProfile.SwitchTo(hotA));
+                StationSettingsCache.Reload();
+                Check("切回A后A数据回来无串扰",
+                    StationSettingsCache.Get(1) != null && StationSettingsCache.Get(1).SerialNumber == "SN-热更A");
+            }
+            finally
+            {
+                try { ProjectProfile.SwitchTo(hotOrig); } catch { }
+                try { Directory.Delete(Path.Combine(ProjectProfile.ProjectsRoot, hotA), true); } catch { }
+                try { Directory.Delete(Path.Combine(ProjectProfile.ProjectsRoot, hotB), true); } catch { }
+                if (!hotHadOrigDir) { try { Directory.Delete(hotOrigDir, true); } catch { } }
+                StationSettingsCache.Reload(); // 缓存指回原项目（后模块还会 ResetStationCache 再隔离）
+            }
+            Check("指针已恢复原项目", ProjectProfile.ActiveProfileName == hotOrig);
+            Check("临时项目已清理", !ProjectProfile.ListProfiles().Contains(hotA)
+                && !ProjectProfile.ListProfiles().Contains(hotB));
+
+            // ── V1.72.10 改干净：遗留 Default 自愈（列表里永远没有 Default） ──
+            // run 目录是各模块共享的：burnDir 若已存在（别的用例留的货）绝不能删，
+            // 只验证"有正主时清 Default + 合并补拷 + 重名不覆盖"；反之验证"整体改名"。
+            string burnDir = Path.Combine(ProjectProfile.ProjectsRoot, "烧屏测试");
+            string legacyDir = Path.Combine(ProjectProfile.ProjectsRoot, "Default");
+            bool hadBurn = Directory.Exists(burnDir);
+            bool hadLegacy = Directory.Exists(legacyDir);
+            string stashDir = null;
+            if (hadLegacy)
+            {
+                stashDir = legacyDir + "_UT暂存_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                try { Directory.Move(legacyDir, stashDir); } catch { stashDir = null; }
+            }
+            try
+            {
+                if (!hadBurn)
+                {
+                    // 正主不在：有货 Default 整体改名（数据不丢，列表干净）
+                    Directory.CreateDirectory(legacyDir);
+                    File.WriteAllText(Path.Combine(legacyDir, "Recipes.json"), "[]");
+                    ProjectProfile.CleanupLegacyDefault();
+                    Check("正主不在时有货Default整体改名",
+                        !Directory.Exists(legacyDir) && File.Exists(Path.Combine(burnDir, "Recipes.json")));
+                    try { Directory.Delete(burnDir, true); } catch { } // 还原现场
+                }
+                else
+                {
+                    // 正主在：Default 必删；独有文件补拷；重名文件不覆盖正主
+                    string burnStation = Path.Combine(burnDir, "StationSettings.json");
+                    bool hadBurnStation = File.Exists(burnStation);
+                    string burnStationBackup = hadBurnStation ? File.ReadAllText(burnStation) : null;
+                    Directory.CreateDirectory(legacyDir);
+                    string stationMarker = "[{\"DeviceId\": 7, \"SerialNumber\": \"SN-UT补拷\"}]";
+                    File.WriteAllText(Path.Combine(legacyDir, "StationSettings.json"), stationMarker);
+                    ProjectProfile.CleanupLegacyDefault();
+                    Check("正主在时Default被删", !Directory.Exists(legacyDir));
+                    Check("项目列表无Default", !ProjectProfile.ListProfiles().Contains("Default"));
+                    if (hadBurnStation)
+                        Check("重名回填文件不覆盖正主", File.ReadAllText(burnStation) == burnStationBackup);
+                    else
+                    {
+                        Check("独有回填文件补拷给正主", File.ReadAllText(burnStation) == stationMarker);
+                        try { File.Delete(burnStation); } catch { } // 只删我们补拷的
+                    }
+                }
+            }
+            finally
+            {
+                // 有一删一：测试造的 Default 不能留；之前暂存的有货 Default 原样还回去
+                try { if (Directory.Exists(legacyDir) && stashDir != null) Directory.Delete(legacyDir, true); } catch { }
+                if (stashDir != null)
+                {
+                    try { if (!Directory.Exists(legacyDir)) Directory.Move(stashDir, legacyDir); } catch { }
+                }
+            }
+
+            // ── V1.72.10 热更：DeviceConfig.CopyFrom 就地换血（引用不变值全换） ──
+            var copySrc = new DeviceConfig
+            {
+                CollectInterval = 2000,
+                ZeroDurationPolicy = ZeroDurationPolicy.Block,
+                MesEndpoint = "http://ut",
+                ScannerEnabled = true,
+                AlarmPressureThresholdKPa = -9.5m
+            };
+            var copyDst = new DeviceConfig();
+            DeviceConfig alias = copyDst; // 持别名的服务（DeviceManager/MES）视角：引用不能变
+            copyDst.CopyFrom(copySrc);
+            Check("CopyFrom引用不变", Object.ReferenceEquals(alias, copyDst));
+            Check("CopyFrom全量拷(数字/枚举/字符串/布尔/小数)",
+                copyDst.CollectInterval == 2000
+                && copyDst.ZeroDurationPolicy == ZeroDurationPolicy.Block
+                && copyDst.MesEndpoint == "http://ut"
+                && copyDst.ScannerEnabled == true
+                && copyDst.AlarmPressureThresholdKPa == -9.5m);
+            copySrc.MesEndpoint = "http://changed";
+            Check("CopyFrom后两边脱钩(值拷贝)", copyDst.MesEndpoint == "http://ut");
+            bool copyThrew = false;
+            try { copyDst.CopyFrom(null); } catch (ArgumentNullException) { copyThrew = true; }
+            Check("CopyFrom(null)抛参数异常", copyThrew);
+
+            // ── V1.72.10 热更：DeviceManager.ClearProjectScopedState + 采集暂停 ──
+            // 只构造不 Start（无线程无时序；Fake 设备零硬件），用完 Dispose。
+            DeviceManager hotDm = null;
+            try
+            {
+                var hotCfg = new DeviceConfig
+                {
+                    TotalBarometers = 4, TotalInputs = 80, TotalOutputs = 160, FanEnabled = false
+                };
+                hotDm = new DeviceManager(hotCfg,
+                    new FakeBarometerReader(hotCfg.TotalBarometers),
+                    new FakeIoController(hotCfg.TotalInputs + hotCfg.TotalOutputs), null);
+                hotDm.SetStationRecipeName(1, "旧项目配方");
+                Check("清理前指派存在", hotDm.GetStationInfo(1) != null
+                    && hotDm.GetStationInfo(1).RecipeName == "旧项目配方");
+                hotDm.ClearProjectScopedState();
+                Check("清理后旧指派归零", hotDm.GetStationInfo(1) == null);
+                bool wasRunning = hotDm.PauseCollection();
+                Check("未启动时Pause返回false", wasRunning == false);
+                hotDm.ResumeCollection(false);
+                Check("Resume(false)不擅自启动", hotDm.PauseCollection() == false);
+            }
+            finally
+            {
+                if (hotDm != null) { try { hotDm.Dispose(); } catch { } }
+            }
+
             // ── ProjectPolicyStore.Save/Load 往返（写当前项目 Policy.json，隔离目录） ──
             string policyPath = ProjectPolicyStore.PolicyFilePath;
             bool hadPolicy = File.Exists(policyPath);

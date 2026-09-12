@@ -853,6 +853,61 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
+        /// 暂停主采集（【V1.72.10 热更】项目切换时调用；不碰连接不断硬件）。
+        /// 只停 _collectTimer（压力/IO 主链路），送风机独立定时器与重连节流不动——
+        /// 它们读的是跟机器的配置，与项目无关，停了反而丢温度曲线。
+        /// </summary>
+        /// <returns>暂停前采集是否在跑（调用方原样传给 ResumeCollection 恢复）</returns>
+        public bool PauseCollection()
+        {
+            bool wasRunning = _collectTimer.Enabled;
+            _collectTimer.Stop();
+            return wasRunning;
+        }
+
+        /// <summary>
+        /// 恢复主采集（PauseCollection 的另一半；wasRunning=false 时不启动，
+        /// 保持"原来就没跑"的状态，不擅自开采集）。
+        /// </summary>
+        /// <param name="wasRunning">PauseCollection 的返回值</param>
+        public void ResumeCollection(bool wasRunning)
+        {
+            if (wasRunning && !_collectTimer.Enabled) _collectTimer.Start();
+        }
+
+        /// <summary>
+        /// 清掉跟项目走的内存状态（【V1.72.10 热更】项目切换时调用，切前必须无在测）。
+        ///
+        /// 【清什么、为什么】
+        /// - _stationInfo（SN/配方/延时指派）：工位设置是跟项目的，旧项目的指派
+        ///   带到新项目 = 张冠李戴（面板上挂着别家的 SN 跑新工艺）。必须清零，
+        ///   新项目按自己的 StationSettings.json 重新指派；
+        /// - 规则持续计时（_rules.ResetStation）：自定义报警规则是跟项目的，
+        ///   旧规则攒了一半的"持续秒"不能带到新规则上（V1.69 家规：状态变迁调 Reset）。
+        /// 【不清什么、为什么】
+        /// - 压力/IO 实时缓存：下个采集周期（1 秒）自然刷新， Pain 无需清；
+        ///   清了反而闪一下空面板；
+        /// - 测试状态数组/快照：调用方已保证 TestingCount==0，idle 台无状态可清；
+        ///   且 StopAll 会写 IO 全 OFF + 停风机，那是急停动作，切换项目不该动硬件。
+        /// 线程安全：_stationInfo 持 _stationInfoLock，规则计时持 _stateLock，
+        /// 与采集线程同锁；调用方还停了主采集，双保险。
+        /// </summary>
+        public void ClearProjectScopedState()
+        {
+            lock (_stationInfoLock)
+            {
+                _stationInfo.Clear();
+            }
+            lock (_stateLock)
+            {
+                for (int i = 0; i < _config.TotalBarometers; i++)
+                {
+                    _rules.ResetStation(i + 1);
+                }
+            }
+        }
+
+        /// <summary>
         /// 气压表串口心跳 + 后台自动重连（【V1.16.2 新增】）
         /// 每个采集周期调用一次：
         /// - 状态边沿：气压表由"已连接 → 未连接"时，记一次"气压表串口已断开"日志，
