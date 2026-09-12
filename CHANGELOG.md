@@ -3,6 +3,56 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md)。
 
+## V1.72.4 — 分级回归：小改只测影响面（2026-09-12，无产品改动，纯测试基建）
+
+### 改动范围
+- `tests/TestRunner.cs` — `Main()` 的 37 个 `Module` 硬编码改为 `allModules`
+  查表 + `args[0]` 模块过滤（逗号分隔、大小写不敏感；`list` 打印清单；
+  未知模块 exit 2，防拼错导致"零模块全绿"误报）。断言数不变（1187）。
+- 新增 `scripts/get_affected_modules.ps1` — 产品文件→测试模块映射表（`$Map`，
+  保守登记直接覆盖 + 交互模块），`git diff` 改动自动算子集；
+  认不出的文件/骨架改动兜底 FULL，纯文档改动返回 NONE。
+- `run_unit_tests.ps1` 加 `-Modules` 透传；`build_and_test.ps1` 加
+  `-Modules` / `-Affected`（NONE 时跳过回归，构建+冒烟已过即绿）。
+
+### 为什么这么改
+- 用户点名：V1.72.3 一个 UI 间距调整跑了 1187 条全量，浪费资源。
+  以后日常小改 `build_and_test.ps1 -Affected`（如公共参数窗只跑
+  `UiStyleV172_1`，17 条秒过）；大重构/发布前仍走全量。
+- 修了两个实现期抓获的脚本坑：①新 ps1 无 BOM，中文 `、` 的 UTF-8 尾字节
+  在 GBK 下吞掉后续英文引号致解析雪崩——三个脚本统一加 UTF-8 BOM 根治；
+  ②`$affected` 与开关 `$Affected` 同名（PS 变量大小写不敏感），赋值炸
+  SwitchParameter 转换错——改名 `$affectedResult`（二分三次才定位，已进 skill 踩坑 #25）。
+
+### 验证
+- 映射单测：公共参数窗 2 文件→`UiStyleV172_1`；纯文档→NONE；
+  DeviceManager→7 模块；未知新文件→FULL；未知模块名 exit 2。
+- 子集 `UiStyleV172_1` 17/17 绿；`-Affected` 端到端（工作区含用例改动→兜底
+  FULL）构建 + 冒烟 + **1187 回归全绿**。
+
+## V1.72.3 — 公共参数标签输入框防叠（2026-09-12）
+
+### 改动范围
+- `Dialogs/CommonParameterForm.cs` — `CenterControls` 标签宽度口径修正：
+  `Max(实测文本宽, AutoSize 实际宽)`，间距 8→10px。
+- `Dialogs/CommonParameterForm.Designer.cs` — 初始 X 按运行真值摆
+ （lbl 54→36、nud 167→192），所见即所得。
+- 回归 +1 条（全量 1186→1187）：`公共参数标签输入框无重叠`
+  （`nud.Left - lbl.Right >= 8`，直接锁视觉间距）。
+
+### 为什么这么改
+- 用户报 lblThreshold 与 nudThreshold 距离太近/重叠。
+  根因：旧口径只用 `MeasureText` 纯文本宽（143px）估标签宽，
+  但标签是 AutoSize 的 Sunny UILabel（默认宋体 12pt + 自带内边距），
+  实占 146px——按小了算整组宽度，输入框偏左 3px，只剩 5px 缝。
+- 附带坑：Designer 残留 `Size 107` 是旧字体过期值，
+  拿它算居中会得出错误的 56/173（运行真值是 36/192），已按探针实测纠正；
+  以后算居中一律以运行时实测为准，勿用 Designer 残留 Size。
+
+### 验证
+- 探针实测：旧算术视觉间距 5px（新断言下红，锁有效）、
+  新算术 10px（绿）；构建 + 冒烟 + **1187 回归全绿**。
+
 ## V1.72.2 — 老配方 0 值语义锁（2026-09-12，无产品改动，纯回归）
 
 ### 改动范围

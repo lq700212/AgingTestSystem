@@ -141,7 +141,7 @@ namespace AgingTestSystem.Tests
         }
 
         [STAThread]
-        private static int Main()
+        private static int Main(string[] args)
         {
             // 控制台输出切 UTF-8，避免中文断言信息乱码（脚本捕获输出也按 UTF-8 读）
             try { Console.OutputEncoding = Encoding.UTF8; } catch { }
@@ -150,43 +150,103 @@ namespace AgingTestSystem.Tests
             Console.WriteLine("BaseDirectory = " + AppDomain.CurrentDomain.BaseDirectory);
             Console.WriteLine("起始工作目录   = " + Environment.CurrentDirectory);
 
-            Module("PasswordHasher", PasswordHasherTests);
-            Module("UserManager", UserManagerTests);
-            Module("SettingsForm.Normalize", NormalizeTests);
-            Module("IoOutputChannelRemap", IoRemapTests);
-            Module("DeviceConfig.ParseFanIpCandidates", FanIpTests);
-            Module("RecipeStorage", RecipeStorageTests);
-            Module("TestEventLogger", TestEventLoggerTests);
-            Module("AppLogFileWriter", AppLogWriterTests);
-            Module("PanelLayoutConfig", PanelLayoutTests);
-            Module("HomeLayoutConfig", HomeLayoutTests);
-            Module("ModelRoundtrip", ModelRoundtripTests);
-            Module("AgingSequencer", AgingSequencerTests);
-            Module("PolicyV167", PolicyTests);
-            Module("MesV168", MesTests);
-            Module("RuleExprV169", RuleExprTests);
-            Module("TestSessionStore", TestSessionStoreTests);
-            Module("AgingBusinessModel", AgingBusinessModelTests);
-            Module("ThemeManager", ThemeManagerTests);
-            Module("IoMapBuilder", IoMapBuilderTests);
-            Module("MockDevices", MockDeviceTests);
-            Module("StationCache", StationCacheTests);
-            Module("ModelDefaults", ModelDefaultsTests);
-            Module("SettingsValidate", SettingsValidateTests);
-            Module("ScannerParse", ScannerParseTests);
-            Module("ModbusConvert", ModbusConvertTests);
-            Module("FanParse", FanParseTests);
-            Module("StationTime", StationTimeTests);
-            Module("HistoryCsv", HistoryCsvTests);
-            Module("UiPureHelpers", UiPureHelperTests);
-            Module("DeviceManagerIntegration", DeviceManagerIntegrationTests);
-            Module("DeviceManagerExtended", DeviceManagerExtendedTests);
-            Module("DeviceManagerPolicy", DeviceManagerPolicyTests);
-            Module("DeviceManagerMes", DeviceManagerMesTests);
-            Module("DeviceManagerRules", DeviceManagerRulesTests);
-            Module("FlowCockpitV170", FlowCockpitTests);
-            Module("UiStyleV172_1", UiStyleV172_1Tests);
-            Module("LegacyRecipeGuard", LegacyRecipeGuardTests);
+            // ── V1.72.4 分级回归：37 个模块全表（新增模块只加这里一行，
+            // 下面的选中逻辑与 SKILL.md 覆盖表自动跟随，无需再改别处）──
+            var allModules = new Dictionary<string, Action>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "PasswordHasher", PasswordHasherTests },
+                { "UserManager", UserManagerTests },
+                { "SettingsForm.Normalize", NormalizeTests },
+                { "IoOutputChannelRemap", IoRemapTests },
+                { "DeviceConfig.ParseFanIpCandidates", FanIpTests },
+                { "RecipeStorage", RecipeStorageTests },
+                { "TestEventLogger", TestEventLoggerTests },
+                { "AppLogFileWriter", AppLogWriterTests },
+                { "PanelLayoutConfig", PanelLayoutTests },
+                { "HomeLayoutConfig", HomeLayoutTests },
+                { "ModelRoundtrip", ModelRoundtripTests },
+                { "AgingSequencer", AgingSequencerTests },
+                { "PolicyV167", PolicyTests },
+                { "MesV168", MesTests },
+                { "RuleExprV169", RuleExprTests },
+                { "TestSessionStore", TestSessionStoreTests },
+                { "AgingBusinessModel", AgingBusinessModelTests },
+                { "ThemeManager", ThemeManagerTests },
+                { "IoMapBuilder", IoMapBuilderTests },
+                { "MockDevices", MockDeviceTests },
+                { "StationCache", StationCacheTests },
+                { "ModelDefaults", ModelDefaultsTests },
+                { "SettingsValidate", SettingsValidateTests },
+                { "ScannerParse", ScannerParseTests },
+                { "ModbusConvert", ModbusConvertTests },
+                { "FanParse", FanParseTests },
+                { "StationTime", StationTimeTests },
+                { "HistoryCsv", HistoryCsvTests },
+                { "UiPureHelpers", UiPureHelperTests },
+                { "DeviceManagerIntegration", DeviceManagerIntegrationTests },
+                { "DeviceManagerExtended", DeviceManagerExtendedTests },
+                { "DeviceManagerPolicy", DeviceManagerPolicyTests },
+                { "DeviceManagerMes", DeviceManagerMesTests },
+                { "DeviceManagerRules", DeviceManagerRulesTests },
+                { "FlowCockpitV170", FlowCockpitTests },
+                { "UiStyleV172_1", UiStyleV172_1Tests },
+                { "LegacyRecipeGuard", LegacyRecipeGuardTests },
+            };
+
+            // 参数约定：无参=全量；"模块A,模块B"=子集（大小写不敏感）；
+            // "list"=只打印模块清单（给脚本做补全/校验用）。
+            // 未知模块名直接 exit 2 并打印清单（fail-fast，防拼写错导致"零模块全绿"误报）。
+            List<string> selected;
+            if (args.Length == 1 && args[0].Trim().Equals("list", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine("可用模块（共 " + allModules.Count + " 个）：");
+                foreach (string k in allModules.Keys) Console.WriteLine("  " + k);
+                return 0;
+            }
+            else if (args.Length == 0 || (args.Length == 1 && string.IsNullOrWhiteSpace(args[0])))
+            {
+                selected = new List<string>(allModules.Keys);
+            }
+            else
+            {
+                selected = new List<string>();
+                var unknown = new List<string>();
+                foreach (string raw in string.Join(" ", args).Split(','))
+                {
+                    string m = raw.Trim();
+                    if (m.Length == 0) continue;
+                    if (allModules.ContainsKey(m))
+                    {
+                        // 按全表顺序去重加入（输出顺序稳定，与参数顺序无关）
+                        if (!selected.Exists(s => s.Equals(m, StringComparison.OrdinalIgnoreCase)))
+                            selected.Add(m);
+                    }
+                    else unknown.Add(m);
+                }
+                if (unknown.Count > 0)
+                {
+                    Console.WriteLine("[SETUP-FAIL] 未知模块: " + string.Join("、", unknown.ToArray()));
+                    Console.WriteLine("可用模块（共 " + allModules.Count + " 个）：");
+                    foreach (string k in allModules.Keys) Console.WriteLine("  " + k);
+                    return 2;
+                }
+                if (selected.Count == 0)
+                {
+                    Console.WriteLine("[SETUP-FAIL] 未选中任何模块（参数为空），拒绝空跑。");
+                    return 2;
+                }
+            }
+
+            Console.WriteLine("选中模块 " + selected.Count + "/" + allModules.Count
+                + (selected.Count == allModules.Count ? "（全量）" : "（子集）") + "："
+                + string.Join("、", selected.ToArray()));
+            foreach (string name in allModules.Keys)
+            {
+                if (selected.Exists(s => s.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                    Module(name, allModules[name]);
+                else
+                    Console.WriteLine("(跳过模块：" + name + ")");
+            }
 
             // 统一清理临时目录（尽力而为，删不掉不影响结果）
             foreach (string dir in _tempDirs)
@@ -3648,6 +3708,14 @@ namespace AgingTestSystem.Tests
                     Check("CenterControls后控件仍在窗内",
                         lbl.Left >= 0 && nud.Left > lbl.Left && btn.Left >= 0
                         && nud.Right <= pmForm.ClientSize.Width && btn.Right <= pmForm.ClientSize.Width);
+                    // V1.72.3 无重叠锁：输入框左缘 − 标签右缘（AutoSize 实占）≥ 8px。
+                    // 直接锁视觉间距，不与产品 CenterControls 同口径（防循环自证）：
+                    // 探针实测 MeasureText=143、AutoSize 实宽=146（delta=3），
+                    // 旧口径（纯文本宽+gap 8）视觉间距仅 8−3=5px → 本条红；
+                    // 新口径（Max 实宽+gap 10）视觉间距 10px → 本条绿。
+                    // 另注意 Designer 残留 Size 107 是旧字体过期值，算居中勿用它。
+                    Check("公共参数标签输入框无重叠",
+                        nud.Left - lbl.Right >= 8);
                 }
             }
             finally { pmForm.Dispose(); }

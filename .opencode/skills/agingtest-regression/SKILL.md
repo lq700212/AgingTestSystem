@@ -15,18 +15,34 @@ description: AgingTestSystem 项目专属的最终测试验证技能：一键完
 ## 一、快速用法
 
 ```powershell
-# 一键全跑：构建 → 冒烟(真机 exe 存活) → 全量回归用例（最常用）
+# 一键全跑：构建 → 冒烟(真机 exe 存活) → 全量回归用例（发布/大重构用，默认）
 powershell -ExecutionPolicy Bypass -File ".opencode\skills\agingtest-regression\scripts\build_and_test.ps1"
+
+# 按影响面跑：构建 → 冒烟 → 只跑 git 改动命中的模块（日常小改用，最常用）
+powershell -ExecutionPolicy Bypass -File ".opencode\skills\agingtest-regression\scripts\build_and_test.ps1" -Affected
 
 # 只冒烟（已构建好的 exe 启动存活 18s 判定；设备连接超时导致真实启动要 10~15s）
 powershell -ExecutionPolicy Bypass -File ".opencode\skills\agingtest-regression\scripts\smoke_test.ps1"
 
-# 只跑回归用例（不重新构建，引用 bin\Debug 现有产物）
-powershell -ExecutionPolicy Bypass -File ".opencode\skills\agingtest-regression\scripts\run_unit_tests.ps1"
+# 只跑回归用例（不重新构建，引用 bin\Debug 现有产物；-Modules 可指定子集）
+powershell -ExecutionPolicy Bypass -File ".opencode\skills\agingtest-regression\scripts\run_unit_tests.ps1" -Modules "UiStyleV172_1,ThemeManager"
+
+# 查有哪些模块 / 看某次改动会命中哪些模块（不执行，只分析）
+powershell -ExecutionPolicy Bypass -File ".opencode\skills\agingtest-regression\scripts\run_unit_tests.ps1" -Modules "list"
+powershell -ExecutionPolicy Bypass -Command "& '.opencode\skills\agingtest-regression\scripts\get_affected_modules.ps1' -Files @('AgingTestSystem\Dialogs\CommonParameterForm.cs')"
 ```
 
-判定标准：退出码 0 = 全绿；输出末尾 `PASS = n FAIL = 0 / ALL PASS`。
-失败时会打印每条失败断言的名称与实际值明细。
+## 一点五、分级回归策略（V1.72.4：小改不跑全量）
+
+- **日常小改**（单个窗体/单个服务/单个模型）：`build_and_test.ps1 -Affected`，
+  按 `git diff` 自动算模块子集（如公共参数窗间距只跑 `UiStyleV172_1`，17 条秒过）。
+- **必须全量**：大重构、发布前、改了骨架（csproj/Interfaces/用例自身/scripts）。
+  映射不到的新文件/接口改动会自动兜底全量（fail-safe，宁多跑不漏测）。
+- **映射表**在 `scripts/get_affected_modules.ps1` 的 `$Map`：
+  **新增产品 .cs 文件必须在此登记**（否则每次改它都付全量代价）；
+  登记时连带"断言交互"的模块一起写（如 TestEventLogger 改格式→全部 DeviceManager* 都读 CSV）。
+- 判定标准：退出码 0 = 全绿；输出末尾 `PASS = n FAIL = 0 / ALL PASS`。
+  失败时会打印每条失败断言的名称与实际值明细。
 
 ## 二、目录结构与职责
 
@@ -41,7 +57,7 @@ agingtest-regression/
     └── TestRunner.cs         ← 全部测试用例源码（加用例就改这里）
 ```
 
-## 三、测试覆盖范围（37 个模块，1186 断言）
+## 三、测试覆盖范围（37 个模块，1187 断言）
 
 | 模块 | 覆盖点 |
 | --- | --- |
@@ -80,7 +96,7 @@ agingtest-regression/
 | RuleExprV169(V1.69) | 四则优先级/括号/负号/取模/字面量、比较逻辑与或非、变量大小写、短路跳过除零、除零模零未知变量错、语法错位置、NaN恒false、规则表行格式/行号/上限20、执行器持续计时(假时钟/中断复位/同配置不清/换配置清/非在测复位/立即/求值错)、完成表达式(空禁用/到点/求值错)、缺省锁、ValidateValue规则分支 |
 | **DeviceManagerRules(V1.69)** | 自定义报警端到端(首轮触发FAIL+CSV规则名)、完成表达式提前完成(CSV原因)、跳过抽真空(直接上电+常压不误报+快照Aging+CSV)、各阶段台数R4(抽真空1/老化1/空闲2) |
 | FlowCockpitV170(V1.70) | 拓扑锁(7节点8边+端点全已知+节点挂key+key全真属性)、缺省文本锁、策略切换文本变、台数进文本、布局存取往返/钳制/损坏回空、驾驶舱构造不断言弹窗(V1.71)、检索框 SetCaretToEnd 原生/Sunny 双过(V1.71)、驾驶舱无参构造不抛+边框7件(V1.72 Designer 拆分) |
-| UiStyleV172_1(V1.72.1) | 弹窗主按钮蓝5窗(DodgerBlue+Custom+白字)、公共参数设计Y锁(lbl65/nud62/btn110)+CenterControls不动Y、历史日期宽150+实测文本宽防叠、深浅下蓝保留 |
+| UiStyleV172_1(V1.72.1) | 弹窗主按钮蓝5窗(DodgerBlue+Custom+白字)、公共参数设计Y锁(lbl65/nud62/btn110)+CenterControls不动Y、公共参数标签输入框无重叠(V1.72.3：锁视觉间距≥8px；MeasureText比AutoSize实占小3px是根因，Designer残留Size 107过期勿用)、历史日期宽150+实测文本宽防叠、深浅下蓝保留 |
 | LegacyRecipeGuard(V1.72.2) | V1.59老配方0值语义锁：缺字段读出0/null、下发0=定格0(0≠全局)/null=保持/清空回全局、批量窗新建默认全局、老配方回填显示0待人工复核（只构造不启采集） |
 
 **不在覆盖范围**（明确边界）：真串口/真设备通讯（ModbusRtuBarometerReader /
@@ -92,7 +108,10 @@ UI 弹窗分支（如配方同名覆盖确认框，靠界面手工测试）、�
 1. 打开 `tests/TestRunner.cs`，找到对应模块的 `XxxTests()` 方法；
 2. 加一行 `Check("用例名(说清预期)", 条件, "可选失败详情");`
    - 异常也是预期行为时用 `CheckThrows<TEx>("名字", () => ...)`；
-   - 新模块就写 `private static void XxxTests()` 并在 `Main()` 里挂一行 `Module("名字", XxxTests);`
+   - 新模块就写 `private static void XxxTests()` 并在 `Main()` 的 `allModules`
+     字典里加一行（选中逻辑与 SKILL 覆盖表自动跟随，无需改别处）；
+   - 过滤参数：`TestRunner.exe [模块A,模块B]` 跑子集（大小写不敏感），
+     `list` 打印清单，未知模块名 exit 2（防拼错导致"零模块全绿"误报）。
 3. 重跑 `run_unit_tests.ps1` 必须全绿；若新用例暴露了产品 bug → 先修产品代码再回来；
 4. 若踩了新坑，把结论追加到本文件第六节。
 
@@ -135,9 +154,11 @@ UI 弹窗分支（如配方同名覆盖确认框，靠界面手工测试）、�
 8. **CSV 可选字段全空时行尾必然 `,,`**：TestEventLogger 每个字段后面都跟逗号，
    pressure/temperature 缺省时两个空列连着，别把 EndsWith(",") 和 !EndsWith(",,")
    组合当成"留空"判据。
-9. **PowerShell 5.1 对无 BOM 的 ps1 按 ANSI 解析**，中文字符串/注释会乱码甚至语法错。
-    本 skill 的 ps1 一律纯 ASCII 英文内容；中文输出统一由被调用的 C# 程序打印
-    （脚本里设 `[Console]::OutputEncoding = UTF8`）。
+9. **PowerShell 5.1 对无 BOM 的 ps1 按 ANSI 解析**，中文字符串/注释会乱码甚至语法错：
+    最阴的是中文标点（如 `、` U+3001）的 UTF-8 尾字节在 GBK 下是悬空前导字节，
+    会吞掉后面的英文引号，引发连锁解析错。**根治：本 skill 的 ps1 一律带 UTF-8 BOM**
+    （V1.72.4 起三个脚本已加；edit 工具改 BOM 文件会保留 BOM，改完用字节头复查）。
+    输出中文仍由被调用的 C# 程序打印（脚本里设 `[Console]::OutputEncoding = UTF8`）。
 10. **管道捕获中文显示残缺不影响判定**：通过 bash/管道转发时控制台编码仍可能花屏，
     但 PASS/FAIL/ALL PASS/退出码始终可靠，以它们为准。
 11. **集成测试必须给 Fake 气压表设初始读数**：DeviceManager 有"连续 N 次读失败→失联报警"
@@ -199,3 +220,10 @@ UI 弹窗分支（如配方同名覆盖确认框，靠界面手工测试）、�
     "值false"当"出错"断言，红；引擎本身是对的——`||` 对照组绿即证明）。
     **教训：短路/惰性语义的用例必须把"值断言"和"无错断言"分开写（evalErr==null
     且 eval==期望值），混在一起红了都不知道哪边错。**
+25. **PowerShell 变量大小写不敏感，局部变量别撞参数名**（V1.72.4：
+    build_and_test 里 `$affected = & ...` 给 `[switch]$Affected` 赋值，
+    炸"无法将 String 转 SwitchParameter"，定位花了三次二分）。
+    **教训：开关叫 `-Affected`，局部变量就叫 `$affectedResult`；
+    凡 param 块有名，函数体内禁用其大小写变体。**
+26. **ps1 的 param 块必须是第一条语句**（V1.72.4：`$ErrorActionPreference` 写在
+    param 前面，报"无法将 param 识别为 cmdlet"）。注释可以放前面，代码不行。

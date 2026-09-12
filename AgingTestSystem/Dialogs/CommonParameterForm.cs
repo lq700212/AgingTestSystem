@@ -93,12 +93,17 @@ namespace AgingTestSystem.Dialogs
         /// </summary>
         private void CenterControls()
         {
-            // 标签的实际像素宽度（AutoSize 的宽度用 PreferredSize 或测量文本得到）
-            int labelWidth = System.Windows.Forms.TextRenderer.MeasureText(
+            // 标签的实际占用宽度（V1.72.3 血泪：原来只用 MeasureText 纯文本宽，
+            // 但 lbl 是 AutoSize 的 Sunny UILabel——默认宋体 12pt + 自带内边距，
+            // 实际占用（lbl.Width / PreferredSize）比纯文本宽大好几个像素；
+            // 按小了算整组宽度，输入框就偏左盖到标签上。取两者最大值，两边都保：
+            // 即使构造时 AutoSize 还没布局（Width 偏小），MeasureText 也能兜底。）
+            int textWidth = System.Windows.Forms.TextRenderer.MeasureText(
                 lblThreshold.Text, lblThreshold.Font).Width;
+            int labelWidth = System.Math.Max(textWidth, lblThreshold.Width);
 
             // 一组控件（标签 + 间距 + 数值框）的整体宽度
-            const int gap = 8;                      // 标签与数值框之间的间距
+            const int gap = 10;                     // 标签与数值框之间的间距（V1.72.3：8→10，用户点名太挤，留白更松）
             int groupWidth = labelWidth + gap + nudThreshold.Width;
 
             // 整组水平居中：左边距 = (窗体宽度 - 整组宽度) / 2（只动 X，Y 以 Designer 为准）
