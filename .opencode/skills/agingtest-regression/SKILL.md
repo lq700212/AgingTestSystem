@@ -1,6 +1,6 @@
 ---
 name: agingtest-regression
-description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案热更/MES映射上报/规则表达式/流程驾驶舱等全部核心逻辑类（1211 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
+description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案热更删除/MES映射上报/规则表达式/流程驾驶舱等全部核心逻辑类（1220 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
 ---
 
 # AgingTestSystem 回归测试套件（冒烟 + 用例一体）
@@ -57,7 +57,7 @@ agingtest-regression/
     └── TestRunner.cs         ← 全部测试用例源码（加用例就改这里）
 ```
 
-## 三、测试覆盖范围（37 个模块，1211 断言）
+## 三、测试覆盖范围（37 个模块，1220 断言）
 
 | 模块 | 覆盖点 |
 | --- | --- |
@@ -89,7 +89,7 @@ agingtest-regression/
 | HistoryCsv(V1.62) | CSV 解析边角、与 TestEventLogger 互逆 7 列 |
 | UiPureHelpers(V1.62) | 批号去空格、配方查找(ignoreCase)+25h 不截断、工位温度读取(V1.63 数字框恒合法+回填钳制)、IP 合法、数字格钳制、网格命中/边界/四色、位值→通道、风机中文(V1.63 对齐主窗)、CH340 谓词/串口参数钳制(V1.63)、右侧宽度比例 ComputeRightPanelWidth(V1.65：0.234 常量/护栏/兜底/自定义优先 8 条)、配方窗负压/显示模式框回填(V1.66)、反射 as-cast 跟随控件换型（V1.71：TextBox→UITextBox 两处） |
 | **DeviceManagerExtended(V1.62)** | 状态口/在线数/启动错误、批量 SN、配方名负压联动、副本隔离、非法电池、连接与间隔热生效、批量阈值+定时器恢复、反方向报警端到端、全局时长回退、定格隔离、清理回全局、不限时、2s 延时门、空闲容错、自愈计数、报警驻留、边沿单次(CSV 计数)、快照全字段+双台+批号、急停、停止再启动、风机生命周期(MockFan)、超长数组与错 id 防火墙、脏快照恢复、显示模式下发/保持/清空+叠加采集可见+GetTestingDeviceIds(V1.66) |
-| PolicyV167(V1.67) | BuildStartBlockText 阻断文案、MapAlarmResult 责任映射、ComputeResumeDuration 剩余/跑超/回拨、ValidatePolicyCombination 矛盾锁、ParseValue 大小写/非法、PolicyKeys↔DeviceConfig↔下拉选项三处同步锁、DeviceConfig 缺省=现状锁、快照新字段缺省锁、ValidateValue 策略分支+点位、NormalizePolicyValue 脏值兜底、WrapTooltip 40字换行、ProjectProfile 非法名/重复/切换拒绝/路径分流、Policy.json 存取往返、热更往返12条(V1.72.10：切A/切B/切回指针路径缓存跟人走+finally恢复)、Default自愈3条(正主在删+补拷+重名不覆盖/正主不在整体改名)、DeviceConfig.CopyFrom引用不变全量拷脱钩、ClearProjectScopedState清指派+Pause/Resume不擅自启动 |
+| PolicyV167(V1.67) | BuildStartBlockText 阻断文案、MapAlarmResult 责任映射、ComputeResumeDuration 剩余/跑超/回拨、ValidatePolicyCombination 矛盾锁、ParseValue 大小写/非法、PolicyKeys↔DeviceConfig↔下拉选项三处同步锁、DeviceConfig 缺省=现状锁、快照新字段缺省锁、ValidateValue 策略分支+点位、NormalizePolicyValue 脏值兜底、WrapTooltip 40字换行、ProjectProfile 非法名/重复/切换拒绝/路径分流、Policy.json 存取往返、热更往返12条(V1.72.10：切A/切B/切回指针路径缓存跟人走+finally恢复)、Default自愈3条(正主在删+补拷+重名不覆盖/正主不在整体改名)、DeviceConfig.CopyFrom引用不变全量拷脱钩、ClearProjectScopedState清指派+Pause/Resume不擅自启动、DeleteProfile删不存在空名被拒切入当前禁删切回删除列表干净指针不变(V1.72.11) |
 | **DeviceManagerPolicy(V1.67)** | 治具责任端到端(装夹异常+CSV)、待判定完成+下料录入(收/跳过/null)+CSV明细、失压保持(不停机+边沿单条不刷屏)、续跑(快照阶段/上电时刻+剩余60s+重抽真空)、泄压(破空阀开+CSV+复位关阀不残留) |
 | MesV168(V1.68) | 触发器解析(空全开/中英文分隔/未知进错/去重/命中)、字段映射(合法/未知本站/坏组/坏MES名/重复覆盖/大小写)、静态字段(坏组/空值)、组包(直通/改名/静态合并覆盖)、ParseValue字符串直通、PolicyKeys含MES三key、MES缺省锁(零行为)、ValidateValue鉴权/触发/映射/静态/布尔/整数分支、NormalizeMesAuthType兜底None、上报器Fake传输(发出/映射/静态/地址/开关零发送/触发器零发送/Mock只写CSV/全灭落盘/恢复补发清盘)、DPAPI往返/前缀/明文兼容/篡改回null、自定义头解析与鉴权优先、分地址解析与命中回退 |
 | **DeviceManagerMes(V1.68)** | Fake抓包端到端：启动/完成(PASS+映射+静态+SN)/下料判定(不良代码)/报警(FAIL)四触发器各一条+发往配置地址 |

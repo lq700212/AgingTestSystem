@@ -267,6 +267,39 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
+        /// 删除项目（【V1.72.11】建错/验证用项目的清理口，配切换窗"删除项目"按钮）。
+        ///
+        /// 【规则】空名、当前项目、不存在 → 一律 false：
+        /// - 当前项目正在用（内存数据就是它），删了文件和内存对不上，
+        ///   必须先切到别的项目再删；
+        /// - 删的是"非当前"项目目录，不碰当前内存/采集，在测也可删别的项目，
+        ///   调用方只拦"删当前"不拦在测（别误收紧）。
+        /// 成功 = 整个项目目录递归删除（配方/工位设置/布局/策略一起走）。
+        /// </summary>
+        /// <param name="name">要删除的项目名</param>
+        /// <returns>true=已删除，false=拒绝或失败</returns>
+        public static bool DeleteProfile(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            string target = name.Trim();
+            try
+            {
+                // 当前项目禁删（先切走再删，防内存与文件对不上）
+                if (string.Equals(target, ActiveProfileName, StringComparison.OrdinalIgnoreCase))
+                    return false;
+                string dir = Path.Combine(ProjectsRoot, target);
+                if (!Directory.Exists(dir)) return false;
+                Directory.Delete(dir, true);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[项目档案] 删除项目失败: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
         /// 切换当前项目（只写机器指针 ActiveProject + 刷 appSettings 缓存）。
         /// 【V1.72.10 热更】写完指针即返回，内存数据的换装由调用方
         /// （MainForm.ReloadActiveProject）接力完成：重载配方/工位缓存/策略叠加/

@@ -1906,6 +1906,28 @@ namespace AgingTestSystem.Tests
                 if (hotDm != null) { try { hotDm.Dispose(); } catch { } }
             }
 
+            // ── V1.72.11：DeleteProfile（建错/验证完的清理口） ──
+            string delCur = ProjectProfile.ActiveProfileName; // 前面 finally 已恢复
+            string delName = "UT_待删";
+            try
+            {
+                Check("删不存在项目被拒", !ProjectProfile.DeleteProfile("UT_不存在_999"));
+                Check("空名删除被拒", !ProjectProfile.DeleteProfile("  "));
+                Check("可建待删项目", ProjectProfile.CreateProfile(delName));
+                Check("切到待删项目", ProjectProfile.SwitchTo(delName));
+                Check("当前项目拒绝删除", !ProjectProfile.DeleteProfile(delName));
+                Check("切回原项目", ProjectProfile.SwitchTo(delCur));
+                Check("非当前项目可删", ProjectProfile.DeleteProfile(delName));
+                Check("列表无待删项目", !ProjectProfile.ListProfiles().Contains(delName));
+            }
+            finally
+            {
+                try { ProjectProfile.SwitchTo(delCur); } catch { }
+                try { Directory.Delete(Path.Combine(ProjectProfile.ProjectsRoot, delName), true); } catch { }
+                StationSettingsCache.Reload();
+            }
+            Check("删除后指针仍在原项目", ProjectProfile.ActiveProfileName == delCur);
+
             // ── ProjectPolicyStore.Save/Load 往返（写当前项目 Policy.json，隔离目录） ──
             string policyPath = ProjectPolicyStore.PolicyFilePath;
             bool hadPolicy = File.Exists(policyPath);

@@ -16,7 +16,7 @@ namespace AgingTestSystem.Dialogs
     /// │ │ 项目列表（ListBox，★=当前）   │ │
     /// │ └──────────────────────────────┘ │
     /// │ 新建：[________] [创建]          │
-    /// │ [切换并生效] [关闭]              │
+    /// │ [切换并生效] [删除项目] [关闭]   │
     /// │ 注：测试中有在测工位时禁切       │
     /// └──────────────────────────────────┘
     ///
@@ -24,6 +24,8 @@ namespace AgingTestSystem.Dialogs
     /// - 新建=以当前项目为模板复制（配方/策略/布局全带过去，回来改差异项即可）；
     /// - 切换=改机器指针 ActiveProject，主窗体随后热加载（配方/工位设置/策略/
     ///   布局即时换装，【V1.72.10】无需重启；成功后 SwitchedProjectName 带回项目名）；
+    /// - 删除=删非当前项目整个目录（【V1.72.11】建错/验证完的清理口；当前项目
+    ///   禁删，先切走再删；二次确认防手滑）；
     /// - 有工位在测（Testing/Vacuuming/Aging）时禁切：切项目=换配方换策略，
     ///   跑中的任务会读劈叉，等停机/完成再切。
     /// - 用户账号是全局的，不跟项目走（见 ProjectProfile 注释）。
@@ -37,6 +39,7 @@ namespace AgingTestSystem.Dialogs
         private Sunny.UI.UITextBox _txtNewName;
         private Sunny.UI.UIButton _btnCreate;
         private Sunny.UI.UIButton _btnSwitch;
+        private Sunny.UI.UIButton _btnDelete;
         private Sunny.UI.UIButton _btnClose;
 
         /// <summary>
@@ -96,12 +99,15 @@ namespace AgingTestSystem.Dialogs
             this.Controls.Add(_btnCreate);
             y += 34;
 
-            _btnSwitch = new Sunny.UI.UIButton { Location = new Point(12, y), Size = new Size(188, 30), Text = "切换并生效" };
+            // 【V1.72.11】操作行一排三按钮（各 120 宽、间距 8：12+120+8+120+8+120=388，右留 12）
+            _btnSwitch = new Sunny.UI.UIButton { Location = new Point(12, y), Size = new Size(120, 30), Text = "切换并生效" };
             _btnSwitch.Click += BtnSwitch_Click;
+            _btnDelete = new Sunny.UI.UIButton { Location = new Point(140, y), Size = new Size(120, 30), Text = "删除项目" };
+            _btnDelete.Click += BtnDelete_Click;
             _btnClose = new Sunny.UI.UIButton
             {
-                Location = new Point(208, y),
-                Size = new Size(180, 30),
+                Location = new Point(268, y),
+                Size = new Size(120, 30),
                 Text = "关闭",
                 DialogResult = DialogResult.Cancel,
                 FillColor = Color.DimGray,
@@ -110,6 +116,7 @@ namespace AgingTestSystem.Dialogs
                 Style = Sunny.UI.UIStyle.Custom
             };
             this.Controls.Add(_btnSwitch);
+            this.Controls.Add(_btnDelete);
             this.Controls.Add(_btnClose);
             y += 38;
 
@@ -179,6 +186,42 @@ namespace AgingTestSystem.Dialogs
             MessageBox.Show($"项目 [{name}] 已创建（以当前项目为模板复制）。\n选中它再点\"切换并生效\"即切换。",
                 "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
             _txtNewName.Text = "";
+            RefreshList();
+        }
+
+        /// <summary>
+        /// 删除项目（【V1.72.11】建错名/验证完的清理口）。
+        /// 只删"选中的非当前项目"：当前项目禁删（先切走再删，防内存与文件对不上）；
+        /// 删的是别的项目目录，不碰当前内存与采集，所以在测也可删（与"禁切"不同，
+        /// 这里不查 TestingCount，原因写在 DeleteProfile 注释里）。
+        /// 二次确认框里带项目名防手滑；删完刷新列表即可，无需热加载（顶栏/数据不动）。
+        /// </summary>
+        private void BtnDelete_Click(object sender, EventArgs e)
+        {
+            if (_lstProjects.SelectedItem == null)
+            {
+                MessageBox.Show("请先在列表中选中要删除的项目。", "提示",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            string name = StripMarker(_lstProjects.SelectedItem.ToString());
+            if (string.Equals(name, ProjectProfile.ActiveProfileName, StringComparison.OrdinalIgnoreCase))
+            {
+                MessageBox.Show($"项目 [{name}] 是当前项目，不能删除。\n" +
+                    "请先切换到别的项目，再回来删它。",
+                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            DialogResult r = MessageBox.Show($"确定要删除项目 [{name}] 吗？\n" +
+                "该项目下的配方/工位设置/主页布局/策略将全部删除，且不可恢复。",
+                "确认删除", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
+            if (r != DialogResult.OK) return;
+            if (!ProjectProfile.DeleteProfile(name))
+            {
+                MessageBox.Show("删除失败（项目不存在或文件被占用）。", "错误",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
             RefreshList();
         }
 
