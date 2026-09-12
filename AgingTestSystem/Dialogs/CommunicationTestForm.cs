@@ -139,6 +139,11 @@ namespace AgingTestSystem.Dialogs
         /// <summary>非模态映射提示窗（复用同一实例，多次触发只更新文本，不重复弹窗）</summary>
         private RemapNoticeForm _remapNoticeForm;
 
+        /// <summary>窗体已关闭标记（V1.72.14 新增）：OnFormClosed 首行置 true，后台遍历/连接线程的
+        /// RunOnUi/AppendLog 见到即直接丢弃，不再 BeginInvoke/Invoke，避免"句柄已销毁后跨线程碰 txtLog"
+        /// 与"已释放窗体上建新句柄"两类 InvalidOperationException；volatile 保证后台线程立即可见。</summary>
+        private volatile bool _closed;
+
         /// <summary>构造函数：复用主程序的共享连接，创建两个测试网格</summary>
         /// <param name="deviceManager">设备管理器（拥有 IO 耦合器共享连接；通过它完成连接与原始寄存器读写）</param>
         public CommunicationTestForm(DeviceManager deviceManager)
@@ -217,17 +222,29 @@ namespace AgingTestSystem.Dialogs
         /// <param name="connected">true=已连接，false=未连接</param>
         private void SetConnected(bool connected)
         {
+            // 【V1.72.14】关窗竞态下已排队的 BeginInvoke 仍会进到这里，直碰 led/lbl 即炸，故先拦。
+            if (_closed || IsDisposed || Disposing) { _connected = connected; return; }
+            try
+            {
+                if (ledStatus == null || ledStatus.IsDisposed) return;
+                if (lblStatus == null || lblStatus.IsDisposed) return;
+            }
+            catch { return; }
             _connected = connected;
 
-            // LED 颜色与亮灭：已连接=亮绿灯，未连接=亮红灯
-            ledStatus.Color = connected ? Color.Lime : Color.FromArgb(230, 80, 80);
-            ledStatus.On = true;
+            try
+            {
+                // LED 颜色与亮灭：已连接=亮绿灯，未连接=亮红灯
+                ledStatus.Color = connected ? Color.Lime : Color.FromArgb(230, 80, 80);
+                ledStatus.On = true;
 
-            // 状态文字与颜色
-            lblStatus.Text = connected ? "已连接" : "未连接";
-            lblStatus.ForeColor = connected
-                ? Color.FromArgb(0, 150, 80)      // 连接：绿色
-                : Color.FromArgb(30, 80, 160);    // 未连接：深蓝
+                // 状态文字与颜色
+                lblStatus.Text = connected ? "已连接" : "未连接";
+                lblStatus.ForeColor = connected
+                    ? Color.FromArgb(0, 150, 80)      // 连接：绿色
+                    : Color.FromArgb(30, 80, 160);    // 未连接：深蓝
+            }
+            catch { }
         }
 
         // ===================== 通道映射表生成 =====================
@@ -301,6 +318,9 @@ namespace AgingTestSystem.Dialogs
         /// <returns>true=已连接，false=连接失败/未连接</returns>
         private bool TryConnectSilent()
         {
+            // 【V1.72.15】关后不碰硬件：关闭瞬间后台连接任务若刚起步，直接返回，
+            // 不调共享连接、不排队 UI 回调（RunOnUi 另有自拦，双保险）。
+            if (_closed || IsDisposed || Disposing) return false;
             bool ok = _deviceManager.EnsureIoConnected();
             RunOnUi(() =>
             {
@@ -368,12 +388,19 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 跨线程安全地在 UI 线程执行委托（后台线程 → UI 线程用 BeginInvoke）。
-        /// 窗体已释放/正在释放时直接忽略，避免 ObjectDisposedException。
+        /// 【V1.72.14 加固】关闭后（_closed/IsDisposed/Disposing/句柄未建/已销毁）直接丢弃，
+        /// 不再 BeginInvoke：旧版只查 IsDisposed，关闭瞬间后台拍仍能 BeginInvoke 进已销毁句柄，
+        /// 抛"线程间操作无效"（非 UI 线程弹窗）；BeginInvoke 本身包 try，防竞态。
         /// </summary>
         private void RunOnUi(Action action)
         {
             if (action == null) return;
-            if (IsDisposed || Disposing) return;
+            if (_closed || IsDisposed || Disposing) return;
+            try
+            {
+                if (!IsHandleCreated) return;
+            }
+            catch { return; }
             if (InvokeRequired)
             {
                 try { BeginInvoke(new Action(action)); }
@@ -381,31 +408,54 @@ namespace AgingTestSystem.Dialogs
             }
             else
             {
-                action();
+                try { action(); }
+                catch { }
             }
         }
 
-        /// <summary>窗体关闭时停止所有定时器，释放资源（**不**断开共享连接——连接归主程序所有）</summary>
+        /// <summary>窗体关闭时停止所有定时器，释放资源（**不**断开共享连接——连接归主程序所有）
+        /// 【V1.72.14】首行置 _closed 拦后台回调；定时器/提示窗逐个 try 包，单个失败不影响其余；
+        /// 提示窗 Close+Dispose 包 try（它被用户点×后 Close 再调无妨，Dispose 保 Sunny 输入框在 UI 线程释放）。</summary>
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            _closed = true;
             // 停止遍历/状态定时器并释放，避免窗体销毁后定时器回调
             _sweepActive = false;
-            if (_sweepTimer != null)
+            try
             {
-                _sweepTimer.Stop();
-                _sweepTimer.Dispose();
+                if (_sweepTimer != null)
+                {
+                    _sweepTimer.Stop();
+                    _sweepTimer.Dispose();
+                }
             }
-            if (_statusTimer != null)
+            catch { }
+            try
             {
-                _statusTimer.Stop();
-                _statusTimer.Dispose();
+                if (_statusTimer != null)
+                {
+                    _statusTimer.Stop();
+                    _statusTimer.Dispose();
+                }
             }
-            if (_remapNoticeForm != null)
+            catch { }
+            try
             {
-                _remapNoticeForm.Close();
-                _remapNoticeForm.Dispose();
-                _remapNoticeForm = null;
+                if (_remapNoticeForm != null)
+                {
+                    if (!_remapNoticeForm.IsDisposed) _remapNoticeForm.Close();
+                }
             }
+            catch { }
+            try
+            {
+                if (_remapNoticeForm != null)
+                {
+                    if (!_remapNoticeForm.IsDisposed) _remapNoticeForm.Dispose();
+                    _remapNoticeForm = null;
+                }
+            }
+            catch { _remapNoticeForm = null; }
 
             base.OnFormClosed(e);
         }
@@ -441,6 +491,8 @@ namespace AgingTestSystem.Dialogs
         /// <param name="triggerRow">触发本次写入的排索引（0~8），仅用于日志显示</param>
         public void WriteRegister(ChannelGrid grid, int regIndex, int triggerRow)
         {
+            // 【V1.72.15】关后停硬件写（在途遍历拍的收尾调用进到这里即丢弃）。
+            if (_closed || IsDisposed || Disposing) return;
             int addr = grid.RegAddresses[regIndex];
             int val = grid.CurrentRegValues[regIndex];
 
@@ -594,6 +646,7 @@ namespace AgingTestSystem.Dialogs
         /// <param name="dstCh">实际输出通道号（0~15）</param>
         public void ShowRemapNotice(string ioName, int srcReg, int srcCh, int dstReg, int dstCh)
         {
+            if (_closed || IsDisposed || Disposing) return;
             string msg = string.Format(
                 "通道 {0}（寄存器 0x{1:X4} 第 {2} 通道）已做备用通道映射。\n\n" +
                 "实际输出通道：寄存器 0x{3:X4} 第 {4} 通道（第 {5} 路）。\n\n" +
@@ -601,14 +654,19 @@ namespace AgingTestSystem.Dialogs
                 ioName, srcReg, srcCh + 1, dstReg, dstCh + 1, dstCh + 1);
 
             // 复用同一个悬浮提示窗（非模态、不抢焦点），多次触发只更新文本，不重复弹窗
-            if (_remapNoticeForm == null || _remapNoticeForm.IsDisposed)
+            // 【V1.72.14】关闭竞态下不再建新窗（建了也随主窗一起释放，不如直接丢弃防孤儿）。
+            try
             {
-                _remapNoticeForm = new RemapNoticeForm();
-                // 【V1.60】提示窗打开前按当前主题着色
-                AgingTestSystem.Services.ThemeManager.ApplyTo(_remapNoticeForm);
-                _remapNoticeForm.Show(this);
+                if (_remapNoticeForm == null || _remapNoticeForm.IsDisposed)
+                {
+                    _remapNoticeForm = new RemapNoticeForm();
+                    // 【V1.60】提示窗打开前按当前主题着色
+                    AgingTestSystem.Services.ThemeManager.ApplyTo(_remapNoticeForm);
+                    _remapNoticeForm.Show(this);
+                }
+                if (!_remapNoticeForm.IsDisposed) _remapNoticeForm.SetMessage(msg);
             }
-            _remapNoticeForm.SetMessage(msg);
+            catch { }
 
             AppendLog($"[映射] 通道 {ioName}（0x{srcReg:X4} 通道{srcCh + 1}）→ 实际输出 0x{dstReg:X4} 通道{dstCh + 1}");
         }
@@ -616,6 +674,9 @@ namespace AgingTestSystem.Dialogs
         /// <summary>
         /// 非模态映射提示窗：WS_EX_NOACTIVATE + WS_EX_TOOLWINDOW，弹窗不激活、不抢焦点、
         /// 不进任务栏/AltTab；置顶显示并停留在屏幕右上角，直到用户手动关闭。
+        /// 【V1.72.14】自带 FormClosed→Dispose：非模态 Close 不释放，不自释就是孤儿 Sunny 控件，
+        /// GC 终结器线程 Dispose 读 Handle 即跨线程崩（R2 白名单 reuse 只能保"主窗在时不进终结"，
+        /// 用户先×掉提示窗、主窗后关的窗口期仍会进终结；自释后此窗永不进终结）。
         /// </summary>
         private sealed class RemapNoticeForm : UIForm
         {
@@ -651,6 +712,9 @@ namespace AgingTestSystem.Dialogs
 
                 Controls.Add(_label);
                 Controls.Add(footer);
+
+                // 非模态自释（UI 线程 FormClosed 里 Dispose，Sunny 控件永不在终结器线程释放）
+                this.FormClosed += (s, e) => { try { this.Dispose(); } catch { } };
             }
 
             /// <summary>禁止激活：弹窗不抢占当前窗口焦点（鼠标点击仍有效）。</summary>
@@ -727,6 +791,8 @@ namespace AgingTestSystem.Dialogs
         /// </summary>
         private void StartSweep()
         {
+            // 【V1.72.15】排队回调（状态定时断连/页签切换）关后进到这里即丢弃，不碰按钮/定时器。
+            if (_closed || IsDisposed || Disposing) return;
             // 按当前页签确定要遍历的测试网格（0=负压开关测试，1=载台上电测试）
             if (tabControl.SelectedIndex == 0)
             {
@@ -756,10 +822,16 @@ namespace AgingTestSystem.Dialogs
         /// </summary>
         private void StopSweep()
         {
+            // 【V1.72.15】同上：关后（定时器已释放）StopSweep 再调 Stop/Text 即炸，只收标记。
             _sweepActive = false;
-            _sweepTimer.Stop();
-            btnSweep.Text = "一键遍历";
-            btnSweep.Style = UIStyle.Purple;
+            if (_closed || IsDisposed || Disposing) { _sweepGrid = null; return; }
+            try { _sweepTimer.Stop(); } catch { }
+            try
+            {
+                btnSweep.Text = "一键遍历";
+                btnSweep.Style = UIStyle.Purple;
+            }
+            catch { }
 
             // 停止后把该网格全部通道关闭（仅已连接时才写设备，未连接只清本地灯）
             if (_sweepGrid != null)
@@ -787,11 +859,14 @@ namespace AgingTestSystem.Dialogs
         ///  2) 加锁整体写回设备（读-改-写）；
         ///  3) 读回真实通道状态，切回 UI 线程实时刷新按钮，让跑马灯与实际通断同步。
         /// 连接中途断开时由共享连接的状态定时器统一处理（停遍历 + 提示）。
+        /// 【V1.72.15】关后停硬件写：关闭瞬间在途的拍若继续写寄存器，等于"关了窗还在动设备"，
+        /// 现每步查 _closed，关后整拍丢弃（设备保持关窗前状态，不残留半拍）。
         /// </summary>
         private void SweepStepWorker()
         {
             try
             {
+                if (_closed || IsDisposed || Disposing) return;
                 if (!_sweepActive || _sweepGrid == null) return;
 
                 // 连接中断时停止遍历（不再写失败刷屏），交由状态定时器统一处理
@@ -814,12 +889,15 @@ namespace AgingTestSystem.Dialogs
                 int[] regs = grid.ComputeSweepRegisters(row, col);
 
                 // 2) 加锁写回设备（每个寄存器一次，读-改-写保留共享字节）
+                // 【V1.72.15】写前再查关闭：计算与写之间关窗即停手。
+                if (_closed || IsDisposed || Disposing) return;
                 WriteSweepRegisters(grid, regs);
 
                 // 3) 读回 10 个寄存器，用于按钮实时反映真实通断
                 ushort[] readBack = null;
                 lock (_modbusLock)
                 {
+                    if (_closed) return;
                     if (_connected)
                     {
                         readBack = ReadRegs(0x2000, 10);
@@ -835,13 +913,19 @@ namespace AgingTestSystem.Dialogs
                 int litCol = col;
                 RunOnUi(() =>
                 {
+                    // 【V1.72.14】排队期间关窗即丢弃，不碰已释放的圆形灯按钮/提示窗。
+                    if (_closed || IsDisposed || Disposing) return;
                     if (_sweepGrid == null) return;
-                    if (readBack != null && readBack.Length >= 10)
+                    try
                     {
-                        int[] vals = new int[10];
-                        for (int i = 0; i < 10; i++) vals[i] = readBack[i] & 0xFFFF;
-                        _sweepGrid.SetButtonsFromRegisters(vals);
+                        if (readBack != null && readBack.Length >= 10)
+                        {
+                            int[] vals = new int[10];
+                            for (int i = 0; i < 10; i++) vals[i] = readBack[i] & 0xFFFF;
+                            _sweepGrid.SetButtonsFromRegisters(vals);
+                        }
                     }
+                    catch { return; }
                     if (idxForLog == 0)
                     {
                         AppendLog($"[遍历] {_sweepGridName} 完成一整圈（72 路通断检测），继续下一圈...");
@@ -879,6 +963,8 @@ namespace AgingTestSystem.Dialogs
         /// </summary>
         private void WriteSweepRegisters(ChannelGrid grid, int[] regs)
         {
+            // 【V1.72.15】关后停硬件写（与 SweepStepWorker 双保险）。
+            if (_closed || IsDisposed || Disposing) return;
             lock (_modbusLock)
             {
                 if (!_connected) return;
@@ -968,28 +1054,51 @@ namespace AgingTestSystem.Dialogs
         /// <summary>
         /// 把一条日志追加到底部 txtLog（SunnyUI UITextBox），并加时间戳，最多保留 200 行。
         /// 自动滚动到底部，方便现场随时查看最近操作。
+        /// 【V1.72.14】旧版用同步 Invoke：关闭瞬间后台拍 Invoke 进已销毁句柄即炸"线程间操作无效"
+        /// （非 UI 线程弹窗）；现改异步 BeginInvoke + 关闭/句柄三查 + 全程 try，后台收尾日志丢了就丢了，
+        /// 不炸框；UI 线程直写分支同样包 try（关窗竞态下 txtLog 已释放）。
         /// </summary>
         public void AppendLog(string message)
         {
+            if (_closed || IsDisposed || Disposing) return;
             string line = $"[{DateTime.Now:HH:mm:ss}] {message}";
+            try
+            {
+                if (txtLog == null || txtLog.IsDisposed) return;
+                if (!IsHandleCreated || !txtLog.IsHandleCreated) return;
+            }
+            catch { return; }
             if (this.txtLog.InvokeRequired)
             {
-                this.txtLog.Invoke(new Action<string>(AppendLog), line);
+                try { this.txtLog.BeginInvoke(new Action<string>(AppendLogInner), line); }
+                catch { }
                 return;
             }
 
-            this.txtLog.AppendText(line + Environment.NewLine);
-            this.txtLog.ScrollToCaret();
+            AppendLogInner(line);
+        }
 
-            const int maxLines = 200;
-            var lines = this.txtLog.Lines;
-            if (lines.Length > maxLines)
+        /// <summary>日志真正落盘（必在 UI 线程调；AppendLog 已分流，后台不直调这里）。</summary>
+        private void AppendLogInner(string line)
+        {
+            if (_closed || IsDisposed || Disposing) return;
+            try
             {
-                int skip = lines.Length - maxLines;
-                var kept = new string[maxLines];
-                Array.Copy(lines, skip, kept, 0, maxLines);
-                this.txtLog.Lines = kept;
+                if (txtLog == null || txtLog.IsDisposed) return;
+                this.txtLog.AppendText(line + Environment.NewLine);
+                this.txtLog.ScrollToCaret();
+
+                const int maxLines = 200;
+                var lines = this.txtLog.Lines;
+                if (lines.Length > maxLines)
+                {
+                    int skip = lines.Length - maxLines;
+                    var kept = new string[maxLines];
+                    Array.Copy(lines, skip, kept, 0, maxLines);
+                    this.txtLog.Lines = kept;
+                }
             }
+            catch { }
         }
 
         // ========================================================================

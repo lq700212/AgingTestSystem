@@ -53,6 +53,13 @@ namespace AgingTestSystem.Dialogs
         private readonly DeviceManager _deviceManager;
 
         /// <summary>
+        /// 窗体已关闭标记（V1.72.15 新增，全仓关窗竞态排查：后台批量写线程在关闭前后脚
+        /// BeginInvoke 进已销毁句柄即炸"线程间操作无效"。volatile 保证后台线程立即可见；
+        /// OnFormClosed 首行置位，投递点与完成入口双查，丢日志不炸框）。
+        /// </summary>
+        private volatile bool _closed;
+
+        /// <summary>
         /// 构造函数
         /// </summary>
         /// <param name="deviceManager">设备管理器（主窗体传入，负责批量写阈值）</param>
@@ -159,12 +166,26 @@ namespace AgingTestSystem.Dialogs
                 }
 
                 // ===== 4) 切回 UI 线程显示结果 =====
-                // IsHandleCreated 判断窗体还没被关闭，避免对已释放窗体调用 BeginInvoke
-                if (IsHandleCreated)
+                // 【V1.72.15】旧版只查 IsHandleCreated 且无 try：关闭瞬间仍能 BeginInvoke 进已销毁句柄
+                // （与通讯/风扇窗同病根）；现关窗/释放/句柄三查 + try 包，关后完成回调直接丢弃。
+                try
                 {
+                    if (_closed || IsDisposed || Disposing) return;
+                    if (!IsHandleCreated) return;
                     BeginInvoke(new Action(() => OnBatchWriteCompleted(thresholdValue, result)));
                 }
+                catch { }
             });
+        }
+
+        /// <summary>
+        /// 窗体关闭时置位，拦后台完成回调（**不**停硬件写——写阈值是整批落盘语义，
+        /// 关窗只丢 UI 回调，设备侧写完即止；见 OnBatchWriteCompleted 入口自拦）。
+        /// </summary>
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            _closed = true;
+            base.OnFormClosed(e);
         }
 
         /// <summary>
@@ -180,6 +201,14 @@ namespace AgingTestSystem.Dialogs
         /// <param name="result">写入结果字典（deviceId → 是否成功），异常时为 null</param>
         private void OnBatchWriteCompleted(decimal thresholdValue, Dictionary<int, bool> result)
         {
+            // 【V1.72.15】排队期间关窗即丢弃：BeginInvoke 已投递的回调仍会在关后执行，
+            // 直碰 btnSave/MessageBox 即炸，故先拦（与通讯窗 SetConnected 同因）。
+            if (_closed || IsDisposed || Disposing) return;
+            try
+            {
+                if (btnSave == null || btnSave.IsDisposed) return;
+            }
+            catch { return; }
             // 恢复按钮状态（无论成功失败都要恢复）
             btnSave.Enabled = true;
             btnSave.Text = "保存设置";

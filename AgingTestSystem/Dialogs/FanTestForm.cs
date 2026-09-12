@@ -57,6 +57,9 @@ namespace AgingTestSystem.Dialogs
         /// <summary>是否已连接（镜像 DeviceManager.IsFanConnected，由刷新定时器跟随）</summary>
         private volatile bool _connected;
 
+        /// <summary>窗体已关闭标记（V1.72.14 新增，与通讯窗同因：拦后台命令/重连线程在关闭后碰句柄）</summary>
+        private volatile bool _closed;
+
         /// <summary>自动刷新是否忙（防任务堆积：上一拍未完成时跳过下一拍）</summary>
         private volatile bool _refreshBusy;
 
@@ -89,11 +92,20 @@ namespace AgingTestSystem.Dialogs
             AutoConnect();
         }
 
-        /// <summary>关闭窗体时：停止定时器（**不**断开连接——连接归主程序所有）</summary>
+        /// <summary>关闭窗体时：停止定时器（**不**断开连接——连接归主程序所有）
+        /// 【V1.72.14】首行置 _closed 拦后台 RunOnUi/AppendLog；定时器 Stop+Dispose 包 try。</summary>
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
-            _refreshTimer.Stop();
-            _refreshTimer.Dispose();
+            _closed = true;
+            try
+            {
+                if (_refreshTimer != null)
+                {
+                    _refreshTimer.Stop();
+                    _refreshTimer.Dispose();
+                }
+            }
+            catch { }
             base.OnFormClosed(e);
         }
 
@@ -115,9 +127,11 @@ namespace AgingTestSystem.Dialogs
             Task.Run(() => ConnectInternal());
         }
 
-        /// <summary>后台执行按需重连（不弹窗）：成功更新状态并启动自动刷新，失败只写日志</summary>
+        /// <summary>后台执行按需重连（不弹窗）：成功更新状态并启动自动刷新，失败只写日志
+        /// 【V1.72.15】关后不碰硬件（与通讯窗 TryConnectSilent 同因）。</summary>
         private void ConnectInternal()
         {
+            if (_closed || IsDisposed || Disposing) return;
             // 生产配置未启用送风机时无法共享连接（主程序根本没建 FanControllerClient）
             if (!_config.FanEnabled)
             {
@@ -136,34 +150,46 @@ namespace AgingTestSystem.Dialogs
                 AppendLog(ok
                     ? $"[连接] 已连接送风机 {_config.FanIpAddress}:{_config.FanPort}（复用主程序共享连接）"
                     : $"[错误] 送风机 {_config.FanIpAddress}:{_config.FanPort} 连接失败（请检查 IP/网线，主程序后台会自动重连）");
-                if (ok) _refreshTimer.Start();
+                // 【V1.72.15】执行期再查：排队期间关窗则定时器已释放，Start 即炸，丢弃。
+                if (ok && !_closed && !IsDisposed && !Disposing && _refreshTimer != null)
+                {
+                    try { _refreshTimer.Start(); } catch { }
+                }
             });
         }
 
         // ===================== 状态读取 =====================
 
-        /// <summary>自动刷新定时器触发：从主程序缓存读状态刷新标签（上一拍未完成则跳过）</summary>
+        /// <summary>自动刷新定时器触发：从主程序缓存读状态刷新标签（上一拍未完成则跳过）
+        /// 【V1.72.14】包 try/finally：旧版异常即卡死 _refreshBusy（以后永不刷新）；关窗直接丢弃。</summary>
         private void OnRefreshTick(object sender, EventArgs e)
         {
+            if (_closed || IsDisposed || Disposing) return;
             if (_refreshBusy) return;
             _refreshBusy = true;
-
-            FanData data = _deviceManager.GetFanData();
-            bool live = _deviceManager.IsFanConnected;
-            var d = data;
-            RunOnUi(() =>
+            try
             {
-                if (live && d != null && d.IsOnline)
+                FanData data = _deviceManager.GetFanData();
+                bool live = _deviceManager.IsFanConnected;
+                var d = data;
+                RunOnUi(() =>
                 {
-                    UpdateStatus(d);
-                    SetConnected(true);
-                }
-                else
-                {
-                    SetConnected(false);
-                }
-            });
-            _refreshBusy = false;
+                    if (live && d != null && d.IsOnline)
+                    {
+                        UpdateStatus(d);
+                        SetConnected(true);
+                    }
+                    else
+                    {
+                        SetConnected(false);
+                    }
+                });
+            }
+            catch { }
+            finally
+            {
+                _refreshBusy = false;
+            }
         }
 
         private void btnRefresh_Click(object sender, EventArgs e)
@@ -200,9 +226,11 @@ namespace AgingTestSystem.Dialogs
             RunCommand("定值停止", () => _deviceManager.StopFan());
         }
 
-        /// <summary>后台执行控制命令并记录结果（走主程序共享连接）</summary>
+        /// <summary>后台执行控制命令并记录结果（走主程序共享连接）
+        /// 【V1.72.15】关后不发硬件命令：关闭瞬间在途的启停若继续下发，等于"关了窗还在动设备"。</summary>
         private void RunCommand(string name, Func<bool> action)
         {
+            if (_closed || IsDisposed || Disposing) return;
             if (!_connected)
             {
                 MessageBox.Show("未连接送风机，请先连接", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -211,6 +239,8 @@ namespace AgingTestSystem.Dialogs
             AppendLog($"[{name}] 正在执行...");
             Task.Run(() =>
             {
+                // 发命令前再查一次：排队期间关窗即停手。
+                if (_closed || IsDisposed || Disposing) return;
                 bool ok = false;
                 try { ok = action(); } catch (Exception ex) { RunOnUi(() => AppendLog($"[错误] {name} 异常: {ex.Message}")); return; }
                 var result = ok;
@@ -220,30 +250,50 @@ namespace AgingTestSystem.Dialogs
 
         // ===================== UI 辅助 =====================
 
-        /// <summary>更新连接状态指示（LED + 文字）</summary>
+        /// <summary>更新连接状态指示（LED + 文字）
+        /// 【V1.72.14】关窗竞态下已排队回调进到这里即拦（与通讯窗 SetConnected 同因）。</summary>
         private void SetConnected(bool connected)
         {
+            if (_closed || IsDisposed || Disposing) { _connected = connected; return; }
             _connected = connected;
-            ledStatus.Color = connected ? Color.Lime : Color.FromArgb(230, 80, 80);
-            ledStatus.On = true;
-            lblStatus.Text = connected ? "已连接" : "未连接";
-            lblStatus.ForeColor = connected
-                ? Color.FromArgb(0, 150, 80)
-                : Color.FromArgb(30, 80, 160);
-        }
-
-        /// <summary>用读取到的实时数据刷新各状态标签</summary>
-        private void UpdateStatus(FanData d)
-        {
-            lblRunState.Text = GetStateText(d.RunState);
-            lblRunState.ForeColor =
-                (d.RunState == FanRunState.FixedValueRunning || d.RunState == FanRunState.ProgramRunning)
+            try
+            {
+                if (ledStatus == null || ledStatus.IsDisposed) return;
+                if (lblStatus == null || lblStatus.IsDisposed) return;
+                ledStatus.Color = connected ? Color.Lime : Color.FromArgb(230, 80, 80);
+                ledStatus.On = true;
+                lblStatus.Text = connected ? "已连接" : "未连接";
+                lblStatus.ForeColor = connected
                     ? Color.FromArgb(0, 150, 80)
                     : Color.FromArgb(30, 80, 160);
-            lblTemp.Text = $"{d.Temperature:F2} °C";
-            lblHumidity.Text = $"{d.Humidity:F2} %RH";
-            lblTempSet.Text = $"{d.TempSetpoint:F2} °C";
-            lblHumSet.Text = $"{d.HumSetpoint:F2} %RH";
+            }
+            catch { }
+        }
+
+        /// <summary>用读取到的实时数据刷新各状态标签
+        /// 【V1.72.14】同上，排队回调关窗后丢弃。</summary>
+        private void UpdateStatus(FanData d)
+        {
+            if (_closed || IsDisposed || Disposing) return;
+            if (d == null) return;
+            try
+            {
+                if (lblRunState == null || lblRunState.IsDisposed) return;
+                if (lblTemp == null || lblTemp.IsDisposed) return;
+                if (lblHumidity == null || lblHumidity.IsDisposed) return;
+                if (lblTempSet == null || lblTempSet.IsDisposed) return;
+                if (lblHumSet == null || lblHumSet.IsDisposed) return;
+                lblRunState.Text = GetStateText(d.RunState);
+                lblRunState.ForeColor =
+                    (d.RunState == FanRunState.FixedValueRunning || d.RunState == FanRunState.ProgramRunning)
+                        ? Color.FromArgb(0, 150, 80)
+                        : Color.FromArgb(30, 80, 160);
+                lblTemp.Text = $"{d.Temperature:F2} °C";
+                lblHumidity.Text = $"{d.Humidity:F2} %RH";
+                lblTempSet.Text = $"{d.TempSetpoint:F2} °C";
+                lblHumSet.Text = $"{d.HumSetpoint:F2} %RH";
+            }
+            catch { }
         }
 
         /// <summary>
@@ -264,10 +314,18 @@ namespace AgingTestSystem.Dialogs
             }
         }
 
-        /// <summary>切换到 UI 线程执行（窗体已销毁时安全跳过）</summary>
+        /// <summary>切换到 UI 线程执行（窗体已销毁时安全跳过）
+        /// 【V1.72.14】加 _closed + 句柄双查：旧版只查 IsDisposed，关闭瞬间后台命令仍能 BeginInvoke
+        /// 进已销毁句柄（与通讯窗同病根）；action 本体包 try，防关窗竞态下 lbl/txt 已释放。</summary>
         private void RunOnUi(Action action)
         {
-            if (IsDisposed) return;
+            if (action == null) return;
+            if (_closed || IsDisposed || Disposing) return;
+            try
+            {
+                if (!IsHandleCreated) return;
+            }
+            catch { return; }
             try
             {
                 if (InvokeRequired) BeginInvoke(action);
@@ -276,12 +334,34 @@ namespace AgingTestSystem.Dialogs
             catch { }
         }
 
-        /// <summary>追加一行带时间戳的日志</summary>
+        /// <summary>追加一行带时间戳的日志
+        /// 【V1.72.14】旧版直调 txtLog.AppendText（调用方全在 UI 线程时没事，但关窗竞态下句柄已毁即炸）；
+        /// 现与通讯窗同口径：关闭/释放/句柄三查 + 全程 try，丢日志不炸框。</summary>
         private void AppendLog(string message)
         {
-            if (IsDisposed) return;
+            if (_closed || IsDisposed || Disposing) return;
             try
             {
+                if (txtLog == null || txtLog.IsDisposed) return;
+                if (!IsHandleCreated || !txtLog.IsHandleCreated) return;
+                if (txtLog.InvokeRequired)
+                {
+                    try { txtLog.BeginInvoke(new Action<string>(AppendLogInner), message); }
+                    catch { }
+                    return;
+                }
+                AppendLogInner(message);
+            }
+            catch { }
+        }
+
+        /// <summary>日志真正落盘（必在 UI 线程调）。</summary>
+        private void AppendLogInner(string message)
+        {
+            if (_closed || IsDisposed || Disposing) return;
+            try
+            {
+                if (txtLog == null || txtLog.IsDisposed) return;
                 txtLog.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}{Environment.NewLine}");
             }
             catch { }

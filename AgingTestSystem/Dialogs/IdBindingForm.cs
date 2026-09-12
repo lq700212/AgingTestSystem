@@ -122,6 +122,13 @@ namespace AgingTestSystem.Dialogs
         private readonly DeviceManager _deviceManager;
 
         /// <summary>
+        /// 窗体已关闭标记（V1.72.15 新增，全仓关窗竞态排查：扫码事件经 _syncContext.Post
+        /// 排队到 UI 线程，退订拦不住已排队的回调，关后执行直碰已释放输入框即炸。
+        /// OnFormClosed 首行置位，回调入口自拦，扫了也白扫不炸框）。
+        /// </summary>
+        private volatile bool _closed;
+
+        /// <summary>
         /// 构造函数
         /// </summary>
         /// <param name="lotNumber">从录入批号窗口传入的批号</param>
@@ -255,6 +262,8 @@ namespace AgingTestSystem.Dialogs
         /// <param name="barcode">扫到的条码内容</param>
         private void Scanner_OnBarcodeScanned(object sender, string barcode)
         {
+            // 【V1.72.15】排队回调关后丢弃（退订拦不住已 Post 的委托，与通讯窗排队回调同因）。
+            if (_closed || IsDisposed || Disposing) return;
             HandleScannedBarcode(barcode);
         }
 
@@ -281,6 +290,8 @@ namespace AgingTestSystem.Dialogs
         /// <param name="barcode">扫到的条码内容</param>
         private void HandleScannedBarcode(string barcode)
         {
+            // 【V1.72.15】关后二次拦截（直接调 Handle 的路径同样安全）。
+            if (_closed || IsDisposed || Disposing) return;
             // 空条码直接忽略（理论上不会发生，防御性判断）
             if (string.IsNullOrWhiteSpace(barcode)) return;
 
@@ -779,12 +790,16 @@ namespace AgingTestSystem.Dialogs
         /// </summary>
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
+            // 【V1.72.15】先置位再调基类：基类触发外部 FormClosed 订阅者时 _closed 已可见，
+            // 随后退订扫码事件（退订拦不住已排队 Post，靠入口 _closed 拦）。
+            _closed = true;
             base.OnFormClosed(e);
 
             // 退订扫码事件，防止事件回调到已销毁的窗体
             if (_scanner != null)
             {
-                _scanner.OnBarcodeScanned -= Scanner_OnBarcodeScanned;
+                try { _scanner.OnBarcodeScanned -= Scanner_OnBarcodeScanned; }
+                catch { }
             }
         }
     }

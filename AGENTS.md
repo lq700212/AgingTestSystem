@@ -168,6 +168,26 @@
   三 popup 的 FormClosed 只回写不释放就是第二案发现场——handler 里
   `finally { popup.Dispose(); }`，用例走生产挂接（反射 ShowXxxPopup→OpenForms 找窗→
   Close→IsDisposed），裸 Show/Close 是恒绿假绿。
+  **关窗竞态同罪（V1.72.14）**：窗体释放路径对（FormClosed→Dispose）仍会炸——后台拍在
+  关窗前后脚 `Invoke/BeginInvoke` 进已销毁句柄，或排队回调关后执行直碰已释放 label/txt。
+  "关 A 开 B 必炸"是关 A 尾巴被开 B 的 GC 赶出来。对策：非模态测试窗一律 `_closed`
+  首行置位 + `IsDisposed/Disposing/IsHandleCreated` 三查 + 日志 `BeginInvoke`（禁同步 Invoke）
+  + `SetConnected/UpdateStatus` 入口自拦；提示窗自带 `FormClosed→Dispose`（reuse 白名单只保
+  "主窗在时不进终结"，先×提示窗的窗口期仍漏）；用例锁"关后三件套静默丢弃"。
+  **关窗竞态全仓四模式（V1.72.15 血泪，新增后台/定时/订阅一律照此四条自查）**：
+  ①后台 `Task` 投递（公共参数批量写/测试窗遍历/重连）：投递点与完成入口双查 `_closed`，
+  关后硬件写停手（在途整拍丢弃，不残留半拍）；②有延迟的 UI `Timer`（设置窗长按 700ms/
+  补全 200/100ms 延迟隐藏）：字段定时器必须手停手放（`OnFormClosed/Dispose` 里 Stop+Dispose，
+  不在 components 容器不会自动停），延迟 Tick 入口查释放，待触发的一次性 Timer 集中登记释放时排空；
+  ③经 `Post` 排队的事件（扫码枪 `_syncContext.Post`）：退订拦不住已排队回调，handler 入口必须
+  `_closed` 自拦；④活得比窗久的服务事件源（`_deviceManager`/`_scanner` 的 `On*`）：
+  `OnFormClosed/FormClosing` 先置位再退订（退订包 try），handler 入口自拦双保险。
+  主窗（活到退出）用 `_mainClosing` 同款（`FormClosing` 首行置位，`WriteLog` 改 UI 丢弃文件照写）。
+  **审计 R5/R6/R7 就是这四条的机器版**：R5 禁 UI 文件同步 `Control.Invoke(`、
+  R6 锁 Timer 字段同文件 `Dispose()`、R7 锁长生命周期 `On*` 事件同文件 `-=`，HIGH 拦提交。
+  **纯代码窗设计器可预览（V1.72.14）**：只有带参构造的窗 VS 预览报"没有无参数构造函数"——
+  补公有无参构造（空快照占位，执行键加 null-manager 守卫）；静态文本禁 `var` 局部，
+  一律具名字段（设计器序列化认字段，局部下次存盘即丢；Name 全空也是终结器案发的辨认特征）。
   **改 UI 代码后必跑终结器审计**：`scripts/audit_finalizer_risk.ps1`
   （R1 Clear/R2 非模态 Show/R3 Remove/R4 动态创建，HIGH 拦提交）；
   新增非模态弹窗在 `$SafeShowKeys` 登记（方法|文件|配对），R2 验行为不认空登记。

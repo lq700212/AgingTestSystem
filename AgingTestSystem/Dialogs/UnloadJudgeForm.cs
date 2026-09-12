@@ -10,15 +10,15 @@ namespace AgingTestSystem.Dialogs
     /// <summary>
     /// 下料判定窗体（【V1.67 新增】Q22 PendingReview 配套）。
     ///
-    /// 【界面布局】（【V1.71】UIForm 自绘蓝标题，内容整体下移 35px）
+    /// 【界面布局】（【V1.71】UIForm 自绘蓝标题，内容整体下移 35px；【V1.72.14】标签具名可预览）
     /// ┌──────────────────────────────────┐
-    /// │ 下料判定（N 台送判）              │
-    /// │ 完成态 M 台可判，K 台跳过（灰字）  │
-    /// │ ○ PASS  ○ FAIL                   │
-    /// │ 不良代码：[________]（FAIL 必填） │
-    /// │ 处置：[重测 ▼]（FAIL 必选）       │
-    /// │ [执行判定] [关闭]                 │
-    /// │ 结果：已判定 M 台，跳过 K 台       │
+    /// │ 下料判定（UIForm 蓝标题）          │
+    /// │ _lblScope：送判 N 台可判 M 跳过 K  │ ← 灰字两行，构造回填
+    /// │ _rbPass ○ PASS  _rbFail ○ FAIL    │ ← PASS 默认选中
+    /// │ _lblCode 不良代码：[_txtDefectCode]│ ← FAIL 必填
+    /// │ _lblDisp 处置：[_cmbDisposition ▼] │ ← FAIL 必选=Dispositions
+    /// │ [_btnExecute 执行判定] [_btnClose]  │ ← 蓝主操作 / 灰关闭(Cancel)
+    /// │ _lblResult：已判定 M 台跳过 K 台    │ ← 蓝字，明细见 CSV
     /// └──────────────────────────────────┘
     ///
     /// 【流程】执行 → DeviceManager.RecordUnloadJudge（只收 Completed 台 →
@@ -36,6 +36,16 @@ namespace AgingTestSystem.Dialogs
 
         private readonly int[] _deviceIds;
         private readonly DeviceManager _deviceManager;
+
+        /// <summary>
+        /// 无参构造（仅 VS 设计器预览用：设计器必须调无参构造实例化，运行时一律走带参构造）。
+        /// 给空快照占位（0 台送判），InitializeComponent 里的占位文本会被 BuildScopeText 覆盖为空快照文案，
+        /// 预览不空白；判定按钮在空快照下点执行会因 manager 为 null 直接返回（见 BtnExecute_Click 守卫）。
+        /// </summary>
+        public UnloadJudgeForm()
+            : this(new int[0], null)
+        {
+        }
 
         /// <param name="deviceIds">选中的工位号（主窗体已判空）</param>
         /// <param name="deviceManager">设备管理器（执行判定 + 读完成态）</param>
@@ -73,6 +83,13 @@ namespace AgingTestSystem.Dialogs
         /// </summary>
         private void BtnExecute_Click(object sender, EventArgs e)
         {
+            // 【V1.72.14】设计器无参构造下 manager 为 null（仅预览/构造冒烟），直接提示返回，不 NRE。
+            if (_deviceManager == null)
+            {
+                MessageBox.Show("设计预览模式，无设备管理器，不执行判定。", "提示",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
             bool pass = _rbPass.Checked;
             string code = (_txtDefectCode.Text ?? "").Trim();
             string disp = pass ? "—" : (_cmbDisposition.SelectedItem as string ?? "");

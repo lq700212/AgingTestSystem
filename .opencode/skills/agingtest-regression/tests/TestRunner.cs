@@ -150,7 +150,7 @@ namespace AgingTestSystem.Tests
             Console.WriteLine("BaseDirectory = " + AppDomain.CurrentDomain.BaseDirectory);
             Console.WriteLine("起始工作目录   = " + Environment.CurrentDirectory);
 
-            // ── V1.72.4 分级回归：37 个模块全表（新增模块只加这里一行，
+            // ── V1.72.4 分级回归：38 个模块全表（新增模块只加这里一行，
             // 下面的选中逻辑与 SKILL.md 覆盖表自动跟随，无需再改别处）──
             var allModules = new Dictionary<string, Action>(StringComparer.OrdinalIgnoreCase)
             {
@@ -190,6 +190,7 @@ namespace AgingTestSystem.Tests
                 { "DeviceManagerRules", DeviceManagerRulesTests },
                 { "FlowCockpitV170", FlowCockpitTests },
                 { "UiStyleV172_1", UiStyleV172_1Tests },
+                { "UiFinalizerV172_14", UiFinalizerV172_14Tests },
                 { "LegacyRecipeGuard", LegacyRecipeGuardTests },
             };
 
@@ -4074,6 +4075,303 @@ namespace AgingTestSystem.Tests
             Check("浅色下主按钮蓝保留", guard.FillColor.ToArgb() == Color.DodgerBlue.ToArgb());
             ThemeManager.SetMode(AppThemeMode.Light, false);
             pnl.Dispose();
+        }
+
+        // =====================================================================
+        // UiFinalizerV172_14 —— 终结器跨线程崩溃 + 判定窗预览 + 关于 SunnyUI（V1.72.14）
+        // 背景：关通讯窗开风扇窗时弹"非 UI 线程"错，堆栈终点 ResetAutoComplete←Dispose←Finalize
+        // （Sunny UITextBox/原生 TextBox 皆然：有句柄 + 未显式 Dispose + 失根 → 终结器线程碰 Handle 即炸）。
+        // 修法是"关窗即拦后台回调"（_closed + 句柄双查 + BeginInvoke + 全程 try）与"非模态自释"，
+        // 而非改 Sunny 源码。本模块锁三件事，防后人删 guard 又复发：
+        // ①Comm/Fan 有 _closed 且关后日志/切线程不炸；②判定窗无参可预览、标签具名；
+        // ③关于弹窗是 SunnyUIForm + 确认蓝。全程只构造不 Show、不点会弹框的按钮（零 MessageBox 阻塞）。
+        // =====================================================================
+        private static void UiFinalizerV172_14Tests()
+        {
+            const BindingFlags Flags = BindingFlags.NonPublic | BindingFlags.Public
+                | BindingFlags.Instance | BindingFlags.Static;
+
+            // —— ①Comm/Fan 关窗标记与释放安全（反射找字段 + 构造释放不炸） ——
+            Check("通讯窗有_closed关窗标记",
+                typeof(CommunicationTestForm).GetField("_closed", Flags) != null);
+            Check("风扇窗有_closed关窗标记",
+                typeof(FanTestForm).GetField("_closed", Flags) != null);
+
+            var mockCfg = new DeviceConfig { UseMockCommunication = true };
+            var mockDm = new DeviceManager(mockCfg);
+            try
+            {
+                var comm = new CommunicationTestForm(mockDm);
+                try
+                {
+                    var closedF = typeof(CommunicationTestForm).GetField("_closed", Flags);
+                    Check("通讯窗初建_closed=false", closedF != null && !(bool)closedF.GetValue(comm));
+                    bool noThrow = true;
+                    try
+                    {
+                        // 未 Show 无句柄：AppendLog 应直接丢弃而非 Invoke 炸框
+                        comm.AppendLog("构造后日志（无句柄应丢弃）");
+                    }
+                    catch { noThrow = false; }
+                    Check("通讯窗无句柄AppendLog不炸", noThrow);
+                    // 映射提示窗类型自带 FormClosed 自释（用户先×提示窗也不进终结器）
+                    var noticeT = typeof(CommunicationTestForm).GetNestedType("RemapNoticeForm", Flags);
+                    Check("反射找到RemapNoticeForm", noticeT != null);
+                }
+                finally { try { comm.Dispose(); } catch { } }
+
+                var fan = new FanTestForm(mockDm);
+                try
+                {
+                    var closedF = typeof(FanTestForm).GetField("_closed", Flags);
+                    Check("风扇窗初建_closed=false", closedF != null && !(bool)closedF.GetValue(fan));
+                    // 反射置 _closed=true 模拟"已关窗排队回调"：RunOnUi/AppendLog/SetConnected 全丢弃不炸
+                    closedF.SetValue(fan, true);
+                    bool quiet = true;
+                    try
+                    {
+                        var runOnUi = typeof(FanTestForm).GetMethod("RunOnUi", BindingFlags.NonPublic | BindingFlags.Instance);
+                        runOnUi.Invoke(fan, new object[] { new Action(() => { throw new Exception("不应执行"); }) });
+                        var append = typeof(FanTestForm).GetMethod("AppendLog", BindingFlags.NonPublic | BindingFlags.Instance);
+                        append.Invoke(fan, new object[] { "关后日志应丢弃" });
+                        var setConn = typeof(FanTestForm).GetMethod("SetConnected", BindingFlags.NonPublic | BindingFlags.Instance);
+                        setConn.Invoke(fan, new object[] { true });
+                    }
+                    catch { quiet = false; }
+                    Check("风扇窗关后三件套静默丢弃", quiet);
+                    closedF.SetValue(fan, false);
+                }
+                finally { try { fan.Dispose(); } catch { } }
+            }
+            finally { try { mockDm.Dispose(); } catch { } }
+
+            // —— ②判定窗设计器可预览：无参构造 + 标签具名 + 下拉选项 ——
+            Check("判定窗有无参构造（设计器必需）",
+                typeof(UnloadJudgeForm).GetConstructor(Type.EmptyTypes) != null);
+            var judge = new UnloadJudgeForm();
+            try
+            {
+                var t = typeof(UnloadJudgeForm);
+                var lblCode = t.GetField("_lblCode", Flags)?.GetValue(judge) as Control;
+                var lblDisp = t.GetField("_lblDisp", Flags)?.GetValue(judge) as Control;
+                Check("判定窗静态标签具名（_lblCode/_lblDisp）", lblCode != null && lblDisp != null);
+                var cmbObj = t.GetField("_cmbDisposition", Flags)?.GetValue(judge);
+                // Sunny UIComboBox 不是原生 ComboBox 子类，按 Items 反射断言选项数
+                // （V1.71 血泪：is Button/TextBox 认不出 Sunny 自绘，断言一律走反射/类型名）
+                int itemCount = -1;
+                try
+                {
+                    var itemsProp = cmbObj?.GetType().GetProperty("Items");
+                    var items = itemsProp?.GetValue(cmbObj, null) as System.Collections.IList;
+                    itemCount = items?.Count ?? -1;
+                }
+                catch { }
+                // 兜底：直接数静态数组（构造 AddRange 的源）
+                Check("判定窗处置下拉选项数=Dispositions",
+                    itemCount == UnloadJudgeForm.Dispositions.Length);
+                var scope = t.GetField("_lblScope", Flags)?.GetValue(judge) as Control;
+                Check("判定窗无参空快照范围文案", scope != null && scope.Text.Contains("送判 0 台"));
+                var btnEx = t.GetField("_btnExecute", Flags)?.GetValue(judge) as Control;
+                var btnCl = t.GetField("_btnClose", Flags)?.GetValue(judge) as Control;
+                Check("判定窗两按钮全建好", btnEx != null && btnCl != null);
+            }
+            finally { try { judge.Dispose(); } catch { } }
+
+            // —— ③关于弹窗 SunnyUI 风格（反射调 internal static，不 new 主窗） ——
+            var buildMi = typeof(MainForm).GetMethod("BuildVersionInfoDialog", Flags);            Check("反射找到BuildVersionInfoDialog", buildMi != null);
+            if (buildMi != null)
+            {
+                Form dlg = null;
+                try { dlg = buildMi.Invoke(null, null) as Form; }
+                catch { }
+                Check("关于弹窗构造成功", dlg != null);
+                if (dlg != null)
+                {
+                    try
+                    {
+                        Check("关于弹窗是SunnyUIForm（蓝标题）",
+                            dlg.GetType().FullName == "Sunny.UI.UIForm"
+                            || dlg.GetType().BaseType?.FullName == "Sunny.UI.UIForm"
+                            || dlg is Sunny.UI.UIForm);
+                        var txt = dlg.Controls.Find("txtVersionInfo", true).FirstOrDefault()
+                            as Sunny.UI.UITextBox;
+                        Check("关于弹窗只读多行UITextBox",
+                            txt != null && txt.Multiline && txt.ReadOnly);
+                        if (txt != null)
+                        {
+                            Check("关于内容从标题区下起排（Y>=35）", txt.Top >= 35);
+                            Check("关于文本含版本号与版权",
+                                (txt.Text ?? "").Contains("V1.58.4")
+                                && (txt.Text ?? "").Contains("版权所有"));
+                        }
+                        var btnOk = dlg.Controls.Find("btnOk", true).FirstOrDefault()
+                            as Sunny.UI.UIButton;
+                        bool blue = btnOk != null
+                            && btnOk.FillColor.ToArgb() == Color.DodgerBlue.ToArgb()
+                            && btnOk.RectColor.ToArgb() == Color.DodgerBlue.ToArgb()
+                            && btnOk.ForeColor.ToArgb() == Color.White.ToArgb()
+                            && btnOk.Style.ToString() == "Custom";
+                        Check("关于确定钮确认蓝（DodgerBlue白字Custom）", blue);
+                        Check("关于弹窗Accept落确定钮", dlg.AcceptButton == btnOk);
+                    }
+                    finally { try { dlg.Dispose(); } catch { } }
+                }
+            }
+
+            // —— ④全仓关窗竞态锁（V1.72.15）：有后台线程/定时器/长事件订阅的窗全有 _closed ——
+            // 只构造不 Show、不点会弹框的按钮（零 MessageBox 阻塞）；关后调用静默丢弃。
+            Check("公共参数窗有_closed关窗标记",
+                typeof(CommonParameterForm).GetField("_closed", Flags) != null);
+            Check("ID绑定窗有_closed关窗标记",
+                typeof(IdBindingForm).GetField("_closed", Flags) != null);
+            Check("设置窗有_closed关窗标记",
+                typeof(SettingsForm).GetField("_closed", Flags) != null);
+            Check("主窗有_mainClosing退出标记",
+                typeof(MainForm).GetField("_mainClosing", Flags) != null);
+
+            // 公共参数窗：反射调 OnFormClosed 置位（构造不弹框，投递点靠审计 R5 锁）。
+            var pmForm2 = new CommonParameterForm(null);
+            try
+            {
+                var onClosed = typeof(CommonParameterForm).GetMethod("OnFormClosed",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Check("反射找到公共参数OnFormClosed", onClosed != null);
+                if (onClosed != null)
+                {
+                    onClosed.Invoke(pmForm2, new object[] { new FormClosedEventArgs(CloseReason.None) });
+                    var closedF = typeof(CommonParameterForm).GetField("_closed", Flags);
+                    Check("公共参数关后_closed=true", closedF != null && (bool)closedF.GetValue(pmForm2));
+                    // 关后完成回调静默丢弃（会碰 btnSave/MessageBox，未守卫即炸）。
+                    bool quiet = true;
+                    try
+                    {
+                        var done = typeof(CommonParameterForm).GetMethod("OnBatchWriteCompleted",
+                            BindingFlags.NonPublic | BindingFlags.Instance);
+                        done.Invoke(pmForm2, new object[] { -5m, new Dictionary<int, bool>() });
+                    }
+                    catch { quiet = false; }
+                    Check("公共参数关后完成回调静默丢弃", quiet);
+                }
+            }
+            finally { try { pmForm2.Dispose(); } catch { } }
+
+            // ID 绑定窗：释放后扫码回调静默丢弃（Post 排队拦不住退订，靠入口 _closed）。
+            var idForm2 = new IdBindingForm("LOT-1");
+            try
+            {
+                try { idForm2.Dispose(); } catch { }
+                bool quiet = true;
+                try
+                {
+                    var scan = typeof(IdBindingForm).GetMethod("Scanner_OnBarcodeScanned",
+                        BindingFlags.NonPublic | BindingFlags.Instance);
+                    scan.Invoke(idForm2, new object[] { null, "01" });
+                }
+                catch { quiet = false; }
+                Check("ID绑定释放后扫码回调静默丢弃", quiet);
+            }
+            finally { try { idForm2.Dispose(); } catch { } }
+
+            // 通讯窗：关后写寄存器停手（在途遍历拍收尾调用即丢弃，不动设备）。
+            {
+                var cfg2 = new DeviceConfig { UseMockCommunication = true };
+                var dm2 = new DeviceManager(cfg2);
+                try
+                {
+                    var comm2 = new CommunicationTestForm(dm2);
+                    try
+                    {
+                        var closedF = typeof(CommunicationTestForm).GetField("_closed", Flags);
+                        closedF.SetValue(comm2, true);
+                        bool quiet = true;
+                        try
+                        {
+                            var gridF = typeof(CommunicationTestForm).GetField("_vacuumGrid",
+                                BindingFlags.NonPublic | BindingFlags.Instance);
+                            object grid = gridF.GetValue(comm2);
+                            comm2.WriteRegister(grid as CommunicationTestForm.ChannelGrid, 0, 0);
+                        }
+                        catch { quiet = false; }
+                        Check("通讯窗关后写寄存器停手", quiet);
+                        closedF.SetValue(comm2, false);
+                    }
+                    finally { try { comm2.Dispose(); } catch { } }
+
+                    // 风扇窗：关后控制命令停手（未连接分支本会弹 MessageBox，关后应先退）。
+                    var fan2 = new FanTestForm(dm2);
+                    try
+                    {
+                        var closedF = typeof(FanTestForm).GetField("_closed", Flags);
+                        closedF.SetValue(fan2, true);
+                        bool quiet = true;
+                        try
+                        {
+                            var run = typeof(FanTestForm).GetMethod("RunCommand",
+                                BindingFlags.NonPublic | BindingFlags.Instance);
+                            run.Invoke(fan2, new object[] { "定值启动", new Func<bool>(() => true) });
+                        }
+                        catch { quiet = false; }
+                        Check("风扇窗关后控制命令停手（不弹框）", quiet);
+                        closedF.SetValue(fan2, false);
+                    }
+                    finally { try { fan2.Dispose(); } catch { } }
+                }
+                finally { try { dm2.Dispose(); } catch { } }
+            }
+
+            // 自动补全提供者：释放排空延迟定时器（internal 类一律反射，不直引）。
+            try
+            {
+                var provType = typeof(DeviceManager).Assembly
+                    .GetType("AgingTestSystem.Services.RecipeAutoCompleteProvider");
+                Check("反射找到RecipeAutoCompleteProvider", provType != null);
+                if (provType != null)
+                {
+                    var box = new Sunny.UI.UITextBox();
+                    object prov = null;
+                    try
+                    {
+                        prov = Activator.CreateInstance(provType,
+                            new object[] { box, new List<RecipeConfig>(), new Action<RecipeConfig>(r => { }) });
+                    }
+                    catch (Exception ex)
+                    {
+                        Check("补全提供者构造（" + ex.GetType().Name + "）", false);
+                    }
+                    if (prov != null)
+                    {
+                        try
+                        {
+                            var pendF = provType.GetField("_pendingHideTimers", Flags);
+                            var pend = pendF?.GetValue(prov) as System.Collections.IList;
+                            Check("补全提供者有延迟定时器登记表", pend != null);
+                            bool quiet = true;
+                            try { provType.GetMethod("Dispose").Invoke(prov, null); }
+                            catch { quiet = false; }
+                            Check("补全提供者释放不炸", quiet && pend.Count == 0);
+                            // 释放后消息过滤静默（Post 关窗期点击不碰释放后列表）。
+                            bool filterQuiet = true;
+                            try
+                            {
+                                var msg = new Message();
+                                object[] args = new object[] { msg };
+                                provType.GetMethod("PreFilterMessage").Invoke(prov, args);
+                            }
+                            catch { filterQuiet = false; }
+                            Check("补全提供者释放后过滤静默", filterQuiet);
+                        }
+                        finally { try { box.Dispose(); } catch { } }
+                    }
+                    else
+                    {
+                        try { box.Dispose(); } catch { }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Check("补全提供者构造释放链路（" + ex.GetType().Name + "）", false);
+            }
         }
 
         // =====================================================================
