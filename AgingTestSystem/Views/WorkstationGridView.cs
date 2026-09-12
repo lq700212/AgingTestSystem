@@ -52,11 +52,12 @@ namespace AgingTestSystem.Views
     /// 解析结果与 V1.58.18 布局完全一致（视觉零变化）**：
     /// - 设置按钮：以面板下缘为基准，BottomMargin=10（下缘距面板底 10px，Y=145 不变）；
     /// - 配方框：以设置按钮上缘为基准，BottomToTopGap=6（下缘在其上方 6px，Y=118 不变）；
-    /// - SN 框：以配方框上缘为基准，BottomToTopGap=4（Y=93 不变）；
-    /// - 真空关/压力框：以 SN 框上缘为基准，BottomToTopGap=5（Y=67 不变）；
+    /// - 【V1.77】SN 框改吊电流行下方（TopToBottomGap=3，关电流=93 不变，开=114）、
+    ///   真空关/压力框改吊空闲下方（TopToTopGap=15，Y=67 不变）——位置零变化，见下"V1.77 开态几何"；
     /// - 延时开启/到达：以设置按钮中心为基准，CenterOffsetY=-12/+13 对称分布（Y=147/172 不变）；
     /// - 各标签：以各自框中心为基准，VerticalCenterOffset=-1（Y=70/96/121/150/175 不变）。
-    /// 改 PanelInnerHeight 时整个纵链按各自间距自动联动。旧版 PanelLayout.json 无这些新字段
+    /// 改 PanelInnerHeight 时下链（按钮/配方/延时）按各自间距自动联动，上链不动（【V1.77】）。
+    /// 旧版 PanelLayout.json 无这些新字段
     /// (反序列化为 null) 会导致垂直锚定不生效，需同步 json 或删除让程序重新导出（见 CHANGELOG V1.58.19）。
     /// 【V1.51】值框左边界与左侧标签文字间距加大（值框 X 由 57→62，宽相应缩短），
     /// 解决"数据框紧贴左侧标签"问题；间距可在 PanelLayout.json 中微调。
@@ -114,8 +115,13 @@ namespace AgingTestSystem.Views
     /// 标注说明（括号内为锚定关系）：
     /// - 行1：上电/下电块(65,29,60,23) + 工作状态块(153,29,60,23) + 选中框(194,2,23,23)
     /// - 行2：真空压力值框(65,67,85,21；双端锚定+RightToLeftGap=3，右缘150距真空关左缘153留3px间隙、
-    ///   下缘贴 SN 上缘 Gap=5) + 真空开/关块(153,67,60,21；下缘贴 SN 上缘、Gap=5)
-    /// - 行3：SN 值框(65,93,148,21；下缘贴配方上缘、Gap=4)
+    ///   下缘原贴 SN 上缘；【V1.77】改吊空闲下方 TopToBottomGap=15，Y=29+23+15=67 不变)
+    ///   + 真空开/关块(153,67,60,21；【V1.77】同改吊空闲下方，Y 不变)
+    ///   + 【V1.77】电流值框 RcCurrentValue(65,90,85,21；双端同压力框，Y 吊压力框下方 Gap=2；
+    ///   ShowCurrentRow 关=整行不画；开=面板 205→226、SN 93→114、配方 118→139、
+    ///   延时 147/172→168/193、按钮 145→166，间距全都不变，见下方"V1.77 开态几何")
+    /// - 行3：SN 值框(65,93,148,21；【V1.77】改吊电流行下方 TopToBottomGap=3：
+    ///   关电流电流行高按 0，Y=90+0+3=93 不变；开时 Y=90+21+3=114)
     /// - 行4：配方值框(65,118,148,21；下缘贴设置按钮上缘、Gap=6)
     /// - 行5：延时开启值框(65,147,80,21；以设置按钮中心为基准、CenterOffsetY=-12) +
     ///   设置按钮(153,145,60,50；下缘距面板底 BottomMargin=10) + 延时到达值框(65,172,80,21；CenterOffsetY=13)
@@ -158,10 +164,18 @@ namespace AgingTestSystem.Views
     /// - 【V1.58.17 边缘锚定】编号 TitlePosition 左上角锚定（LeftMargin=3 + TopMargin=4）；
     ///   选中框右上角锚定（RightMargin=5 + TopMargin=4）；延时开启/到达值框补左缘锚定
     ///   LeftAlignTo="SNValue"（跟随值框列）。至此全部元素均已锚定，改面板宽/高基本布局不变。
-    /// - 【V1.58.19 垂直锚定（自下而上链）】见上方"V1.58.19 垂直锚定"说明：只声明"以谁为基准+距离多少"
-    ///   保持位置零变化——设置按钮 BottomMargin=10(距面板底)；配方/SN/真空关/压力框 BottomToTopAlignTo+
-    ///   BottomToTopGap=6/4/5/5(距上一级上缘)；延时两行 VerticalCenterAlignTo="SetButton"+CenterOffsetY=-12/+13
-    ///   (以按钮中心为基准对称)；各标签 VerticalCenterAlignTo 各自框+offset=-1。改 PanelInnerHeight 自动联动。
+    /// - 【V1.58.19 垂直锚定链（【V1.77】压力/真空关/SN 改走自上而下链 TopToBottom，位置零变化；
+    ///   SN→配方之间改为两链交接缝，缺省高度下间距仍 4px，详见 PanelLayoutConfig 类头"完整锚定链（V1.77）"）】
+    ///   保持位置零变化——设置按钮 BottomMargin=10(距面板底)；配方 BottomToTopGap=6(贴按钮上缘)；
+    ///   压力/真空关 TopToBottomGap=15(吊空闲下方)；SN 吊电流行下方 Gap=3(关电流=93)；
+    ///   延时两行 VerticalCenterAlignTo="SetButton"+CenterOffsetY=-12/+13(以按钮中心为基准对称)；
+    ///   各标签 VerticalCenterAlignTo 各自框+offset=-1。改 PanelInnerHeight 时下链自动联动，
+    ///   上链（空闲及以上+压力/真空关/电流/SN）不动，差值由交接缝吸收。
+    /// - 【V1.77 开态几何】ShowCurrentRow=true（UsePowerMeter 开）时单面板内容 222×226
+    ///   （行高 225→246），压力行(67)及以上逐像素不动，新增电流行(90,高21)+标签"电流："，
+    ///   SN(114)/配方(139)/延时(168/193)/按钮(166)整体下移 21，间距全都不变；
+    ///   false 时与本图逐像素一致。开关走 ShowCurrentRow 属性（MainForm 按 UsePowerMeter 装配一次），
+    ///   行高/画布/命中一律走 GetEffectiveRowHeight()/GetEffectiveInnerHeight()，禁止手写 205/225。
     /// - 值框文字左内边距：ValueTextLeftPadding=6px（V1.52，文字不贴值框左边框，值框坐标不变）
     /// - 状态块配色见下方"状态块配色"；颜色值均可由 PanelLayout.json 覆盖
     ///
@@ -391,7 +405,7 @@ namespace AgingTestSystem.Views
             if (_columns > 0)
             {
                 this.Size = new Size(Scaled(_columns * _layout.PanelColumnWidth + _layout.RowSelectButtonColumnWidth),
-                                     Scaled(_rows * _layout.PanelRowHeight));
+                                     Scaled(_rows * _layout.GetEffectiveRowHeight()));
                 Invalidate();
             }
         }
@@ -585,8 +599,32 @@ namespace AgingTestSystem.Views
             // 【V1.55 高DPI适配】画布总尺寸 = 逻辑像素尺寸 × DPI缩放因子。
             // 若不放大，150% 缩放下格子保持 96DPI 大小、文字却自动变大 → 溢出重叠。
             this.Size = new Size(Scaled(_columns * _layout.PanelColumnWidth + _layout.RowSelectButtonColumnWidth),
-                                 Scaled(_rows * _layout.PanelRowHeight));
+                                 Scaled(_rows * _layout.GetEffectiveRowHeight()));
             Invalidate();
+        }
+
+        /// <summary>
+        /// 是否显示电流行（【V1.77 新增】运行时开关，默认 false = 原来布局逐像素不变）。
+        /// 主窗体按 DeviceConfig.UsePowerMeter 传入一次（结构型开关，改后重启生效，
+        /// 与 UsePowerMeter 同口径，不跟项目热更）。
+        /// 置 true → 布局 ShowCurrent 置位 + 锚定重解（面板有效高 +21，下游下移 21）
+        /// + 画布重算 + 重绘；置 false 回到原来布局。重解幂等，反复置位不漂移。
+        /// </summary>
+        public bool ShowCurrentRow
+        {
+            get { return _layout.ShowCurrent; }
+            set
+            {
+                if (_layout.ShowCurrent == value) return;
+                _layout.ShowCurrent = value;
+                _layout.ResolveAnchors();
+                if (_columns > 0)
+                {
+                    this.Size = new Size(Scaled(_columns * _layout.PanelColumnWidth + _layout.RowSelectButtonColumnWidth),
+                                         Scaled(_rows * _layout.GetEffectiveRowHeight()));
+                }
+                Invalidate();
+            }
         }
 
         #region DPI 缩放辅助
@@ -688,8 +726,8 @@ namespace AgingTestSystem.Views
         {
             item.PressureText = $"{data.VacuumPressure} kPa";
             // 【V1.74】电流文本：有数显示（如 0.42 A），无数据（NaN）记空串；
-            // 只进悬停提示（见 GetTooltipText），不占面板布局（新矩形要走 PanelLayoutConfig
-            // 锚定全套，72 面板重排风险大；悬停已满足"看得到电流"的追溯需求）。
+            // 【V1.77】改直绘：电流画在面板电流行（见 DrawPanel），无数据画 "--"；
+            // 悬停不再带电流（压力框回到原来无提示，见 GetTooltipText）。
             item.CurrentText = float.IsNaN(data.LoadCurrentA) ? "" : $"{data.LoadCurrentA:0.00} A";
             item.SnText = data.SerialNumber ?? "";
             item.RecipeText = data.RecipeName ?? "";
@@ -768,7 +806,7 @@ namespace AgingTestSystem.Views
             // 【V1.55 高DPI适配】e.ClipRectangle 是物理像素坐标，而布局配置是 96DPI 逻辑像素，
             // 所以可见列/行范围计算必须先乘缩放因子，否则 150% 缩放下只重绘左上角一小块。
             int colW = Scaled(_layout.PanelColumnWidth);
-            int rowH = Scaled(_layout.PanelRowHeight);
+            int rowH = Scaled(_layout.GetEffectiveRowHeight());
 
             Rectangle clip = e.ClipRectangle;
             int startCol = Math.Max(0, clip.Left / colW);
@@ -787,7 +825,7 @@ namespace AgingTestSystem.Views
 
                     // 面板左上角绝对坐标（面板内容设计尺寸 + 上下左右各 2px 外边距，均按 DPI 放大）
                     int panelLeft = Scaled(col * _layout.PanelColumnWidth + 2);
-                    int panelTop = Scaled(row * _layout.PanelRowHeight + 2);
+                    int panelTop = Scaled(row * _layout.GetEffectiveRowHeight() + 2);
                     DrawPanel(g, item, anySelected, panelLeft, panelTop);
                 }
             }
@@ -804,9 +842,9 @@ namespace AgingTestSystem.Views
                     // Y 与面板内容同为 row*行高+2，顶部天然对齐；宽度仍为列宽-左右边距(=76)。
                     Rectangle btnRect = new Rectangle(
                         Scaled(_columns * _layout.PanelColumnWidth + 2),
-                        Scaled(row * _layout.PanelRowHeight + 2),
+                        Scaled(row * _layout.GetEffectiveRowHeight() + 2),
                         Scaled(_layout.RowSelectButtonColumnWidth - 4),
-                        Scaled(_layout.PanelInnerHeight - 1));
+                        Scaled(_layout.GetEffectiveInnerHeight() - 1));
                     DrawRowSelectButton(g, btnRect, row);
                 }
             }
@@ -821,7 +859,7 @@ namespace AgingTestSystem.Views
             // 面板背景（状态色），尺寸按 DPI 放大
             using (var bg = new SolidBrush(item.BackColor))
             {
-                g.FillRectangle(bg, panelLeft, panelTop, Scaled(_layout.PanelInnerWidth), Scaled(_layout.PanelInnerHeight));
+                g.FillRectangle(bg, panelLeft, panelTop, Scaled(_layout.PanelInnerWidth), Scaled(_layout.GetEffectiveInnerHeight()));
             }
 
             // 设备编号（左上角）
@@ -838,6 +876,16 @@ namespace AgingTestSystem.Views
 
             // 值框
             DrawValueBox(g, Offset(Scaled(_layout.RcPressureValue.ToRectangle()), panelLeft, panelTop), item.PressureText);
+            // 【V1.77】电流值行（ShowCurrentRow 开才画）：标签 + 值框走锚定矩形
+            // （RcCurrentValue/LabelCurrentPosition，与压力/SN 同套路：Scaled 走 DPI、
+            // _brushValueBox/_penBorder 复用；无新增命中区，纯展示，命中/DPI 零改动）。
+            // 无数据（电表未接/离线）画 "--"（与压力框缺省 "---" 同风格，不留空框）。
+            // 关 = 整行不画，布局与原来逐像素一致。
+            if (ShowCurrentRow && _layout.RcCurrentValue != null && _layout.LabelCurrentPosition != null)
+            {
+                DrawValueBox(g, Offset(Scaled(_layout.RcCurrentValue.ToRectangle()), panelLeft, panelTop),
+                    string.IsNullOrEmpty(item.CurrentText) ? "--" : item.CurrentText);
+            }
             DrawValueBox(g, Offset(Scaled(_layout.RcSNValue.ToRectangle()), panelLeft, panelTop), item.SnText);
             DrawValueBox(g, Offset(Scaled(_layout.RcRecipeValue.ToRectangle()), panelLeft, panelTop), item.RecipeText);
             DrawValueBox(g, Offset(Scaled(_layout.RcDelayStartValue.ToRectangle()), panelLeft, panelTop), item.DelayStartText);
@@ -845,6 +893,11 @@ namespace AgingTestSystem.Views
 
             // 静态标签
             DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelPressurePosition.X), panelTop + Scaled(_layout.LabelPressurePosition.Y)), "真空压力");
+            // 【V1.77】"电流："标签（与值框同条件：开才画；关时坐标无意义，不画即可）。
+            if (ShowCurrentRow && _layout.LabelCurrentPosition != null)
+            {
+                DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelCurrentPosition.X), panelTop + Scaled(_layout.LabelCurrentPosition.Y)), "电流：");
+            }
             DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelSnPosition.X), panelTop + Scaled(_layout.LabelSnPosition.Y)), "SN:");
             DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelRecipePosition.X), panelTop + Scaled(_layout.LabelRecipePosition.Y)), "配方:");
             DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelDelayStartPosition.X), panelTop + Scaled(_layout.LabelDelayStartPosition.Y)), "延时开启");
@@ -1246,8 +1299,8 @@ namespace AgingTestSystem.Views
             if (_columns == 0) return false;
 
             int colW = Scaled(_layout.PanelColumnWidth);
-            int rowH = Scaled(_layout.PanelRowHeight);
-            if (p.X < 0 || p.Y < 0 || p.X >= Scaled(_columns * _layout.PanelColumnWidth) || p.Y >= Scaled(_rows * _layout.PanelRowHeight)) return false;
+            int rowH = Scaled(_layout.GetEffectiveRowHeight());
+            if (p.X < 0 || p.Y < 0 || p.X >= Scaled(_columns * _layout.PanelColumnWidth) || p.Y >= Scaled(_rows * _layout.GetEffectiveRowHeight())) return false;
 
             int col = p.X / colW;
             int row = p.Y / rowH;
@@ -1257,7 +1310,7 @@ namespace AgingTestSystem.Views
             if (deviceId > _totalDevices) return false;
 
             // 面板内局部坐标 = 鼠标物理坐标 - 面板左上角物理坐标（含 2px 外边距，已缩放）
-            local = new Point(p.X - Scaled(col * _layout.PanelColumnWidth + 2), p.Y - Scaled(row * _layout.PanelRowHeight + 2));
+            local = new Point(p.X - Scaled(col * _layout.PanelColumnWidth + 2), p.Y - Scaled(row * _layout.GetEffectiveRowHeight() + 2));
             return true;
         }
 
@@ -1265,8 +1318,8 @@ namespace AgingTestSystem.Views
         private bool TryHitRowButton(Point p, out int row)
         {
             row = -1;
-            if (p.X < Scaled(_columns * _layout.PanelColumnWidth) || p.Y < 0 || p.Y >= Scaled(_rows * _layout.PanelRowHeight)) return false;
-            row = p.Y / Scaled(_layout.PanelRowHeight);
+            if (p.X < Scaled(_columns * _layout.PanelColumnWidth) || p.Y < 0 || p.Y >= Scaled(_rows * _layout.GetEffectiveRowHeight())) return false;
+            row = p.Y / Scaled(_layout.GetEffectiveRowHeight());
             return row >= 0 && row < _rows;
         }
 
@@ -1278,14 +1331,8 @@ namespace AgingTestSystem.Views
             if (Scaled(_layout.RcPower.ToRectangle()).Contains(local)) return "上电状态：绿=上电，浅灰=下电";
             if (Scaled(_layout.RcWorkState.ToRectangle()).Contains(local)) return "工作状态：空闲=绿 / 选中(已上电待测试)=橙 / 繁忙(测试中)=黄 / 故障=红";
             if (Scaled(_layout.RcVacuumOpen.ToRectangle()).Contains(local)) return "真空开启状态：真空开=绿底，真空关=浅灰底";
-            // 【V1.74】压力框悬停：电表启用且有数时追加电流（无数据不打扰，保持原来无提示）；
-            // 用现成矩形 RcPressureValue，不新增命中区（命中检测/DPI/重绘零改动）。
-            if (Scaled(_layout.RcPressureValue.ToRectangle()).Contains(local)
-                && _items.TryGetValue(deviceId, out GridItem item)
-                && !string.IsNullOrEmpty(item.CurrentText))
-            {
-                return $"压力：{item.PressureText} / 电流：{item.CurrentText}";
-            }
+            // 【V1.77】压力框悬停回退到原来（无提示）：电流已改直绘（电流行），
+            // 悬停不再承担"看得到电流"的需求，压力框回到 V1.73 及以前的无提示行为。
             return null;
         }
 
@@ -1295,8 +1342,8 @@ namespace AgingTestSystem.Views
             int index = deviceId - 1;
             int col = index % _columns;
             int row = index / _columns;
-            return new Rectangle(Scaled(col * _layout.PanelColumnWidth), Scaled(row * _layout.PanelRowHeight),
-                                 Scaled(_layout.PanelColumnWidth), Scaled(_layout.PanelRowHeight));
+            return new Rectangle(Scaled(col * _layout.PanelColumnWidth), Scaled(row * _layout.GetEffectiveRowHeight()),
+                                 Scaled(_layout.PanelColumnWidth), Scaled(_layout.GetEffectiveRowHeight()));
         }
 
         #endregion
@@ -1322,7 +1369,7 @@ namespace AgingTestSystem.Views
             public string PressureText = "---";
             /// <summary>
             /// 载台电流文本（【V1.74 新增】Q2 骨架：ApplyData 随采集刷新，有数如"0.42 A"，
-            /// 无数据记空串；只用于压力框悬停提示，不参与绘制布局）。
+            /// 无数据记空串；【V1.77】用于电流行直绘（ShowCurrentRow 开时画，无数据画 "--"）。
             /// </summary>
             public string CurrentText = "";
             public string SnText = "";

@@ -1284,6 +1284,10 @@ namespace AgingTestSystem.Views
             // 自绘工位网格（1 个 UserControl 画全部面板 + 行全选按钮列）
             _gridView = new WorkstationGridView();
             _gridView.Configure(_config.PanelColumns, _config.PanelRows, _config.TotalBarometers);
+            // 【V1.77】电流行直绘开关：UsePowerMeter 开=每面板压力框下方加"电流："行
+            // （面板 205→226、行 225→246，下游下移 21 间距不变）；关=原来布局逐像素不动。
+            // 结构型开关（改后重启生效），这里 startup 装配一次即可（_config 已 LoadConfig 就绪）。
+            _gridView.ShowCurrentRow = _config.UsePowerMeter;
 
             // 【V1.60】自绘画布跟随全局主题（浅色=PanelLayout.json 原色，深色=深灰系；
             // 上电绿/故障红等语义状态色两边都不动，见 WorkstationGridView.SetDarkMode 注释）

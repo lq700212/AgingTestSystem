@@ -1202,15 +1202,18 @@ namespace AgingTestSystem.Tests
             var snap2 = SnapshotLayout(c);
             Check("ResolveAnchors 幂等(二次解析零漂移)", DictionaryEquals(snap1, snap2));
 
-            // ── 高度联动：面板高 +10 → 纵链全链下移、间距不变 ──
+            // ── 高度联动：面板高 +10 → 下链下移、上链锁定、差值由交接缝吸收（V1.77）──
             var tall = PanelLayoutConfig.LoadOrDefault();
             tall.PanelInnerHeight = 215;
             tall.ResolveAnchors();
             Check("高度+10: 设置按钮 Y 145→155", tall.RcSetButton.ToRectangle().Y == 155);
-            Check("高度+10: SN 框 Y 93→103(链式跟随)", tall.RcSNValue.ToRectangle().Y == 103);
+            Check("高度+10: SN 框 Y=93 不动(上链锁定，V1.77 改走自上而下链)",
+                tall.RcSNValue.ToRectangle().Y == 93);
             Check("高度+10: 配方框 Y 118→128", tall.RcRecipeValue.ToRectangle().Y == 128);
-            Check("高度+10: 真空开/压力框 Y 67→77",
-                tall.RcVacuumOpen.ToRectangle().Y == 77 && tall.RcPressureValue.ToRectangle().Y == 77);
+            Check("高度+10: 交接缝吸收差值(SN→配方间距4→14)",
+                tall.RcRecipeValue.ToRectangle().Y - (tall.RcSNValue.ToRectangle().Y + 21) == 14);
+            Check("高度+10: 真空开/压力框 Y=67 不动(吊空闲下方)",
+                tall.RcVacuumOpen.ToRectangle().Y == 67 && tall.RcPressureValue.ToRectangle().Y == 67);
             Check("高度+10: 延时两行 Y 147/172→157/182",
                 tall.RcDelayStartValue.ToRectangle().Y == 157 && tall.RcDelayArriveValue.ToRectangle().Y == 182);
             Check("高度+10: 选中框 TopMargin 锚定不动仍 Y=2", tall.RcSelectBox.ToRectangle().Y == 2);
@@ -1234,9 +1237,9 @@ namespace AgingTestSystem.Tests
                 "实际 " + wPressure.ToString());
             Check("宽度+10: 选中框 X 194→204(RightMargin=5 跟随)", wide.RcSelectBox.ToRectangle().X == 204);
 
-            // ── 标签垂直居中：随目标框移动 ──
-            Check("压力标签随框垂直居中(Y=70→80)",
-                c.LabelPressurePosition.ToPoint().Y == 70 && tall.LabelPressurePosition.ToPoint().Y == 80,
+            // ── 标签垂直居中：随目标框移动（V1.77：压力框定高位，标签不动）──
+            Check("压力标签定高位不动(Y=70)",
+                c.LabelPressurePosition.ToPoint().Y == 70 && tall.LabelPressurePosition.ToPoint().Y == 70,
                 "基准 " + c.LabelPressurePosition.ToPoint().ToString() + " 加高后 " + tall.LabelPressurePosition.ToPoint().ToString());
 
             // ── 颜色解析工具 ──
@@ -1261,6 +1264,37 @@ namespace AgingTestSystem.Tests
             DictionaryDiff(snap1, snapReload, out diffs);
             Check("SaveDefault→重载→解析结果与默认零差异", diffs.Count == 0,
                 "差异: " + string.Join("; ", diffs.Take(5)));
+
+            // ── V1.77 电流行：关=原来逐像素一致，开=下游下移21间距不变 ──
+            // 纯代码默认（不读文件，零文件依赖）：new 出来就是 ShowCurrent=false 的原布局
+            var cur = new PanelLayoutConfig();
+            Check("电流行缺省关闭", cur.ShowCurrent == false);
+            Check("关电流有效高=205/行高=225",
+                cur.GetEffectiveInnerHeight() == 205 && cur.GetEffectiveRowHeight() == 225);
+            cur.ShowCurrent = true;
+            cur.ResolveAnchors();
+            Check("开电流有效高226/行高246",
+                cur.GetEffectiveInnerHeight() == 226 && cur.GetEffectiveRowHeight() == 246);
+            var rcCur = cur.RcCurrentValue.ToRectangle();
+            Check("开电流电流行 (65,90,85,21)",
+                rcCur.X == 65 && rcCur.Y == 90 && rcCur.Width == 85 && rcCur.Height == 21,
+                "实际 " + rcCur.ToString());
+            Check("开电流SN下移114", cur.RcSNValue.ToRectangle().Y == 114);
+            Check("开电流配方139且交接缝仍4",
+                cur.RcRecipeValue.ToRectangle().Y == 139
+                && cur.RcRecipeValue.ToRectangle().Y - (cur.RcSNValue.ToRectangle().Y + 21) == 4);
+            Check("开电流按钮166/延时168/193",
+                cur.RcSetButton.ToRectangle().Y == 166
+                && cur.RcDelayStartValue.ToRectangle().Y == 168
+                && cur.RcDelayArriveValue.ToRectangle().Y == 193);
+            Check("开电流压力/真空关不动67",
+                cur.RcPressureValue.ToRectangle().Y == 67 && cur.RcVacuumOpen.ToRectangle().Y == 67);
+            Check("开电流标签93", cur.LabelCurrentPosition.ToPoint().Y == 93);
+            Check("开电流SN标签跟随117", cur.LabelSnPosition.ToPoint().Y == 117);
+            // 关回去：与默认快照零差异（开关往返不漂移）
+            cur.ShowCurrent = false;
+            cur.ResolveAnchors();
+            Check("开关往返布局零漂移", DictionaryEquals(snap1, SnapshotLayout(cur)));
         }
 
         /// <summary>把布局对象里所有 ElementRect/ElementPoint 属性拍成 名称→字符串 快照</summary>
@@ -5019,6 +5053,25 @@ namespace AgingTestSystem.Tests
             Check("策略名单含报表与字典(跟项目)",
                 ProjectPolicyStore.PolicyKeys.Contains("ReportColumns")
                 && ProjectPolicyStore.PolicyKeys.Contains("DisplayModes"));
+
+            // —— V1.77 电流行直显开关（构造即默认关；置位只重解布局+重算画布，不抛） ——
+            AgingTestSystem.Views.WorkstationGridView gv = null;
+            string gvErr = null;
+            try { gv = new AgingTestSystem.Views.WorkstationGridView(); }
+            catch (Exception ex) { gvErr = ex.GetType().Name + ":" + ex.Message; }
+            Check("网格可构造", gv != null, gvErr);
+            if (gv != null)
+            {
+                try
+                {
+                    Check("电流行缺省关闭", gv.ShowCurrentRow == false);
+                    gv.ShowCurrentRow = true;
+                    Check("电流行开关置位", gv.ShowCurrentRow == true);
+                    gv.ShowCurrentRow = false;
+                    Check("电流行开关可关回", gv.ShowCurrentRow == false);
+                }
+                finally { try { gv.Dispose(); } catch { } }
+            }
 
             // —— Mock 电表：有数、范围、未连接返回null ——
             var mock = new MockPowerMeter();
