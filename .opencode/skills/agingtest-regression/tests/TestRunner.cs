@@ -4450,6 +4450,48 @@ namespace AgingTestSystem.Tests
                     txtM != null && txtM.DropDownStyle == Sunny.UI.UIDropDownStyle.DropDownList);
                 Check("维度关时配方窗收缩(V1.75: 355→317)",
                     rmForm.ClientSize.Height == 317);
+                // 配方管理窗6项tooltip全覆盖（标签+输入框双挂，超40字走WrapTooltip换行）：
+                // 以前只有显示模式有说明，其余5项悬停空白；现在6项与批量窗/工位窗同口径。
+                var tipRM = typeof(RecipeManagerForm).GetField("_tip",
+                    BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(rmForm) as ToolTip;
+                Check("配方窗tooltip容器已建", tipRM != null);
+                if (tipRM != null)
+                {
+                    Func<string, Control> rmCtl = n => typeof(RecipeManagerForm).GetField(n,
+                        BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(rmForm) as Control;
+                    Func<string, string> rmTip = n => { var c = rmCtl(n); return c == null ? "" : tipRM.GetToolTip(c); };
+                    Check("配方名称tooltip双挂（含覆盖更新）",
+                        rmTip("lblRecipeName").Contains("覆盖更新") && rmTip("txtRecipeName") == rmTip("lblRecipeName")
+                        && rmTip("lblRecipeName").Length > 0);
+                    Check("延时时间tooltip双挂（含延时开启）",
+                        rmTip("lblDelayTime").Contains("延时开启") && rmTip("nudDelayHours") == rmTip("lblDelayTime"));
+                    Check("启动时间tooltip双挂（含延时到达）",
+                        rmTip("lblStartTime").Contains("延时到达") && rmTip("nudStartHours") == rmTip("lblStartTime"));
+                    Check("极限温度tooltip双挂（0~300℃追溯）",
+                        rmTip("lblLimitTemp").Contains("0~300") && rmTip("lblLimitTemp").Contains("追溯")
+                        && rmTip("nudLimitTemp") == rmTip("lblLimitTemp"));
+                    Check("负压阈值tooltip双挂（含定格）",
+                        rmTip("lblNegativePressure").Contains("定格")
+                        && rmTip("nudNegativePressure") == rmTip("lblNegativePressure"));
+                    Check("显示模式tooltip双挂（含追溯）",
+                        rmTip("lblDisplayMode").Contains("追溯") && rmTip("cmbDisplayMode") == rmTip("lblDisplayMode"));
+                    Check("超长tooltip已换行（负压条含换行且每行≤40字）",
+                        rmTip("lblNegativePressure").Contains("\r\n")
+                        && rmTip("lblNegativePressure").Split(new[] { "\r\n" }, StringSplitOptions.None).All(
+                            line => line.Length <= 40));
+                    // 大白话版（V1.86.5）：时间轴举例+负压符号+0语义必须讲清，否则小白照样迷茫。
+                    // 注：tooltip 含 WrapTooltip 插的换行，查内容先去换行（换行位置随字数浮动，
+                    // 直接 Contains 会被从中切断的例子误杀，本条红过）。
+                    Func<string, string> rmTipFlat = n => rmTip(n).Replace("\r\n", "");
+                    Check("延时说明讲清先开阀后上电",
+                        rmTipFlat("lblDelayTime").Contains("只开真空阀") && rmTipFlat("lblDelayTime").Contains("00:00:30"));
+                    Check("启动说明讲清0回退全局",
+                        rmTipFlat("lblStartTime").Contains("全局") && rmTipFlat("lblStartTime").Contains("08:00:00"));
+                    Check("负压说明举例符号方向",
+                        rmTipFlat("lblNegativePressure").Contains("-7") && rmTipFlat("lblNegativePressure").Contains("-3"));
+                    Check("长说明悬停多停留15秒（默认5秒看不完）",
+                        tipRM.AutoPopDelay == 15000);
+                }
                 var rmFormOn = new RecipeManagerForm(new List<RecipeConfig>(),
                     -5m, new DeviceConfig { DisplayModeEnabled = true });
                 try
