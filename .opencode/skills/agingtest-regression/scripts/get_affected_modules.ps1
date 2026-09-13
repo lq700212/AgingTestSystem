@@ -48,7 +48,7 @@ $Map = @(
     @{ Pat = @("*ProjectSwitchForm*");              Mods = @("PolicyV167") },
     @{ Pat = @("*HomeLayoutEditorForm*");           Mods = @("HomeLayoutConfig", "DesignerStabilityV172_16") },
     @{ Pat = @("*CommunicationTestForm*", "*FanTestForm*", "*IoRemapVisualForm*"); Mods = @("ScannerParse", "ModbusConvert", "FanParse", "IoOutputChannelRemap", "SettingsValidate", "UiFinalizerV172_14", "DesignerStabilityV172_16") },
-    @{ Pat = @("*ProcessPolicyForm*", "*PolicyGraph*"); Mods = @("ProcessPolicyV170", "PolicyV167", "UiFinalizerV172_14", "DesignerStabilityV172_16") },
+    @{ Pat = @("*ProcessPolicyForm*", "*PolicyGraph*"); Mods = @("ProcessPolicyV170", "PolicyV167", "PolicyNodeComboV1851", "UiFinalizerV172_14", "DesignerStabilityV172_16") },
     @{ Pat = @("*MainForm*");                       Mods = @("UiPureHelpers", "UiStyleV172_1", "ThemeManager", "SettingsValidate", "UiFinalizerV172_14", "DesignerStabilityV172_16") },
     @{ Pat = @("*WorkstationGridView*");            Mods = @("PanelLayoutConfig", "UiPureHelpers") },
     @{ Pat = @("*RuleListEditorPopup*");            Mods = @("RuleExprV169", "SettingsValidate", "PowerReportV174") },
