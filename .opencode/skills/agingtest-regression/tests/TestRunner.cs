@@ -3514,6 +3514,60 @@ namespace AgingTestSystem.Tests
                 }
                 finally { try { if (frm != null) frm.Dispose(); } catch { } }
 
+                // ── 授权窗 Designer 化 + 眼睛显隐（V1.86，只点眼睛，不碰弹框键） ──
+                var fl = typeof(LicenseForm);
+                var flInst = BindingFlags.NonPublic | BindingFlags.Instance;
+                var flStat = BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static;
+                LicenseForm eyeFrm = null;
+                try
+                {
+                    eyeFrm = new LicenseForm();
+                    var fEye = fl.GetField("_eyeIcon", flInst);
+                    var fTx = fl.GetField("_txtMachine", flInst);
+                    var eyeIcon = fEye != null ? fEye.GetValue(eyeFrm) as AgingTestSystem.Controls.EyeIcon : null;
+                    var mBox = fTx != null ? fTx.GetValue(eyeFrm) as Sunny.UI.UITextBox : null;
+                    Check("无参构造可用（Designer预览口）", eyeFrm != null && eyeIcon != null && mBox != null);
+                    if (eyeIcon != null && mBox != null)
+                    {
+                        // 眼睛是显示框的子控件：天然浮在输入框上（比"窗体级叠放"稳，
+                        // V1.86 血泪：窗体级叠加被输入框整体盖住，见 AGENTS 叠放控件层级三锁）
+                        Check("眼睛是显示框子控件", eyeIcon.Parent == mBox);
+                        Check("眼睛贴显示框右缘内侧",
+                            eyeIcon.Location.X + eyeIcon.Width <= mBox.ClientSize.Width - 1
+                            && eyeIcon.Left > 0);
+                        Check("眼睛垂直居中于显示框",
+                            Math.Abs((eyeIcon.Location.Y + eyeIcon.Height / 2f)
+                                - mBox.ClientSize.Height / 2f) <= 2f);
+                        Check("默认掩码", mBox.PasswordChar == '●');
+                        Check("默认隐藏态(Shown=false)", eyeIcon.Shown == false);
+                        var tipObj = fl.GetField("_tipEye", flInst) != null
+                            ? fl.GetField("_tipEye", flInst).GetValue(eyeFrm) as ToolTip : null;
+                        string wantMasked = fl.GetField("EyeTipMasked", flStat) != null
+                            ? (string)fl.GetField("EyeTipMasked", flStat).GetValue(null) : null;
+                        string wantShown = fl.GetField("EyeTipShown", flStat) != null
+                            ? (string)fl.GetField("EyeTipShown", flStat).GetValue(null) : null;
+                        Check("默认悬停=显示明文",
+                            tipObj != null && wantMasked != null && tipObj.GetToolTip(eyeIcon) == wantMasked);
+                        string keep = mBox.Text;
+                        // PerformClick 在窗体未 Show 时 CanSelect=false 不触发事件（harness 实锤），
+                        // 回归不 Show 弹窗，直接调私有 handler，效果与点眼睛一致。
+                        var eyeHandler = fl.GetMethod("BtnEye_Click", flInst);
+                        Check("眼睛handler存在", eyeHandler != null);
+                        if (eyeHandler != null) eyeHandler.Invoke(eyeFrm, new object[] { eyeIcon, EventArgs.Empty });
+                        Check("点眼睛→明文", mBox.PasswordChar == '\0');
+                        Check("点眼睛→可见态(Shown=true)", eyeIcon.Shown == true);
+                        Check("悬停换隐藏",
+                            tipObj != null && wantShown != null && tipObj.GetToolTip(eyeIcon) == wantShown);
+                        Check("显隐不丢值", mBox.Text == keep && !string.IsNullOrWhiteSpace(keep), keep);
+                        if (eyeHandler != null) eyeHandler.Invoke(eyeFrm, new object[] { eyeIcon, EventArgs.Empty });
+                        Check("再点→掩码回去", mBox.PasswordChar == '●');
+                        Check("再点→隐藏态(Shown=false)", eyeIcon.Shown == false);
+                        Check("悬停换回来",
+                            tipObj != null && wantMasked != null && tipObj.GetToolTip(eyeIcon) == wantMasked);
+                    }
+                }
+                finally { try { if (eyeFrm != null) eyeFrm.Dispose(); } catch { } }
+
                 // ── 标题后缀只替换不堆叠（V1.83.1：试用转正/续费换证后老后缀不能赖着） ──
                 var mTitle = typeof(Views.MainForm).GetMethod("WithLicenseSuffix",
                     BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);

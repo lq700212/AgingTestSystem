@@ -4,22 +4,30 @@ using System.Drawing;
 using System.IO;
 using System.Text;
 using System.Windows.Forms;
+using AgingTestSystem.Controls;
 using AgingTestSystem.Services.License;
 
 namespace AgingTestSystem.Dialogs
 {
     /// <summary>
-    /// 软件授权窗（【V1.83 新增】机器码导出 + 授权导入，纯代码窗体无 Designer）。
+    /// 软件授权窗（【V1.83 新增】机器码导出 + 授权导入；【V1.86】纯代码改 Designer 拆分）。
     ///
-    /// 【界面布局】（单列纵向，标签+值左右排）
+    /// 【界面布局】（单列纵向，标签+值左右排；静态边框见 LicenseForm.Designer.cs）
     /// ┌─────────────────────────────────┐
-    /// │ 授权状态：[已授权至…/试用剩余…]  │ ← lblStatus（加粗，红/绿按状态）
+    /// │ 授权状态：[已授权至…/试用剩余…]  │ ← _lblStatus（加粗，红/绿按状态）
     /// │ 机器码：                          │
-    /// │ ┌───────────────────┐ [复制]    │ ← txtMachine（只读）+ btnCopy
-    /// │ [导出机器码] [导入授权文件]       │ ← btnExport / btnImport（导入仅管理员）
-    /// │ 项目/点数/到期：[…]              │ ← lblDetail（证里读到的，无证显示试用）
-    /// │              [关闭]              │ ← btnClose（Sunny 灰）
+    /// │ ┌─────────────────────┐(◉)[复制]│ ← _txtMachine（只读，默认●掩码）+ _eyeIcon + _btnCopy
+    /// │ [导出机器码] [导入授权文件]       │ ← _btnExport / _btnImport（导入仅管理员）
+    /// │ 项目/点数/到期：[…]              │ ← _lblDetail（证里读到的，无证显示试用）
+    /// │              [关闭]              │ ← _btnClose（Sunny 灰）
     /// └─────────────────────────────────┘
+    ///
+    /// 【眼睛显隐】机器码默认掩码（PasswordChar='●'，防路过偷窥）：
+    /// 点眼睛 → 明文（PasswordChar='\0'）+ 图标翻找（掩码态=眼睛+斜线，明文态=实心瞳孔）
+    /// + 悬停换"点击隐藏"；再点 → 掩码。
+    /// 眼睛是 _eyeIcon（EyeIcon 自绘控件），作为 _txtMachine 的子控件内嵌其右缘内侧，
+    /// 随输入框 Resize 重定位（PositionEye）。复制/导出读的都是 Text 真值，跟掩码无关
+    /// ——遮的是眼睛，不是数据。
     ///
     /// 【两种打开方式】
     /// - 启动闸（Program.Main）：无有效授权阻断时弹出，此时无登录概念，
@@ -27,127 +35,127 @@ namespace AgingTestSystem.Dialogs
     /// - 主界面【关于→软件授权】：canEdit=管理员才可导入，操作员/技术员只读看状态。
     /// 导入成功返回 DialogResult.OK（调用方重查一次授权并刷新标题栏）。
     ///
-    /// 【纯代码窗高 DPI 三要素】（家规：无 Designer 的窗体三件套）
-    /// ①AutoScaleDimensions=6F,12F + AutoScaleMode.Font；
-    /// ②SuspendLayout 包裹全部创建、末尾 ResumeLayout(false)；
-    /// ③不写死字体字号（跟随继承，防大小眼）。
+    /// 【无参构造】只给 VS 设计器预览 + 回归 harness 用：状态未知、导入禁用，
+    /// 点导入/复制/导出走正常守卫（弹提示，不抛）。执行键（真正导入）只认带参构造。
     /// </summary>
-    public class LicenseForm : Sunny.UI.UIForm
+    public partial class LicenseForm : Sunny.UI.UIForm
     {
         private readonly bool _canEdit;
         private LicenseResult _result;
 
-        private Sunny.UI.UILabel _lblStatus;
-        private Sunny.UI.UITextBox _txtMachine;
-        private Sunny.UI.UIButton _btnCopy;
-        private Sunny.UI.UIButton _btnExport;
-        private Sunny.UI.UIButton _btnImport;
-        private Sunny.UI.UILabel _lblDetail;
-        private Sunny.UI.UIButton _btnClose;
         // 【V1.83.1】只读模式的导入按钮提示：ToolTip 自带窗口句柄，无容器托管，
         // 局部 new 完不管会进终结器线程释放（家规：无容器的手写 Dispose，项目切换窗先例）。
         private ToolTip _tipImport;
 
+        // 【V1.86】眼睛图标悬停说明：同一个 ToolTip，显隐切换时换文案（动态两套话随状态同步换，家规）。
+        // 无容器托管，随窗体手写 Dispose（与 _tipImport 同处）。
+        private ToolTip _tipEye;
+
+        /// <summary>掩码态悬停文案（默认态：点一下看明文）。</summary>
+        internal const string EyeTipMasked = "点击显示明文（默认隐藏防偷窥）";
+
+        /// <summary>明文态悬停文案（已展开态：点一下藏回去）。</summary>
+        internal const string EyeTipShown = "点击隐藏（当前明文显示）";
+
         /// <summary>本次是否成功导入过授权（调用方据此重查 + 刷新标题）。</summary>
         public bool Imported { get; private set; }
+
+        /// <summary>
+        /// 无参构造（VS 设计器预览 + 回归 harness 专用）：
+        /// 状态未知、导入禁用；机器码照常回填（本机可算，与授权无关）。
+        /// </summary>
+        public LicenseForm() : this(null, false)
+        {
+        }
 
         public LicenseForm(LicenseResult result, bool canEdit)
         {
             _result = result;
             _canEdit = canEdit;
-            SuspendLayout();
-            AutoScaleDimensions = new SizeF(6F, 12F);
-            AutoScaleMode = AutoScaleMode.Font;
-            Text = "软件授权";
-            StartPosition = FormStartPosition.CenterParent;
-            Size = new Size(560, 360);
-            MinimumSize = new Size(480, 320);
-            // UIForm 自绘标题占 35px：内容整体下移（家规，见 AGENTS 换肤约定）。
-            Padding = new Padding(10, 45, 10, 10);
+            InitializeComponent();
+            FillMachineCode();
+            ApplyEditState();
+            RefreshView();
+        }
 
-            _lblStatus = new Sunny.UI.UILabel
-            {
-                Location = new Point(16, 50),
-                Size = new Size(510, 30),
-                Font = new Font(Font.FontFamily, Font.Size, FontStyle.Bold),
-            };
-            Controls.Add(_lblStatus);
-
-            var lblM = new Sunny.UI.UILabel
-            {
-                Location = new Point(16, 88),
-                Size = new Size(510, 22),
-                Text = "本机机器码（发给商务签发授权，一机一证）：",
-            };
-            Controls.Add(lblM);
-
-            _txtMachine = new Sunny.UI.UITextBox
-            {
-                Location = new Point(16, 112),
-                Size = new Size(400, 30),
-                ReadOnly = true,
-            };
+        /// <summary>回填本机机器码（与授权状态无关；算不出置空，不拖垮构造）。</summary>
+        private void FillMachineCode()
+        {
             try { _txtMachine.Text = MachineFingerprint.FormatGrouped(MachineFingerprint.Compute()); }
             catch { _txtMachine.Text = ""; }
-            Controls.Add(_txtMachine);
+        }
 
-            _btnCopy = new Sunny.UI.UIButton
-            {
-                Location = new Point(424, 112),
-                Size = new Size(100, 30),
-                Text = "复制",
-            };
-            _btnCopy.Click += BtnCopy_Click;
-            Controls.Add(_btnCopy);
-
-            _btnExport = new Sunny.UI.UIButton
-            {
-                Location = new Point(16, 152),
-                Size = new Size(150, 32),
-                Text = "导出机器码",
-            };
-            _btnExport.Click += BtnExport_Click;
-            Controls.Add(_btnExport);
-
-            _btnImport = new Sunny.UI.UIButton
-            {
-                Location = new Point(176, 152),
-                Size = new Size(150, 32),
-                Text = "导入授权文件",
-                Enabled = _canEdit,
-            };
+        /// <summary>
+        /// 按 canEdit 落导入按钮态 + 挂两个悬停提示 + 把眼睛图标精确挂到显示框上。
+        /// 只读模式：按钮禁用 + 改文案点名"管理员"，悬停说明去哪提权；
+        /// 眼睛图标：默认掩码态文案（与 Designer 里 PasswordChar='●' 对上）。
+        /// 眼睛是 _txtMachine 的子控件（Designer 已 Add），这里补：背景跟输入框、
+        /// 抢最前（防被其内层编辑框盖住）、按当前尺寸精定位、并随 Resize 跟随。
+        /// </summary>
+        private void ApplyEditState()
+        {
+            _btnImport.Enabled = _canEdit;
             if (!_canEdit)
             {
                 _btnImport.Text = "导入（管理员）";
                 _tipImport = new ToolTip();
                 _tipImport.SetToolTip(_btnImport, "导入授权仅管理员可用，请先切换管理员权限。");
             }
-            _btnImport.Click += BtnImport_Click;
-            Controls.Add(_btnImport);
+            _tipEye = new ToolTip();
+            _eyeIcon.BackColor = _txtMachine.BackColor;
+            _eyeIcon.BringToFront();
+            PositionEye(_txtMachine, _eyeIcon);
+            _txtMachine.Resize += delegate { PositionEye(_txtMachine, _eyeIcon); };
+            _tipEye.SetToolTip(_eyeIcon, EyeTipMasked);
+        }
 
-            _lblDetail = new Sunny.UI.UILabel
+        /// <summary>
+        /// 把眼睛图标贴到输入框右缘内侧并垂直居中。
+        /// 为什么：单行文本框文本让不出右侧边距，图标只能以不透明 BackColor 盖在
+        /// 文本右端；位置 = 输入框客户区右缘 − 图标宽 − 2px。
+        /// 调用时机：构造后一次 + 每次输入框 Resize（输入框随窗体/DPI 缩放都得跟上）。
+        /// </summary>
+        private static void PositionEye(Control box, Control eye)
+        {
+            if (box == null || eye == null || eye.IsDisposed) return;
+            int x = box.ClientSize.Width - eye.Width - 2;   // 距右缘 2px
+            int y = (box.ClientSize.Height - eye.Height) / 2; // 垂直居中
+            if (x < 0) x = 0; if (y < 0) y = 0;
+            eye.Location = new Point(x, y);
+            eye.BackColor = box.BackColor;   // 与输入框底色一致，盖在文本右端不突兀
+        }
+
+        /// <summary>
+        /// 眼睛图标点击：掩码 ⇄ 明文切换（只动显示层，不动 Text 真值）。
+        /// 掩码态（PasswordChar != '\0'）→ 明文（'\0'）+ 图标翻实心瞳孔；
+        /// 明文态 → 掩码（'●'）+ 图标翻回"眼睛+斜线"。
+        /// 悬停文案同步换，看到的是哪态、提示的就是反向动作。
+        /// </summary>
+        private void BtnEye_Click(object sender, EventArgs e)
+        {
+            try
             {
-                Location = new Point(16, 194),
-                Size = new Size(510, 70),
-                ForeColor = Color.Gray,
-            };
-            Controls.Add(_lblDetail);
-
-            _btnClose = new Sunny.UI.UIButton
-            {
-                Location = new Point(374, 274),
-                Size = new Size(150, 32),
-                Text = "关闭",
-                FillColor = Color.DimGray,
-                RectColor = Color.DimGray,
-                ForeColor = Color.White,
-                Style = Sunny.UI.UIStyle.Custom,
-            };
-            _btnClose.Click += (s, e) => Close();
-            Controls.Add(_btnClose);
-
-            RefreshView();
-            ResumeLayout(false);
+                if (_txtMachine.PasswordChar != '\0')
+                {
+                    _txtMachine.PasswordChar = '\0';
+                    _eyeIcon.Shown = true;
+                    if (_tipEye != null) _tipEye.SetToolTip(_eyeIcon, EyeTipShown);
+                }
+                else
+                {
+                    _txtMachine.PasswordChar = '●';
+                    _eyeIcon.Shown = false;
+                    if (_tipEye != null) _tipEye.SetToolTip(_eyeIcon, EyeTipMasked);
+                }
+                // Sunny UITextBox 切 PasswordChar 后内层编辑框不重绘（harness 实锤：
+                // 内外值都在 79 长，但框里空白；Invalidate(true)+Update 也刷不出来）：
+                // 把文本重推一次（先清空破 Sunny 的相等守卫），WM_SETTEXT 逼内层当场重画。
+                // 读 Text 的复制/导出走外层缓存，不受这一进一出的影响。
+                string keep = _txtMachine.Text ?? "";
+                _txtMachine.Text = "";
+                _txtMachine.Text = keep;
+            }
+            catch { /* 显隐切不动不影响授权主流程 */ }
         }
 
         /// <summary>刷新状态显示（导入成功后重查一次再调它）。</summary>
@@ -291,10 +299,17 @@ namespace AgingTestSystem.Dialogs
             }
         }
 
+        private void BtnClose_Click(object sender, EventArgs e)
+        {
+            Close();
+        }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
+                // _eyeIcon 是 _txtMachine 的子控件，随 _txtMachine.Dispose 一并释放，
+                // 这里不再单独 dispose（先在父前释放是父的事）。
                 try { _txtMachine.Dispose(); } catch { }
                 try { _btnCopy.Dispose(); } catch { }
                 try { _btnExport.Dispose(); } catch { }
@@ -303,6 +318,7 @@ namespace AgingTestSystem.Dialogs
                 try { _lblStatus.Dispose(); } catch { }
                 try { _lblDetail.Dispose(); } catch { }
                 try { if (_tipImport != null) _tipImport.Dispose(); } catch { }
+                try { if (_tipEye != null) _tipEye.Dispose(); } catch { }
             }
             base.Dispose(disposing);
         }
