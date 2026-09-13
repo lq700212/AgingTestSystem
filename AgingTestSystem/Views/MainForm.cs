@@ -194,6 +194,10 @@ namespace AgingTestSystem.Views
             //    必须最先调用，否则其他代码访问控件会报空引用
             InitializeComponent();
 
+            // 【V1.78】顶栏/状态区加粗（用户点名：项目/权限/通讯/运行状态/监视全加粗）。
+            // 放构造里按当前字号原样加粗，详见 ApplyHeaderBoldFonts 注释（为什么不动 Designer）。
+            ApplyHeaderBoldFonts();
+
             // 【V1.60 深色/浅色主题】读出上次保存的主题并给主窗体着色（按钮等语义色原样保留，
             // 详见 ThemeManager 类头"配色约定"）。
             // 工位大画布在 MainForm_Load → CreateWorkstationPanels 里同步主题；
@@ -2375,6 +2379,51 @@ namespace AgingTestSystem.Views
                 default:
                     return role.ToString();
             }
+        }
+
+        /// <summary>
+        /// 顶栏与右侧状态区文本加粗（【V1.78 新增】用户点名：顶栏项目/权限/通讯、
+        /// 运行状态组、监视组全部加粗，更醒目）。
+        ///
+        /// 【为什么放代码里而不写 Designer】Sunny 控件默认 Style=Inherited，吃样式字体：
+        /// 名/值两套标签要么都不写 Font（同源永不分叉），要么两边写死同一套——只写一边必大小眼
+        /// （V1.72.8 血泪：lblRunStatus 单写微软雅黑 10F，删字解决；V1.72.9 顶栏五段字体全删回默认）。
+        /// 这里按各控件"当前实际字号"原样加粗（字族/字号一个不动，只或上 Bold），
+        /// 成对的名/值标签永远同源同尺寸，不会分叉。ThemeManager 不碰 Font，加粗一次永久有效，
+        /// 深色/浅色切换不影响粗细。
+        /// </summary>
+        private void ApplyHeaderBoldFonts()
+        {
+            // 顶栏：项目 + 权限（前缀/角色名成对） + 通讯（标签/状态成对）
+            SetBold(lblProject);
+            SetBold(lblPermissionPrefix);
+            SetBold(lblPermissionRole);
+            SetBold(lblCommStatusLabel);
+            SetBold(lblCommStatus);
+            // 运行状态组：分组标题"运行状态" + 状态文本
+            SetBold(groupBoxStatus);
+            SetBold(lblRunStatus);
+            // 监视组：分组标题"监视" + 名/值三对（当前温度/设置温度/送风机状态）
+            SetBold(groupBoxMonitor);
+            SetBold(lblUpperTempLabel);
+            SetBold(lblUpperTemp);
+            SetBold(lblSetTempLabel);
+            SetBold(lblSetTemp);
+            SetBold(lblFanStateLabel);
+            SetBold(lblFanState);
+        }
+
+        /// <summary>
+        /// 单个控件按原字号加粗（幂等：已是粗体不再重复创建字体对象）。
+        /// 空控件/已释放时静默跳过（构造早期调用，防空引用拖垮启动）。
+        /// </summary>
+        /// <param name="c">要加粗的控件（Label/GroupBox 均可，Font 是 Control 基类属性）</param>
+        private static void SetBold(Control c)
+        {
+            if (c == null || c.IsDisposed) return;
+            if (c.Font == null) return;
+            if ((c.Font.Style & FontStyle.Bold) != 0) return;
+            c.Font = new Font(c.Font, c.Font.Style | FontStyle.Bold);
         }
 
         /// <summary>
