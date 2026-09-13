@@ -52,6 +52,12 @@ namespace AgingTestSystem.Services
         /// </summary>
         private const int Iterations = 100000;
 
+        /// <summary>Verify 接受的迭代次数下限（低于此值=弱哈希，判非法）。</summary>
+        private const int MinIterations = 10000;
+
+        /// <summary>Verify 接受的迭代次数上限（高于此值一次登录数分钟，判非法防 DoS）。</summary>
+        private const int MaxIterations = 2000000;
+
         /// <summary>
         /// 生成密码哈希
         /// </summary>
@@ -108,7 +114,14 @@ namespace AgingTestSystem.Services
                     return false;
                 }
 
-                int iterations = int.Parse(parts[0]);
+                int iterations;
+                // 【大扫荡】迭代次数收范围：手改 Users.json 写 PBKDF2$2147483647$…，
+                // 一次登录卡死 UI 数分钟（DoS）。超界=非法串，直接判失败。
+                if (!int.TryParse(parts[0], out iterations)
+                    || iterations < MinIterations || iterations > MaxIterations)
+                {
+                    return false;
+                }
                 byte[] salt = Convert.FromBase64String(parts[1]);
                 byte[] expected = Convert.FromBase64String(parts[2]);
 

@@ -35,9 +35,9 @@
 //  【退出码约定】0 = 全部通过；非 0 = 有失败（供 CI/脚本判断）。
 //
 //  【覆盖边界说明】涉及真串口/真设备（ModbusRtuBarometerReader、ScannerService、
-//  FanControllerClient、ModbusTcpIoController）与 UI 弹窗分支
-//  （RecipeStorage.SaveWithDuplicateCheck 同名覆盖确认框）不在本 harness 范围，
+//  FanControllerClient、ModbusTcpIoController）与 UI 弹窗分支不在本 harness 范围，
 //  由现场联调与界面手工测试覆盖；后续可扩展虚拟串口/模拟器用例。
+//  （配方同名覆盖确认框已搬到 UI 层，Services 层 SaveRecipe 无 UI 全覆盖。）
 // ============================================================================
 
 using System;
@@ -321,6 +321,11 @@ namespace AgingTestSystem.Tests
             Check("非法 Base64 盐判失败", !PasswordHasher.Verify("123456", "PBKDF2$100000$@@##$$****"));
             Check("迭代次数非数字判失败", !PasswordHasher.Verify("123456", "PBKDF2$abc$AAAA==$BBBB=="));
             Check("迭代次数为负判失败", !PasswordHasher.Verify("123456", "PBKDF2$-1$AAAA==$BBBB=="));
+            // 【大扫荡】迭代次数上下界（防 DoS）：手改 Users.json 写 PBKDF2$2147483647$…
+            // 一次登录卡死 UI 数分钟；超界=非法串，判失败且不跑哈希。
+            Check("迭代次数过低判失败", !PasswordHasher.Verify("123456", "PBKDF2$1$AAAA==$BBBB=="));
+            Check("迭代次数巨量判失败(DoS防护)", !PasswordHasher.Verify("123456", "PBKDF2$2147483647$AAAA==$BBBB=="));
+            Check("迭代次数100000正常仍可用", PasswordHasher.Verify("123456", h1));
 
             // 特殊字符密码往返
             string cnHash = PasswordHasher.Hash("中文密码!@#￥%……&*（）");
@@ -364,7 +369,9 @@ namespace AgingTestSystem.Tests
             Check("空密码登录失败", !umOp.Login(UserRole.Operator, "operator", "").Success);
             Check("null 密码登录失败", !umOp.Login(UserRole.Operator, "operator", null).Success);
             Check("用户名带首尾空格仍能登录(Trim)", umOp.Login(UserRole.Operator, "  operator  ", "123456").Success);
-            Check("用户名大小写敏感(Admin≠admin)", !umOp.Login(UserRole.Administrator, "Admin", "123456").Success);
+            // 【大扫荡】登录大小写不敏感（与注册/改名查重口径一致；以前精确匹配，
+            // 存"dev"输"DEV"报用户名错误、但该名又注册不了，口径分裂）。
+            Check("用户名大小写不敏感(Admin=admin)", umOp.Login(UserRole.Administrator, "Admin", "123456").Success);
             Check("角色错配(operator 登管理员)被拒绝", !umOp.Login(UserRole.Administrator, "operator", "123456").Success);
 
             // ── C. 权限矩阵 HasPermission（枚举值 Admin(2)>Tech(1)>Operator(0)）──
@@ -1071,6 +1078,9 @@ namespace AgingTestSystem.Tests
 
             Check("无缓存读null", StationSettingsCache.Get(1) == null);
             StationSettingsCache.Save(null); // 静默不抛
+            StationSettingsCache.Save(new StationCacheEntry { DeviceId = 0, SerialNumber = "野" });
+            StationSettingsCache.Save(new StationCacheEntry { DeviceId = -3, SerialNumber = "野" });
+            Check("非法编号拒绝入库", StationSettingsCache.Get(0) == null && StationSettingsCache.Get(-3) == null);
 
             var e = new StationCacheEntry
             {
@@ -1209,20 +1219,33 @@ namespace AgingTestSystem.Tests
             var nulllit = RecipeStorage.Load();
             Check("json字面量null Load 返回空列表(非 null)", nulllit != null && nulllit.Count == 0);
 
-            // SaveWithDuplicateCheck 新增分支（同名覆盖分支弹 UI 对话框，归界面手工测试覆盖）
+            // SaveRecipe 新增/覆盖分支（覆盖确认框在 UI 层，单测只测无 UI 的落盘语义）
             var shared = new List<RecipeConfig>();
             var r = new RecipeConfig { Name = "新建配方", NegativePressure = -70m };
-            Check("SaveWithDuplicateCheck 新增返回 true", RecipeStorage.SaveWithDuplicateCheck(shared, r));
+            Check("SaveRecipe 新增返回 true", RecipeStorage.SaveRecipe(shared, r, true));
             Check("新增后 Id 自动分配为 1", shared.Count == 1 && shared[0].Id == 1);
             Check("新增后立即落盘", File.Exists(ProjectProfile.ResolveDataPath("Recipes.json", true)));
             var r2 = new RecipeConfig { Name = "第二个配方" };
-            Check("第二条新增 Id=2", RecipeStorage.SaveWithDuplicateCheck(shared, r2) && shared[1].Id == 2);
+            Check("第二条新增 Id=2", RecipeStorage.SaveRecipe(shared, r2, true) && shared[1].Id == 2);
             // V1.62：删中间配方后新增不许撞号（Max+1，不是 Count+1）
             shared.RemoveAt(0);
             var r3 = new RecipeConfig { Name = "第三个配方" };
-            Check("删Id=1后新增Id=3不撞号", RecipeStorage.SaveWithDuplicateCheck(shared, r3) && shared[1].Id == 3);
-            Check("参数 recipe=null 返回 false", !RecipeStorage.SaveWithDuplicateCheck(shared, null));
-            Check("参数 list=null 返回 false", !RecipeStorage.SaveWithDuplicateCheck(null, r));
+            Check("删Id=1后新增Id=3不撞号", RecipeStorage.SaveRecipe(shared, r3, true) && shared[1].Id == 3);
+            Check("参数 recipe=null 返回 false", !RecipeStorage.SaveRecipe(shared, null, true));
+            Check("参数 list=null 返回 false", !RecipeStorage.SaveRecipe(null, r, true));
+            Check("空名配方拒绝", !RecipeStorage.SaveRecipe(shared, new RecipeConfig { Name = "  " }, true));
+            // 同名语义：FindDuplicateIndex 定位 + overwrite 开关
+            Check("同名定位忽略大小写",
+                RecipeStorage.FindDuplicateIndex(shared, "第二个配方") == 0
+                && RecipeStorage.FindDuplicateIndex(shared, "不存在") < 0);
+            int keepId = shared[0].Id;
+            var dup = new RecipeConfig { Name = "第二个配方", NegativePressure = -11m };
+            Check("同名不覆盖被拒且列表不动",
+                !RecipeStorage.SaveRecipe(shared, dup, false) && shared.Count == 2
+                && shared[0].NegativePressure != -11m);
+            Check("同名覆盖保留原Id",
+                RecipeStorage.SaveRecipe(shared, dup, true) && shared.Count == 2
+                && shared[0].Id == keepId && shared[0].NegativePressure == -11m);
         }
 
         // =====================================================================
@@ -1673,8 +1696,9 @@ namespace AgingTestSystem.Tests
             bc.InputStatus[0] = false; bc.OutputStatus[1] = false;
             Check("Clone数组深拷贝", b.InputStatus[0] && b.OutputStatus[1]);
             var bn = new BarometerData { InputStatus = null, OutputStatus = null };
-            var bnc = bn.Clone(); // null 数组不抛
-            Check("Clone空数组不抛且仍null", bnc.InputStatus == null && bnc.OutputStatus == null);
+            var bnc = bn.Clone(); // null 数组不抛且回非空（下游 Length/[0] 不判空）
+            Check("Clone空数组不抛且非空", bnc.InputStatus != null && bnc.OutputStatus != null
+                && bnc.InputStatus.Length == 0 && bnc.OutputStatus.Length == 0);
 
             // UserAccount.LoginResult 工厂
             var u = new UserAccount("op", "h", UserRole.Operator);
@@ -2059,6 +2083,20 @@ namespace AgingTestSystem.Tests
             Check("空名建项目被拒", !ProjectProfile.CreateProfile("  "));
             Check("路径穿越字符被拒", !ProjectProfile.CreateProfile("../逃逸"));
             Check("斜杠被拒", !ProjectProfile.CreateProfile("a/b"));
+            // 【大扫荡】Delete/Switch/列表过滤同样防穿越（以前只有 Create 拦）：
+            // DeleteProfile("..\\重要目录") 存在即递归删除，Switch 写成指针全盘带出 Projects。
+            Check("删除穿越名被拒", !ProjectProfile.DeleteProfile(".."));
+            Check("删除斜杠名被拒", !ProjectProfile.DeleteProfile("../重要目录"));
+            Check("切换穿越名被拒", !ProjectProfile.SwitchTo(".."));
+            Check("切换带路径名被拒", !ProjectProfile.SwitchTo("a/b"));
+            Check("名单校验合法名过", ProjectProfile.IsValidProfileName("项目A_2"));
+            Check("名单校验穿越名拒", !ProjectProfile.IsValidProfileName("..")
+                && !ProjectProfile.IsValidProfileName("a\\b") && !ProjectProfile.IsValidProfileName(". .."));
+            // 空/野目录不冒充项目（手丢 backup 文件夹切入后配方策略全空易误跑）。
+            string junkDir = System.IO.Path.Combine(ProjectProfile.ProjectsRoot, "backup_野目录");
+            try { Directory.CreateDirectory(junkDir); } catch { }
+            Check("空野目录不算项目", !ProjectProfile.ListProfiles().Contains("backup_野目录"));
+            try { Directory.Delete(junkDir, true); } catch { }
             string tmpName = "UT_TMP_单元测试";
             Check("合法名可建(中文下划线)", ProjectProfile.CreateProfile(tmpName));
             Check("重复建被拒", !ProjectProfile.CreateProfile(tmpName));
@@ -2474,7 +2512,12 @@ namespace AgingTestSystem.Tests
             }
 
             // ── MesReporter + Fake 传输：上报/开关/触发器/Mock/离线缓存 ──
-            EnterCleanDir();
+            // 【大扫荡】缓存绝对路径化后走 BaseDirOverride 隔离（finally 复位）。
+            string mesDir = EnterCleanDir();
+            var fMesBase = typeof(MesReporter).GetField("BaseDirOverride",
+                BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            if (fMesBase != null) fMesBase.SetValue(null, mesDir);
+            string mesQueuePath = Path.Combine(mesDir, "MesQueue.json");
             var captured = new List<Tuple<string, string, Dictionary<string, string>>>();
             var capLock = new object();
             bool transportOk = true;
@@ -2510,6 +2553,12 @@ namespace AgingTestSystem.Tests
                     lock (capLock) { if (captured.Count > 0) json = captured[0].Item2; }
                     Check("映射改名生效(eqId)",
                         json.Contains("\"eqId\":\"7\""));
+                    // 【大扫荡】真改名：原名 device 不再一起发出（严格 schema 拒收多余字段）。
+                    Check("改名后原名已删", !json.Contains("\"device\":"));
+                    // 本站键大小写不敏感：映射写 Device 也命中 device。
+                    string jCase = MesReporter.BuildPayloadJson(fields, "eqId=Device", "");
+                    Check("映射本站键大小写兼容",
+                        jCase.Contains("\"eqId\":\"7\"") && !jCase.Contains("\"device\":"));
                     Check("静态字段并入(line)",
                         json.Contains("\"line\":\"L5\""));
                     Check("发往配置地址",
@@ -2608,20 +2657,21 @@ namespace AgingTestSystem.Tests
                 {
                     repFail.Report("Complete", fields);
                     Check("全灭后离线缓存落盘",
-                        WaitFor(() => File.Exists("MesQueue.json"), 5000));
+                        WaitFor(() => File.Exists(mesQueuePath), 5000));
                 }
                 transportOk = true;
                 using (var repBack = new MesReporter(failCfg))
                 {
                     repBack.Report("Complete", fields);
                     Check("恢复后补发并清盘",
-                        WaitFor(() => !File.Exists("MesQueue.json"), 8000));
+                        WaitFor(() => !File.Exists(mesQueuePath), 8000));
                 }
             }
             finally
             {
                 MesReporter.Transport = null;
-                try { if (File.Exists("MesQueue.json")) File.Delete("MesQueue.json"); } catch { }
+                try { if (fMesBase != null) fMesBase.SetValue(null, null); } catch { }
+                try { if (File.Exists(mesQueuePath)) File.Delete(mesQueuePath); } catch { }
             }
         }
 
@@ -2734,6 +2784,26 @@ namespace AgingTestSystem.Tests
             Check("负持续秒被拦", rerrs.Count == 1);
             RuleEngine.ParseRuleList(" | temp>1", out defs, out rerrs);
             Check("空名称被拦", rerrs.Count == 1);
+            // 【大扫荡】表达式含 || 的分隔冲突：段数超中间的应被自动识别为表达式一部分。
+            // 以前 Split('|')>3 直接报格式错，`||` 功能实际死亡。
+            RuleEngine.ParseRuleList("低压 | pressure>5 || temp>80 | 5", out defs, out rerrs);
+            Check("含||规则解析成功",
+                rerrs.Count == 0 && defs.Count == 1
+                && defs[0].Name == "低压" && defs[0].SustainedSecs == 5
+                && defs[0].Expression.Contains("||"));
+            RuleEngine.ParseRuleList("a | 1>0 || 2>1 || 3>2 || 4>3 | 1", out defs, out rerrs);
+            Check("多个||仍可解析", rerrs.Count == 0 && defs.Count == 1 && defs[0].Expression.Contains("4>3"));
+            RuleEngine.ParseRuleList("名 | bogus > 1", out defs, out rerrs);
+            Check("严格模式未知变量被拦", rerrs.Count == 1 && rerrs[0].Contains("未知变量"));
+            RuleEngine.ParseRuleList("名 | bogus > 1", out defs, out rerrs, false);
+            Check("非严格模式未知变量放行(运行时容错)", defs.Count == 1 && rerrs.Count == 0);
+            // 深嵌套防护：5000 层括号不能 StackOverflow（解析器有深度上限）。
+            string deep = new string('(', 300) + "1" + new string(')', 300);
+            RuleEngine.ParseRuleList("深嵌套 | " + deep, out defs, out rerrs);
+            Check("超深嵌套被拦(防栈溢出)", rerrs.Count == 1 && rerrs[0].Contains("嵌套"));
+            string deepOk = new string('(', 10) + "1" + new string(')', 10);
+            RuleEngine.ParseRuleList("浅嵌套 | " + deepOk, out defs, out rerrs);
+            Check("浅嵌套正常过", rerrs.Count == 0 && defs.Count == 1);
             var many = new System.Text.StringBuilder();
             for (int i = 0; i < 25; i++) many.AppendLine("r" + i + " | 1>0");
             RuleEngine.ParseRuleList(many.ToString(), out defs, out rerrs);
@@ -3366,6 +3436,17 @@ namespace AgingTestSystem.Tests
                     Services.License.LicenseManager.SignForIssuer(emptyFp, testPriv));
                 var ef = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
                 Check("空指纹证阻断", !ef.Allowed && ef.Message.Contains("绑定"), ef.Message);
+                // 缺 maxStations 字段=证损坏≠点数超配（不误导用户去升级点数）
+                var noStations = new Services.License.LicenseInfo
+                {
+                    machine = fp, project = "烧屏测试", expiry = "2027-09-01",
+                    maxStations = 0, serial = "UT009", issued = "2026-09-13",
+                };
+                Services.License.LicenseManager.SaveLicenseFile(noStations,
+                    Services.License.LicenseManager.SignForIssuer(noStations, testPriv));
+                var ns = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
+                Check("点数字段非法=证损坏不误报超配",
+                    !ns.Allowed && ns.Message.Contains("重新导入") && !ns.Message.Contains("超配"), ns.Message);
 
                 // ── 无证试用：首跑放行 30 天，31 天拦，回拨占不到便宜 ──
                 try { File.Delete(licPath); } catch { }
@@ -3469,10 +3550,28 @@ namespace AgingTestSystem.Tests
         // =====================================================================
         private static void TestSessionStoreTests()
         {
-            EnterCleanDir(); // 快照写在运行目录(TestSession.json 相对路径)，必须隔离
-
+            // 【大扫荡】快照路径改绝对（BaseDirectory）后，隔离改走 BaseDirOverride 测试缝
+            //（相对路径字面量同步改拼装路径；finally 复位，零残留）。
+            string dir = EnterCleanDir();
+            var fBase = typeof(TestSessionStore).GetField("BaseDirOverride",
+                BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            if (fBase != null) fBase.SetValue(null, dir);
+            string snapPath = Path.Combine(dir, "TestSession.json");
+            try
+            {
             // 无文件 → 无任务
             Check("无快照文件时 Load=null", TestSessionStore.Load() == null);
+            // 【大扫荡】原子写基础：写后内容完整 + 无 .tmp 残留半截。
+            string atomPath = Path.Combine(dir, "atom_test.txt");
+            Services.AtomicFile.WriteAllText(atomPath, "中文内容\r\nline2");
+            try
+            {
+                Check("原子写文件内容完整", File.ReadAllText(atomPath, Encoding.UTF8).Contains("中文内容"));
+                bool tmpLeft = false;
+                foreach (string f in Directory.GetFiles(dir, "*.tmp_*")) { tmpLeft = true; break; }
+                Check("原子写无临时残留", !tmpLeft);
+            }
+            finally { try { File.Delete(atomPath); } catch { } }
 
             // Save→Load 往返全字段
             var session = new TestSession
@@ -3493,7 +3592,7 @@ namespace AgingTestSystem.Tests
                 }
             };
             Check("Save 成功", TestSessionStore.Save(session));
-            Check("快照文件确实生成", File.Exists("TestSession.json"));
+            Check("快照文件确实生成", File.Exists(snapPath));
 
             var loaded = TestSessionStore.Load();
             Check("Load 读回非空", loaded != null);
@@ -3521,7 +3620,7 @@ namespace AgingTestSystem.Tests
             Check("重复 Clear 幂等不抛", clearAgainSafe);
 
             // 损坏 json → 静默按无任务处理（绝不能拖垮启动流程）
-            File.WriteAllText("TestSession.json", "{ 这不是合法 json !!!");
+            File.WriteAllText(snapPath, "{ 这不是合法 json !!!");
             Check("损坏快照静默返回 null", TestSessionStore.Load() == null);
 
             // 空在测清单的快照视为无任务
@@ -3529,13 +3628,18 @@ namespace AgingTestSystem.Tests
             Check("空清单快照 Load=null", TestSessionStore.Load() == null);
 
             // V1.62：Stations:null 与字面量 null 的 Load 语义
-            File.WriteAllText("TestSession.json", "{\"LotNumber\":\"L\",\"Stations\":null}");
+            File.WriteAllText(snapPath, "{\"LotNumber\":\"L\",\"Stations\":null}");
             Check("Stations为null Load=null", TestSessionStore.Load() == null);
-            File.WriteAllText("TestSession.json", "null");
+            File.WriteAllText(snapPath, "null");
             Check("json字面量null Load=null", TestSessionStore.Load() == null);
             Check("Save(null)返回false", TestSessionStore.Save(null) == false);
 
             TestSessionStore.Clear();
+            }
+            finally
+            {
+                try { if (fBase != null) fBase.SetValue(null, null); } catch { }
+            }
         }
 
         // =====================================================================
@@ -4500,7 +4604,34 @@ namespace AgingTestSystem.Tests
                     Check("切回浅色还原", bc(DeviceStatus.Fault).ToArgb() == cFault.ToArgb());
                 }
             }
-            finally { grid.Dispose(); }
+            finally
+            {
+                grid.Dispose();
+                // 【大扫荡】缓存画笔/画刷随控件销毁释放（Designer.Dispose 补的），
+                // 防 GDI 句柄泄漏（以前只在换主题时覆盖释放）。
+                try
+                {
+                    var tg2 = typeof(WorkstationGridView);
+                    string[] brs = { "_brushSetButton", "_brushSelectChecked", "_penBorder", "_brushValueBox", "_brushRowSelect", "_brushSelectUnchecked" };
+                    var lines = (grid.GetType().GetProperty("Disposed", BindingFlags.Instance | BindingFlags.Public)?.GetValue(grid) as bool?) ?? true;
+                    Check("网格Dispose后已释放", lines);
+                    Check("网格GDI缓存已随释放",
+                        brs.All(n =>
+                        {
+                            var f = tg2.GetField(n, BindingFlags.NonPublic | BindingFlags.Instance);
+                            var v = f?.GetValue(grid);
+                            if (v == null) return true;
+                            // .NET Framework 的 Pen/Brush 无 IsReleased，反射取内部 GDI 句柄：
+                            // 释放后 nativePen/nativeBrush 应为 IntPtr.Zero（无法直接读则降级签名）。
+                            var hf = v.GetType().GetField("nativePen", BindingFlags.NonPublic | BindingFlags.Instance)
+                                ?? v.GetType().GetField("nativeBrush", BindingFlags.NonPublic | BindingFlags.Instance);
+                            if (hf == null) return true;
+                            var ptr = hf.GetValue(v) as IntPtr?;
+                            return ptr.HasValue && ptr.Value == IntPtr.Zero;
+                        }));
+                }
+                catch { }
+            }
 
             // —— 通讯测试位值→通道号（公开静态） ——
             Check("0x0001→0", CommunicationTestForm.ChannelOf(0x0001) == 0);

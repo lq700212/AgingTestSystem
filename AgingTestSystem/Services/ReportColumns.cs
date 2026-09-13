@@ -63,6 +63,9 @@ namespace AgingTestSystem.Services
         /// - 显示名为空/含空格/= → 进 errors；
         /// - 同一显示名出现两次 → 后者覆盖前者（记一条提醒）。
         /// </summary>
+        /// <summary>列数上限（【大扫荡】以前无上限，手写上万列导出时列爆炸）。</summary>
+        public const int MaxColumns = 64;
+
         /// <param name="raw">原始配置字符串</param>
         /// <param name="cols">解析出的列（保序）</param>
         /// <param name="errors">非法组描述</param>
@@ -73,6 +76,12 @@ namespace AgingTestSystem.Services
             if (string.IsNullOrWhiteSpace(raw)) return;   // 空=缺省，调用方走 Resolve
             foreach (string item in raw.Split(GroupSeparators))
             {
+                // 到上限即停（与 DisplayModeOptions 同口径，不先吃满内存）。
+                if (cols.Count >= MaxColumns)
+                {
+                    errors.Add("列太多（≤" + MaxColumns + "列），已截断保留前 " + MaxColumns + " 列");
+                    break;
+                }
                 string g = (item ?? "").Trim();
                 if (g.Length == 0) continue;
                 int eq = g.IndexOf('=');

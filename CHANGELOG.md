@@ -3,6 +3,63 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md).
 
+## V1.84 — 全局大扫荡 60+ 项修复（2026-09-13，用户："全局走查+mock模拟，找难发现的顽固bug，改就改干净"）
+
+### 致命/严重（三路走查：编排核心 / 授权·MES·规则·项目 / UI·模型）
+
+- **规则表达式 `||` 分隔冲突**（`RuleEngine.ParseRuleList`）：以前 Split('|') >3 段一律报格式错，
+  表达式里用 `||` 的规则全部死亡；改为枚举切分点取首个"表达式+持续秒全合法"组合。附严格变量校验
+  （保存即拦未知变量，死规则不再蒙混过关）+ 深嵌套/超长解析防护（防 5000 层括号 StackOverflow 杀进程）。
+- **项目名路径穿越全拦截**（`ProjectProfile`）：以前 Delete/Switch 不验名，`DeleteProfile("..\\重要目录")`
+  存在即递归删除、Switch 写成指针后续全带出 Projects。统一 `IsValidProfileName`（Create/Delete/Switch/
+  ActiveProfile 只认合法名单）；`CreateProfile` 原子化（临时目录组装+Move，无半截空目录）；ListProfiles
+  过滤空/野目录（手丢 backup 冒充不了项目）。
+- **项目热更改工位数 → 状态数组越界/尾部失控**（`DeviceManager.RebuildStationArrays`）：以前数组只在
+  构造定长，CopyFrom 只换血不换数组——调大采集越界整轮被吞、调小尾部在测台硬件保持上电无人关。
+  新增重建入口（数组+`RuleEngine.Resize`+采集间隔热更），热更时调。
+- **上电写失败即假 PASS 流出**（`ProcessTestingProgress`）：耦合器掉线瞬间写载台电丢失，状态机已进
+  Aging 开始计时、压力凑巧在阈值内一路走到 PASS。现写失败回滚 Vacuuming + 记"上电失败"事件下轮重试；
+  SkipVacuum 分支写失败清状态再抛。
+- **启/停/急停/复位 IO 写失败软硬分叉**（`StartTesting`/`StopTesting`/`StopAll`/`ResetDevices`/`HandleAlarm`）：
+  批量启动单台隔离、先写后清（写失败状态不清、台还显示在测，看得见没停掉）、急停写失败弹框明示、
+  急停补关破空阀（以前漏了，泄压后急停阀一直开着）。
+- **MES 上报器**：队列有界（2000，满丢最旧+记事件）、worker 重试 Sleep 可中断（去 10s 静默钳制防重试风暴）、
+  缓存落盘 2s 节流、Dispose 转存内存余量（以前直接丢）、缓存绝对路径（防 cwd 漂移）、字段映射真改名
+  （配 `eqId=device` 不再同时发出 device）+ 本站键大小写兼容、HttpClient 进程单例复用。
+- **原子写落盘（新建 `Services/AtomicFile.cs`）**：快照/配方/策略/工位缓存/用户/授权/试用/记住密码
+  从裸 WriteAllText 改为"临时文件+改名"，断电/杀进程不再截断 JSON 静默清零。
+- **快照/缓存绝对路径**（`TestSessionStore`/`MesReporter`）：以前裸文件名跟 CWD 走，
+  快捷方式起始位置不同即写散、重启找不到=整批任务静默丢失。改 BaseDirectory + 测试缝。
+- **`SkipVacuum` 定格**：以前采集每轮活读配置，运行中翻开关/切项目在跑 Aging 台保护当场加/卸；
+  现启动定格 `_sessionSkipVacuum`，进行中任务不受影响。
+- **真空建立超时误报"压力越限"**：`ClassifyAlarm` 分出真实原因（超时/越限/DI 各说各的），报警行
+  压力/电流记触发当轮值（以前读缓存差一拍）。
+- **电表 72 倍冗余读**：`ReadAllCurrents` 提取到逐台循环前读一次。
+- **CSV 文化/NaN 断列**（`TestEventLogger`）：数字走不变文化（逗号小数文化下多一列断列）、
+  NaN 温度记空、一次 Now 跨午夜不写错文件、写失败留痕。
+- **PasswordHasher 迭代次数 DoS**：手改 `PBKDF2$2147483647$…` 登录卡死数分钟，现收 1w~200w 区间。
+- **授权**：点数字段缺失/非法单独报"证损坏"（不再误报超配叫用户去升点数）；超期显示实际天数；
+  MachineFingerprint Lazy 缓存（启动 8 次 WMI→1 次）。
+- **UserManager**：登录大小写统一（以前存 dev 输 DEV 登不进但名又被注册不了）；`CurrentUser`/`GetAccounts`
+  改吐副本（拿列表强转改密码绕过哈希落盘）；忘记密码 DPAPI 加密（以前 Base64 可逆）；加载多余管理员点名留痕。
+- **RuleEngine 并发锁 + LastError 清零**：UI 线程启停/复位与采集求值并发，小锁保护 TrueSince/引用。
+
+### 一般/优化（UI 与边界）
+
+- SettingsForm popup 关闭回写加宿主存活守卫 + `_copyTip` 释放；MainForm `timerTime` 关窗守卫 + 网格
+  OnLog 具名退订 + 版本窗去 ZoomScaleRect(Font 混搭)；WorkstationGridView 销毁释放 6 个 GDI 画笔/
+  画刷 + 行全选按钮命中补右界；RecipeAutoCompleteProvider 空名脏项/定位坐标系/构造期挂接修复；
+  ProcessPolicyForm 定时器复用安全；DisplayModeOptions/ReportColumns 超限即停（防超大数组吃内存）；
+  面板布局旧 json 缺 RcCurrentValue 自愈；下料判定原子认领（防并发双记）+ 破空阀多台待取料保留；
+  采集广播按总数组 + 订阅异常隔离；送风机启动失败 30s 节流重试；Mock 设备 Connect(null) 拒绝、电表断连清表；
+  公共参数批量写失败/关窗中断口径明示+事件留痕；`_testDurations` 死数组删除。
+
+### 验证
+
+- `build_and_test.ps1` 全量 **1590 断言全绿**（V1.83.1 的 1562 + 本次 28 条新锁：`||`解析/严格变量/深嵌套/
+  路径穿越 Delete·Switch/密码 DoS/点数字段非法/原子写/网格GDI释放/清痕等）；
+  终结器审计 HIGH=0（INFO=19 均为"动态建控件走容器释放"既有白名单）；csc 构建零 error。
+
 ## V1.83.1 — 授权代码审查修复（2026-09-13，用户："仔细检查有没有bug，要绝对稳定0BUG"）
 
 ### 改动范围（V1.83 新代码全量审查，6 处）

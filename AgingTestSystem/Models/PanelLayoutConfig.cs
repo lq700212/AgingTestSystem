@@ -409,6 +409,12 @@ namespace AgingTestSystem.Models
                     var cfg = JsonConvert.DeserializeObject<PanelLayoutConfig>(json);
                     if (cfg != null)
                     {
+                        // 【大扫荡】旧 json 自愈：V1.77 前的文件无 RcCurrentValue（null），
+                        // 以前开电流行静默丢整行且零提示；现在补缺省，旧文件开电流即显示。
+                        if (cfg.RcCurrentValue == null)
+                        {
+                            cfg.RcCurrentValue = new ElementRect { X = 65, Y = 90, Width = 85, Height = 21, LeftAlignTo = "SNValue", RightToLeftAlignTo = "VacuumOpen", RightToLeftGap = 3, TopToBottomAlignTo = "PressureValue", TopToBottomGap = 2 };
+                        }
                         cfg.ResolveAnchors();   // 解析面板锚定 + 元素间锚定（V1.58.13/1.58.14）
                         return cfg;
                     }

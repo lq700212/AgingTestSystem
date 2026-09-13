@@ -1,4 +1,4 @@
-
+﻿
 using System;
 using System.IO;
 using AgingTestSystem.Models;
@@ -26,14 +26,32 @@ namespace AgingTestSystem.Services
     /// </summary>
     public static class TestSessionStore
     {
-        /// <summary>
-        /// 快照文件路径（程序运行目录下的 TestSession.json）
-        /// 注意：本文件是程序运行生成的数据文件，已加入 .gitignore，不入库。
-        /// </summary>
-        private const string SessionFilePath = "TestSession.json";
+        /// <summary>目录覆盖测试缝（回归隔离用，生产恒 null；用例赋值后 try/finally 复位）。</summary>
+        internal static string BaseDirOverride;
 
         /// <summary>
-        /// 保存快照（整文件覆盖写；调用方保证 stations 为"当前仍在测的任务"）
+        /// 快照文件路径（程序运行目录下的 TestSession.json，绝对路径——
+        /// 【大扫荡】以前是相对路径，跟 CWD 走：快捷方式起始位置不同快照就写散，
+        /// 重启找不到=不问恢复，整批任务静默丢失）。
+        /// 注意：本文件是程序运行生成的数据文件，已加入 .gitignore，不入库。
+        /// </summary>
+        private static string SessionFilePath
+        {
+            get
+            {
+                string dir = BaseDirOverride;
+                if (string.IsNullOrEmpty(dir))
+                {
+                    try { dir = AppDomain.CurrentDomain.BaseDirectory; }
+                    catch { dir = "."; }
+                }
+                return Path.Combine(dir, "TestSession.json");
+            }
+        }
+
+        /// <summary>
+        /// 保存快照（【大扫荡】原子写：临时文件+改名，无写半截截断 JSON。
+        /// 调用方保证 stations 为"当前仍在测的任务"）
         /// </summary>
         /// <param name="session">要保存的快照</param>
         /// <returns>保存成功返回 true</returns>
@@ -47,7 +65,7 @@ namespace AgingTestSystem.Services
                 }
                 session.SavedAt = DateTime.Now;
                 string json = JsonConvert.SerializeObject(session, Formatting.Indented);
-                File.WriteAllText(SessionFilePath, json);
+                AtomicFile.WriteAllText(SessionFilePath, json);
                 return true;
             }
             catch (Exception ex)
@@ -70,7 +88,7 @@ namespace AgingTestSystem.Services
                     return null;
                 }
 
-                string json = File.ReadAllText(SessionFilePath);
+                string json = AtomicFile.SafeReadAllText(SessionFilePath);
                 TestSession session = JsonConvert.DeserializeObject<TestSession>(json);
 
                 // 没有任何在测工位的空快照视为无任务（正常退出前最后一次 Save 可能已是空清单）

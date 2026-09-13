@@ -62,14 +62,47 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 加载当前项目的策略字典（key → 原始字符串）。文件不存在/损坏返回空字典
         /// （= 全部回退 App.config/DeviceConfig 缺省，即现状行为，安全）。
+        /// 【大扫荡】路径键缓存：录入窗/校验高频调 GetRaw/Resolve，以前每次读文件+
+        /// 反序列化；路径变（切项目）/Save 后自动失效，测试换目录也安全。
         /// </summary>
+        private static readonly object _cacheLock = new object();
+        private static string _cachedPath;
+        private static Dictionary<string, string> _cachedDict;
+
         public static Dictionary<string, string> Load()
         {
             try
             {
                 string path = PolicyFilePath;
+                lock (_cacheLock)
+                {
+                    if (_cachedDict != null && string.Equals(_cachedPath, path,
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new Dictionary<string, string>(_cachedDict);
+                    }
+                }
+                Dictionary<string, string> fresh = LoadFromFile(path);
+                lock (_cacheLock)
+                {
+                    _cachedPath = path;
+                    _cachedDict = fresh;
+                    return new Dictionary<string, string>(fresh);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[项目策略] 加载失败回退缺省: {ex.Message}");
+                return new Dictionary<string, string>();
+            }
+        }
+
+        private static Dictionary<string, string> LoadFromFile(string path)
+        {
+            try
+            {
                 if (!File.Exists(path)) return new Dictionary<string, string>();
-                string json = File.ReadAllText(path);
+                string json = AtomicFile.SafeReadAllText(path);
                 var dict = JsonConvert.DeserializeObject<Dictionary<string, string>>(json);
                 return dict ?? new Dictionary<string, string>();
             }
@@ -95,6 +128,7 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 保存策略修改（SettingsForm 保存按钮调用：只含策略 key 的子集）。
         /// 与现有文件合并（不碰本次没改的项），写失败抛异常（调用方弹框）。
+        /// 【大扫荡】原子写，无写半截截断。
         /// </summary>
         public static void Save(Dictionary<string, string> changes)
         {
@@ -106,7 +140,13 @@ namespace AgingTestSystem.Services
                     dict[kv.Key] = kv.Value;
                 }
             }
-            File.WriteAllText(PolicyFilePath, JsonConvert.SerializeObject(dict, Formatting.Indented));
+            AtomicFile.WriteAllText(PolicyFilePath, JsonConvert.SerializeObject(dict, Formatting.Indented));
+            // 写完即刷新缓存（下次 Load 命中新值，不读脏）。
+            lock (_cacheLock)
+            {
+                _cachedPath = PolicyFilePath;
+                _cachedDict = dict;
+            }
         }
 
         /// <summary>

@@ -383,7 +383,8 @@ namespace AgingTestSystem.Views
             {
                 List<Services.RuleEngine.RuleDef> defs;
                 List<string> errors;
-                Services.RuleEngine.ParseRuleList(config.CustomAlarmRules, out defs, out errors);
+                // 非严格=执行口径（运行时容错收的行也计数，与副标题"规则 N 条"一致）。
+                Services.RuleEngine.ParseRuleList(config.CustomAlarmRules, out defs, out errors, false);
                 return defs.Count;
             }
             catch { return 0; }

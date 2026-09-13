@@ -68,8 +68,9 @@ namespace AgingTestSystem.Services
         private const string LegacyDefaultProfileName = "Default";
 
         /// <summary>
-        /// 当前生效的项目名（读 App.config 的 ActiveProject；为空/缺省回 "烧屏测试"）。
+        /// 当前生效的项目名（读 App.config 的 ActiveProject；为空/缺省/非法回 "烧屏测试"）。
         /// 大小写保留原样，目录名即项目名。
+        /// 【大扫荡】非法值（手改 ..\..）回缺省，不让 ActiveProfileDir 建到外面去。
         /// </summary>
         public static string ActiveProfileName
         {
@@ -78,7 +79,7 @@ namespace AgingTestSystem.Services
                 string raw = null;
                 try { raw = ConfigurationManager.AppSettings["ActiveProject"]; }
                 catch { raw = null; }
-                if (string.IsNullOrWhiteSpace(raw)) return DefaultProfileName;
+                if (!IsValidProfileName(raw)) return DefaultProfileName;
                 return raw.Trim();
             }
         }
@@ -206,6 +207,31 @@ namespace AgingTestSystem.Services
             return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, fileName);
         }
 
+        /// <summary>
+        /// 项目名合法性（【大扫荡】唯一口径：Delete/SwitchTo/ActiveProfileDir 与
+        /// CreateProfile 共用。只允许字母/数字/中文/下划线/连横线/空格——`..`、
+        /// `/`、`\`、`:` 全拒，防路径穿越出 Projects 目录删任意目录）。
+        /// </summary>
+        public static bool IsValidProfileName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            string n = name.Trim();
+            if (n.Length == 0 || n.Length > 64) return false;
+            if (n == "." || n == "..") return false;
+            foreach (char c in n)
+            {
+                bool ok = char.IsLetterOrDigit(c) || c == '_' || c == '-' || c == ' ';
+                if (!ok) return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 项目目录哨兵文件名（【大扫荡】CreateProfile 成功最后写入，证明"这是走正常流程建的项目"。
+        /// ListProfiles 认"哨兵或任一跟项目文件"——手丢的 backup 空目录冒充不了可切换项目）。
+        /// </summary>
+        public const string ProfileMarkerFileName = ".project";
+
         /// <summary>列出全部项目名（目录名即项目名，按字母序）。</summary>
         public static List<string> ListProfiles()
         {
@@ -215,7 +241,21 @@ namespace AgingTestSystem.Services
                 string root = ProjectsRoot;
                 foreach (string dir in Directory.GetDirectories(root))
                 {
-                    result.Add(Path.GetFileName(dir));
+                    string name = Path.GetFileName(dir);
+                    // 【大扫荡】只认"真项目"：名合法 +（有哨兵 或 至少含一个跟项目文件）。
+                    // 手丢的 backup 空目录/野目录不再冒充可切换项目（切入后配方策略全空易误跑）；
+                    // 老目录（无哨兵但有数据）照认，不误伤。
+                    if (!IsValidProfileName(name)) continue;
+                    if (!File.Exists(Path.Combine(dir, ProfileMarkerFileName)))
+                    {
+                        bool hasData = false;
+                        foreach (string f in ProjectScopedFiles)
+                        {
+                            if (File.Exists(Path.Combine(dir, f))) { hasData = true; break; }
+                        }
+                        if (!hasData) continue;
+                    }
+                    result.Add(name);
                 }
             }
             catch (Exception ex)
@@ -235,34 +275,45 @@ namespace AgingTestSystem.Services
         /// <returns>true=创建成功，false=名字非法或已存在</returns>
         public static bool CreateProfile(string newName)
         {
-            if (string.IsNullOrWhiteSpace(newName)) return false;
+            if (!IsValidProfileName(newName)) return false;
             string name = newName.Trim();
-            foreach (char c in name)
-            {
-                bool ok = char.IsLetterOrDigit(c) || c == '_' || c == '-' || c == ' '
-                    || (c >= 0x4E00 && c <= 0x9FFF);
-                if (!ok) return false;
-            }
+            string tmpDir = null;
             try
             {
                 string target = Path.Combine(ProjectsRoot, name);
                 if (Directory.Exists(target)) return false;
-                Directory.CreateDirectory(target);
+                // 【大扫荡】原子化：临时目录组装（拷模板+写哨兵），一次 Move 到位；
+                // 中途失败删临时目录，不留半截空目录进列表。
+                tmpDir = Path.Combine(ProjectsRoot, name + ".tmp_" + Guid.NewGuid().ToString("N"));
+                if (Directory.Exists(tmpDir)) Directory.Delete(tmpDir, true);
+                Directory.CreateDirectory(tmpDir);
                 string src = ActiveProfileDir;
                 foreach (string f in ProjectScopedFiles)
                 {
                     string s = Path.Combine(src, f);
                     if (File.Exists(s))
                     {
-                        File.Copy(s, Path.Combine(target, f));
+                        File.Copy(s, Path.Combine(tmpDir, f));
                     }
                 }
+                File.WriteAllText(Path.Combine(tmpDir, ProfileMarkerFileName),
+                    "AgingTestSystem project: " + name);
+                Directory.Move(tmpDir, target);
+                tmpDir = null;   // 已到位，不再清理
                 return true;
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[项目档案] 创建项目失败: {ex.Message}");
                 return false;
+            }
+            finally
+            {
+                if (tmpDir != null)
+                {
+                    try { if (Directory.Exists(tmpDir)) Directory.Delete(tmpDir, true); }
+                    catch { /* 清不掉下次启动再说，不阻塞 */ }
+                }
             }
         }
 
@@ -280,7 +331,9 @@ namespace AgingTestSystem.Services
         /// <returns>true=已删除，false=拒绝或失败</returns>
         public static bool DeleteProfile(string name)
         {
-            if (string.IsNullOrWhiteSpace(name)) return false;
+            // 【大扫荡】先验名：DeleteProfile("..\\..\\重要目录")存在即递归删除，
+            // 必须拦在 Path.Combine 之前（CreateProfile 早拦了，这里补齐）。
+            if (!IsValidProfileName(name)) return false;
             string target = name.Trim();
             try
             {
@@ -310,7 +363,8 @@ namespace AgingTestSystem.Services
         /// <returns>true=指针已改（待热加载），false=项目不存在或写入失败</returns>
         public static bool SwitchTo(string name)
         {
-            if (string.IsNullOrWhiteSpace(name)) return false;
+            // 【大扫荡】先验名：指针一旦写成 ..\..，后续 ResolveDataPath 全带出 Projects。
+            if (!IsValidProfileName(name)) return false;
             try
             {
                 string target = Path.Combine(ProjectsRoot, name.Trim());

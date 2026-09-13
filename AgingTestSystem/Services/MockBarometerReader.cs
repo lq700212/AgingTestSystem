@@ -49,6 +49,8 @@ namespace AgingTestSystem.Services
 
         public bool Connect(DeviceConfig config)
         {
+            // 【大扫荡】空配置拒绝（与 MockIoController/MockFanController 同口径）。
+            if (config == null) return false;
             _config = config;
             Thread.Sleep(500);
             _isConnected = true;

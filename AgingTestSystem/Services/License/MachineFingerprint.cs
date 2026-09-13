@@ -31,11 +31,14 @@ namespace AgingTestSystem.Services.License
         public static readonly string[] ComponentNames =
             { "board", "cpu", "disk", "guid" };
 
-        /// <summary>
-        /// 取四个分量的原始值（小白调试用：哪一项 UNKNOWN 一眼看出来）。
-        /// 顺序与 <see cref="ComponentNames"/> 对齐；全部 try/catch，永不抛异常。
-        /// </summary>
-        public static string[] GetRawComponents()
+        // 【大扫荡】进程内缓存：机器指纹运行中不变，以前每次启动打 8 遍 WMI
+        //（Compute 4 连查 + GetComponentHashes 又 4 连查），WMI 卡时启动更卡。
+        private static readonly Lazy<string[]> _rawCache =
+            new Lazy<string[]>(ReadAllRaw, true);
+        private static readonly Lazy<string[]> _hashCache =
+            new Lazy<string[]>(ComputeAllHashes, true);
+
+        private static string[] ReadAllRaw()
         {
             return new string[]
             {
@@ -46,16 +49,36 @@ namespace AgingTestSystem.Services.License
             };
         }
 
+        private static string[] ComputeAllHashes()
+        {
+            string[] raw = _rawCache.Value;
+            var out_ = new string[raw.Length];
+            for (int i = 0; i < raw.Length; i++) out_[i] = HashOf(ComponentNames[i] + "=" + Norm(raw[i]));
+            return out_;
+        }
+
+        /// <summary>
+        /// 取四个分量的原始值（小白调试用：哪一项 UNKNOWN 一眼看出来）。
+        /// 顺序与 <see cref="ComponentNames"/> 对齐；全部 try/catch，永不抛异常。
+        /// </summary>
+        public static string[] GetRawComponents()
+        {
+            string[] raw = _rawCache.Value;
+            var copy = new string[raw.Length];
+            Array.Copy(raw, copy, raw.Length);
+            return copy;
+        }
+
         /// <summary>
         /// 算分量指纹（每个分量单独 SHA256 hex，用于授权文件里的漂移比对）。
         /// 与总指纹同算法（见 <see cref="HashOf"/>），分量归一化后各自哈希。
         /// </summary>
         public static string[] GetComponentHashes()
         {
-            string[] raw = GetRawComponents();
-            var out_ = new string[raw.Length];
-            for (int i = 0; i < raw.Length; i++) out_[i] = HashOf(ComponentNames[i] + "=" + Norm(raw[i]));
-            return out_;
+            string[] h = _hashCache.Value;
+            var copy = new string[h.Length];
+            Array.Copy(h, copy, h.Length);
+            return copy;
         }
 
         /// <summary>
@@ -65,7 +88,7 @@ namespace AgingTestSystem.Services.License
         /// </summary>
         public static string Compute()
         {
-            string[] raw = GetRawComponents();
+            string[] raw = _rawCache.Value;
             var sb = new StringBuilder(256);
             for (int i = 0; i < ComponentNames.Length; i++)
             {

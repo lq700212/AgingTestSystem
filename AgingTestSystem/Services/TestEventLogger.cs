@@ -41,17 +41,27 @@ namespace AgingTestSystem.Services
         private static readonly object _lock = new object();
 
         /// <summary>
-        /// 日志目录（程序运行目录下的 Logs 文件夹，不存在则自动创建）
+        /// 日志目录（程序运行目录下的 Logs 文件夹，不存在则自动创建）。
+        /// 【大扫荡】目录只建一次（静态记死；被删后写失败会触发重建+失败计数告警）。
         /// </summary>
+        private static string _logDirCached;
+
         private static string LogDirectory
         {
             get
             {
-                string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
-                Directory.CreateDirectory(dir);
-                return dir;
+                if (string.IsNullOrEmpty(_logDirCached) || !Directory.Exists(_logDirCached))
+                {
+                    string dir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
+                    Directory.CreateDirectory(dir);
+                    _logDirCached = dir;
+                }
+                return _logDirCached;
             }
         }
+
+        /// <summary>连续写失败计数（磁盘满/权限丢时用；恢复清零，见 Write 尾）。</summary>
+        private static int _writeFailStreak;
 
         /// <summary>
         /// 追加一条事件日志
@@ -76,13 +86,19 @@ namespace AgingTestSystem.Services
             {
                 lock (_lock)
                 {
-                    string file = Path.Combine(LogDirectory, $"TestLog_{DateTime.Now:yyyyMMdd}.csv");
+                    // 【大扫荡】一次 Now 复用：文件名与行时间同一次取值，
+                    // 跨午夜不写错文件（以前两次 Now，23:59:59 写进次日文件行时间却是当天）。
+                    DateTime now = DateTime.Now;
+                    string file = Path.Combine(LogDirectory, $"TestLog_{now:yyyyMMdd}.csv");
 
                     // 文件不存在时先写表头（便于用 Excel 打开）
                     bool needHeader = !File.Exists(file);
 
+                    // 【大扫荡】数字一律不变文化：逗号小数文化（de-DE）下 ToString 会多出
+                    // 一个逗号，CSV 直接断列；NaN 温度记空（与电流分支一致，文件头"NaN 记空"）。
+                    var invariant = System.Globalization.CultureInfo.InvariantCulture;
                     var sb = new StringBuilder();
-                    sb.Append(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")).Append(',');
+                    sb.Append(now.ToString("yyyy-MM-dd HH:mm:ss")).Append(',');
                     sb.Append(CsvEscape(lotNumber ?? "")).Append(',');
                     sb.Append(CsvEscape(sn ?? "")).Append(',');
                     sb.Append(CsvEscape(recipe ?? "")).Append(',');
@@ -90,11 +106,13 @@ namespace AgingTestSystem.Services
                     sb.Append(CsvEscape(eventType)).Append(',');
                     sb.Append(CsvEscape(result ?? "")).Append(',');
                     sb.Append(CsvEscape(detail)).Append(',');
-                    sb.Append(pressureKPa.HasValue ? pressureKPa.Value.ToString() : "").Append(',');
-                    sb.Append(temperature.HasValue ? temperature.Value.ToString("0.0") : "").Append(',');
+                    sb.Append(pressureKPa.HasValue
+                        ? pressureKPa.Value.ToString(invariant) : "").Append(',');
+                    sb.Append((temperature.HasValue && !float.IsNaN(temperature.Value))
+                        ? temperature.Value.ToString("0.0", invariant) : "").Append(',');
                     // 电流（V1.74）：有数写两位小数，无数（null/NaN）记空（历史窗与报表都按空处理）
                     sb.Append((currentA.HasValue && !float.IsNaN(currentA.Value))
-                        ? currentA.Value.ToString("0.00") : "");
+                        ? currentA.Value.ToString("0.00", invariant) : "");
 
                     using (var writer = new StreamWriter(file, true, Encoding.UTF8))
                     {
@@ -104,11 +122,19 @@ namespace AgingTestSystem.Services
                         }
                         writer.WriteLine(sb.ToString());
                     }
+                    _writeFailStreak = 0;
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // 日志写入失败不能影响主流程（采集/UI），静默吞掉
+                // 日志写入失败不能影响主流程（采集/UI），但不能无声断裂：
+                // 连续失败记 Debug（首败+每 100 次），磁盘满/权限丢时至少留痕。
+                _writeFailStreak++;
+                if (_writeFailStreak == 1 || _writeFailStreak % 100 == 0)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[事件日志] 写失败已连续 {_writeFailStreak} 次: {ex.Message}");
+                }
             }
         }
 

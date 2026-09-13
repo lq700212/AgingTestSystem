@@ -505,8 +505,9 @@ namespace AgingTestSystem.Controls
 
         /// <summary>
         /// 按缩放算出所有行的 Bounds（虚拟坐标）并记度量 + 设 AutoScrollMinSize。
-        /// 注意：绘制时 e.Graphics 先 TranslateTransform(AutoScrollPosition.X, AutoScrollPosition.Y)
-        /// （值为负），鼠标坐标转虚拟坐标则减去它（见 ToVirtual）。
+        /// 注意：绘制不挂 TranslateTransform（V1.81.3 去矩阵：滚动偏移手工加到矩形上，
+        /// 见 Paint 里的 Off/ToVirtual；旧注释写 TranslateTransform 已过时，特此纠正）。
+        /// 鼠标坐标转虚拟坐标见 ToVirtual。
         /// </summary>
         private void ComputeLayout(float s)
         {

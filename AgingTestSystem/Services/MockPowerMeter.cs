@@ -49,7 +49,12 @@ namespace AgingTestSystem.Services
 
         public bool Connect(DeviceConfig config)
         {
+            // 【大扫荡】空配置拒绝（与 MockIoController/MockFanController 同口径；
+            // 以前 null 也"连上"，ReconnectNow 从未 Connect 时也能假连上）。
+            if (config == null) return false;
             _config = config;
+            // 重上电=漂移表清零（以前断线重连延续旧曲线，与真表行为不符）。
+            _currents = null;
             // 模拟连接耗时，让 UI 有"正在连接"的反馈（与 MockFanController 同值）
             Thread.Sleep(200);
             _isConnected = true;
@@ -59,6 +64,7 @@ namespace AgingTestSystem.Services
         public void Disconnect()
         {
             _isConnected = false;
+            _currents = null;   // 断连清表：下次连接从待机初值重新漂移
         }
 
         public bool ReconnectNow()

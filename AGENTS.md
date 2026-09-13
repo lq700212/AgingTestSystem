@@ -301,6 +301,34 @@
 - **签发工具运行**：中文项目名用 **cmd 窗口 / .bat / ProcessStartInfo** 传参（PS5.1 `&` 会把中文
   转成 U+FFFD，KeyGen 已加乱码硬停防线）；签发完跑 `verify` 自检。
 
+## 全局健壮性铁律（V1.84 大扫荡沉淀，涉及落盘/路径/解析/账号/自绘一律先读）
+
+- **运行时 json 一律 `AtomicFile.WriteAllText`（临时文件+改名），禁止裸 `File.WriteAllText`**：
+  写半截断电=下次启动 Load 吞异常回空（配方被清空/策略全回缺省按错误工艺跑）。已统一：快照/配方/
+  策略/工位缓存/用户/记住密码/授权/试用。新增持久化类文件先想原子写。
+- **运行时文件路径一律 `BaseDirectory` 绝对路径**（除非确为相对=产品 cwd 恒定）：快照/MES 缓存以前
+  裸文件名跟 CWD 走，快捷方式起始位置一变写散、重启找不到=整批任务静默丢失。测试隔离走 `BaseDirOverride`
+  静态测试缝（finally 复位），不要靠切 cwd 自欺。
+- **规则表达式解析三防护**：名称/表达式/持续秒用 `|` 分隔但**表达式内允许 `||`**（`ParseRuleList`
+  枚举切分点取首个全合法组合）；保存/校验走**严格变量模式**（`TryParse(…, strictVars:true)`，未知变量
+  当场拦，别让死规则过了保存运行时恒 false）；解析加**长度/嵌套上限**（防 5000 层括号 StackOverflow
+  不可捕获直接杀进程）。
+- **路径穿越防御只认一个名单**：`ProjectProfile.IsValidProfileName` 是 Create/Delete/Switch/ActiveProfile
+  唯一口径；Delete/Switch 同样先验名（不能只拦 Create）。新建项目原子化 + 写哨兵，ListProfiles 过滤野目录。
+- **热更/数组/跨度三坑**：按 `TotalBarometers` 定长数组，热更改工位数必须走
+  `DeviceManager.RebuildStationArrays()`（数组+`RuleEngine.Resize`+采集间隔一起）；IO 写失败一律
+  **先写后清**（清了状态写失败=软硬分叉，UI 弹框明示）；时钟类作差（重连节流/计时）负跨度钳零，
+  防时钟拨慢饿死。
+- **状态清单一律十倍自检**：新加按工位的逐台状态数组，检查"启动定格/停止/复位/急停/完成/报警/热更重建"
+  七处清理点是否都清了（V1.84 清 `_sessionSkipVacuum` 就是自查捞出来的）；删死数组前全仓扫 6 处读写。
+- **账号/列表对外只吐副本**：`UserManager.CurrentUser`/`GetAccounts`/`LoginResult.User` 一律 Clone，
+  防拿引用强转改密码绕过哈希/校验；内部写操作按值定位内部对象（`FindInternal`）。记住密码用
+  MesCrypto DPAPI（禁 Base64）。
+- **后台即时写失败必须留痕**：写阈值/启动/停止/急停/报警下发失败，除 UI 弹框明示外记一条事件
+  （CSV/LOG），追溯链不能无声断裂。
+- **自绘控件销毁放 GDI**：WorkstationGridView 的 6 个缓存画笔/画刷在 `Designer.Dispose` 释放
+  （光靠 RebuildThemeBrushes 覆盖只堵了换主题，堵不住控件销毁泄漏）。
+
 ## 构建与验证命令
 
 ```powershell

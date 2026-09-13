@@ -50,6 +50,12 @@ namespace AgingTestSystem.Services
             if (string.IsNullOrWhiteSpace(raw)) return;   // 空=缺省
             foreach (string item in raw.Split(Separators))
             {
+                // 【大扫荡】到上限即停：以前先全量进表再截断，10 万脏项先吃满内存。
+                if (options.Count >= MaxOptionCount)
+                {
+                    errors.Add("选项太多（≤" + MaxOptionCount + "个），已截断保留前 " + MaxOptionCount + " 个");
+                    break;
+                }
                 string t = (item ?? "").Trim();
                 if (t.Length == 0) continue;
                 if (t.Length > MaxItemLength)
@@ -73,11 +79,6 @@ namespace AgingTestSystem.Services
             {
                 // 配了但全是分隔符/空格 = 配了个寂寞，报出来（与"留空走预设"区分开）
                 errors.Add("未解析出任何选项（留空=缺省预设；要自定义请填如 白场,红场）");
-            }
-            else if (options.Count > MaxOptionCount)
-            {
-                errors.Add("选项太多（≤" + MaxOptionCount + "个），已截断保留前 " + MaxOptionCount + " 个");
-                options = options.GetRange(0, MaxOptionCount);
             }
         }
 

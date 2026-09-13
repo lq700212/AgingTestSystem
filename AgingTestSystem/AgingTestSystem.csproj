@@ -159,6 +159,7 @@
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Services\RecipeAutoCompleteProvider.cs" />
+    <Compile Include="Services\AtomicFile.cs" />
     <Compile Include="Services\StationSettingsCache.cs" />
     <Compile Include="Services\ThemeManager.cs" />
     <Compile Include="Services\License\LicenseInfo.cs" />

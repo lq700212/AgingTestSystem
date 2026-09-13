@@ -432,7 +432,9 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 用当前输入框内容更新列表中第 index 个配方
-        /// （btnAdd 重名确定 与 btnUpdate 共用此逻辑）
+        /// （btnAdd 重名确定 与 btnUpdate 共用此逻辑）。
+        /// 【大扫荡】先改副本：校验失败原对象不受污染（以前就地改，
+        /// 字典校验不过时前 5 个字段已脏，内存与界面分叉）。
         /// </summary>
         /// <param name="index">配方在列表中的索引</param>
         private void UpdateRecipeAt(int index)
@@ -440,17 +442,19 @@ namespace AgingTestSystem.Dialogs
             if (index < 0 || index >= _recipes.Count) return;
 
             RecipeConfig target = _recipes[index];
-            if (!TryApplyInputToRecipe(target))
+            RecipeConfig draft = target != null ? target.Clone() : new RecipeConfig();
+            if (!TryApplyInputToRecipe(draft))
             {
                 return;
             }
+            _recipes[index] = draft;
 
             PersistRecipes();
             LoadRecipesToGrid();
             SelectRecipeRow(index);
             // 【V1.74】定格说明（Q18）：配方库更新只影响新启动，在测按旧参数跑完——
             // 本窗无 deviceManager 查不了在测，写死静态说明（不弹窗分支、不打扰）。
-            MessageBox.Show($"配方 \"{target.Name}\" 已更新\r\n（在测工位按启动时定格参数跑完，仅对新启动生效）", "提示",
+            MessageBox.Show($"配方 \"{draft.Name}\" 已更新\r\n（在测工位按启动时定格参数跑完，仅对新启动生效）", "提示",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 

@@ -1,7 +1,6 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Windows.Forms;
 using AgingTestSystem.Models;
 using Newtonsoft.Json;
 
@@ -47,7 +46,7 @@ namespace AgingTestSystem.Services
                     return null;
                 }
 
-                string jsonContent = File.ReadAllText(RecipeDataFilePath);
+                string jsonContent = AtomicFile.SafeReadAllText(RecipeDataFilePath);
                 List<RecipeConfig> recipes = JsonConvert.DeserializeObject<List<RecipeConfig>>(jsonContent);
 
                 System.Diagnostics.Debug.WriteLine($"[配方存储] 配方数据加载成功，共 {recipes?.Count ?? 0} 个配方");
@@ -61,7 +60,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 将配方列表保存到 JSON 文件
+        /// 将配方列表保存到 JSON 文件（【大扫荡】原子写，无写半截截断）。
         /// </summary>
         /// <param name="recipes">要保存的配方列表</param>
         /// <returns>保存成功返回 true，失败返回 false</returns>
@@ -70,7 +69,7 @@ namespace AgingTestSystem.Services
             try
             {
                 string jsonContent = JsonConvert.SerializeObject(recipes, Formatting.Indented);
-                File.WriteAllText(RecipeDataFilePath, jsonContent);
+                AtomicFile.WriteAllText(RecipeDataFilePath, jsonContent);
 
                 System.Diagnostics.Debug.WriteLine($"[配方存储] 配方数据保存成功，共 {recipes?.Count ?? 0} 个配方");
                 return true;
@@ -83,48 +82,52 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 保存单个配方到配方列表并落盘（带同名覆盖询问）
+        /// 按名找同名配方下标（忽略大小写；空名返回 -1）。
+        /// 【大扫荡】覆盖确认框搬到调用方 UI：Services 层弹 MessageBox 会卡死后台线程，
+        /// 且单测一碰就挂起等点确认。本方法给 UI 做"问不问"判断用。
+        /// </summary>
+        public static int FindDuplicateIndex(List<RecipeConfig> recipes, string name)
+        {
+            if (recipes == null || string.IsNullOrWhiteSpace(name)) return -1;
+            return recipes.FindIndex(r =>
+                r != null && string.Equals(r.Name, name, StringComparison.OrdinalIgnoreCase));
+        }
+
+        /// <summary>
+        /// 保存单个配方到配方列表并落盘（无 UI：同名时按 overwrite 决定覆盖/拒绝）。
         ///
         /// 【用途】批量设置配方窗体、工位设置窗体的"保存/加入队列"按钮共用：
-        /// 把用户在界面上配置好的一个配方写入主窗体共享的配方列表并持久化到 Recipes.json，
-        /// 使新配置的配方能在「参数设置 → 配方管理」列表中随时选用。
+        /// 调用方先用 <see cref="FindDuplicateIndex"/> 查同名、同名时自己弹窗问，
+        /// 用户确认覆盖才传 overwrite=true（取消=直接返回，不调本方法）。
         ///
         /// 【同名处理】
-        /// - 列表中没有同名配方 → 直接新增；
-        /// - 列表中已有同名配方（忽略大小写）→ 弹窗询问"是否覆盖更新"：
-        ///   确定 = 用新配方覆盖旧配方；取消 = 放弃保存。
+        /// - 无同名 → 新增（Id=Max+1，防删除塌号撞号）；
+        /// - 有同名 + overwrite=true → 覆盖（保留原 Id，CreateTime 刷新）；
+        /// - 有同名 + overwrite=false → 拒绝（列表不动，返回 false）。
         ///
-        /// 【说明】
-        /// - 传入的 recipes 是主窗体共享列表（<see cref="Views.MainForm._recipes"/>），
-        ///   本方法会直接修改它，因此配方管理窗口打开后即可看到新配置的配方。
-        /// - 覆盖更新时保留原配方的 Id（创建时间用当前时间刷新），避免编号漂移。
+        /// 【失败回滚】先改内存再落盘，落盘失败则内存恢复原样（以前 Id 改了回不来，
+        /// 列表与文件分叉）。空名配方直接拒绝（以前 null 名互判"同名"）。
         /// </summary>
-        /// <param name="recipes">外部共享的配方列表（会被直接修改）</param>
+        /// <param name="recipes">外部共享的配方列表（成功时才被修改）</param>
         /// <param name="recipe">要保存的配方</param>
-        /// <returns>true=已保存（新增或覆盖成功）；false=用户取消覆盖 / 保存失败 / 参数非法</returns>
-        public static bool SaveWithDuplicateCheck(List<RecipeConfig> recipes, RecipeConfig recipe)
+        /// <param name="overwrite">同名时是否覆盖</param>
+        /// <returns>true=已保存（新增或覆盖成功）；false=拒绝覆盖 / 保存失败 / 参数非法</returns>
+        public static bool SaveRecipe(List<RecipeConfig> recipes, RecipeConfig recipe, bool overwrite)
         {
             if (recipes == null || recipe == null) return false;
+            if (string.IsNullOrWhiteSpace(recipe.Name)) return false;
 
-            // 忽略大小写查找同名配方
-            int index = recipes.FindIndex(r =>
-                string.Equals(r.Name, recipe.Name, StringComparison.OrdinalIgnoreCase));
+            int index = FindDuplicateIndex(recipes, recipe.Name);
+            if (index >= 0 && !overwrite) return false;
 
+            // 先备份，落盘失败回滚（内存与文件永不分叉）
+            RecipeConfig backup = null;
+            bool added = false;
             if (index >= 0)
             {
-                // 同名 → 询问是否覆盖更新
-                var result = MessageBox.Show(
-                    $"已存在配方 \"{recipe.Name}\"，是否覆盖更新该配方？",
-                    "配方已存在",
-                    MessageBoxButtons.OKCancel,
-                    MessageBoxIcon.Question);
-
-                // 取消 → 放弃保存（不新增、不覆盖）
-                if (result != DialogResult.OK) return false;
-
                 // 覆盖：保留原 Id，其余字段用新配方内容刷新
-                RecipeConfig existing = recipes[index];
-                recipe.Id = existing.Id;
+                backup = recipes[index];
+                recipe.Id = backup.Id;
                 recipe.CreateTime = DateTime.Now;
                 recipes[index] = recipe;
             }
@@ -140,10 +143,15 @@ namespace AgingTestSystem.Services
                 }
                 recipe.Id = nextId;
                 recipes.Add(recipe);
+                added = true;
             }
 
-            // 整个列表落盘
-            return Save(recipes);
+            if (Save(recipes)) return true;
+
+            // 落盘失败：内存回滚
+            if (added) recipes.Remove(recipe);
+            else recipes[index] = backup;
+            return false;
         }
     }
 }
