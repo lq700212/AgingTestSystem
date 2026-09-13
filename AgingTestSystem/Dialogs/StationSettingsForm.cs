@@ -149,27 +149,41 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 给 8 个设置项 + 破空/下电按钮挂悬停说明（标签+输入框都挂，悬停哪边都看得到）。
+        /// 文案规则（小白能看懂）：每条=是什么+举例+填错会怎样；时间轴按真实流程写
+        /// （点启动→只开阀→延时到+真空到位→上电→跑够启动时间→自动完成）。
         /// </summary>
         private void SetupTooltips()
         {
             _tip = new ToolTip(this.components);
             _tip.ShowAlways = true;
+            // 说明偏长，悬停提示多停留 15 秒（默认 5 秒看不完）。
+            _tip.AutoPopDelay = 15000;
             SetTip(new Control[] { lblState, txtState },
-                "状态：只读，当前工位实时状态（空闲/选中/繁忙/故障/已完成）。");
+                "状态：只读，不用填。当前工位实时状态（空闲/选中/繁忙/故障/已完成）。");
             SetTip(new Control[] { lblSN, txtSN },
-                "SN：该工位的产品序列号，空表示未绑定。0时长与空SN能不能启动，在工艺策略里配。");
+                "SN：这台上测的是哪件产品（产品条码），空=没绑定。空SN点启动只警告不拦截；" +
+                "测完按启动时绑的SN记追溯，中途改SN不影响在测归属。0时长能不能启动在工艺策略里配。");
             SetTip(new Control[] { lblRecipe, txtRecipe },
-                "配方：该工位当前配方。输入时自动检索已有配方，选中后自动回填延时、温度、负压、显示模式。");
+                "配方：该工位当前用哪套参数，下发、选用都认这个名字。" +
+                "输入时自动联想已有配方，选中后自动回填延时、温度、负压、显示模式。");
             SetTip(new Control[] { lblDelay, nudDelayHours, nudDelayMinutes, nudDelaySeconds },
-                "延时时间：对应工位面板延时开启。上电后等这么久才开始计时老化（时:分:秒）。");
+                "延时时间：上电前等待。点启动后先只开真空阀（不上电），等够这么久才上电，" +
+                "例如00:00:30=开阀30秒后上电，给吸附留稳定时间。填0=真空一到位立刻上电。" +
+                "对应工位面板延时开启。");
             SetTip(new Control[] { lblStart, nudStartHours, nudStartMinutes, nudStartSeconds },
-                "启动时间：对应工位面板延时到达，与延时时间共同决定上电时序（时:分:秒）。");
+                "启动时间：上电后老化时长。上电开始计时，跑够这么久自动完成" +
+                "（下电+关阀+PASS待取料），例如08:00:00=跑8小时。填00:00:00=不用配方时长、" +
+                "走全局时长；全局也是0才一直跑、只能手动停。对应工位面板延时到达。");
             SetTip(new Control[] { lblTemp, nudTemp },
-                "极限温度：该工位温度上限（0~300°C）。只记录追溯，不参与自动判定。");
+                "极限温度：该工位温度上限（0~300℃）。只存档追溯：" +
+                "面板不显示、不参与自动判定，填错不影响运行，但以后查配方看到的就是这个数。");
             SetTip(new Control[] { lblPressure, nudPressure },
-                "负压阈值：该工位真空到位判定阈值（kPa）。回填优先级：上次保存>配方>全局；保存即下发，启动时定格。");
+                "负压阈值：真空到位线（kPa）。例如填-5：表读到-7（比-5更负）=吸住了、可上电；" +
+                "读到-3（更接近0）=没吸住，宽限到了报真空失败。框里数按上次保存>配方>全局回填，" +
+                "保存即下发、启动时定格。");
             SetTip(new Control[] { lblDisplayMode, cmbDisplayMode },
-                "显示模式：下拉选择本次烧屏跑的显示画面，只追溯不判定。可选：" +
+                "显示模式：这次烧屏跑的画面。只记档追溯：面板不显示、不参与判定，" +
+                "但启动/报警日志里会记，方便事后查这批烧的什么画面。可选：" +
                 string.Join("/", DisplayModeOptions.Resolve(_config).ToArray()) +
                 "（字典在系统设置→工艺策略里改；保存时按字典校验）。");
             SetTip(new Control[] { btnBreakVacuum },

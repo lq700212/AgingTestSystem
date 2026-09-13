@@ -90,6 +90,13 @@ namespace AgingTestSystem.Dialogs
         private readonly bool _displayModeShown;
 
         /// <summary>
+        /// 悬停说明（每个配方项都挂 tooltip，超 40 字走
+        /// SettingsForm.WrapTooltip 换行，全仓统一口径；
+        /// 标签+输入框两边都挂；随 components 容器自动释放）。
+        /// </summary>
+        private ToolTip _tip;
+
+        /// <summary>
         /// 构造函数
         /// </summary>
         /// <param name="recipes">外部传入的配方列表，修改将反映到外部列表实例</param>
@@ -135,18 +142,8 @@ namespace AgingTestSystem.Dialogs
                 this.MinimumSize = this.ClientSize;
             }
 
-            // 【V1.74】显示模式悬停说明（标签+输入框两边都挂；选项走字典。
-            // ToolTip 进 components 容器随窗体自动释放；本窗 Designer 从未放过组件类控件，
-            // components 为 null 时补建（与 BatchRecipeForm 同口径，回归 UiPureHelpers 锁）。
-            if (this.components == null) this.components = new System.ComponentModel.Container();
-            var modeTipText = SettingsForm.WrapTooltip(
-                "显示模式：下拉选择本次烧屏跑的显示画面，只追溯不判定。可选：" +
-                string.Join("/", DisplayModeOptions.Resolve(_displayConfig).ToArray()) +
-                "（字典在系统设置→工艺策略里改）。");
-            var modeTip = new ToolTip(this.components);
-            modeTip.ShowAlways = true;
-            modeTip.SetToolTip(lblDisplayMode, modeTipText);
-            modeTip.SetToolTip(cmbDisplayMode, modeTipText);
+            // 每个配方项都挂悬停说明（标签+输入框两边都挂，超 40 字自动换行）。
+            SetupTooltips();
         }
 
         /// <summary>
@@ -178,6 +175,58 @@ namespace AgingTestSystem.Dialogs
             cmbDisplayMode.Items.Clear();
             foreach (string o in options) cmbDisplayMode.Items.Add(o);
             if (selectIt) cmbDisplayMode.Text = (selectedAfterFill ?? "").Trim();
+        }
+
+        /// <summary>
+        /// 给 6 个配方项挂悬停说明（标签+输入框两边都挂，悬停哪边都看得到）。
+        /// 文案规则（小白能看懂）：每条=是什么+举例+填错会怎样；时间轴按真实流程写
+        /// （点启动→只开阀→延时到+真空到位→上电→跑够启动时间→自动完成）；
+        /// 量程按本窗控件写（极限温度 0~300℃ / 负压 ±9999kPa / 时间时0-99分秒0-59），
+        /// 与批量窗（0~999℃文本框）/工位窗（0~300℃数字框）各按各的控件写，不互相抄。
+        /// 超 40 字走 SettingsForm.WrapTooltip 换行（全仓唯一入口，不手写截断）。
+        /// </summary>
+        private void SetupTooltips()
+        {
+            // 本窗 Designer 没建 components 容器（历史原因：从没放过 ToolTip 类控件），
+            // 这里补建一个，后续 Dispose 走容器自动释放（与 BatchRecipeForm 同口径）。
+            if (this.components == null) this.components = new System.ComponentModel.Container();
+            _tip = new ToolTip(this.components);
+            _tip.ShowAlways = true;
+            // 说明偏长，悬停提示多停留 15 秒（默认 5 秒看不完）。
+            _tip.AutoPopDelay = 15000;
+            SetTip(new Control[] { lblRecipeName, txtRecipeName },
+                "配方名称：延时、温度、负压等一整套参数打包存一个名字，选用、下发都认它。" +
+                "重名点添加时会询问是否覆盖更新。");
+            SetTip(new Control[] { lblDelayTime, nudDelayHours, nudDelayMinutes, nudDelaySeconds },
+                "延时时间：上电前等待。点启动后先只开真空阀（不上电），等够这么久才上电，" +
+                "例如00:00:30=开阀30秒后上电，给吸附留稳定时间。填0=真空一到位立刻上电。" +
+                "对应工位面板延时开启。");
+            SetTip(new Control[] { lblStartTime, nudStartHours, nudStartMinutes, nudStartSeconds },
+                "启动时间：上电后老化时长。上电开始计时，跑够这么久自动完成" +
+                "（下电+关阀+PASS待取料），例如08:00:00=跑8小时。填00:00:00=不用配方时长、" +
+                "走全局时长；全局也是0才一直跑、只能手动停。对应工位面板延时到达。");
+            SetTip(new Control[] { lblLimitTemp, nudLimitTemp },
+                "极限温度：该配方的温度上限（本窗0~300℃，1位小数）。只存档追溯：" +
+                "面板不显示、不参与自动判定，填错不影响运行，但以后查配方看到的就是这个数。");
+            SetTip(new Control[] { lblNegativePressure, nudNegativePressure },
+                "负压阈值：真空到位线（kPa，±9999）。例如填-5：表读到-7（比-5更负）=吸住了、可上电；" +
+                "读到-3（更接近0）=没吸住，宽限到了报真空失败。新建默认填全局阈值，" +
+                "下发后启动时定格，改配方不影响在测。");
+            SetTip(new Control[] { lblDisplayMode, cmbDisplayMode },
+                "显示模式：这次烧屏跑的画面。只记档追溯：面板不显示、不参与判定，" +
+                "但启动/报警日志里会记，方便事后查这批烧的什么画面。可选：" +
+                string.Join("/", DisplayModeOptions.Resolve(_displayConfig).ToArray()) +
+                "（字典在系统设置→工艺策略里改）。");
+        }
+
+        /// <summary>给一组控件挂同一条说明（超 40 字自动换行）。</summary>
+        private void SetTip(Control[] controls, string text)
+        {
+            string tip = SettingsForm.WrapTooltip(text);
+            foreach (Control c in controls)
+            {
+                if (c != null) _tip.SetToolTip(c, tip);
+            }
         }
 
         /// <summary>
