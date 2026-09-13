@@ -22,6 +22,7 @@
 //   12f. PowerReportV174          —— 电流骨架(Mock/桩/接线/规则变量) + 报表列 + 显示字典
 //   12g. LicenseV183              —— 授权签名验签 + 四道关 + 试用双记（隔离目录+隔离注册表+运行时测试密钥）
 //   12h. PolicyPresetV185          —— 预置策略 A/B/C（套用/探测纯函数 + 名单/口径/安全锁 + UI 预置行回显）
+//   12i. PolicyNodeComboV1851      —— 节点选项框按预置下拉口径统一（下拉实测拉宽 + 悬停全文 + 切节点清表）
 //
 //  【怎么跑】
 //  不直接运行本文件。用本 skill 目录 scripts\run_unit_tests.ps1：
@@ -201,6 +202,7 @@ namespace AgingTestSystem.Tests
                 { "PowerReportV174", PowerReportV174Tests },
                 { "LicenseV183", LicenseTests },
                 { "PolicyPresetV185", PolicyPresetTests },
+                { "PolicyNodeComboV1851", PolicyNodeComboTests },
             };
 
             // 参数约定：无参=全量；"模块A,模块B"=子集（大小写不敏感）；
@@ -6272,6 +6274,156 @@ namespace AgingTestSystem.Tests
                 Check("关窗后悬停提示已释放（不进终结器）", tipGone);
             }
             finally { try { if (full != null) full.Dispose(); } catch { } }
+        }
+
+        // 12i. PolicyNodeComboV1851 —— 节点选项框按预置下拉口径统一（V1.85.1 新增）
+        //
+        // 【测什么】全部节点 Bool/Enum 下拉：下拉列表按最长选项实测拉宽（不再与框
+        // 同宽 270，最长 22 字项旧口径下被拦腰截断）+ 悬停恒=选中项全文（闭合框
+        // 270 放不下长中文时的第二路）+ 切节点清提示表（不清=已释放控件被钉住泄漏）。
+        // 独立再量一遍逐项宽度（与产品同 TextRenderer 口径，但每个数字重新算，
+        // 不是复述产品字段），另有 harness 真实展开截图为第二证据（见 CHANGELOG）。
+        static void PolicyNodeComboTests()
+        {
+            var t = typeof(ProcessPolicyForm);
+            var mSelect = t.GetMethod("SelectNode",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            var fEditors = t.GetField("_editorControls",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            var fTip = t.GetField("_editorTip",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Check("节点编辑反射口径有效（防探针本身失效假绿）",
+                mSelect != null && fEditors != null && fTip != null);
+
+            ProcessPolicyForm form = null;
+            try
+            {
+                form = new ProcessPolicyForm(new DeviceConfig(), null, true);
+                object tipObj = fTip.GetValue(form);
+                Check("节点悬停提示单例已建", tipObj != null);
+
+                // 期望数：全部节点 Bool/Enum key 个数（Text/Multiline 不是下拉，不进数；
+                // VentValveDoPoint 藏行是 Text 也不影响，数对不上=有下拉漏网或多算）。
+                int expect = 0;
+                foreach (var node in PolicyGraph.Nodes)
+                {
+                    var keys = node.GetType().GetField("Keys").GetValue(node)
+                        as System.Collections.IList;
+                    foreach (var k in keys)
+                    {
+                        string kind = k.GetType().GetField("Kind").GetValue(k).ToString();
+                        if (kind == "Bool" || kind == "Enum") expect++;
+                    }
+                }
+
+                int comboTotal = 0, narrowTotal = 0, clipTotal = 0, tipTotal = 0;
+                int worstNeed = 0;
+                string worstWhere = "";
+                Control firstCombo = null;
+                foreach (var node in PolicyGraph.Nodes)
+                {
+                    string id = (string)node.GetType().GetField("Id").GetValue(node);
+                    mSelect.Invoke(form, new object[] { id, false });
+                    var editors = fEditors.GetValue(form) as System.Collections.IDictionary;
+                    foreach (System.Collections.DictionaryEntry en in editors)
+                    {
+                        var cmb = en.Value as Control;
+                        if (cmb == null || cmb.GetType().Name != "UIComboBox") continue;
+                        comboTotal++;
+                        if (firstCombo == null) firstCombo = cmb;
+                        int ddw = (int)cmb.GetType().GetProperty("DropDownWidth")
+                            .GetValue(cmb, null);
+                        if (ddw < cmb.Width) narrowTotal++;
+                        var items = cmb.GetType().GetProperty("Items")
+                            .GetValue(cmb, null) as System.Collections.IList;
+                        int need = cmb.Width;
+                        using (Graphics g = cmb.CreateGraphics())
+                        {
+                            foreach (var it in items)
+                            {
+                                string s = it != null ? it.ToString() : "";
+                                if (s.Length == 0) continue;
+                                int w = TextRenderer.MeasureText(g, s, cmb.Font,
+                                    new Size(int.MaxValue, int.MaxValue),
+                                    TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width;
+                                if (w > need) need = w;
+                            }
+                        }
+                        need += SystemInformation.VerticalScrollBarWidth + 12;
+                        if (need > worstNeed) { worstNeed = need; worstWhere = id + "/" + en.Key; }
+                        if (need > ddw + 1) clipTotal++;
+                        int sel = (int)cmb.GetType().GetProperty("SelectedIndex")
+                            .GetValue(cmb, null);
+                        string selText = (sel >= 0 && sel < items.Count && items[sel] != null)
+                            ? items[sel].ToString() : "";
+                        string tipText = null;
+                        try
+                        {
+                            tipText = (string)tipObj.GetType().GetMethod("GetToolTip",
+                                new Type[] { typeof(Control) })
+                                .Invoke(tipObj, new object[] { cmb });
+                        }
+                        catch { tipText = null; }
+                        if (tipText != selText) tipTotal++;
+                    }
+                }
+                Check("选项框全扫到（数=全部Bool/Enum key）",
+                    expect > 0 && comboTotal == expect,
+                    "扫到" + comboTotal + "/期望" + expect);
+                Check("下拉都不比框窄", narrowTotal == 0);
+                Check("下拉列表无截断（逐项独立实测）", clipTotal == 0,
+                    "最长 " + worstWhere + " 需" + worstNeed);
+                Check("悬停恒=选中全文", tipTotal == 0);
+                // 反向验证（坑38：新探针必须能 FAIL）：旧口径下拉=框宽 270，
+                // 最长项需要 >270，旧代码跑同一判据必红，证明本模块不是恒绿。
+                Check("旧口径必截断（反向验证）", worstNeed > 270,
+                    worstWhere + " 需" + worstNeed + ">270");
+                // 切节点清表：首节点旧下拉已释放，提示表里必须查无此人
+                //（不清表=旧控件被提示钉住，切一次漏几个）。
+                bool cleared = false;
+                try
+                {
+                    string stale = (string)tipObj.GetType().GetMethod("GetToolTip",
+                        new Type[] { typeof(Control) })
+                        .Invoke(tipObj, new object[] { firstCombo });
+                    cleared = string.IsNullOrEmpty(stale);
+                }
+                catch { cleared = false; }
+                Check("切节点后旧下拉提示已清（不清表即泄漏）", cleared);
+                // 改选同步：旧节点重选后换一项，悬停跟着变（提示不是一次性快照）
+                mSelect.Invoke(form, new object[] { "unload", false });
+                var ed2 = fEditors.GetValue(form) as System.Collections.IDictionary;
+                var cmb2 = ed2["EventIdentityMode"] as Control;
+                bool syncOk = false;
+                try
+                {
+                    var propSel = cmb2.GetType().GetProperty("SelectedIndex");
+                    var items2 = cmb2.GetType().GetProperty("Items")
+                        .GetValue(cmb2, null) as System.Collections.IList;
+                    int other = ((int)propSel.GetValue(cmb2, null) == 0) ? 1 : 0;
+                    propSel.SetValue(cmb2, other, null);
+                    string tip2 = (string)tipObj.GetType().GetMethod("GetToolTip",
+                        new Type[] { typeof(Control) })
+                        .Invoke(tipObj, new object[] { cmb2 });
+                    syncOk = tip2 == items2[other].ToString();
+                }
+                catch { syncOk = false; }
+                Check("改选后悬停同步换（非一次性快照）", syncOk);
+                // 释放配对（R2：与 _presetTip 同款无容器托管，关窗两字段皆 null）
+                try { ((Form)form).Close(); }
+                catch { try { form.Dispose(); } catch { } }
+                bool bothGone = false;
+                try
+                {
+                    bothGone = t.GetField("_presetTip",
+                            BindingFlags.NonPublic | BindingFlags.Instance).GetValue(form) == null
+                        && t.GetField("_editorTip",
+                            BindingFlags.NonPublic | BindingFlags.Instance).GetValue(form) == null;
+                }
+                catch { bothGone = false; }
+                Check("关窗后两悬停提示皆释放", bothGone);
+            }
+            finally { try { if (form != null) form.Dispose(); } catch { } }
         }
 
     }

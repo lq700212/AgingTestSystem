@@ -49,6 +49,10 @@ namespace AgingTestSystem.Views
     /// 走 PersistChanges 同一条保存路）。只动 12 个行为开关（见 PolicyPresets），
     /// MES/规则/报表/点位/时长阈值不动；只读模式整行禁用。
     ///
+    /// 【V1.85.1 节点选项框】全部节点 Bool/Enum 下拉按预置下拉口径统一：
+    /// 下拉列表按最长选项实测拉宽（SizeNodeCombo，最长 22 字项原来被截断）+
+    /// 悬停看选中项全文（共享 _editorTip，切节点清表防钉住泄漏，随窗体释放）。
+    ///
     /// 【鼠标操作】（对标 mFormFlowEdit 手感）
     /// - 左键拖节点体 = 移动节点（位置存 PolicyLayout.json，下次打开接着用）；
     /// - 左键点节点/连线 = 选中（右栏切出该节点的编辑器；连线只读，显示条件来源）；
@@ -84,6 +88,13 @@ namespace AgingTestSystem.Views
         // 下拉联动自保护：程序回显选中项时不触发"用户改选"分支（只套用按钮才真干活）。
         private bool _presetRefreshing;
 
+        // 【V1.85.1 节点选项框】与 _presetTip 同款的共享悬停提示（一个实例管全部
+        // 节点下拉，选中项全文随选随换）。不给每个下拉各建一个：提示按控件建表
+        // 强引用，旧编辑器释放时不清表 = 已释放控件被提示钉住不回收（切节点一
+        // 次漏几个，小而久的托管泄漏）。所以切节点时 DisposeEditorControls 先
+        // RemoveAll() 清表（见该方法注释），窗体释放时这里 Dispose（见 Dispose 重写）。
+        private ToolTip _editorTip;
+
         /// <summary>本次会话保存过的 key（主窗体按需热生效，SettingsForm.SavedKeys 同款语义）</summary>
         public HashSet<string> SavedKeys { get; private set; }
 
@@ -96,6 +107,7 @@ namespace AgingTestSystem.Views
             SavedKeys = new HashSet<string>();
             InitializeComponent();
             InitPresetBar();
+            _editorTip = new ToolTip();
             UpdateStatus("就绪：点击节点查看/修改配置。滚轮缩放 · 中键平移 · 拖节点移动。");
         }
 
@@ -165,6 +177,8 @@ namespace AgingTestSystem.Views
         /// 释放悬停提示（【V1.85】_presetTip 无容器托管（本窗 Designer 无 components
         /// 容器），必须手写释放；R2 配对检查认方法体内真 Dispose。静态挂接随窗体走，
         /// _timer 照旧在 OnFormClosed 里停（同线程串行，双保险判空）。
+        /// 【V1.85.1】_editorTip 同款无容器托管，同处释放（两行一一对应，缺一行
+        /// 漏一个；回归锁"关窗后两字段皆 null"）。
         /// </summary>
         protected override void Dispose(bool disposing)
         {
@@ -173,6 +187,7 @@ namespace AgingTestSystem.Views
                 try
                 {
                     if (_presetTip != null) { _presetTip.Dispose(); _presetTip = null; }
+                    if (_editorTip != null) { _editorTip.Dispose(); _editorTip = null; }
                 }
                 catch { }
             }
@@ -270,9 +285,15 @@ namespace AgingTestSystem.Views
         /// 照样是孤儿，GC 时照样在终结器线程炸（拖业务框时炸的其实是早先某次切节点
         /// 漏掉的旧编辑器）。正确姿势是 ControlDisposeHelper：先 CopyTo 快照成数组
         /// 再逐个释放（枚举快照不怕原集合被改），最后 Clear。以后动态重建一律调它。
+        /// 【V1.85.1 加清表】ToolTip 内部按控件建表（强引用）：旧编辑器 Dispose 了，
+        /// 表不清 = 已释放的下拉还被 _editorTip 钉着，GC 回收不了。切节点是高频动作
+        /// （现场一个个点过去），不清表就是"切一次漏几个控件"的慢性泄漏。
+        /// 所以快照释放前先 RemoveAll()（清表不碰控件），再走 helper 释放旧编辑器。
         /// </summary>
         private void DisposeEditorControls()
         {
+            try { if (_editorTip != null) _editorTip.RemoveAll(); }
+            catch { }
             ControlDisposeHelper.DisposeAllAndClear(_pnlEditors.Controls);
             _editorControls.Clear();
         }
@@ -345,6 +366,11 @@ namespace AgingTestSystem.Views
                 Control editor = CreateEditor(key.Key, key.Kind);
                 editor.Location = new Point(0, y);
                 editor.Width = 270;
+                // 【V1.85.1】选项框按预置下拉口径统一：下拉列表按最长选项实测拉宽 +
+                // 悬停看选中项全文（见 SizeNodeCombo）。宽 270 定死后才能量（量的是
+                // 像素，基准就是这个 270），所以调口必须在 Width 赋值之后。
+                var nodeCmb = editor as Sunny.UI.UIComboBox;
+                if (nodeCmb != null) SizeNodeCombo(nodeCmb);
                 // 只读模式：控件禁用（与系统设置"仅管理员可改"同级，不开后门）
                 editor.Enabled = _canEdit;
                 if (key.Kind == PolicyGraph.EditorKind.Multiline)
@@ -417,7 +443,7 @@ namespace AgingTestSystem.Views
                 cmb.Items.Add(new FlowOpt("false", "false"));
                 cmb.Items.Add(new FlowOpt("true", "true"));
                 SelectOpt(cmb, current.Equals("true", StringComparison.OrdinalIgnoreCase) ? "true" : "false");
-                cmb.SelectedIndexChanged += (s, e) => MarkDirty();
+                cmb.SelectedIndexChanged += (s, e) => OnNodeComboChanged(s);
                 return cmb;
             }
             if (kind == PolicyGraph.EditorKind.Enum)
@@ -429,7 +455,7 @@ namespace AgingTestSystem.Views
                     foreach (var o in opts) cmb.Items.Add(new FlowOpt(o.Item1, o.Item2));
                 }
                 SelectOpt(cmb, NormalizeEnumValue(key, current));
-                cmb.SelectedIndexChanged += (s, e) => MarkDirty();
+                cmb.SelectedIndexChanged += (s, e) => OnNodeComboChanged(s);
                 return cmb;
             }
             if (kind == PolicyGraph.EditorKind.Multiline)
@@ -463,6 +489,69 @@ namespace AgingTestSystem.Views
                 }
             }
             if (cmb.Items.Count > 0) cmb.SelectedIndex = 0;
+        }
+
+        /// <summary>节点下拉改选：标脏 + 悬停全文同步换（提示永远是当前选中项）。</summary>
+        private void OnNodeComboChanged(object sender)
+        {
+            MarkDirty();
+            RefreshNodeComboTip(sender as Sunny.UI.UIComboBox);
+        }
+
+        /// <summary>
+        /// 节点选项框按预置下拉（_cboPreset）口径统一（【V1.85.1 新增】全节点生效）：
+        /// 下拉列表按最长选项实测拉宽（不再默认与框同宽 270，最长的
+        /// "启动定格：该轮启动时的SN/配方，中途重绑不污染"原来在下拉里被拦腰截断），
+        /// 悬停看选中项全文（闭合框 270 放不下长中文时，悬停补全文，与预置行同手感）。
+        ///
+        /// 【为什么实测不定死 340】预置选项文案固定四条，写死 340 省事；节点是 9 组
+        /// 枚举 + 布尔两类，文案长短差 4 倍（"false" 5 个字符 vs 最长 22 个汉字+英文）。
+        /// 写死 340 会让布尔下拉虚胖、极端长项仍可能差几个像素。实测量一次全都有：
+        /// 短的保持框宽（不虚胖），长的按需拉宽（不截断），480 封顶（超出看悬停，
+        /// 不把下拉铺满屏）。EnumOptions 加新长文案时这里自动跟上，不用手改。
+        ///
+        /// 【高 DPI 说明】量的是当前 DC 的设备像素，下拉宽与字同源，缩放一致；
+        /// 万一哪台工控机字体渲染偏胖差几个像素，闭合框还有悬停全文兜底，
+        /// 现场永远有路看到全文。
+        /// </summary>
+        private void SizeNodeCombo(Sunny.UI.UIComboBox cmb)
+        {
+            if (cmb == null || cmb.IsDisposed) return;
+            try
+            {
+                int need = cmb.Width;
+                using (Graphics g = cmb.CreateGraphics())
+                {
+                    foreach (var item in cmb.Items)
+                    {
+                        string t = item != null ? item.ToString() : null;
+                        if (string.IsNullOrEmpty(t)) continue;
+                        int w = TextRenderer.MeasureText(g, t, cmb.Font,
+                            new Size(int.MaxValue, int.MaxValue),
+                            TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width;
+                        if (w > need) need = w;
+                    }
+                }
+                need += SystemInformation.VerticalScrollBarWidth + 12;
+                if (need < cmb.Width) need = cmb.Width;
+                if (need > 480) need = 480;
+                cmb.DropDownWidth = need;
+            }
+            catch { try { cmb.DropDownWidth = cmb.Width; } catch { } }
+            RefreshNodeComboTip(cmb);
+        }
+
+        /// <summary>悬停全文同步为当前选中项（与预置行"闭合框看全文"同手感）。</summary>
+        private void RefreshNodeComboTip(Sunny.UI.UIComboBox cmb)
+        {
+            try
+            {
+                if (_editorTip == null || cmb == null || cmb.IsDisposed) return;
+                object sel = (cmb.SelectedIndex >= 0 && cmb.SelectedIndex < cmb.Items.Count)
+                    ? cmb.Items[cmb.SelectedIndex] : null;
+                _editorTip.SetToolTip(cmb, sel != null ? sel.ToString() : "");
+            }
+            catch { }
         }
 
         private static string NormalizeEnumValue(string key, string current)
