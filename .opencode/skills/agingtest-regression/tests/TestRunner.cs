@@ -804,6 +804,80 @@ namespace AgingTestSystem.Tests
                 string dot = (string)mEllip.Invoke(null, new object[] { gg, "Y000 真空电磁阀-1", f9, 0 });
                 Check("V181零宽保底空串", dot == "");
             }
+
+            // ── V1.81.3 徽标/截断布局态预计算（SetData+ComputeLayout 纯数学，
+            // FitRows 用内存 DC 量字，全程无句柄无弹窗，runner 里安全） ──
+            var gtest = new IoRemapGraphControl();
+            var gcfg = new DeviceConfig();
+            var gsrcs = IoRemapCatalog.BuildSourceEndpoints(gcfg);
+            var gtgts = IoRemapCatalog.BuildTargetEndpoints(gcfg, IoRemapTargetPool.SpareOnly);
+            var gmaps = IoOutputChannelRemap.ParseAll("0x2000@0x00->0x2009@0x00", out _);
+            gtest.SetData(gsrcs, gtgts, gmaps);
+            var gtGraph = typeof(IoRemapGraphControl);
+            var mLayout = gtGraph.GetMethod("ComputeLayout", BindingFlags.NonPublic | BindingFlags.Instance);
+            var mFit = gtGraph.GetMethod("FitRows", BindingFlags.NonPublic | BindingFlags.Instance);
+            mLayout.Invoke(gtest, new object[] { 1f });
+            var gsrcRows = (System.Collections.IList)gtGraph.GetField("_srcRows",
+                BindingFlags.NonPublic | BindingFlags.Instance).GetValue(gtest);
+            var gtgtRows = (System.Collections.IList)gtGraph.GetField("_tgtRows",
+                BindingFlags.NonPublic | BindingFlags.Instance).GetValue(gtest);
+            using (var bmpF = new Bitmap(1, 1))
+            using (var gf = Graphics.FromImage(bmpF))
+            using (var ff = new Font("微软雅黑", 9f))
+            using (var fb = new Font("微软雅黑", 8f))
+            {
+                mFit.Invoke(gtest, new object[] { gf, gsrcRows, true });
+                mFit.Invoke(gtest, new object[] { gf, gtgtRows, false });
+                string badgeHit = null;
+                string badgeMiss = "哨兵";
+                int fitBad = 0;
+                int nodeCount = 0;
+                foreach (System.Collections.IList pool in new object[] { gsrcRows, gtgtRows })
+                {
+                    foreach (var r in pool)
+                    {
+                        var rt = r.GetType();
+                        if ((bool)rt.GetField("IsHeader").GetValue(r)) continue;
+                        nodeCount++;
+                        var ep = rt.GetField("Endpoint").GetValue(r);
+                        var et = ep.GetType();
+                        int greg = (ushort)et.GetField("Register").GetValue(ep);
+                        int gch = (int)et.GetField("Channel").GetValue(ep);
+                        string main = (string)rt.GetField("MainText").GetValue(r);
+                        string badge = (string)rt.GetField("Badge").GetValue(r);
+                        var bounds = (Rectangle)rt.GetField("Bounds").GetValue(r);
+                        if (greg == 0x2000 && gch == 0) badgeHit = badge + "";
+                        if (greg == 0x2000 && gch == 1) badgeMiss = badge + "";
+                        int w = TextRenderer.MeasureText(main ?? "", ff).Width
+                            + (badge != null ? TextRenderer.MeasureText(badge, fb).Width + 6 : 0);
+                        if (string.IsNullOrEmpty(main) || w > bounds.Width - 12) fitBad++;
+                    }
+                }
+                Check("V181徽标随映射预计算（有/无）", badgeHit == "→0x2009@0x00" && badgeMiss == "");
+                Check("V181缺省176行截断后全装框", nodeCount == 176 && fitBad == 0);
+
+                // 60 字超长名：必截断且装框（杜绝以后加长设备名撑爆节点）
+                var longEp = new IoRemapEndpoint
+                {
+                    Register = 0x2000, Channel = 0, IoName = "Y000",
+                    DeviceName = new string('X', 60), Function = IoFunction.Unknown, IoId = 1
+                };
+                gtest.SetData(new List<IoRemapEndpoint> { longEp }, gtgts, null);
+                mLayout.Invoke(gtest, new object[] { 1f });
+                var loneRows = (System.Collections.IList)gtGraph.GetField("_srcRows",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(gtest);
+                mFit.Invoke(gtest, new object[] { gf, loneRows, true });
+                string loneMain = "";
+                foreach (var r in loneRows)
+                {
+                    var rt = r.GetType();
+                    if ((bool)rt.GetField("IsHeader").GetValue(r)) continue;
+                    loneMain = (string)rt.GetField("MainText").GetValue(r);
+                }
+                Check("V181超长名截断加…且装框",
+                    loneMain.EndsWith("…") && TextRenderer.MeasureText(loneMain, ff).Width <= 250 - 12);
+            }
+            try { gtest.Dispose(); } catch { }
         }
 
         // =====================================================================

@@ -72,6 +72,12 @@ namespace AgingTestSystem.Controls
             /// 绘制时直接用，不再量字——量字放布局态，Paint 只管画才跟手）。
             /// </summary>
             public string MainText;
+
+            /// <summary>
+            /// 徽标（源="→0x2009@0x00" / 目标="已被Y000占用" / 空闲=null；
+            /// 同 MainText 在布局态一次算好，Paint 不扫映射表）。
+            /// </summary>
+            public string Badge;
         }
 
         /// <summary>
@@ -90,6 +96,9 @@ namespace AgingTestSystem.Controls
                 DoubleBuffered = false;
                 ResizeRedraw = true;
                 SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint, true);
+                // 底色显式锁白（不跟随 Control 默认灰，节点白底+灰字在灰底上发闷；
+                // 深色主题由 ThemeManager 运行时覆盖，vClip 填充走 _canvas.BackColor，永远同底）
+                BackColor = Color.White;
             }
 
             /// <summary>背景由 OnPaint 按裁剪区自填白底，不走默认擦除（擦一遍画一遍=闪）</summary>
@@ -118,6 +127,12 @@ namespace AgingTestSystem.Controls
 
         /// <summary>布局脏标记（数据/宽度变化后置位，Paint 里重算；平时直接复用，不重复算）</summary>
         private bool _layoutDirty = true;
+
+        /// <summary>列头文案缓存（随 SetData 更新，Paint 里不拼字符串）</summary>
+        private string _headSrc = "源通道";
+
+        /// <summary>列头文案缓存（同上）</summary>
+        private string _headTgt = "目标通道";
 
         /// <summary>当前布局度量（与 _srcRows/_tgtRows 同一次算出，绘制与命中共用）</summary>
         private Metrics _metrics;
@@ -214,6 +229,10 @@ namespace AgingTestSystem.Controls
             }
             _hoverRow = null;
             _hoverLineIndex = -1;
+
+            // 列头文案随数据走（Paint 只读，逐帧 string.Format 是浪费）
+            _headSrc = string.Format("源通道（待映射，{0}）", _sources.Count);
+            _headTgt = string.Format("目标通道（备用，{0}）", _targets.Count);
 
             // 只标脏不计算：无句柄时算出的缩放是猜的（错位根因），等 Paint 用真 DPI 算
             _layoutDirty = true;
@@ -439,6 +458,7 @@ namespace AgingTestSystem.Controls
             {
                 if (r.IsHeader || r.Endpoint == null) continue;
                 string badge = isSource ? SourceBadge(r.Endpoint) : TargetBadge(r.Endpoint);
+                r.Badge = badge;
                 int avail = r.Bounds.Width - 12;
                 if (badge != null)
                 {
@@ -486,28 +506,33 @@ namespace AgingTestSystem.Controls
             // 布局与绘制同基准 + 脏了就地重算（错位根因见 _layoutScale 注释）
             EnsureLayout(g);
             Metrics m = _metrics;
-            // 切到虚拟坐标：滚动偏移是负值，直接平移即可
-            g.TranslateTransform(_canvas.AutoScrollPosition.X, _canvas.AutoScrollPosition.Y);
 
-            // 可见区（虚拟坐标）：只画与它相交的行/线。160 行全画就是"浏览卡"的来源，
-            // 屏幕一次只看 ~25 行，裁掉剩下 85%（AGENTS 自绘性能红线：e.ClipRectangle 反推范围）。
-            Rectangle vClip = ToVirtual(e.ClipRectangle);
+            // 【V1.81.3】手工滚动偏移，不调 TranslateTransform：TextRenderer 走 GDI，
+            // 对 Graphics 变换的响应在不同驱动/DC 下不一致（V1.51 在 Scale 上栽过，
+            // 位移也不值得赌），全部画设备坐标；命中检测继续用虚拟坐标，
+            // 两边经 Off（画）/ ToVirtual（鼠标/裁剪）换算，口径一致。
+            int ox = _canvas.AutoScrollPosition.X;
+            int oy = _canvas.AutoScrollPosition.Y;
 
-            // 自填白底（OnPaintBackground 已禁默认擦除，这里按裁剪区填一次，不闪也不留残影）
+            // 客户裁剪（设备坐标，直接填）与虚拟裁剪（行列取舍）各取所需
+            Rectangle clip = e.ClipRectangle;
+            Rectangle vClip = ToVirtual(clip);
+
+            // 自填底（OnPaintBackground 已禁默认擦除，这里按客户裁剪填一次，不闪也不留残影）
             using (var bg = new SolidBrush(_canvas.BackColor))
             {
-                g.FillRectangle(bg, vClip);
+                g.FillRectangle(bg, clip);
             }
 
             // 列头
-            DrawHead(g, m, m.LeftX, m.LeftW, string.Format("源通道（待映射，{0}）", _sources.Count));
-            DrawHead(g, m, m.RightX, m.RightW, string.Format("目标通道（备用，{0}）", _targets.Count));
+            DrawHead(g, Off(new Rectangle(m.LeftX, m.Margin, m.LeftW, m.HeadH - m.Margin), ox, oy), _headSrc);
+            DrawHead(g, Off(new Rectangle(m.RightX, m.Margin, m.RightW, m.HeadH - m.Margin), ox, oy), _headTgt);
 
             // 空态
             if (_srcRows.Count == 0)
-                DrawEmpty(g, m.LeftX, m.LeftW, "无源通道（请检查总数配置）");
+                DrawEmpty(g, Off(new Rectangle(m.LeftX, 40, m.LeftW, 30), ox, oy), "无源通道（请检查总数配置）");
             if (_tgtRows.Count == 0)
-                DrawEmpty(g, m.RightX, m.RightW, "无备用目标（预留点已用完可切“全部空闲”）");
+                DrawEmpty(g, Off(new Rectangle(m.RightX, 40, m.RightW, 30), ox, oy), "无备用目标（预留点已用完可切“全部空闲”）");
 
             // 连线画在节点下层（先画线后画节点，横穿时不断字；选中红线照样从节点边缘露出）
             // 两端节点必须同时可见才画；被筛选掉的不画，宿主窗列表兜底。
@@ -523,7 +548,7 @@ namespace AgingTestSystem.Controls
                 bool selected = (map.SourceRegister + ":" + map.SourceChannel == _selMapSrcKey)
                     && (map.TargetRegister + ":" + map.TargetChannel == _selMapDstKey);
                 bool hovered = (i == _hoverLineIndex);
-                DrawLink(g, s.Bounds, t.Bounds, selected, hovered);
+                DrawLink(g, Off(s.Bounds, ox, oy), Off(t.Bounds, ox, oy), selected, hovered);
             }
 
             // 预连线（源已选 + 悬停在目标上：灰色虚线"预告"点下去会连到哪）
@@ -536,46 +561,51 @@ namespace AgingTestSystem.Controls
                     using (var pen = new Pen(Color.Gray, 1.5f))
                     {
                         pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash;
-                        DrawBezier(g, pen, s.Bounds, _hoverRow.Bounds);
+                        DrawBezier(g, pen, Off(s.Bounds, ox, oy), Off(_hoverRow.Bounds, ox, oy));
                     }
                 }
             }
 
             foreach (var r in _srcRows)
             {
-                if (r.Bounds.IntersectsWith(vClip)) DrawRow(g, r, true);
+                if (r.Bounds.IntersectsWith(vClip)) DrawRow(g, r, Off(r.Bounds, ox, oy), true);
             }
             foreach (var r in _tgtRows)
             {
-                if (r.Bounds.IntersectsWith(vClip)) DrawRow(g, r, false);
+                if (r.Bounds.IntersectsWith(vClip)) DrawRow(g, r, Off(r.Bounds, ox, oy), false);
             }
         }
 
-        private void DrawHead(Graphics g, Metrics m, int x, int w, string text)
+        /// <summary>虚拟矩形 → 设备矩形（加滚动偏移；Paint 里所有绘制都走这里，不碰变换矩阵）</summary>
+        private static Rectangle Off(Rectangle virtualRect, int ox, int oy)
         {
-            var rc = new Rectangle(x, m.Margin, w, m.HeadH - m.Margin);
+            virtualRect.Offset(ox, oy);
+            return virtualRect;
+        }
+
+        private void DrawHead(Graphics g, Rectangle dev, string text)
+        {
             using (var bg = new SolidBrush(Color.FromArgb(237, 243, 253)))
-                g.FillRectangle(bg, rc);
-            TextRenderer.DrawText(g, text, _fontHead, rc,
+                g.FillRectangle(bg, dev);
+            TextRenderer.DrawText(g, text, _fontHead, dev,
                 Color.FromArgb(30, 80, 160),
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
         }
 
-        private void DrawEmpty(Graphics g, int x, int w, string text)
+        private void DrawEmpty(Graphics g, Rectangle dev, string text)
         {
-            var rc = new Rectangle(x, 40, w, 30);
-            TextRenderer.DrawText(g, text, _fontNode, rc, Color.Gray,
+            TextRenderer.DrawText(g, text, _fontNode, dev, Color.Gray,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
         }
 
-        /// <summary>画一行（分组条 / 端点节点，徽标规则见类头注释）</summary>
-        private void DrawRow(Graphics g, Row r, bool isSource)
+        /// <summary>画一行（分组条 / 端点节点，徽标规则见类头注释；bounds 已是设备坐标）</summary>
+        private void DrawRow(Graphics g, Row r, Rectangle dev, bool isSource)
         {
             if (r.IsHeader)
             {
                 using (var bg = new SolidBrush(Color.FromArgb(245, 245, 245)))
-                    g.FillRectangle(bg, r.Bounds);
-                TextRenderer.DrawText(g, r.HeaderText, _fontHead, r.Bounds, Color.DimGray,
+                    g.FillRectangle(bg, dev);
+                TextRenderer.DrawText(g, r.HeaderText, _fontHead, dev, Color.DimGray,
                     TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
                 return;
             }
@@ -584,7 +614,8 @@ namespace AgingTestSystem.Controls
             string key = e.Key;
             bool selected = isSource ? (key == _selSrcKey) : (key == _selTgtKey);
             bool hovered = (r == _hoverRow);
-            string badge = isSource ? SourceBadge(e) : TargetBadge(e);
+            // 徽标布局态已算好（r.Badge），Paint 不扫映射表、不拼串
+            string badge = r.Badge;
 
             Color fill = Color.White;
             Color border = Color.FromArgb(180, 180, 180);
@@ -593,15 +624,15 @@ namespace AgingTestSystem.Controls
             if (selected) { fill = Color.FromArgb(232, 241, 255); border = Color.FromArgb(48, 112, 238); }
 
             using (var bg = new SolidBrush(fill))
-                g.FillRectangle(bg, r.Bounds);
+                g.FillRectangle(bg, dev);
             float bw = (selected || hovered) ? 2f : 1f;
             Color bc = hovered ? Color.FromArgb(48, 112, 238) : border;
             using (var pen = new Pen(bc, bw))
-                g.DrawRectangle(pen, r.Bounds);
+                g.DrawRectangle(pen, dev);
 
             // 正文左对齐，徽标右对齐（徽标 null 就是空闲端点，不画；
             // 正文是布局态截好的 MainText，绘制宽度必进框，不会压徽标/出框）
-            var textRc = new Rectangle(r.Bounds.X + 6, r.Bounds.Y, r.Bounds.Width - 12, r.Bounds.Height);
+            var textRc = new Rectangle(dev.X + 6, dev.Y, dev.Width - 12, dev.Height);
             Color tc = (isSource && badge != null) ? Color.FromArgb(120, 80, 10) : Color.FromArgb(48, 48, 48);
             TextRenderer.DrawText(g, r.MainText ?? e.DisplayText, _fontNode, textRc, tc,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
@@ -865,6 +896,12 @@ namespace AgingTestSystem.Controls
         /// <summary>连线命中（采样贝塞尔 24 段折线，点到折线距离 &lt;5px 即中）</summary>
         private int HitLine(Point v)
         {
+            if (_mappings.Count == 0) return -1;
+            // 快拒：连线只活在两列之间的竖带里（节点上的点击早被 HitRow 吃掉，
+            // 左右列内部的空白点进来直接返回，不做 24 段采样；鼠标划过左列空白区最受益）
+            int x0 = _metrics.LeftX + _metrics.LeftW - 12;
+            int x1 = _metrics.RightX + 12;
+            if (v.X < x0 || v.X > x1) return -1;
             for (int i = 0; i < _mappings.Count; i++)
             {
                 var map = _mappings[i];
