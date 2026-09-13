@@ -21,6 +21,7 @@
 //   12e. ProcessPolicyV170          —— 流程图静态文本 + 布局存取（纯函数，零 UI）
 //   12f. PowerReportV174          —— 电流骨架(Mock/桩/接线/规则变量) + 报表列 + 显示字典
 //   12g. LicenseV183              —— 授权签名验签 + 四道关 + 试用双记（隔离目录+隔离注册表+运行时测试密钥）
+//   12h. PolicyPresetV185          —— 预置策略 A/B/C（套用/探测纯函数 + 名单/口径/安全锁 + UI 预置行回显）
 //
 //  【怎么跑】
 //  不直接运行本文件。用本 skill 目录 scripts\run_unit_tests.ps1：
@@ -199,6 +200,7 @@ namespace AgingTestSystem.Tests
                 { "DesignerStabilityV172_16", DesignerStabilityV172_16Tests },
                 { "PowerReportV174", PowerReportV174Tests },
                 { "LicenseV183", LicenseTests },
+                { "PolicyPresetV185", PolicyPresetTests },
             };
 
             // 参数约定：无参=全量；"模块A,模块B"=子集（大小写不敏感）；
@@ -6031,6 +6033,245 @@ namespace AgingTestSystem.Tests
                 Check("字典全空拦截",
                     (bool)miValidate.Invoke(null, new object[] { "DisplayModes", " , ", null }) == false);
             }
+        }
+
+        // 12h. PolicyPresetV185 —— 预置策略 A/B/C（一键套用，V1.85 新增）
+        private static void PolicyPresetTests()
+        {
+            // —— 名单与规模锁 ——
+            Check("预置3个且试用顺序A/B/C",
+                PolicyPresets.All.Count == 3
+                && PolicyPresets.All[0].Id == "A"
+                && PolicyPresets.All[1].Id == "B"
+                && PolicyPresets.All[2].Id == "C");
+            Check("管辖12个行为开关", PolicyPresets.GovernedKeys.Count == 12);
+            bool governedInKeys = true;
+            foreach (string k in PolicyPresets.GovernedKeys)
+            {
+                if (!ProjectPolicyStore.PolicyKeys.Contains(k)) { governedInKeys = false; break; }
+            }
+            Check("管辖全是PolicyKeys成员（跟项目走Policy.json）", governedInKeys);
+            bool labelsOk = true;
+            foreach (string k in PolicyPresets.GovernedKeys)
+            {
+                string lbl;
+                if (!PolicyPresets.KeyLabels.TryGetValue(k, out lbl)
+                    || string.IsNullOrWhiteSpace(lbl)) { labelsOk = false; break; }
+            }
+            Check("管辖开关中文名齐（确认框列差异项用）", labelsOk);
+            bool fullSet = true;
+            foreach (var p in PolicyPresets.All)
+            {
+                if (p.Values == null || p.Values.Count != PolicyPresets.GovernedKeys.Count) { fullSet = false; break; }
+                foreach (string k in PolicyPresets.GovernedKeys)
+                {
+                    if (!p.Values.ContainsKey(k)) { fullSet = false; break; }
+                }
+                if (!fullSet) break;
+            }
+            Check("每预置都是完整12项集合（切预置不残留）", fullSet);
+            bool metaOk = true;
+            foreach (var p in PolicyPresets.All)
+            {
+                if (string.IsNullOrWhiteSpace(p.Title) || string.IsNullOrWhiteSpace(p.Scenario)
+                    || string.IsNullOrWhiteSpace(p.HowToSwitch)) { metaOk = false; break; }
+            }
+            Check("预置标题/场景/换挡指引非空（UI直读，不另写文案）", metaOk);
+
+            // —— 预置值与保存口径一致（存得进去） ——
+            bool parseOk = true;
+            string parseBad = "";
+            foreach (var p in PolicyPresets.All)
+            {
+                foreach (var kv in p.Values)
+                {
+                    var prop = typeof(DeviceConfig).GetProperty(kv.Key);
+                    if (prop == null
+                        || ProjectPolicyStore.ParseValue(prop.PropertyType, kv.Value) == null)
+                    {
+                        parseOk = false;
+                        parseBad = p.Id + ":" + kv.Key + "=" + kv.Value;
+                        break;
+                    }
+                }
+                if (!parseOk) break;
+            }
+            Check("预置值全部可解析（与PersistChanges同口径）", parseOk, parseBad);
+            bool enumOptOk = true;
+            foreach (var p in PolicyPresets.All)
+            {
+                foreach (var kv in p.Values)
+                {
+                    var prop = typeof(DeviceConfig).GetProperty(kv.Key);
+                    if (prop == null || !prop.PropertyType.IsEnum) continue;
+                    Tuple<string, string>[] opts;
+                    if (!ProjectPolicyStore.EnumOptions.TryGetValue(kv.Key, out opts)) { enumOptOk = false; break; }
+                    bool hit = false;
+                    foreach (var o in opts)
+                    {
+                        if (string.Equals(o.Item2, kv.Value, StringComparison.OrdinalIgnoreCase)) { hit = true; break; }
+                    }
+                    if (!hit) { enumOptOk = false; break; }
+                }
+                if (!enumOptOk) break;
+            }
+            Check("枚举预置值全在下拉选项里（节点编辑器显示得出来）", enumOptOk);
+
+            // —— 套用/探测往返 ——
+            bool roundOk = true;
+            foreach (var p in PolicyPresets.All)
+            {
+                var cfg = new DeviceConfig();
+                if (PolicyPresets.ApplyToConfig(cfg, p.Id) != null
+                    || !string.Equals(PolicyPresets.DetectPreset(cfg), p.Id, StringComparison.Ordinal))
+                {
+                    roundOk = false;
+                    break;
+                }
+            }
+            Check("A/B/C套用后探测回原预置", roundOk);
+            Check("缺省配置=自定义（预置是刻意偏离现状，不是现状本身）",
+                PolicyPresets.DetectPreset(new DeviceConfig()) == PolicyPresets.CustomId);
+            var cfgA = new DeviceConfig();
+            PolicyPresets.ApplyToConfig(cfgA, "A");
+            cfgA.CompletionAction = CompletionAction.PowerOffOnly;
+            Check("改一项即自定义（探测是全对上才算）",
+                PolicyPresets.DetectPreset(cfgA) == PolicyPresets.CustomId);
+            Check("null配置探测=自定义不抛",
+                PolicyPresets.DetectPreset(null) == PolicyPresets.CustomId);
+            Check("未知预置找不到", PolicyPresets.Find("Z") == null);
+            Check("未知预置取值null", PolicyPresets.GetPresetValues("Z") == null);
+            Check("未知预置套用报错不抛",
+                PolicyPresets.ApplyToConfig(new DeviceConfig(), "Z") != null);
+            Check("null配置套用报错不抛",
+                PolicyPresets.ApplyToConfig(null, "A") != null);
+            var valsA1 = PolicyPresets.GetPresetValues("A");
+            var valsA2 = PolicyPresets.GetPresetValues("A");
+            valsA1["SkipVacuum"] = "true";
+            Check("取值返回副本（改返回不污染预置本身）",
+                PolicyPresets.GetPresetValues("A")["SkipVacuum"] == "false"
+                && valsA2["SkipVacuum"] == "false");
+
+            // —— 本机无阀/单探头炉的安全锁 ——
+            bool noVent = true;
+            bool noSkip = true;
+            foreach (var p in PolicyPresets.All)
+            {
+                string act = p.Values["CompletionAction"];
+                if (string.Equals(act, "PowerOffAndVent", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(act, "PowerOffVentAndBeep", StringComparison.OrdinalIgnoreCase))
+                {
+                    noVent = false;
+                }
+                if (!string.Equals(p.Values["SkipVacuum"], "false", StringComparison.OrdinalIgnoreCase))
+                {
+                    noSkip = false;
+                }
+            }
+            Check("三预置全不选泄压（本机无破空阀，选了保存即拦）", noVent);
+            Check("三预置全不跳抽真空（真空治具永不跳过）", noSkip);
+            Check("A/B超温联停关（零门槛直接套）",
+                PolicyPresets.Find("A").Values["FanTempShutdownEnabled"] == "false"
+                && PolicyPresets.Find("B").Values["FanTempShutdownEnabled"] == "false");
+            Check("C超温联停开（单探头炉最后一道闸）",
+                PolicyPresets.Find("C").Values["FanTempShutdownEnabled"] == "true");
+            Check("C在本机上限0时组合校验拦（逼人先填上限，fail-safe）",
+                AgingSequencer.ValidatePolicyCombination(
+                    true, 0f, CompletionAction.PowerOffAndBeep, 0, false) != null);
+            Check("C在上限60时组合校验过",
+                AgingSequencer.ValidatePolicyCombination(
+                    true, 60f, CompletionAction.PowerOffAndBeep, 0, false) == null);
+            Check("A零门槛组合校验过（上电/风机/阀全默认）",
+                AgingSequencer.ValidatePolicyCombination(
+                    false, 0f, CompletionAction.PowerOffAndBeep, 0, false) == null);
+
+            // —— 序列化口径 ——
+            Check("布尔存小写",
+                PolicyPresets.ToStorageString(true) == "true"
+                && PolicyPresets.ToStorageString(false) == "false");
+            Check("枚举存英文名",
+                PolicyPresets.ToStorageString(ZeroDurationPolicy.Block) == "Block");
+            Check("null存空串", PolicyPresets.ToStorageString(null) == "");
+
+            // —— UI预置行（构造不断言弹窗，反射探针；注意 Sunny 下拉/按钮不是原生
+            // ComboBox/Button 子类，一律按 Control + 反射读 Items/SelectedIndex，
+            // 直接 as 原生类型会静默 null 造成假红，V1.85 实锤） ——
+            ProcessPolicyForm bare = null;
+            try
+            {
+                bare = new ProcessPolicyForm();
+                var t = typeof(ProcessPolicyForm);
+                object fCbo = t.GetField("_cboPreset",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(bare);
+                object fBtn = t.GetField("_btnApplyPreset",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(bare);
+                var desc = t.GetField("_lblPresetDesc",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(bare) as Control;
+                var title = t.GetField("_lblPresetTitle",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(bare) as Control;
+                Check("预置行4件全建好",
+                    fCbo != null && fBtn != null && desc != null && title != null);
+                var items = fCbo != null
+                    ? fCbo.GetType().GetProperty("Items").GetValue(fCbo, null)
+                        as System.Collections.IList
+                    : null;
+                Check("预置下拉4项（A/B/C/自定义）",
+                    items != null && items.Count == 4);
+                int selIdx = fCbo != null
+                    ? (int)fCbo.GetType().GetProperty("SelectedIndex").GetValue(fCbo, null)
+                    : -1;
+                Check("无参构造回显自定义且整行禁用（只读安全）",
+                    selIdx == 3
+                    && !((Control)fCbo).Enabled && !((Control)fBtn).Enabled
+                    && !string.IsNullOrWhiteSpace(desc.Text));
+            }
+            finally { try { if (bare != null) bare.Dispose(); } catch { } }
+            ProcessPolicyForm full = null;
+            try
+            {
+                var cfgFull = new DeviceConfig();
+                PolicyPresets.ApplyToConfig(cfgFull, "B");
+                full = new ProcessPolicyForm(cfgFull, null, true);
+                var t = typeof(ProcessPolicyForm);
+                object fCbo = t.GetField("_cboPreset",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(full);
+                object fBtn = t.GetField("_btnApplyPreset",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(full);
+                var desc = t.GetField("_lblPresetDesc",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(full) as Control;
+                int selIdx = (int)fCbo.GetType().GetProperty("SelectedIndex").GetValue(fCbo, null);
+                Check("B配置打开回显选中B", selIdx == 1);
+                Check("管理员模式预置行可用",
+                    ((Control)fCbo).Enabled && ((Control)fBtn).Enabled);
+                Check("说明行显示B场景",
+                    desc != null && desc.Text.Contains("调试"));
+                Check("下拉列表拉宽防截断（看全选项）",
+                    (int)fCbo.GetType().GetProperty("DropDownWidth").GetValue(fCbo, null) >= 300);
+                object fTip = t.GetField("_presetTip",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(full);
+                string tipText = "";
+                if (fTip != null)
+                {
+                    tipText = (string)fTip.GetType().GetMethod("GetToolTip",
+                        new Type[] { typeof(Control) }).Invoke(fTip, new object[] { (Control)fCbo });
+                }
+                Check("悬停提示存在且含B全标题（闭合框看全文）",
+                    !string.IsNullOrWhiteSpace(tipText) && tipText.Contains("宽松试产"));
+                // 释放配对（R2：无容器托管的提示必须手写释放，字段归 null 即证据；
+                // 未 Show 的窗 Close 语义各版本不一，抛了就走 Dispose，两种路都进重写）
+                try { ((Form)full).Close(); }
+                catch { try { full.Dispose(); } catch { } }
+                bool tipGone = true;
+                try
+                {
+                    var tipNow = t.GetField("_presetTip",
+                        BindingFlags.NonPublic | BindingFlags.Instance).GetValue(full);
+                    tipGone = (tipNow == null);
+                }
+                catch { tipGone = false; }
+                Check("关窗后悬停提示已释放（不进终结器）", tipGone);
+            }
+            finally { try { if (full != null) full.Dispose(); } catch { } }
         }
 
     }
