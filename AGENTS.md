@@ -34,6 +34,7 @@
   - `StopBits` 存字符串 `1` / `15`（=1.5）/ `2`；校验位 `Parity` 存标准枚举名 `None`/`Odd`/`Even`/`Mark`/`Space`。读写两端大小写兼容（ModbusRtu 用 `Enum.TryParse(…, true)`，ScannerService 用 `ToLowerInvariant()` 匹配）。
   - 备用通道号只认 `0x00`~`0x0F`（单个寄存器 16 个 bit；V1.62 血泪：文档曾写 0x1F，0x10+ 在执行侧静默失效）。解析层直接拒绝 0x10+ 并进 error；编辑弹窗微调框最大值同步 0x0F；执行侧 `MapOutputChannel` 对非法目标保持原通道（绝不写坏掩码）。
   - **可视化端口映射三层分工（V1.81）**：`IoRemapValidator`（新建拦截唯一口：源唯一/目标独占/自环/越界 + 唯一序列化口 `Serialize`，与 `ParseAll` 互逆）+ `IoRemapCatalog`（点位池唯一口：源=全部输出/目标=预留或全空闲，点位来自 `IoMapBuilder` 不手写）+ `IoRemapGraphControl`/`IoRemapVisualForm`（只管画与选，不管落盘；实时/草稿两种提交由调用方定）。新增映射入口（右键/表格/连线）只调这三层，不各写一份规则；目标独占只拦新建，老配置多源同目标照常加载执行。
+  - **自绘画布三不（V1.81.2~3 血泪）**：①不用 `DoubleBuffered`（逼全部 `TextRenderer` 走离屏慢路径，每处 2.2ms，见上性能红线）——直画屏幕 DC + 禁默认擦除 + 按裁剪自填底；②`TextRenderer` 下不挂任何变换矩阵（V1.51 栽过 Scale，位移也不赌），滚动偏移手工加到矩形上；③徽标/标题/截断全放布局态预计算，`Paint` 里不量字不扫表不拼串。滚动过的无缓冲画布 `PrintWindow` 会丢 GDI 文字（框在字无），视觉证据走置顶真屏截图。
   - 界面可显示中文/友好文案，但**存到 App.config 的值必须经过归一化映射**（见 `SettingsForm.NormalizeParity` / `NormalizeStopBits`），禁止把非规范字符写进配置。
 - 配置项编辑控件统一在 `SettingsForm.CreateValueCell` 按 key 分发（布尔/串口/波特率/数据位/停止位/校验位/数字/文本）。新增串口类配置项时，**气压表与扫码枪两套 key（如 `PortName`+`ScannerPort`）都要覆盖**，共用同一套映射逻辑。
 - **新增 App.config 配置项五处同步（V1.66 血泪）**：`DeviceConfig` 属性 + `App.config` key（含中文注释）+
@@ -182,6 +183,11 @@
   三 popup 的 FormClosed 只回写不释放就是第二案发现场——handler 里
   `finally { popup.Dispose(); }`，用例走生产挂接（反射 ShowXxxPopup→OpenForms 找窗→
   Close→IsDisposed），裸 Show/Close 是恒绿假绿。
+  **失焦自杀弹窗开模态子窗（V1.81.1 血泪）**："失焦即关"的无边框 popup（`OnDeactivate→Close`）
+  若用 `ShowDialog(this)` 开模态子窗，子窗激活瞬间父弹窗失焦自杀，Windows 连带销毁 owned
+  的子窗——现象是"点了进不去"，无异常无日志。开子窗前后 `try/finally` 置 `_visualOpen` 守卫，
+  `OnDeactivate` 首行 `if (_closing || _visualOpen) return;`；用例反射直调 `OnDeactivate`
+  （设旗/不设旗各一次），不用真 Show 真弹窗。
   **关窗竞态同罪（V1.72.14）**：窗体释放路径对（FormClosed→Dispose）仍会炸——后台拍在
   关窗前后脚 `Invoke/BeginInvoke` 进已销毁句柄，或排队回调关后执行直碰已释放 label/txt。
   "关 A 开 B 必炸"是关 A 尾巴被开 B 的 GC 赶出来。对策：非模态测试窗一律 `_closed`

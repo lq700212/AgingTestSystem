@@ -415,6 +415,20 @@ namespace AgingTestSystem.Dialogs
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
+            // 【V1.81.3】窗体限工作区：1020×720 在 100% 下刚好，125%/150% 下 AutoScale 放大后
+            // 可能超出小屏工控机（1366×768），按钮够不着、画布被压扁——看着也像"布局坏了"。
+            // 画布内部自带滚动，窗体缩了不丢内容，只收客户区。
+            try
+            {
+                var work = Screen.FromControl(this).WorkingArea;
+                int w = Math.Min(ClientSize.Width, work.Width - 40);
+                int h = Math.Min(ClientSize.Height, work.Height - 60);
+                w = Math.Max(w, 860);
+                h = Math.Max(h, 600);
+                if (w != ClientSize.Width || h != ClientSize.Height)
+                    ClientSize = new Size(w, h);
+            }
+            catch { }
             ApplyPendingPreselect();
         }
 
