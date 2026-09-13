@@ -153,16 +153,17 @@ namespace AgingTestSystem.Services
         /// <summary>真值：非零且非 NaN。</summary>
         public static bool ToBool(double v) { return v != 0.0 && !double.IsNaN(v); }
 
+        /// <summary>单条表达式长度上限（防手贴超长文本卡死解析；正常规则几十字符）。</summary>
+        public const int MaxExprLength = 2000;
+
+        /// <summary>嵌套深度上限（括号/连写一元符共用计数器；
+        /// 防 5000 层括号或 2000 连写 !/- 递归 StackOverflow 杀进程，不可捕获）。</summary>
+        public const int MaxNestingDepth = 32;
+
         /// <summary>
         /// 解析表达式（空/空白 → error"表达式为空"，空=禁用由调用方判断，这里只管语法）。
         /// </summary>
         /// <param name="text">表达式文本</param>
-        /// <summary>单条表达式长度上限（防手贴超长文本卡死解析；正常规则几十字符）。</summary>
-        public const int MaxExprLength = 2000;
-
-        /// <summary>括号嵌套深度上限（防 5000 层括号 StackOverflow 杀进程，不可捕获）。</summary>
-        public const int MaxNestingDepth = 32;
-
         /// <param name="expr">编译结果（失败为 null）</param>
         /// <param name="error">错误描述（带字符位置；成功为 null）</param>
         /// <param name="strictVars">true=未知变量直接报错（保存/校验路径用，死规则当场拦）；
@@ -266,26 +267,20 @@ namespace AgingTestSystem.Services
                 return Pos < _s.Length ? _s[Pos] : '\0';
             }
 
+            // 【深度计数口径】只在"真递归"处 +1：括号分支（见 ParsePrimary）与
+            // 连写一元符分支（见 ParseUnary）；ParseOr 本体不计数（顶层调一次，
+            // 平坦长表达式零消耗，预算全留给真嵌套）。
             public Node ParseOr(ref string error)
             {
-                if (++_depth > MaxNestingDepth)
+                Node l = ParseAnd(ref error);
+                if (error != null) return null;
+                while (true)
                 {
-                    error = "括号嵌套过深（上限" + MaxNestingDepth + "层）";
-                    return null;
+                    if (Match("||")) { Node r = ParseAnd(ref error); if (error != null) return null; l = new BinaryNode("||", l, r); }
+                    else if (Peek() == '|') { error = "第" + (Pos + 1) + "字符：单 | 非法，请用 ||"; return null; }
+                    else break;
                 }
-                try
-                {
-                    Node l = ParseAnd(ref error);
-                    if (error != null) return null;
-                    while (true)
-                    {
-                        if (Match("||")) { Node r = ParseAnd(ref error); if (error != null) return null; l = new BinaryNode("||", l, r); }
-                        else if (Peek() == '|') { error = "第" + (Pos + 1) + "字符：单 | 非法，请用 ||"; return null; }
-                        else break;
-                    }
-                    return l;
-                }
-                finally { _depth--; }
+                return l;
             }
 
             private Node ParseAnd(ref string error)
@@ -358,9 +353,28 @@ namespace AgingTestSystem.Services
 
             private Node ParseUnary(ref string error)
             {
+                if (Peek() == '!' || Peek() == '-')
+                {
+                    // 连写一元符真递归才计数（平坦路过不消耗预算，见 ParseOr 注释）。
+                    if (++_depth > MaxNestingDepth)
+                    {
+                        error = "嵌套过深（上限 " + MaxNestingDepth + " 层）";
+                        return null;
+                    }
+                    try
+                    {
+                        return ParseUnaryOp(ref error);
+                    }
+                    finally { _depth--; }
+                }
+                // 注意：单目 + 不支持（"+5" 报错，逼着写干净；减号够用了）
+                return ParsePrimary(ref error);
+            }
+
+            private Node ParseUnaryOp(ref string error)
+            {
                 if (Match("!")) { Node e = ParseUnary(ref error); if (error != null) return null; return new UnaryNode('!', e); }
                 if (Match("-")) { Node e = ParseUnary(ref error); if (error != null) return null; return new UnaryNode('-', e); }
-                // 注意：单目 + 不支持（"+5" 报错，逼着写干净；减号够用了）
                 return ParsePrimary(ref error);
             }
 
@@ -375,17 +389,27 @@ namespace AgingTestSystem.Services
                 char c = _s[Pos];
                 if (c == '(')
                 {
-                    Pos++;
-                    Node e = ParseOr(ref error);
-                    if (error != null) return null;
-                    SkipSpaces();
-                    if (Pos >= _s.Length || _s[Pos] != ')')
+                    // 括号真递归才计数（预算口径见 ParseOr 注释）。
+                    if (++_depth > MaxNestingDepth)
                     {
-                        error = "第" + (Pos + 1) + "字符：括号未闭合";
+                        error = "括号嵌套过深（上限" + MaxNestingDepth + "层）";
                         return null;
                     }
-                    Pos++;
-                    return e;
+                    try
+                    {
+                        Pos++;
+                        Node e = ParseOr(ref error);
+                        if (error != null) return null;
+                        SkipSpaces();
+                        if (Pos >= _s.Length || _s[Pos] != ')')
+                        {
+                            error = "第" + (Pos + 1) + "字符：括号未闭合";
+                            return null;
+                        }
+                        Pos++;
+                        return e;
+                    }
+                    finally { _depth--; }
                 }
                 if (char.IsDigit(c) || c == '.')
                 {

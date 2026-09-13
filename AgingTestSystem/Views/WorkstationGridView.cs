@@ -1319,7 +1319,9 @@ namespace AgingTestSystem.Views
         {
             row = -1;
             // 【大扫荡】补右界：以前按钮列右侧空白也命中整行翻选；
-            // 右界=绘制右界（左界+列宽，含 2px 视觉容差，与 TryHitPanel 左界口径一致）。
+            // 右界=绘制右界（左界+列宽；绘制宽=列宽-4，命中比绘制宽 2px，
+            // 点到按钮右边缝也算——按钮列已是控件最右缘，无他物不误触；
+            // 与 TryHitPanel 同为严格右界口径，不含容差）。
             int left = Scaled(_columns * _layout.PanelColumnWidth);
             int right = left + Scaled(_layout.RowSelectButtonColumnWidth);
             if (p.X < left || p.X >= right

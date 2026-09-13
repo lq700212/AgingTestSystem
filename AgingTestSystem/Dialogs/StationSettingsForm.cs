@@ -569,7 +569,6 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// <summary>
         /// 把当前窗口的配方（名称 / 延时 / 极限温度 / 负压阈值 / 显示模式）保存到本地配方列表。
         /// 有同名配方时本窗弹窗问是否覆盖（确认才覆盖，取消则不存）。
         /// </summary>
@@ -598,7 +597,12 @@ namespace AgingTestSystem.Dialogs
                     MessageBoxIcon.Question);
                 if (confirm != DialogResult.OK) return;
             }
-            RecipeStorage.SaveRecipe(_recipes, recipe, true);
+            // 【复查补齐】落盘失败必须明示：以前返回值直接丢，盘没写上用户还以为存好了。
+            if (!RecipeStorage.SaveRecipe(_recipes, recipe, true))
+            {
+                MessageBox.Show($"配方 \"{recipe.Name}\" 保存失败（落盘异常），请检查磁盘后重试。",
+                    "保存失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         /// <summary>

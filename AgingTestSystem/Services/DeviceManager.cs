@@ -477,6 +477,13 @@ namespace AgingTestSystem.Services
                 _sessionRecipe = new string[n];
                 _sessionSkipVacuum = new bool[n];
             }
+            // 【复查补齐】工位静态信息（SN/配方/延时绑定）同步清：新项目旧绑定无意义，
+            // 以前缩工位数后 GetStationInfo(50) 还吐旧项目的残留，回显串项目。
+            // 单独持 _stationInfoLock（不与 _stateLock 嵌套，锁顺序零风险）。
+            lock (_stationInfoLock)
+            {
+                _stationInfo.Clear();
+            }
             lock (_cacheLock)
             {
                 _barometerDataCache.Clear();
@@ -2538,16 +2545,36 @@ namespace AgingTestSystem.Services
             }
 
             // 停止送风机（急停时也停）
+            // 【复查补齐】风机停失败不能跳过快照清理+急停记账：以前 Stop() 一抛，
+            // 后面 Clear/记事件全跳过——下次启动问"恢复"已被急停的任务。
+            // 现在记账照做，异常仍抛给 UI（"没停掉"看得见）。
+            Exception fanStopError = null;
             if (_fanController != null)
             {
                 _fanRunning = false;
-                _fanController.Stop();
+                try
+                {
+                    _fanController.Stop();
+                }
+                catch (Exception ex)
+                {
+                    fanStopError = ex;
+                }
             }
 
             // 急停 = 放弃全部在测任务：删除快照，下次启动不再询问恢复
             TestSessionStore.Clear();
 
-            TestEventLogger.Write(_currentLotNumber, 0, "急停", "全部停止（关闭所有阀与载台电）");
+            TestEventLogger.Write(_currentLotNumber, 0, "急停",
+                fanStopError == null
+                    ? "全部停止（关闭所有阀与载台电）"
+                    : $"全部停止（关闭所有阀与载台电；送风机停止失败：{fanStopError.Message}，请检查后重试）");
+            // 原堆栈重抛（throw ex 会抹堆栈，DispatchInfo 保现场，排障看得见真源头）
+            if (fanStopError != null)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo
+                    .Capture(fanStopError).Throw();
+            }
         }
 
         /// <summary>
@@ -3303,13 +3330,24 @@ namespace AgingTestSystem.Services
                 // 触发批量数据更新事件（一次采集只触发一次）
                 // 【大扫荡】订阅方异常独立隔离：以前在采集大 try 内，UI 订阅者 bug
                 // 被吞且误记成"数据采集失败"，界面失败无声。订阅异常只记订阅的账。
-                try
+                // 【复查补齐】逐订阅者隔离：多播 Invoke 遇第一个抛异常即中断，
+                // 后面的订阅者收不到（坏订阅拖累好订阅）。逐个调、逐个吞。
+                var batchHandler = OnBatchDataUpdated;
+                if (batchHandler != null)
                 {
-                    OnBatchDataUpdated?.Invoke(this, broadcastData);
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[采集] 界面刷新订阅异常（非采集故障）: {ex.Message}");
+                    foreach (EventHandler<BarometerData[]> single
+                        in batchHandler.GetInvocationList())
+                    {
+                        try
+                        {
+                            single(this, broadcastData);
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine(
+                                $"[采集] 界面刷新订阅异常（非采集故障）: {ex.Message}");
+                        }
+                    }
                 }
             }
             catch (Exception ex)

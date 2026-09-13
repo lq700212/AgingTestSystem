@@ -519,8 +519,11 @@ namespace AgingTestSystem.Services
 
             string oldName = target.Username;
             target.Username = trimmed;
-            // 改的是当前登录账号：同步当前会话名（否则会话还叫旧名）
-            if (_currentUser != null && string.Equals(_currentUser.Username, oldName,
+            // 改的是当前登录账号：同步当前会话名（否则会话还叫旧名）。
+            // 【复查补齐】身份=角色+用户名：同名可跨角色并存（如操作员"x"与管理员"x"），
+            // 只比名会把同名异角色的会话一起改掉。
+            if (_currentUser != null && _currentUser.Role == target.Role
+                && string.Equals(_currentUser.Username, oldName,
                 StringComparison.OrdinalIgnoreCase))
             {
                 _currentUser.Username = trimmed;
@@ -647,8 +650,9 @@ namespace AgingTestSystem.Services
 
             // 存哈希，明文不落盘
             target.Password = PasswordHasher.Hash(newPassword);
-            // 改的是当前登录账号：同步会话副本
-            if (_currentUser != null && string.Equals(_currentUser.Username, target.Username,
+            // 改的是当前登录账号：同步会话副本（身份=角色+用户名，防同名异角色串会话）
+            if (_currentUser != null && _currentUser.Role == target.Role
+                && string.Equals(_currentUser.Username, target.Username,
                 StringComparison.OrdinalIgnoreCase))
             {
                 _currentUser.Password = target.Password;
@@ -832,7 +836,9 @@ namespace AgingTestSystem.Services
 
             // 若删除的是当前登录账号，恢复为未登录状态
             // 【大扫荡】按用户名比对（CurrentUser 是副本，ReferenceEquals 永假）。
-            if (_currentUser != null && string.Equals(_currentUser.Username, target.Username,
+            // 【复查补齐】身份=角色+用户名：删操作员"x"不该把同名的管理员会话踢下线。
+            if (_currentUser != null && _currentUser.Role == role
+                && string.Equals(_currentUser.Username, target.Username,
                 StringComparison.OrdinalIgnoreCase))
             {
                 _currentUser = null;
