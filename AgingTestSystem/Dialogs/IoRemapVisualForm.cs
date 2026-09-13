@@ -37,8 +37,12 @@ namespace AgingTestSystem.Dialogs
     ///
     /// 【纯代码窗三要素】AutoScaleDimensions(6,12) + SuspendLayout 包裹 + 无参构造
     /// （设计器预览用，空快照占位；保存键加 null 守卫，见 OnSave）。
+    ///
+    /// 【滚轮缩放】本窗实现 IMessageFilter（抄 ProcessPolicyForm 口径）：
+    /// OnShown 注册、OnFormClosed 摘除；光标悬停在画布上时滚轮=缩放并吞掉消息
+    /// （不用先点画布抢焦点，顶栏改下拉时悬停回来照样缩；清单/下拉上的滚轮不受影响）。
     /// </summary>
-    public class IoRemapVisualForm : UIForm
+    public class IoRemapVisualForm : UIForm, IMessageFilter
     {
         private readonly DeviceConfig _config;
 
@@ -143,6 +147,16 @@ namespace AgingTestSystem.Dialogs
             BuildTop();
             BuildGraph();
             BuildBottom();
+
+            // 【V1.82 Dock 铁律】WinForms 按 z 序从后往前布局 Dock：
+            // 后面的先占边（Top/Bottom），Fill 必须在最前、最后布局，吃剩余区。
+            // Controls.Add 插到最前（新加的最靠前），所以 Fill 必须最后 Add；
+            // 这里三段分开建（Bottom 在 Graph 之后），显式把 _graph 挪到最前兜底——
+            // 以前 BuildGraph/BuildBottom 里各调一次 BringToFront，把画布挤到后面先布局，
+            // 它一把梭占满整个客户区，上下固定面板只是浮盖在上面：滚到两端内容滑进
+            // 面板底下，列头和首尾行永远看不全（用户现场"上下滑动后两端被窗口挡住"）。
+            // 以后往本窗加 Dock 面板：边栏正常 Add，完了再把 _graph BringToFront 一次。
+            _graph.BringToFront();
 
             _tip = new ToolTip();
             _tip.SetToolTip(_chkEnabled, SettingsForm.WrapTooltip("总开关。关闭时下面配的映射全部不生效（读写直通原通道），适合切回正常通道排查。"));
@@ -276,10 +290,8 @@ namespace AgingTestSystem.Dialogs
             _graph.MappingProposed += OnMappingProposed;
             _graph.MappingDeleteRequested += OnMappingDeleteRequested;
             Controls.Add(_graph);
-            // Dock 顺序：后加的 Fill 会盖住先加的 Top？WinForms 按 z 序布局：
-            // Top 先加在下，Fill 后加会占剩余区——正确。Bottom 后加同理。
-            _graph.BringToFront();
-            _pnlTop.BringToFront();
+            // z 序统一在构造末尾摆（见构造里 V1.82 Dock 铁律注释），这里不动，
+            // 否则 Fill 先布局占满全区，上下方面板盖住画布两端。
         }
 
         private void BuildBottom()
@@ -290,7 +302,7 @@ namespace AgingTestSystem.Dialogs
                 Height = 176
             };
             Controls.Add(pnlBottom);
-            pnlBottom.BringToFront();
+            // z 序统一在构造末尾摆（见构造里 V1.82 Dock 铁律注释），这里不动。
 
             _lblMapTitle = new UILabel
             {
@@ -430,6 +442,34 @@ namespace AgingTestSystem.Dialogs
             }
             catch { }
             ApplyPendingPreselect();
+            // 滚轮悬停即缩放（IMessageFilter 预过滤，见类头；关窗摘除，防野回调）
+            try { Application.AddMessageFilter(this); } catch { }
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            try { Application.RemoveMessageFilter(this); } catch { }
+            base.OnFormClosed(e);
+        }
+
+        /// <summary>
+        /// 滚轮消息预过滤：光标在画布上时直接缩放并吞掉消息（清单/下拉的滚轮不受影响）。
+        /// </summary>
+        public bool PreFilterMessage(ref Message m)
+        {
+            const int WM_MOUSEWHEEL = 0x020A;
+            if (m.Msg != WM_MOUSEWHEEL) return false;
+            if (_graph == null || _graph.IsDisposed) return false;
+            try
+            {
+                if (!_graph.RectangleToScreen(_graph.ClientRectangle).Contains(Cursor.Position))
+                    return false;
+                int delta = (short)((m.WParam.ToInt32() >> 16) & 0xFFFF);
+                _graph.ZoomAtCursor(delta > 0 ? 1 : -1);
+                RefreshCounts();   // 缩放百分比显示在计数条，滚一格刷一次
+                return true;
+            }
+            catch { return false; }
         }
 
         private void ApplyPendingPreselect()
@@ -512,8 +552,11 @@ namespace AgingTestSystem.Dialogs
         private void RefreshCounts()
         {
             int hidden = CountHiddenMappings();
-            _lblCount.Text = string.Format("源 {0} · 目标 {1} · 已配 {2}",
-                _allSources.Count, _allTargets.Count, _workMappings.Count);
+            int pct = 100;
+            try { if (_graph != null) pct = (int)Math.Round(_graph.ZoomFactor * 100); }
+            catch { }
+            _lblCount.Text = string.Format("源 {0} · 目标 {1} · 已配 {2} · 缩放 {3}%",
+                _allSources.Count, _allTargets.Count, _workMappings.Count, pct);
             _lblMapTitle.Text = string.Format("已配置映射（{0}）{1}", _workMappings.Count,
                 hidden > 0 ? string.Format(" — 其中 {0} 条被当前筛选藏起（清单照常可删）", hidden) : "");
         }
@@ -554,7 +597,8 @@ namespace AgingTestSystem.Dialogs
             else
             {
                 _lblStatus.Text = "操作：先左键点左侧一个源通道（变蓝），再点右侧一个备用目标完成连线；"
-                    + "点连线可选中，右键可删除。目标独占：一个备用通道只允许接一个源。";
+                    + "点连线可选中，右键可删除。目标独占：一个备用通道只允许接一个源。"
+                    + "滚轮以鼠标为中心缩放，按住中键拖动画布，双击中键复位。";
             }
             _btnDeleteSel.Enabled = (map != null);
         }

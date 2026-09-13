@@ -36,6 +36,19 @@
   - **可视化端口映射三层分工（V1.81）**：`IoRemapValidator`（新建拦截唯一口：源唯一/目标独占/自环/越界 + 唯一序列化口 `Serialize`，与 `ParseAll` 互逆）+ `IoRemapCatalog`（点位池唯一口：源=全部输出/目标=预留或全空闲，点位来自 `IoMapBuilder` 不手写）+ `IoRemapGraphControl`/`IoRemapVisualForm`（只管画与选，不管落盘；实时/草稿两种提交由调用方定）。新增映射入口（右键/表格/连线）只调这三层，不各写一份规则；目标独占只拦新建，老配置多源同目标照常加载执行。
   - **自绘画布三不（V1.81.2~3 血泪）**：①不用 `DoubleBuffered`（逼全部 `TextRenderer` 走离屏慢路径，每处 2.2ms，见上性能红线）——直画屏幕 DC + 禁默认擦除 + 按裁剪自填底；②`TextRenderer` 下不挂任何变换矩阵（V1.51 栽过 Scale，位移也不赌），滚动偏移手工加到矩形上；③徽标/标题/截断全放布局态预计算，`Paint` 里不量字不扫表不拼串。滚动过的无缓冲画布 `PrintWindow` 会丢 GDI 文字（框在字无），视觉证据走置顶真屏截图。
   - **连线裁剪按包围盒判交（V1.81.4 血泪）**：贝塞尔中段穿屏、两端屏外的长线，"两端点判交"会整条裁掉，滚屏后新露出的条带只有白底没有线（平时有线、一滚就断）；改控制点包围盒判交（曲线必在盒内，无漏网），箭头仍只在目标可见时画；细连线开抗锯齿（文字/边框不动）。**通用铁律（下次一步到位）**：裁剪判交的对象是图元的实际覆盖范围，不是定义点——以后画布加任何新图元（线/区/徽标），布局时就把它的包围盒/可见性规则一起定掉；修裁剪类 bug 必须配"两端出屏+中段穿屏"场景用例，并对旧条件做反向验证（精准 FAIL 才算找到病，38号坑）。
+  - **Dock 布局 Fill 必须最后布局（V1.82 血泪）**：WinForms 按 z 序从后往前布局 Dock，
+  后面的先占边（Top/Bottom），`Fill` 必须在 z 序最前、最后布局，吃剩余区；
+  `Controls.Add` 插到最前（新加的最靠前），所以正常顺序 Add 下来 Fill 天然最后。
+  禁在分开建面板的方法里各调一次 `BringToFront`——后建的面板会把 Fill 挤到后面
+  先布局，Fill 一把梭占满整个客户区，边栏只是浮盖在上面：滚到两端内容滑进面板
+  底下，首尾永远看不全（连线页实锤：画布 685 高、本该 405）。
+  往 Dock 窗加面板：边栏正常 Add，完了统一把 Fill `BringToFront()` 一次并写清注释。
+  - **列表画布缩放平移抄 `IoRemapGraphControl`（V1.82）**：缩放并进布局基准
+  （s = DPI × zoom，行列/命中全是 s 的函数，不碰变换矩阵）+ 字体按 zoom 重建
+  （FlowCanvas 口径，下限 6pt）+ 宿主窗 `IMessageFilter` 预过滤滚轮
+  （`OnShown` 注册/`OnFormClosed` 摘除，悬停即缩）；中键拖动走 `AutoScroll`，
+  双击复位自己按 `DoubleClickTime/DoubleClickSize` 在 `MouseDown` 里判定
+  （Panel 双击风格对中键不可靠）；`AutoScrollMinSize` 给完整虚宽（给"超出量"横向出不来）。
   - 界面可显示中文/友好文案，但**存到 App.config 的值必须经过归一化映射**（见 `SettingsForm.NormalizeParity` / `NormalizeStopBits`），禁止把非规范字符写进配置。
 - 配置项编辑控件统一在 `SettingsForm.CreateValueCell` 按 key 分发（布尔/串口/波特率/数据位/停止位/校验位/数字/文本）。新增串口类配置项时，**气压表与扫码枪两套 key（如 `PortName`+`ScannerPort`）都要覆盖**，共用同一套映射逻辑。
 - **新增 App.config 配置项五处同步（V1.66 血泪）**：`DeviceConfig` 属性 + `App.config` key（含中文注释）+

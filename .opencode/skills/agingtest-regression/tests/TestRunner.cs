@@ -894,6 +894,31 @@ namespace AgingTestSystem.Tests
             Check("V181连线水平无交不画", !(bool)mCross.Invoke(null, new object[] {
                 new Rectangle(10, 100, 100, 26), new Rectangle(200, 100, 100, 26),
                 new Rectangle(500, 0, 800, 600) }));
+
+            // ── V1.82 缩放纯函数（反射私静，无句柄可测；步进×1.2，钳制0.5~2.5） ──
+            var mZoomF = typeof(IoRemapGraphControl).GetMethod("ZoomFactorOf",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            var mClamp = typeof(IoRemapGraphControl).GetMethod("ClampZoom",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            var mScroll = typeof(IoRemapGraphControl).GetMethod("ZoomScrollOf",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Check("V182放大一步×1.2",
+                Math.Abs((float)mZoomF.Invoke(null, new object[] { 1f, 1 }) - 1.2f) < 0.001);
+            Check("V182缩小一步÷1.2",
+                Math.Abs((float)mZoomF.Invoke(null, new object[] { 1f, -1 }) - 1f / 1.2f) < 0.001);
+            Check("V182上钳2.5",
+                Math.Abs((float)mZoomF.Invoke(null, new object[] { 2.5f, 1 }) - 2.5f) < 0.001);
+            Check("V182下钳0.5",
+                Math.Abs((float)mZoomF.Invoke(null, new object[] { 0.5f, -1 }) - 0.5f) < 0.001);
+            Check("V182钳制上", Math.Abs((float)mClamp.Invoke(null, new object[] { 10f }) - 2.5f) < 0.001);
+            Check("V182钳制下", Math.Abs((float)mClamp.Invoke(null, new object[] { 0.1f }) - 0.5f) < 0.001);
+            Check("V182钳制内", Math.Abs((float)mClamp.Invoke(null, new object[] { 1.5f }) - 1.5f) < 0.001);
+            Check("V182锚定跟随",
+                (int)mScroll.Invoke(null, new object[] { 100, 200, 1.2 }) == 260);
+            Check("V182锚定零点",
+                (int)mScroll.Invoke(null, new object[] { 0, 0, 0.5 }) == 0);
+            Check("V182锚定不负",
+                (int)mScroll.Invoke(null, new object[] { 10, 0, 0.1 }) == 0);
         }
 
         // =====================================================================
