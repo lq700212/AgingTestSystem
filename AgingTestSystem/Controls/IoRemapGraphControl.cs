@@ -28,7 +28,11 @@ namespace AgingTestSystem.Controls
     ///   2. 选中源后再点右侧目标节点 → 触发 MappingProposed（校验+落盘由宿主窗做，
     ///      本控件不管配置只管画，方便以后嵌到别处）；
     ///   3. 左键点连线 → 选中该映射（变红），右键可"删除此映射"；
-    ///   4. 点空白处 / 重复点已选中源 → 取消选择。
+    ///   4. 点空白处 / 重复点已选中源 → 取消选择；
+    ///   5. 【V1.82】滚轮=以鼠标为中心缩放（0.5~2.5，宿主窗 IMessageFilter 预过滤，
+    ///      悬停即缩不用抢焦点；缩放并进布局基准，字与框同比例，命中自动跟）；
+    ///   6. 【V1.82】按住中键=拖动画布（AutoScroll 平移，松手复位光标）；
+    ///      双击中键=复位视图（100% + 回顶）。
     ///
     /// 【通用性设计】
     ///   - 数据全外置：SetData(源池, 目标池, 映射表) 灌入，池子由 IoRemapCatalog 按配置算，
@@ -96,6 +100,9 @@ namespace AgingTestSystem.Controls
                 DoubleBuffered = false;
                 ResizeRedraw = true;
                 SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint, true);
+                // 【V1.82】双击中键复位视图：Panel 默认没有 StandardDoubleClick，
+                // WM_MBUTTONDBLCLK 会走成 MouseDown（还会把 _panning 卡成 true），
+                // 必须显式打开，双击事件才出得来。
                 // 底色显式锁白（不跟随 Control 默认灰，节点白底+灰字在灰底上发闷；
                 // 深色主题由 ThemeManager 运行时覆盖，vClip 填充走 _canvas.BackColor，永远同底）
                 BackColor = Color.White;
@@ -128,6 +135,25 @@ namespace AgingTestSystem.Controls
         /// <summary>布局脏标记（数据/宽度变化后置位，Paint 里重算；平时直接复用，不重复算）</summary>
         private bool _layoutDirty = true;
 
+        /// <summary>
+        /// 缩放倍率（【V1.82】滚轮缩放 + 中键拖动画布，AutoCAD 手感，抄 FlowCanvas 口径）。
+        /// 缩放直接并进布局基准（s = DPI × _zoom）：Metrics/行 Bounds/命中全是 s 的函数，
+        /// 缩放=标脏重排，不碰 Graphics 变换矩阵（V1.81.3 红线）；字体按 zoom 重建
+        /// （FlowCanvas 同款下限 6pt），量字与绘制同字体，口径一致。
+        /// </summary>
+        private float _zoom = 1f;
+        private const float ZoomMin = 0.5f;
+        private const float ZoomMax = 2.5f;
+
+        /// <summary>中键拖动画布状态（down 记起点，move 改 AutoScrollPosition，up 松开）</summary>
+        private bool _panning;
+        private Point _panStartMouse;
+        private Point _panStartScroll;
+
+        /// <summary>上次中键按下（时刻+位置，双击复位判定用）</summary>
+        private DateTime _midLastDown = DateTime.MinValue;
+        private Point _midLastPos;
+
         /// <summary>列头文案缓存（随 SetData 更新，Paint 里不拼字符串）</summary>
         private string _headSrc = "源通道";
 
@@ -157,9 +183,23 @@ namespace AgingTestSystem.Controls
         private readonly ContextMenuStrip _lineMenu;
         private readonly ToolStripMenuItem _miDeleteMap;
 
-        private readonly Font _fontNode = new Font("微软雅黑", 9F);
-        private readonly Font _fontHead = new Font("微软雅黑", 10F, FontStyle.Bold);
-        private readonly Font _fontBadge = new Font("微软雅黑", 8F);
+        /// <summary>节点字体（随缩放重建，见 RebuildFonts；Dispose 照旧释放）</summary>
+        private Font _fontNode;
+        /// <summary>列头字体（同上）</summary>
+        private Font _fontHead;
+        /// <summary>徽标字体（同上）</summary>
+        private Font _fontBadge;
+
+        /// <summary>按当前 zoom 重建三套字体（FlowCanvas 同款：9/10/8pt × zoom，下限 6pt）</summary>
+        private void RebuildFonts()
+        {
+            try { if (_fontNode != null) _fontNode.Dispose(); } catch { }
+            try { if (_fontHead != null) _fontHead.Dispose(); } catch { }
+            try { if (_fontBadge != null) _fontBadge.Dispose(); } catch { }
+            _fontNode = new Font("微软雅黑", Math.Max(6f, 9f * _zoom));
+            _fontHead = new Font("微软雅黑", Math.Max(6f, 10f * _zoom), FontStyle.Bold);
+            _fontBadge = new Font("微软雅黑", Math.Max(6f, 8f * _zoom));
+        }
 
         /// <summary>构造：建画布 + 提示 + 右键菜单并挂事件</summary>
         public IoRemapGraphControl()
@@ -175,8 +215,11 @@ namespace AgingTestSystem.Controls
             _canvas.MouseMove += Canvas_MouseMove;
             _canvas.MouseLeave += Canvas_MouseLeave;
             _canvas.MouseDown += Canvas_MouseDown;
+            _canvas.MouseUp += Canvas_MouseUp;
+            _canvas.MouseDoubleClick += Canvas_MouseDoubleClick;
             // 宽度变了只标脏，真正重算等下一次 Paint（那时才有准的 DPI），防反复 CreateGraphics
             _canvas.SizeChanged += (s, e) => { _layoutDirty = true; _canvas.Invalidate(); };
+            RebuildFonts();
             Controls.Add(_canvas);
 
             // 悬停提示（无容器手写 Dispose，见下方 Dispose(bool)）
@@ -268,6 +311,83 @@ namespace AgingTestSystem.Controls
             RaiseSelectionChanged();
         }
 
+        /// <summary>当前缩放倍率（宿主窗显示"缩放 n%"用；改缩放走 ZoomAtCursor/ResetView）</summary>
+        public float ZoomFactor
+        {
+            get { return _zoom; }
+        }
+
+        /// <summary>
+        /// 滚轮缩放（以鼠标为中心；宿主窗经 IMessageFilter 预过滤后调这里，FlowCanvas 同款）。
+        /// steps>0 放大（每步 ×1.2），<0 缩小；缩前鼠标下的内容点，缩后仍在鼠标下。
+        /// </summary>
+        public void ZoomAtCursor(int steps)
+        {
+            if (steps == 0) return;
+            if (_canvas == null || _canvas.IsDisposed) return;
+            float next = ZoomFactorOf(_zoom, steps);
+            if (Math.Abs(next - _zoom) < 0.001f) return;
+            double ratio = (double)next / (double)_zoom;
+            _zoom = next;
+            RebuildFonts();
+            _layoutDirty = true;
+            EnsureLayoutForScroll();
+            // 鼠标锚定（_canvas 无句柄等极端情况拿不到光标：缩放已生效，只丢锚定，不报错）
+            try
+            {
+                Point mouse = _canvas.PointToClient(Cursor.Position);
+                int sxNew = ZoomScrollOf(mouse.X, -_canvas.AutoScrollPosition.X, ratio);
+                int syNew = ZoomScrollOf(mouse.Y, -_canvas.AutoScrollPosition.Y, ratio);
+                // setter 取正值（getter 是负偏移，符号坑见 ScrollToSource）
+                _canvas.AutoScrollPosition = new Point(sxNew, syNew);
+            }
+            catch { }
+            _canvas.Invalidate();
+        }
+
+        /// <summary>复位视图（100% + 回顶；双击中键调这里）</summary>
+        public void ResetView()
+        {
+            _zoom = 1f;
+            RebuildFonts();
+            _layoutDirty = true;
+            try
+            {
+                if (_canvas != null && !_canvas.IsDisposed)
+                    _canvas.AutoScrollPosition = new Point(0, 0);
+            }
+            catch { }
+            try { if (_canvas != null && !_canvas.IsDisposed) _canvas.Invalidate(); }
+            catch { }
+        }
+
+        /// <summary>缩放步进（纯函数：old × 1.2^steps，再钳制到 [ZoomMin, ZoomMax]）</summary>
+        private static float ZoomFactorOf(float old, int steps)
+        {
+            float next = old * (float)Math.Pow(1.2, steps);
+            return ClampZoom(next);
+        }
+
+        /// <summary>缩放钳制（纯函数，0.5~2.5：列表画布字小了没法看、放太大一行占满屏）</summary>
+        private static float ClampZoom(float v)
+        {
+            if (v < ZoomMin) return ZoomMin;
+            if (v > ZoomMax) return ZoomMax;
+            return v;
+        }
+
+        /// <summary>
+        /// 缩后滚动偏移（纯函数，正值口径）：缩前鼠标下的内容点（mouseClient + scrollOffset）
+        /// 按 ratio 放缩后仍落在鼠标下；WinForms 上限自动钳，这里只保下限不为负。
+        /// </summary>
+        private static int ZoomScrollOf(int mouseClient, int scrollOffset, double ratio)
+        {
+            long v = (long)((mouseClient + scrollOffset) * ratio - mouseClient);
+            if (v < 0) return 0;
+            if (v > 1000000) return 1000000;
+            return (int)v;
+        }
+
         /// <summary>
         /// 按映射选中连线（宿主窗的映射清单点一行 → 画布对应连线变红；
         /// 映射两端被筛选藏起时选中记下但画不出线，返回 false 告诉调用方）。
@@ -321,8 +441,11 @@ namespace AgingTestSystem.Controls
         /// </summary>
         private void EnsureLayout(Graphics g)
         {
-            float s = (g != null) ? g.DpiX / 96f : 1f;
-            if (s < 1f) s = 1f;
+            // 【V1.82】缩放并进布局基准：DPI 归一（<1 按 1）之后再乘 zoom，
+            // 缩小到 0.5 时 s=0.5 必须活下来（以前 s<1 一律按 1 会把缩小吃掉）。
+            float d = (g != null) ? g.DpiX / 96f : 1f;
+            if (d < 1f) d = 1f;
+            float s = d * _zoom;
             if (!_layoutDirty && s == _layoutScale) return;
             ComputeLayout(s);
             _layoutScale = s;
@@ -388,7 +511,7 @@ namespace AgingTestSystem.Controls
         private void ComputeLayout(float s)
         {
             if (_canvas == null || _canvas.IsDisposed) return;
-            if (s < 1f) s = 1f;
+            if (s <= 0f) s = 1f;
 
             Metrics m = BuildMetrics(s, _canvas.ClientSize.Width);
             _metrics = m;
@@ -402,8 +525,10 @@ namespace AgingTestSystem.Controls
             totalH += m.Margin;
             try
             {
-                // 值不变不重设：Paint 里调布局时重设 MinSize 会引发二次布局，抖动
-                var want = new Size(0, totalH);
+                // 【V1.82】宽给完整虚宽（滚动范围 = 虚宽 − 可视宽，WinForms 自己算）：
+                // zoom=1 时虚宽==可视宽，无横向条（原行为）；放大后虚宽超可视，
+                // 横向条自动出来，右列才滚得出来（给"超出量"是错的，横向永远出不来）。
+                var want = new Size(m.VirtualW, totalH);
                 if (_canvas.AutoScrollMinSize != want) _canvas.AutoScrollMinSize = want;
             }
             catch { }
@@ -566,7 +691,9 @@ namespace AgingTestSystem.Controls
                     Row s = FindRow(_srcRows, _selSrcKey);
                     if (s != null)
                     {
-                        using (var pen = new Pen(Color.Gray, 1.5f))
+                        float pw = 1.5f * _zoom;
+                        if (pw < 1f) pw = 1f;
+                        using (var pen = new Pen(Color.Gray, pw))
                         {
                             pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash;
                             DrawBezier(g, pen, Off(s.Bounds, ox, oy), Off(_hoverRow.Bounds, ox, oy));
@@ -688,15 +815,19 @@ namespace AgingTestSystem.Controls
         private void DrawLink(Graphics g, Rectangle src, Rectangle dst, bool selected, bool hovered, bool drawArrow)
         {
             Color c = selected ? Color.Red : (hovered ? Color.Orange : Color.DodgerBlue);
-            float w = selected ? 3f : 2f;
+            // 线宽随缩放（放再大线不毛边，缩再小线不糊成一团；下限 1px）
+            float w = (selected ? 3f : 2f) * _zoom;
+            if (w < 1f) w = 1f;
             using (var pen = new Pen(c, w))
             {
                 DrawBezier(g, pen, src, dst);
             }
             if (!drawArrow) return;
-            // 箭头（小三角，指向目标节点左边缘中点）
+            // 箭头（小三角，指向目标节点左边缘中点；尺寸随缩放，下限 3×2）
+            int ax = Math.Max(3, (int)(8 * _zoom));
+            int ay = Math.Max(2, (int)(5 * _zoom));
             Point tip = new Point(dst.Left, dst.Top + dst.Height / 2);
-            Point[] tri = { tip, new Point(tip.X - 8, tip.Y - 5), new Point(tip.X - 8, tip.Y + 5) };
+            Point[] tri = { tip, new Point(tip.X - ax, tip.Y - ay), new Point(tip.X - ax, tip.Y + ay) };
             using (var br = new SolidBrush(selected ? Color.Red : Color.DodgerBlue))
                 g.FillPolygon(br, tri);
         }
@@ -751,6 +882,7 @@ namespace AgingTestSystem.Controls
 
         private void Canvas_MouseClick(object sender, MouseEventArgs e)
         {
+            if (e.Button == MouseButtons.Middle) return;   // 中键只管拖画布/双击复位，不参与选择
             if (e.Button == MouseButtons.Right) return;   // 右键走 MouseDown 菜单，不参与选择
             Point v = ToVirtual(e.Location);
 
@@ -817,6 +949,34 @@ namespace AgingTestSystem.Controls
 
         private void Canvas_MouseDown(object sender, MouseEventArgs e)
         {
+            if (e.Button == MouseButtons.Middle)
+            {
+                // 中键双击=复位视图（自己按系统双击口径判定，不依赖 DoubleClick 消息：
+                // Panel 的双击风格对中键不可靠，实测 WM_MBUTTONDBLCLK 会走成 MouseDown
+                // 还把 _panning 卡住——V1.82 探针实锤；手动判定最稳）。
+                DateTime now = DateTime.UtcNow;
+                if (_midLastDown != DateTime.MinValue
+                    && (now - _midLastDown).TotalMilliseconds <= SystemInformation.DoubleClickTime
+                    && Math.Abs(e.X - _midLastPos.X) <= SystemInformation.DoubleClickSize.Width
+                    && Math.Abs(e.Y - _midLastPos.Y) <= SystemInformation.DoubleClickSize.Height)
+                {
+                    _midLastDown = DateTime.MinValue;
+                    _panning = false;
+                    try { _canvas.Capture = false; } catch { }
+                    try { _canvas.Cursor = Cursors.Default; } catch { }
+                    ResetView();
+                    return;
+                }
+                _midLastDown = now;
+                _midLastPos = e.Location;
+                // 中键拖动画布（FlowCanvas 同款手感）：记正偏移起点，move 里跟量走
+                _panning = true;
+                _panStartMouse = e.Location;
+                _panStartScroll = new Point(-_canvas.AutoScrollPosition.X, -_canvas.AutoScrollPosition.Y);
+                try { _canvas.Capture = true; } catch { }
+                try { _canvas.Cursor = Cursors.SizeAll; } catch { }
+                return;
+            }
             if (e.Button != MouseButtons.Right) return;
             Point v = ToVirtual(e.Location);
             _ctxLineIndex = HitLine(v);
@@ -836,6 +996,18 @@ namespace AgingTestSystem.Controls
 
         private void Canvas_MouseMove(object sender, MouseEventArgs e)
         {
+            if (_panning)
+            {
+                // 拖画布中：滚动跟鼠标反向等量（setter 取正值）；拖时不算悬停，松手再恢复
+                try
+                {
+                    _canvas.AutoScrollPosition = new Point(
+                        Math.Max(0, _panStartScroll.X + (_panStartMouse.X - e.Location.X)),
+                        Math.Max(0, _panStartScroll.Y + (_panStartMouse.Y - e.Location.Y)));
+                }
+                catch { }
+                return;
+            }
             Point v = ToVirtual(e.Location);
             Row hit = HitRow(v);
             int line = (hit == null) ? HitLine(v) : -1;   // 节点优先，空白处才算连线
@@ -861,6 +1033,21 @@ namespace AgingTestSystem.Controls
             _hoverLineIndex = -1;
             UpdateTip();
             _canvas.Invalidate();
+        }
+
+        private void Canvas_MouseUp(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Middle || !_panning) return;
+            _panning = false;
+            try { _canvas.Capture = false; } catch { }
+            try { _canvas.Cursor = Cursors.Default; } catch { }
+        }
+
+        private void Canvas_MouseDoubleClick(object sender, MouseEventArgs e)
+        {
+            // 双击中键=复位视图（AutoCAD 双击中键是范围缩放；列表画布取 100%+回顶）
+            if (e.Button != MouseButtons.Middle) return;
+            ResetView();
         }
 
         /// <summary>悬停提示内容（节点全称 / 连线两端 / 空白清掉）</summary>
@@ -948,7 +1135,7 @@ namespace AgingTestSystem.Controls
                 Row s = FindRow(_srcRows, map.SourceRegister + ":" + map.SourceChannel);
                 Row t = FindRow(_tgtRows, map.TargetRegister + ":" + map.TargetChannel);
                 if (s == null || t == null) continue;
-                if (DistanceToBezier(v, s.Bounds, t.Bounds) < 5) return i;
+                if (DistanceToBezier(v, s.Bounds, t.Bounds) < Math.Max(3f, 5f / _zoom)) return i;
             }
             return -1;
         }
