@@ -9,10 +9,14 @@ namespace AgingTestSystem.Dialogs
     /// ├──────────────────────────────────────────────────┤
     /// │ pnlHeader（顶部状态条：LED 指示灯 + 连接状态）      │
     /// ├──────────────────────────────────────────────────┤
-    /// │ tabControl（UITabControl，两个 UIPage 页）        │
+    /// │ tabControl（UITabControl，三个 UIPage 页）         │
     /// │ ┌────────────────────────────────────────────┐   │
     /// │ │ 负压开关测试：panelGridVacuum（9×8 圆形灯）  │   │
     /// │ │ 载台上电测试：panelGridPowerOn（9×8 圆形灯） │   │
+    /// │ │ 预留点位：panelSpareDi（预留 DI 只读状态灯） │   │
+    /// │ │   + panelSpareDo（预留 DO 可点圆形灯）       │   │
+    /// │ │   点位来自 IoMapBuilder（Function=Unknown），│   │
+    /// │ │   DI 经 FC0x04 读，DO 与 0x2009 保位共存     │   │
     /// │ └────────────────────────────────────────────┘   │
     /// ├──────────────────────────────────────────────────┤
     /// │ pnlBottom：[连接测试][全部关闭][读取状态][一键遍历][关闭窗口]│
@@ -24,9 +28,9 @@ namespace AgingTestSystem.Dialogs
     ///   启用 ShowTitle 显示 SunnyUI 风格的标题栏（蓝色主题）。
     /// - 顶部 pnlHeader 放置 UILedBulb 连接指示灯 + UILabel 连接状态，
     ///   连接成功/断开时由 CommunicationTestForm.cs 的 SetConnected 更新。
-    /// - 两个 Tab 页内的 9×8 = 72 个圆形灯按钮由 CommunicationTestForm 的
-    ///   ChannelGrid.BuildButtonGrid() 动态生成（每个 ChannelGrid 持有一个 UIPanel）。
-    /// - 挂接方式红线（V1.63.2 血泪）：两个 UIPage 页必须用 tabControl.AddPage(page)
+    /// - 三个 Tab 页内的圆形灯按钮由 CommunicationTestForm 的
+    ///   ChannelGrid / SpareGrid.BuildButtonGrid() 动态生成（每个网格持有一个或两个 UIPanel）。
+    /// - 挂接方式红线（V1.63.2 血泪）：三个 UIPage 页必须用 tabControl.AddPage(page)
     ///   挂接（SunnyUI 专用：内部建 TabPage + Dock=Fill + TabPage 绑定 + Show()）。
     ///   禁止手写 TabPage 包裹 + Controls.Add（漏掉 Show() 会导致 Visible=false，
     ///   按钮全建好但页面一片空白，现场实锤）。
@@ -64,6 +68,11 @@ namespace AgingTestSystem.Dialogs
             this.panelGridVacuum = new Sunny.UI.UIPanel();
             this.pagePowerOn = new Sunny.UI.UIPage();
             this.panelGridPowerOn = new Sunny.UI.UIPanel();
+            this.pageSpare = new Sunny.UI.UIPage();
+            this.lblSpareDiTitle = new Sunny.UI.UILabel();
+            this.panelSpareDi = new Sunny.UI.UIPanel();
+            this.lblSpareDoTitle = new Sunny.UI.UILabel();
+            this.panelSpareDo = new Sunny.UI.UIPanel();
             this.pnlBottom = new Sunny.UI.UIPanel();
             this.txtLog = new Sunny.UI.UITextBox();
             this.btnClose = new Sunny.UI.UIButton();
@@ -75,6 +84,7 @@ namespace AgingTestSystem.Dialogs
             this.tabControl.SuspendLayout();
             this.pageVacuum.SuspendLayout();
             this.pagePowerOn.SuspendLayout();
+            this.pageSpare.SuspendLayout();
             this.pnlBottom.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -231,13 +241,96 @@ namespace AgingTestSystem.Dialogs
             this.panelGridPowerOn.Text = null;
             this.panelGridPowerOn.TextAlignment = System.Drawing.ContentAlignment.MiddleCenter;
             // 
+            // pageSpare
+            // 
+            this.pageSpare.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(243)))), ((int)(((byte)(249)))), ((int)(((byte)(255)))));
+            this.pageSpare.ClientSize = new System.Drawing.Size(780, 673);
+            this.pageSpare.ControlBoxCloseFillHoverColor = System.Drawing.Color.FromArgb(((int)(((byte)(230)))), ((int)(((byte)(80)))), ((int)(((byte)(80)))));
+            this.pageSpare.Controls.Add(this.panelSpareDo);
+            this.pageSpare.Controls.Add(this.lblSpareDoTitle);
+            this.pageSpare.Controls.Add(this.panelSpareDi);
+            this.pageSpare.Controls.Add(this.lblSpareDiTitle);
+            this.pageSpare.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.pageSpare.Font = new System.Drawing.Font("宋体", 12F);
+            this.pageSpare.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this.pageSpare.Frame = null;
+            this.pageSpare.ImageInterval = 6;
+            this.pageSpare.Location = new System.Drawing.Point(0, 0);
+            this.pageSpare.Margin = new System.Windows.Forms.Padding(5);
+            this.pageSpare.MaximizeBox = false;
+            this.pageSpare.MinimizeBox = false;
+            this.pageSpare.Name = "pageSpare";
+            this.pageSpare.Padding = new System.Windows.Forms.Padding(3, 0, 3, 3);
+            this.pageSpare.PageGuid = new System.Guid("e5a1c7d2-9b3f-4e6a-8d2c-1f5a7b9e03d4");
+            this.pageSpare.RectColor = System.Drawing.Color.FromArgb(((int)(((byte)(80)))), ((int)(((byte)(160)))), ((int)(((byte)(255)))));
+            this.pageSpare.ShowIcon = false;
+            this.pageSpare.ShowInTaskbar = false;
+            this.pageSpare.SizeGripStyle = System.Windows.Forms.SizeGripStyle.Hide;
+            this.pageSpare.StartPosition = System.Windows.Forms.FormStartPosition.Manual;
+            this.pageSpare.Style = Sunny.UI.UIStyle.Custom;
+            this.pageSpare.Text = "预留点位";
+            this.pageSpare.TitleFont = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            // 
+            // lblSpareDiTitle
+            // 
+            this.lblSpareDiTitle.Font = new System.Drawing.Font("微软雅黑", 10.5F, System.Drawing.FontStyle.Bold);
+            this.lblSpareDiTitle.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(30)))), ((int)(((byte)(80)))), ((int)(((byte)(160)))));
+            this.lblSpareDiTitle.Location = new System.Drawing.Point(8, 6);
+            this.lblSpareDiTitle.Name = "lblSpareDiTitle";
+            this.lblSpareDiTitle.Size = new System.Drawing.Size(758, 26);
+            this.lblSpareDiTitle.TabIndex = 0;
+            this.lblSpareDiTitle.Text = "预留输入监视";
+            this.lblSpareDiTitle.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
+            // panelSpareDi
+            // 
+            this.panelSpareDi.BackColor = System.Drawing.Color.White;
+            this.panelSpareDi.FillColor = System.Drawing.Color.White;
+            this.panelSpareDi.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.panelSpareDi.Location = new System.Drawing.Point(8, 34);
+            this.panelSpareDi.Margin = new System.Windows.Forms.Padding(4, 5, 4, 5);
+            this.panelSpareDi.MinimumSize = new System.Drawing.Size(1, 1);
+            this.panelSpareDi.Name = "panelSpareDi";
+            this.panelSpareDi.RectColor = System.Drawing.Color.FromArgb(((int)(((byte)(230)))), ((int)(((byte)(234)))), ((int)(((byte)(240)))));
+            this.panelSpareDi.Size = new System.Drawing.Size(758, 150);
+            this.panelSpareDi.TabIndex = 1;
+            this.panelSpareDi.Text = null;
+            this.panelSpareDi.TextAlignment = System.Drawing.ContentAlignment.MiddleCenter;
+            // 
+            // lblSpareDoTitle
+            // 
+            this.lblSpareDoTitle.Font = new System.Drawing.Font("微软雅黑", 10.5F, System.Drawing.FontStyle.Bold);
+            this.lblSpareDoTitle.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(30)))), ((int)(((byte)(80)))), ((int)(((byte)(160)))));
+            this.lblSpareDoTitle.Location = new System.Drawing.Point(8, 190);
+            this.lblSpareDoTitle.Name = "lblSpareDoTitle";
+            this.lblSpareDoTitle.Size = new System.Drawing.Size(758, 26);
+            this.lblSpareDoTitle.TabIndex = 2;
+            this.lblSpareDoTitle.Text = "预留输出测试";
+            this.lblSpareDoTitle.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
+            // panelSpareDo
+            // 
+            this.panelSpareDo.BackColor = System.Drawing.Color.White;
+            this.panelSpareDo.FillColor = System.Drawing.Color.White;
+            this.panelSpareDo.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.panelSpareDo.Location = new System.Drawing.Point(8, 218);
+            this.panelSpareDo.Margin = new System.Windows.Forms.Padding(4, 5, 4, 5);
+            this.panelSpareDo.MinimumSize = new System.Drawing.Size(1, 1);
+            this.panelSpareDo.Name = "panelSpareDo";
+            this.panelSpareDo.RectColor = System.Drawing.Color.FromArgb(((int)(((byte)(230)))), ((int)(((byte)(234)))), ((int)(((byte)(240)))));
+            this.panelSpareDo.Size = new System.Drawing.Size(758, 440);
+            this.panelSpareDo.TabIndex = 3;
+            this.panelSpareDo.Text = null;
+            this.panelSpareDo.TextAlignment = System.Drawing.ContentAlignment.MiddleCenter;
+            // 
             // tabControl 页签
             // 
-            // 把两个 UIPage 页加入 UITabControl（SunnyUI 专用 AddPage，普通 TabPages.Add /
+            // 把三个 UIPage 页加入 UITabControl（SunnyUI 专用 AddPage，普通 TabPages.Add /
             // Controls.Add 不支持 UIPage：AddPage 内部建 TabPage + Dock=Fill + 绑定 + Show()，
             // 手写包裹漏 Show() 会导致页面 Visible=false、一片空白，见本文件头部红线）。
             this.tabControl.AddPage(this.pageVacuum);
             this.tabControl.AddPage(this.pagePowerOn);
+            this.tabControl.AddPage(this.pageSpare);
             // 
             // pnlBottom
             // 
@@ -414,6 +507,7 @@ namespace AgingTestSystem.Dialogs
             this.tabControl.ResumeLayout(false);
             this.pageVacuum.ResumeLayout(false);
             this.pagePowerOn.ResumeLayout(false);
+            this.pageSpare.ResumeLayout(false);
             this.pnlBottom.ResumeLayout(false);
             this.ResumeLayout(false);
 
@@ -430,6 +524,11 @@ namespace AgingTestSystem.Dialogs
         private Sunny.UI.UIPanel panelGridVacuum;
         private Sunny.UI.UIPage pagePowerOn;
         private Sunny.UI.UIPanel panelGridPowerOn;
+        private Sunny.UI.UIPage pageSpare;
+        private Sunny.UI.UILabel lblSpareDiTitle;
+        private Sunny.UI.UIPanel panelSpareDi;
+        private Sunny.UI.UILabel lblSpareDoTitle;
+        private Sunny.UI.UIPanel panelSpareDo;
         private Sunny.UI.UIPanel pnlBottom;
         private Sunny.UI.UIButton btnConnect;
         private Sunny.UI.UIButton btnAllOff;

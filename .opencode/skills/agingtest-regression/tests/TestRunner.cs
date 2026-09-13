@@ -4002,6 +4002,40 @@ namespace AgingTestSystem.Tests
             Check("0x8000→15", CommunicationTestForm.ChannelOf(0x8000) == 15);
             Check("0→0", CommunicationTestForm.ChannelOf(0) == 0);
 
+            // —— 预留点位网格纯函数（V1.80：SpareGrid.ComputePreserveMask/ComputeWriteValue） ——
+            var spareMaps = new List<IoOutputChannelRemap>
+            {
+                new IoOutputChannelRemap { SourceRegister = 0x2000, SourceChannel = 0, TargetRegister = 0x2009, TargetChannel = 3 },
+                new IoOutputChannelRemap { SourceRegister = 0x2001, SourceChannel = 5, TargetRegister = 0x2009, TargetChannel = 7 },
+                new IoOutputChannelRemap { SourceRegister = 0x2000, SourceChannel = 1, TargetRegister = 0x2008, TargetChannel = 0 },
+            };
+            Check("保位掩码只收目标落0x2009的位",
+                CommunicationTestForm.SpareGrid.ComputePreserveMask(spareMaps, 0x2009) == ((1 << 3) | (1 << 7)));
+            Check("他寄存器掩码只收自己的位",
+                CommunicationTestForm.SpareGrid.ComputePreserveMask(spareMaps, 0x2008) == (1 << 0));
+            Check("null映射表掩码为0",
+                CommunicationTestForm.SpareGrid.ComputePreserveMask(null, 0x2009) == 0);
+            Check("非法目标通道跳过",
+                CommunicationTestForm.SpareGrid.ComputePreserveMask(
+                    new List<IoOutputChannelRemap> { new IoOutputChannelRemap { TargetRegister = 0x2009, TargetChannel = 16 } }, 0x2009) == 0);
+            Check("RMW保位合并",
+                CommunicationTestForm.SpareGrid.ComputeWriteValue(0xFF00, 0x00FF, 0xF000) == 0xF0FF);
+            Check("保位0即直写",
+                CommunicationTestForm.SpareGrid.ComputeWriteValue(0x1234, 0x00FF, 0) == 0x00FF);
+            Check("全保位即现值不变",
+                CommunicationTestForm.SpareGrid.ComputeWriteValue(0xABCD, 0x00FF, 0xFFFF) == 0xABCD);
+            // 预留点位表与映射器同源（默认 80DI/160DO：DI 73~80→X110~X117，DO 145~160→Y220~Y237）
+            var spareMap = IoMapBuilder.Build(new DeviceConfig { TotalBarometers = 72, TotalInputs = 80, TotalOutputs = 160 });
+            var spareIn = spareMap.Where(p => p.Function == IoFunction.Unknown && p.Type == IoType.Input).ToList();
+            var spareOut = spareMap.Where(p => p.Function == IoFunction.Unknown && p.Type == IoType.Output).ToList();
+            Check("预留DI 8路X110起",
+                spareIn.Count == 8 && spareIn[0].PhysicalAddress == "X110" && spareIn[7].PhysicalAddress == "X117");
+            Check("预留DO 16路Y220起",
+                spareOut.Count == 16 && spareOut[0].PhysicalAddress == "Y220" && spareOut[15].PhysicalAddress == "Y237");
+            Check("无预留配置两区为空",
+                IoMapBuilder.Build(new DeviceConfig { TotalBarometers = 72, TotalInputs = 72, TotalOutputs = 144 })
+                    .Count(p => p.Function == IoFunction.Unknown) == 0);
+
             // —— 右侧宽度比例自适应（V1.65：MainForm.ComputeRightPanelWidth 纯函数） ——
             Check("比例常量0.234/护栏180~340",
                 MainForm.RightPanelRatio == 0.234

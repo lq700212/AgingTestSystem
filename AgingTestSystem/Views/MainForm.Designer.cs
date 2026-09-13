@@ -257,7 +257,7 @@
             this.lblCommStatusLabel.Name = "lblCommStatusLabel";
             this.lblCommStatusLabel.Size = new System.Drawing.Size(83, 12);
             this.lblCommStatusLabel.TabIndex = 2;
-            this.lblCommStatusLabel.Text = "通讯连接状态:";
+            this.lblCommStatusLabel.Text = "通讯模块状态:";
             this.lblCommStatusLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // lblCommStatus
@@ -699,9 +699,9 @@
         private Sunny.UI.UILabel lblPermissionPrefix;
         /// <summary>角色名标签（V1.19.7：ForeColor 按权限着色——管理员=红/技术员=蓝/操作员=绿）</summary>
         private Sunny.UI.UILabel lblPermissionRole;
-        /// <summary>"通讯连接状态:"标签（V1.16 更名：现场无 PLC，改为通讯连接状态）</summary>
+        /// <summary>"通讯模块状态:"标签（V1.16 更名：现场无 PLC，改为通讯连接状态；V1.80 再更名：用户点名）</summary>
         private Sunny.UI.UILabel lblCommStatusLabel;
-        /// <summary>通讯连接状态值标签（绿=已连接，红=未连接）</summary>
+        /// <summary>通讯模块状态值标签（绿=已连接，红=未连接）</summary>
         private Sunny.UI.UILabel lblCommStatus;
         /// <summary>"送风机运行状态:"标签（V1.10）</summary>
         private Sunny.UI.UILabel lblFanStateLabel;

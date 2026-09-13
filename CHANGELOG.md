@@ -3,6 +3,39 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md).
 
+## V1.80 — 通讯测试预留点位页 + 顶栏改"通讯模块状态"（2026-09-13，用户点名两件）
+
+### 改动范围
+- `Dialogs/CommunicationTestForm.Designer.cs` — 新增第三页 `pageSpare`（预留点位），
+  内装 DI 区标题 + `panelSpareDi` + DO 区标题 + `panelSpareDo`，`tabControl.AddPage` 挂接。
+- `Dialogs/CommunicationTestForm.cs` — 新增 `SpareGrid`（预留 DI 只读灯 + 预留 DO 可点灯）与
+  `ISweepableGrid` 遍历接口（`ChannelGrid` 同步实现，原窗体 `WriteSweepRegisters` 下沉为
+  `ChannelGrid.ApplySweepRegisters`，行为逐行平移）；`AllOff`/`读取状态`/切页自刷新/`StartSweep`
+  第三页分支同步；两处文件头 ASCII 图更新为三页。
+- `Views/MainForm.Designer.cs` + `MainForm.cs` + `Services/DeviceManager.cs` +
+  `Services/ModbusTcpIoController.cs` — `lblCommStatusLabel` 文案"通讯连接状态:"→"通讯模块状态:"
+  （同 6 字 + 冒号，列宽不动），注释/ASCII 图同步更名。
+
+### 为什么这么改
+- 预留点位（默认 DI 73~80/X110~X117 8 路 + DO 145~160/Y220~Y237 16 路）以前只能看映射表，
+  现场接线验证要进页点灯：DI 只读监视（FC0x04 `GetAllInputs`，与采集同源），DO 手动点动。
+- 点位表不手写：`SpareGrid` 构造按 `IoMapBuilder.Build(_config)` 取 `Function=Unknown` 的点，
+  改 `TotalInputs/TotalOutputs` 自动适应；无预留时显示空态，窗体照常开。
+- 0x2009 双重身份（备用映射目标兼预留 DO，问题确认清单#106 备案）：映射启用时
+  `ComputePreserveMask` 自动保位，两边写同一寄存器互不覆盖；关闭时整寄存器直写。
+- 状态定时器坚持不发报文：DI 只在"读取状态"/切进预留页刷新；遍历只走 DO（DI 驱动不了），
+  无预留时 `StartSweep` 直接提示（防 `SweepChannelCount=0` 除零）。
+- 顶栏更名用户点名；旧文案"连接状态"易误读为整机通讯，实为通讯模块（IO 耦合器）状态。
+
+### 验证
+- 构建一次过（仅两条旧警告）；Designer 声明/实例化配对扫描干净。
+- harness 直构 `CommunicationTestForm`（Mock）探针 31/31：三页挂接（`TabPages` 收齐 +
+  选中预留页 `Visible=true`，以负压页同条件取基线）、DI=8 灯 X110~X117 只读、DO=16 灯
+  Y220~Y237 可点、遍历负载 `[0x2009, 0x0001]`、保位/RMW 纯函数、预留页截图目检通过；
+  `MainForm.lblCommStatusLabel` 文案运行时确认；探针产物已清。
+- `build_and_test.ps1 -Affected`（改到 TestRunner 自身→兜底全量）1472 断言全绿（新增 10 条）。
+- `README.md` 对话框表 + `docs/通讯接入.md` 验证顺序 + 回归 skill 覆盖表同步（1462→1472）。
+
 ## V1.79 — 顶栏项目拆分+前缀常规体（2026-09-13，用户点名）
 
 ### 改动范围
