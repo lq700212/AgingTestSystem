@@ -16,6 +16,12 @@ namespace AgingTestSystem.Views
     /// 画布 Dock=Fill 最后加（代码里加）——顺序错画布会盖住右栏。
     /// 【尺寸】1160×980：画布内容 730×885（8 节点，MES 在最下）默认整窗可见；
     /// MinimumSize 只锁到 950×700（小屏走双滚动条，画布/编辑器都带 AutoScroll）。
+    /// 【V1.85】右栏顶部加预置行（标题46/下拉68/说明100，共占约90px）：
+    /// 编辑器下移到146、高642，底部按钮顺延（保存794/复位关闭830）。
+    /// 静态布局（坐标/文本/事件挂接）全在这里，VS 可预览；
+    /// 下拉选项填充在 ProcessPolicyForm.cs 里代码做（数据源 PolicyPresets.All，
+    /// Designer 里写循环/自定义项会被 VS 重写吞掉，手写保命线）。
+    /// 悬停提示 _presetTip 无容器托管，随窗体 Dispose 手动释放（见 .cs）。
     /// </summary>
     partial class ProcessPolicyForm
     {
@@ -24,6 +30,18 @@ namespace AgingTestSystem.Views
 
         /// <summary>右栏标题（选中节点名 / 未选中节点 / 连线（只读））</summary>
         private Sunny.UI.UILabel _lblNodeTitle;
+
+        /// <summary>预置行标题（"预置策略（一键套用A/B/C）"静态文本）</summary>
+        private Sunny.UI.UILabel _lblPresetTitle;
+
+        /// <summary>预置下拉（A/B/C/自定义；选项代码填，下拉列表宽340防截断）</summary>
+        private Sunny.UI.UIComboBox _cboPreset;
+
+        /// <summary>套用预置按钮（Sunny 默认蓝，主操作）</summary>
+        private Sunny.UI.UIButton _btnApplyPreset;
+
+        /// <summary>预置说明（选中项一句话场景，灰字；全文另有悬停提示）</summary>
+        private Sunny.UI.UILabel _lblPresetDesc;
 
         /// <summary>编辑器容器（空壳；内容按选中节点动态重建）</summary>
         private Panel _pnlEditors;
@@ -47,6 +65,10 @@ namespace AgingTestSystem.Views
         {
             this._pnlRight = new Panel();
             this._lblNodeTitle = new Sunny.UI.UILabel();
+            this._lblPresetTitle = new Sunny.UI.UILabel();
+            this._cboPreset = new Sunny.UI.UIComboBox();
+            this._btnApplyPreset = new Sunny.UI.UIButton();
+            this._lblPresetDesc = new Sunny.UI.UILabel();
             this._pnlEditors = new Panel();
             this._btnSaveNode = new Sunny.UI.UIButton();
             this._btnResetLayout = new Sunny.UI.UIButton();
@@ -68,6 +90,10 @@ namespace AgingTestSystem.Views
             // _pnlRight（先加；画布 Fill 在代码里最后加，Z 序不能反）
             //
             this._pnlRight.Controls.Add(this._lblNodeTitle);
+            this._pnlRight.Controls.Add(this._lblPresetTitle);
+            this._pnlRight.Controls.Add(this._cboPreset);
+            this._pnlRight.Controls.Add(this._btnApplyPreset);
+            this._pnlRight.Controls.Add(this._lblPresetDesc);
             this._pnlRight.Controls.Add(this._pnlEditors);
             this._pnlRight.Controls.Add(this._btnSaveNode);
             this._pnlRight.Controls.Add(this._btnResetLayout);
@@ -80,16 +106,31 @@ namespace AgingTestSystem.Views
             this._lblNodeTitle.Location = new Point(12, 12);
             this._lblNodeTitle.Size = new Size(296, 28);
             this._lblNodeTitle.Font = new Font(this.Font.FontFamily, 11F, FontStyle.Bold);
+            this._lblPresetTitle.Location = new Point(12, 46);
+            this._lblPresetTitle.Size = new Size(296, 20);
+            this._lblPresetTitle.Text = "预置策略（一键套用A/B/C）";
+            this._cboPreset.DropDownStyle = Sunny.UI.UIDropDownStyle.DropDownList;
+            this._cboPreset.Location = new Point(12, 68);
+            this._cboPreset.Size = new Size(182, 28);
+            this._cboPreset.DropDownWidth = 340;
+            this._cboPreset.SelectedIndexChanged += new System.EventHandler(this.PresetComboChanged);
+            this._btnApplyPreset.Location = new Point(200, 68);
+            this._btnApplyPreset.Size = new Size(108, 28);
+            this._btnApplyPreset.Text = "套用预置";
+            this._btnApplyPreset.Click += new System.EventHandler(this.BtnApplyPreset_Click);
+            this._lblPresetDesc.Location = new Point(12, 100);
+            this._lblPresetDesc.Size = new Size(296, 42);
+            this._lblPresetDesc.ForeColor = Color.Gray;
             //
             // _pnlEditors
             //
-            this._pnlEditors.Location = new Point(12, 48);
-            this._pnlEditors.Size = new Size(296, 740);
+            this._pnlEditors.Location = new Point(12, 146);
+            this._pnlEditors.Size = new Size(296, 642);
             this._pnlEditors.AutoScroll = true;
             //
             // _btnSaveNode（Sunny 默认蓝，主操作）
             //
-            this._btnSaveNode.Location = new Point(12, 800);
+            this._btnSaveNode.Location = new Point(12, 794);
             this._btnSaveNode.Size = new Size(296, 32);
             this._btnSaveNode.Text = "保存本节点";
             this._btnSaveNode.Enabled = false;
@@ -97,14 +138,14 @@ namespace AgingTestSystem.Views
             //
             // _btnResetLayout（Sunny 默认蓝）
             //
-            this._btnResetLayout.Location = new Point(12, 838);
+            this._btnResetLayout.Location = new Point(12, 830);
             this._btnResetLayout.Size = new Size(144, 30);
             this._btnResetLayout.Text = "复位布局";
             this._btnResetLayout.Click += new System.EventHandler(this.BtnResetLayout_Click);
             //
             // _btnClose（Sunny 灰；语义=取消关闭，走灰）
             //
-            this._btnClose.Location = new Point(164, 838);
+            this._btnClose.Location = new Point(164, 830);
             this._btnClose.Size = new Size(144, 30);
             this._btnClose.Text = "关闭";
             this._btnClose.FillColor = Color.DimGray;

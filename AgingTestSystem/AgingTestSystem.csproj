@@ -117,6 +117,7 @@
     <Compile Include="Services\AgingSequencer.cs" />
     <Compile Include="Services\ProjectProfile.cs" />
     <Compile Include="Services\ProjectPolicyStore.cs" />
+    <Compile Include="Services\PolicyPresets.cs" />
     <Compile Include="Services\MesMapping.cs" />
     <Compile Include="Services\MesReporter.cs" />
     <Compile Include="Services\MesCrypto.cs" />

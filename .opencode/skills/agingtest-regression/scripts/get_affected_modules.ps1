@@ -59,6 +59,7 @@ $Map = @(
     @{ Pat = @("*DeviceManager*");                  Mods = @("DeviceManagerIntegration", "DeviceManagerExtended", "DeviceManagerPolicy", "DeviceManagerMes", "DeviceManagerRules", "DeviceManagerSweep", "AgingBusinessModel", "TestSessionStore", "PowerReportV174") },
     @{ Pat = @("*AgingSequencer*");                 Mods = @("AgingSequencer", "DeviceManagerIntegration", "DeviceManagerExtended", "DeviceManagerPolicy") },
     @{ Pat = @("*ProjectPolicyStore*", "*PolicyEnums*"); Mods = @("PolicyV167", "SettingsValidate", "DeviceManagerPolicy", "ProcessPolicyV170", "PowerReportV174") },
+    @{ Pat = @("*PolicyPresets*");                 Mods = @("PolicyPresetV185", "PolicyV167", "ProcessPolicyV170") },
     @{ Pat = @("*ProjectProfile*");                 Mods = @("PolicyV167") },
     @{ Pat = @("*MesMapping*", "*MesCrypto*");      Mods = @("MesV168") },
     @{ Pat = @("*MesReporter*");                    Mods = @("MesV168", "DeviceManagerMes") },

@@ -31,19 +31,23 @@ namespace AgingTestSystem.Views
     /// 【界面布局】（左列主链 + 右列分支 + 右下 MES 纯配置节点）
     /// ┌──────────────────────────────────────────────┬───────────────┐
     /// │ 画布（自绘，可缩放/平移/拖节点）               │ 右栏 320px    │
-    /// │  [启动开阀]              [断电恢复]            │ 选中节点标题  │
-    /// │      │开阀                   ┊整台重测/续跑    │ [编辑器组]    │
-    /// │  [抽真空]────────超时/失压/失联/规则───────┐   │ [保存本节点]  │
-    /// │      │压力到位 且 延时到                          │               │
-    /// │  [上电老化]────失压/失联/规则/超温───────┐   │               │
+    /// │  [启动开阀]              [断电恢复]            │ 预置策略行    │
+    /// │      │开阀                   ┊整台重测/续跑    │ [A/B/C下拉]   │
+    /// │  [抽真空]────────超时/失压/失联/规则───────┐   │ [套用预置]    │
+    /// │      │压力到位 且 延时到                          │ 选中节点标题  │
+    /// │  [上电老化]────失压/失联/规则/超温───────┐   │ [编辑器组]    │
     /// │      │时长到 或 表达式                      [报警联动]        │
-    /// │  [完成下电]──────────待取料/待判定──────→    │               │
-    /// │                        │人工复位回空闲      [下料判定]        │
+    /// │  [完成下电]──────────待取料/待判定──────→    │ [保存本节点]  │
     /// │                        └────────→                             │
     /// │                                     [MES上报]（无连线，纯配置）│
     /// ├──────────────────────────────────────────────┴───────────────┤
     /// │ 状态条：项目名 | 选中节点 | 保存提示                           │
     /// └──────────────────────────────────────────────────────────────┘
+    ///
+    /// 【V1.85 预置行】右栏顶部（标题46/下拉+按钮68/说明100）：下拉选 A/B/C
+    /// （或"自定义"回显），"套用预置"一键整套生效（确认框列差异项 + 前置条件，
+    /// 走 PersistChanges 同一条保存路）。只动 12 个行为开关（见 PolicyPresets），
+    /// MES/规则/报表/点位/时长阈值不动；只读模式整行禁用。
     ///
     /// 【鼠标操作】（对标 mFormFlowEdit 手感）
     /// - 左键拖节点体 = 移动节点（位置存 PolicyLayout.json，下次打开接着用）；
@@ -71,6 +75,15 @@ namespace AgingTestSystem.Views
         private readonly bool _canEdit;
         private Timer _timer;
 
+        // 【V1.85 预置行】静态布局（坐标/文本/事件挂接）在 Designer，VS 可预览；
+        // 这里只留运行时态：选项填充（数据源 PolicyPresets.All）+ 悬停提示 +
+        // 下拉联动自保护旗。预置控件随窗体释放（静态挂接，无动态重建，终结器安全）。
+        // _presetTip 无容器托管（本窗 Designer 无 components 容器），随窗体 Dispose
+        // 手动释放（见本文件 Dispose 重写；R2 配对检查认方法体内真释放）。
+        private ToolTip _presetTip;
+        // 下拉联动自保护：程序回显选中项时不触发"用户改选"分支（只套用按钮才真干活）。
+        private bool _presetRefreshing;
+
         /// <summary>本次会话保存过的 key（主窗体按需热生效，SettingsForm.SavedKeys 同款语义）</summary>
         public HashSet<string> SavedKeys { get; private set; }
 
@@ -82,6 +95,7 @@ namespace AgingTestSystem.Views
         {
             SavedKeys = new HashSet<string>();
             InitializeComponent();
+            InitPresetBar();
             UpdateStatus("就绪：点击节点查看/修改配置。滚轮缩放 · 中键平移 · 拖节点移动。");
         }
 
@@ -109,6 +123,7 @@ namespace AgingTestSystem.Views
             this.Controls.Add(_canvas);
 
             SelectNode(null, false);
+            RefreshPresetRow();
         }
 
         protected override void OnShown(EventArgs e)
@@ -144,6 +159,24 @@ namespace AgingTestSystem.Views
             catch { }
             Application.RemoveMessageFilter(this);
             base.OnFormClosed(e);
+        }
+
+        /// <summary>
+        /// 释放悬停提示（【V1.85】_presetTip 无容器托管（本窗 Designer 无 components
+        /// 容器），必须手写释放；R2 配对检查认方法体内真 Dispose。静态挂接随窗体走，
+        /// _timer 照旧在 OnFormClosed 里停（同线程串行，双保险判空）。
+        /// </summary>
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                try
+                {
+                    if (_presetTip != null) { _presetTip.Dispose(); _presetTip = null; }
+                }
+                catch { }
+            }
+            base.Dispose(disposing);
         }
 
         /// <summary>
@@ -561,6 +594,216 @@ namespace AgingTestSystem.Views
             {
                 _lblStatus.Text = $"项目：{ProjectProfile.ActiveProfileName} | {text}";
             }
+        }
+
+        /// <summary>
+        /// 预置行运行时初始化（【V1.85】布局在 Designer，这里只做 Designer 干不了的两样：
+        /// ①下拉选项填充（数据源 PolicyPresets.All，循环写 InitializeComponent 会被
+        /// VS 重写吞掉）；②悬停提示（全文显示，见 UpdatePresetDesc）。
+        /// 无参构造也调——_config 为 null 时回显"自定义"、整行禁用，不抛，VS 可预览）。
+        /// </summary>
+        private void InitPresetBar()
+        {
+            if (_cboPreset != null && !_cboPreset.IsDisposed && _cboPreset.Items.Count == 0)
+            {
+                foreach (PolicyPresets.PolicyPresetDef p in PolicyPresets.All)
+                {
+                    _cboPreset.Items.Add(new FlowOpt(p.Title, p.Id));
+                }
+                _cboPreset.Items.Add(new FlowOpt("自定义（当前配置）", PolicyPresets.CustomId));
+            }
+            if (_presetTip == null)
+            {
+                _presetTip = new ToolTip();
+            }
+            RefreshPresetRow();
+        }
+
+        /// <summary>下拉改选只换说明文字（真干活只认"套用预置"按钮，防手滑一切换就改配置）。</summary>
+        private void PresetComboChanged(object sender, EventArgs e)
+        {
+            if (_presetRefreshing) return;
+            UpdatePresetDesc();
+        }
+
+        /// <summary>
+        /// 按内存配置回显预置行：凑上 A/B/C 就选中它，否则落"自定义"；
+        /// 只读模式（非管理员）整行禁用（与节点编辑器同级，不开后门）。
+        /// </summary>
+        private void RefreshPresetRow()
+        {
+            if (_cboPreset == null || _cboPreset.IsDisposed) return;
+            _presetRefreshing = true;
+            try
+            {
+                SelectPresetOpt(_cboPreset, PolicyPresets.DetectPreset(_config));
+            }
+            finally { _presetRefreshing = false; }
+            UpdatePresetDesc();
+            bool editable = _canEdit && _config != null;
+            _cboPreset.Enabled = editable;
+            _btnApplyPreset.Enabled = editable;
+        }
+
+        private static void SelectPresetOpt(Sunny.UI.UIComboBox cmb, string id)
+        {
+            for (int i = 0; i < cmb.Items.Count; i++)
+            {
+                var o = cmb.Items[i] as FlowOpt;
+                if (o != null && string.Equals(o.Value, id, StringComparison.OrdinalIgnoreCase))
+                {
+                    cmb.SelectedIndex = i;
+                    return;
+                }
+            }
+            // 对不上任何预置（或 null 配置）→落"自定义"末项，绝不空选
+            cmb.SelectedIndex = cmb.Items.Count - 1;
+        }
+
+        private static string SelectedPresetId(Sunny.UI.UIComboBox cmb)
+        {
+            if (cmb == null) return PolicyPresets.CustomId;
+            var o = cmb.SelectedItem as FlowOpt;
+            return o != null ? o.Value : PolicyPresets.CustomId;
+        }
+
+        /// <summary>
+        /// 下拉当前项的一句话说明 + 悬停全文（【V1.85】下拉框窄看不全：
+        /// 下拉列表本身已拉宽到 340，闭合框的悬停提示在这里补全文——标题 +
+        /// 场景 + 前置条件，与确认框同源，不另写一份文案）。
+        /// </summary>
+        private void UpdatePresetDesc()
+        {
+            if (_lblPresetDesc == null || _lblPresetDesc.IsDisposed) return;
+            string id = SelectedPresetId(_cboPreset);
+            PolicyPresets.PolicyPresetDef def = PolicyPresets.Find(id);
+            _lblPresetDesc.Text = def != null
+                ? def.Scenario
+                : "当前配置与A/B/C都不完全一致（手动微调过），可重选一套覆盖。";
+            // 悬停提示同步（_cboPreset 闭合显示被截断时，悬停看全文）
+            try
+            {
+                if (_presetTip != null && _cboPreset != null && !_cboPreset.IsDisposed)
+                {
+                    string tip = def != null
+                        ? def.Title + "\r\n\r\n" + def.Scenario + "\r\n\r\n" + def.HowToSwitch
+                            + (string.IsNullOrWhiteSpace(def.Requires)
+                                ? "" : "\r\n\r\n前置条件：" + def.Requires)
+                        : "自定义（当前配置）\r\n\r\n"
+                            + "当前 12 个行为开关与A/B/C都不完全一致（手动微调过），"
+                            + "下拉重选一套并点“套用预置”可整体覆盖。";
+                    _presetTip.SetToolTip(_cboPreset, tip);
+                }
+            }
+            catch { /* 提示写失败不影响主流程（纯展示） */ }
+        }
+
+        private void BtnApplyPreset_Click(object sender, EventArgs e)
+        {
+            ApplyPreset();
+        }
+
+        /// <summary>
+        /// 套用预置（【V1.85】傻瓜入口：脏先问存 → 列差异确认 → 逐项校验 →
+        /// PersistChanges 同一条保存路 → 刷新右栏编辑器 + 画布 + 预置回显）。
+        ///
+        /// 【只动 12 个行为开关】MES/规则/报表/画面字典/破空点位/时长阈值等
+        /// 自由文本与配方/机器参数一律不动——切预置不丢现场已填的东西。
+        /// 【失败语义】校验拦/C 组合拦（超温上限为 0）都是"按住不动 + 中文告诉人
+        /// 去哪填"，绝不悄悄写一半（PersistChanges 内部先验后写）。
+        /// </summary>
+        private void ApplyPreset()
+        {
+            if (!_canEdit || _config == null) return;
+            string id = SelectedPresetId(_cboPreset);
+            PolicyPresets.PolicyPresetDef def = PolicyPresets.Find(id);
+            if (def == null)
+            {
+                MessageBox.Show(this, "请先在下拉里选预置A、B 或 C，再点套用。",
+                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            // 脏先问存（与切节点同规矩：是=先存本节点，否=丢弃，取消=不套用）
+            if (_dirty)
+            {
+                DialogResult r = MessageBox.Show(this,
+                    "当前节点有未保存的修改，套用预置前保存吗？\n\n【是】保存后套用\n【否】丢弃后套用\n【取消】不套用",
+                    "提示", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                if (r == DialogResult.Cancel) return;
+                if (r == DialogResult.Yes && !SaveCurrentNode()) return;
+                _dirty = false;
+            }
+            Dictionary<string, string> values = PolicyPresets.GetPresetValues(id);
+            if (values == null) return;
+            // 差异预览：只列"真的会变"的项（中文名 + 现值→预置值）
+            var diffLines = new List<string>();
+            foreach (string key in PolicyPresets.GovernedKeys)
+            {
+                string want;
+                if (!values.TryGetValue(key, out want)) continue;
+                string cur = GetConfigString(key);
+                if (string.Equals(cur != null ? cur.Trim() : "",
+                    want != null ? want.Trim() : "", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                string label;
+                if (!PolicyPresets.KeyLabels.TryGetValue(key, out label)) label = key;
+                diffLines.Add("【" + label + "】 " + cur + " → " + want);
+            }
+            if (diffLines.Count == 0)
+            {
+                MessageBox.Show(this, "当前已是【" + def.Title + "】，无需套用。",
+                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            string confirm = "套用【" + def.Title + "】？\r\n\r\n" + def.Scenario + "\r\n"
+                + (string.IsNullOrWhiteSpace(def.Requires)
+                    ? "" : "\r\n前置条件：" + def.Requires + "\r\n")
+                + "\r\n将修改 " + diffLines.Count + " 项：\r\n"
+                + string.Join("\r\n", diffLines.ToArray())
+                + "\r\n\r\n配方（时长/阈值/画面/极限温度）、MES/规则/报表/画面字典/点位等不动。\r\n"
+                + def.HowToSwitch;
+            if (MessageBox.Show(this, confirm, "套用预置",
+                MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK)
+            {
+                return;
+            }
+            // 逐项校验（预置值理论上全合法；真被拦就是预置本身写错了，报出来修预置）
+            var invalid = new List<string>();
+            foreach (var kv in values)
+            {
+                string error;
+                if (!Dialogs.SettingsForm.ValidateValue(kv.Key, kv.Value, out error))
+                {
+                    invalid.Add("【" + kv.Key + "】 " + kv.Value + "  →  " + error);
+                }
+            }
+            if (invalid.Count > 0)
+            {
+                MessageBox.Show(this, "预置本身写错了（不是您配错了），请联系开发：\r\n\r\n" +
+                    string.Join("\r\n", invalid.ToArray()),
+                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            // 同一条保存路：组合校验 + 分流写文件 + 热回写全在里面
+            Dialogs.SettingsForm.PersistResult presult;
+            string perror;
+            if (!Dialogs.SettingsForm.PersistChanges(_config, values, out presult, out perror))
+            {
+                MessageBox.Show(this, perror, "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            foreach (string k in presult.SavedKeys) SavedKeys.Add(k);
+            _dirty = false;
+            // 内存已热回写：当前节点编辑器重建回显新值（不重建会显示旧值，误导人）
+            RebuildEditors();
+            if (_canvas != null) _canvas.RefreshCounts();
+            RefreshPresetRow();
+            string msg = "已套用【" + def.Title + "】并即时生效。";
+            UpdateStatus(msg);
+            MessageBox.Show(this, msg + "\r\n\r\n" + def.HowToSwitch,
+                "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         /// <summary>
