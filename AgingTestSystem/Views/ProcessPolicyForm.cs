@@ -117,6 +117,8 @@ namespace AgingTestSystem.Views
             // 滚轮悬停即缩放（不用先点画布抢焦点，右栏改地址时悬停回来照样缩）
             Application.AddMessageFilter(this);
             // 实时台数每秒刷新（画布重画；关窗即停）
+            // 【大扫荡】复用安全：窗体若被二次 Show，先清旧 timer（以前匿名 Tick 只增不减）。
+            if (_timer != null) { try { _timer.Stop(); _timer.Dispose(); } catch { } _timer = null; }
             _timer = new Timer { Interval = 1000 };
             _timer.Tick += (s, args) =>
             {
@@ -136,7 +138,8 @@ namespace AgingTestSystem.Views
         {
             try
             {
-                if (_timer != null) { _timer.Stop(); _timer.Dispose(); }
+                // 【大扫荡】Dispose 后置 null：字段再指已释放对象，复用/探针都干净。
+                if (_timer != null) { _timer.Stop(); _timer.Dispose(); _timer = null; }
             }
             catch { }
             Application.RemoveMessageFilter(this);

@@ -577,13 +577,32 @@ namespace AgingTestSystem.Views
             // 尝试从配置文件读取气压表总数
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["TotalBarometers"], out int count))
             {
-                config.TotalBarometers = count;
+                // 【大扫荡】总数必须 >0：手改 0/负数以前直通构造，零长数组后面全越界。
+                // 回缺省 72（与 DeviceConfig 缺省一致，V1.63 钳制同模式）。
+                if (count <= 0)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"配置警告: TotalBarometers({count}) 非法，已回退 72");
+                }
+                else
+                {
+                    config.TotalBarometers = count;
+                }
             }
 
             // 尝试从配置文件读取采集间隔
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["CollectInterval"], out int interval))
             {
-                config.CollectInterval = interval;
+                // 【大扫荡】采集间隔必须 ≥50ms：0/负数 Timer 构造即抛；太小打爆串口。
+                if (interval < 50)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"配置警告: CollectInterval({interval}) 非法，已回退 1000");
+                }
+                else
+                {
+                    config.CollectInterval = interval;
+                }
             }
 
             // 【修复 H7】补全所有配置项的读取，避免 App.config 修改不生效
@@ -1311,7 +1330,8 @@ namespace AgingTestSystem.Views
             _gridView.OnSetClicked += Panel_OnSetClicked;
 
             // 订阅网格内部动作日志（如行全选/取消全选），写入主窗体 LOG
-            _gridView.OnLog += (sender, message) => WriteLog(message);
+            // 【大扫荡】具名方法（以前匿名 lambda 永不可退订；网格重建时旧画布被事件拽住）。
+            _gridView.OnLog += GridView_OnLog;
 
             scrollContainer.Controls.Add(_gridView);
             splitContainerMain.Panel1.Controls.Add(scrollContainer);
@@ -1607,13 +1627,31 @@ namespace AgingTestSystem.Views
 
             // 【V1.10 保留】送风机温度安全告警：超过配置上限 FanTempAlarmLimitC →
             // 仅记日志提示（不覆盖上面按设置温度显示的颜色）。
-            if (_config.FanTempAlarmLimitC > 0 && data.Temperature > _config.FanTempAlarmLimitC)
+            // 【大扫荡】探头失效（NaN）边沿记"传感器无效"：以前 NaN 比较恒 false，
+            // 超温保护静默致盲，全程无任何一行说明。NaN 不当超温（误停产线更糟），
+            // 但必须明示"保护已盲"，恢复有效即复位边沿。
+            if (float.IsNaN(data.Temperature))
             {
-                if (data.Temperature > _fanTempAlarmLoggedThreshold)
+                if (!_fanTempInvalidLogged)
                 {
-                    // 只在第一次超过新阈值时记日志，避免每秒重复记录
-                    _fanTempAlarmLoggedThreshold = data.Temperature;
-                    WriteLog($"[送风机] 上部温度 {data.Temperature:F1}°C 超过告警上限 {_config.FanTempAlarmLimitC:F1}°C");
+                    _fanTempInvalidLogged = true;
+                    WriteLog("[送风机] 温度传感器无效（读数 NaN）" +
+                        (_config.FanTempShutdownEnabled
+                            ? "，超温联停已盲！请检查送风机通讯/探头"
+                            : "，温度告警暂停，请检查送风机通讯/探头"));
+                }
+            }
+            else
+            {
+                _fanTempInvalidLogged = false;
+                if (_config.FanTempAlarmLimitC > 0 && data.Temperature > _config.FanTempAlarmLimitC)
+                {
+                    if (data.Temperature > _fanTempAlarmLoggedThreshold)
+                    {
+                        // 只在第一次超过新阈值时记日志，避免每秒重复记录
+                        _fanTempAlarmLoggedThreshold = data.Temperature;
+                        WriteLog($"[送风机] 上部温度 {data.Temperature:F1}°C 超过告警上限 {_config.FanTempAlarmLimitC:F1}°C");
+                    }
                 }
             }
 
@@ -1643,6 +1681,11 @@ namespace AgingTestSystem.Views
         /// 已记录过的送风机温度告警阈值（避免重复写日志）
         /// </summary>
         private float _fanTempAlarmLoggedThreshold = 0f;
+
+        /// <summary>
+        /// 温度传感器无效边沿锁（【大扫荡】NaN 记一次，恢复有效即复位）。
+        /// </summary>
+        private bool _fanTempInvalidLogged = false;
 
         /// <summary>
         /// 超温全线联停边沿锁（【V1.66】）：true=本次超温已停过，回温（≤上限）后自动复位 false。
@@ -2102,6 +2145,7 @@ namespace AgingTestSystem.Views
             try
             {
                 // 3) 配置换血：重读（含新项目 Policy 叠加）→ 就地拷进 _config
+                int oldStations = _config.TotalBarometers;
                 DeviceConfig fresh = LoadConfig();
                 _config.CopyFrom(fresh);
 
@@ -2110,6 +2154,25 @@ namespace AgingTestSystem.Views
 
                 // 5) 编排层项目状态：清旧指派 + 规则计时（idle 台，无硬件动作）
                 _deviceManager.ClearProjectScopedState();
+
+                // 【大扫荡 5.5】工位数变了→重建状态数组+规则计时+采集间隔：
+                // 以前只 CopyFrom 换血，数组还是旧尺寸——调大采集越界、调小尾部够不到。
+                // （TotalBarometers 跟机器，正常切项目不变；防手改 App.config 后切项目。）
+                if (_config.TotalBarometers != oldStations)
+                {
+                    _deviceManager.RebuildStationArrays();
+                    WriteLog($"[项目切换] 工位数 {oldStations}→{_config.TotalBarometers}，状态数组已重建");
+                }
+
+                // 【大扫荡 5.6】策略组合重验：组合键分两文件（开关跟项目/限值跟机器），
+                // 切项目可拼出"联停开但上限0"脏组合；保存时拦过，热更这里只告警不断线。
+                try
+                {
+                    string comboWarn = Dialogs.SettingsForm.CheckPolicyCombination(_config, null);
+                    if (!string.IsNullOrEmpty(comboWarn))
+                        WriteLog("[项目切换] 策略组合告警（新项目与机器限值矛盾，请检查）：" + comboWarn);
+                }
+                catch { /* 校验本身永不阻断热更 */ }
 
                 // 6) 配方列表：同一 List 就地换（自动完成源/各录入窗引用不变）
                 LoadRecipes();
@@ -2931,7 +2994,9 @@ namespace AgingTestSystem.Views
                 Style = Sunny.UI.UIStyle.Custom,
                 TitleFont = new Font("微软雅黑", 12F, FontStyle.Bold),
                 EscClose = true,
-                ZoomScaleRect = new Rectangle(15, 15, 560, 465)
+                // 【大扫荡 R8c】纯代码坐标已是终值：AutoScaleMode=None，不跟 Font 缩放双算
+                //（ZoomScaleRect 与 Font 混搭高 DPI 布局偏移，已删；判定/批量/布局三窗同口径）。
+                AutoScaleMode = AutoScaleMode.None
             };
             var txt = new Sunny.UI.UITextBox
             {
@@ -3162,7 +3227,19 @@ namespace AgingTestSystem.Views
             // 【V1.16.2】停止测试需要耦合器（关阀+断载台电）：先异步连接，连不上弹窗提示
             if (!await EnsureIoReadyAsync()) return;
 
-            _deviceManager.StopTesting(ids);
+            // 【大扫荡】下发失败明示（async void 不接住即崩溃；状态不清=台还显示在测）。
+            try
+            {
+                _deviceManager.StopTesting(ids);
+            }
+            catch (Exception ex)
+            {
+                WriteLog("[停止] 下发失败：" + ex.Message + "（选中台可能还开着，请检查耦合器后重试）");
+                MessageBox.Show("停止下发失败：\n\n" + ex.Message +
+                    "\n\n选中工位可能仍在运行！请检查耦合器连接后重试停止。",
+                    "停止失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
             WriteLog($"停止运行（{ids.Length} 台）");
         }
 
@@ -3238,7 +3315,20 @@ namespace AgingTestSystem.Views
             // 操作员，否则可能误以为阀门已关闭（安全提示）。
             if (!await EnsureIoReadyAsync()) return;
 
-            _deviceManager.StopAll();
+            // 【大扫荡】急停下发失败必须明示：StopAll 写失败抛异常（状态不清、台还显示在测），
+            // async void 里不接住即崩溃；接住弹框，操作员看得见"没停掉"。
+            try
+            {
+                _deviceManager.StopAll();
+            }
+            catch (Exception ex)
+            {
+                WriteLog("[急停] 下发失败：" + ex.Message + "（部分阀/电可能还开着，请检查耦合器后重试）");
+                MessageBox.Show("急停下发失败：\n\n" + ex.Message +
+                    "\n\n部分阀门/载台电可能还开着！请检查耦合器连接后重试急停。",
+                    "急停失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
             WriteLog("已执行全部停止（急停）");
         }
 
@@ -3270,6 +3360,10 @@ namespace AgingTestSystem.Views
         /// </summary>
         private void timerTime_Tick(object sender, EventArgs e)
         {
+            // 【大扫荡】关窗守卫：全仓他窗 Tick 都有 _closed，此处独漏；
+            // 关闭瞬间 Tick 与 Dispose 竞态即碰已释放 toolStrip。
+            if (_mainClosing || this.IsDisposed || this.Disposing || !this.IsHandleCreated) return;
+            if (toolStripStatusLabelTime == null || toolStripStatusLabelTime.IsDisposed) return;
             toolStripStatusLabelTime.Text = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
         }
 
@@ -3431,6 +3525,22 @@ namespace AgingTestSystem.Views
 
             // 注意：下拉菜单改为动态创建的弹出窗体（Form），点击菜单项或失去焦点后自动关闭
             // 不需要在这里手动释放，Form.Close 会触发 Dispose
+
+            // 【大扫荡】网格事件退订：主窗单例本次只建一次掩盖了问题，一旦重建网格
+            //（热更扩列/测试），旧画布被 OnSetClicked/OnLog 拽住不释放。
+            if (_gridView != null)
+            {
+                _gridView.OnSetClicked -= Panel_OnSetClicked;
+                _gridView.OnLog -= GridView_OnLog;
+            }
+        }
+
+        /// <summary>
+        /// 网格内部动作日志转发主窗 LOG（具名方法，可退订；见装配处与 FormClosing）。
+        /// </summary>
+        private void GridView_OnLog(object sender, string message)
+        {
+            WriteLog(message);
         }
     }
 }

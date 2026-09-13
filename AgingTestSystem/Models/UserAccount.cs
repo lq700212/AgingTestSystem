@@ -46,6 +46,15 @@ namespace AgingTestSystem.Models
         public UserAccount()
         {
         }
+
+        /// <summary>
+        /// 深拷贝（【大扫荡】UserManager 对外一律给副本：调用方拿到登录结果/
+        /// 账号列表后直接改 Password 也污染不了内部，更绕不过哈希落盘）。
+        /// </summary>
+        public UserAccount Clone()
+        {
+            return new UserAccount(Username, Password, Role);
+        }
     }
 
     /// <summary>

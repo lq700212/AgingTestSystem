@@ -357,8 +357,17 @@ namespace AgingTestSystem.Dialogs
                 return;
             }
 
-            // ---- 2) 保存配方到本地配方存储（有同名则询问是否覆盖更新） ----
-            bool saved = RecipeStorage.SaveWithDuplicateCheck(_recipes, recipe);
+            // ---- 2) 保存配方到本地配方存储（同名先问是否覆盖） ----
+            if (RecipeStorage.FindDuplicateIndex(_recipes, recipe.Name) >= 0)
+            {
+                var confirm = MessageBox.Show(
+                    $"已存在配方 \"{recipe.Name}\"，是否覆盖更新该配方？",
+                    "配方已存在",
+                    MessageBoxButtons.OKCancel,
+                    MessageBoxIcon.Question);
+                if (confirm != DialogResult.OK) return;   // 取消覆盖：放弃本次加入队列
+            }
+            bool saved = RecipeStorage.SaveRecipe(_recipes, recipe, true);
             if (!saved)
             {
                 // 用户取消覆盖 或 保存失败：放弃本次加入队列

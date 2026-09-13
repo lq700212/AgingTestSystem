@@ -80,6 +80,7 @@ $Map = @(
     @{ Pat = @("*ThemeManager*");                   Mods = @("ThemeManager", "UiStyleV172_1") },
     @{ Pat = @("*ControlDisposeHelper*");           Mods = @("DesignerStabilityV172_16") },
     @{ Pat = @("*LicenseInfo*", "*MachineFingerprint*", "*LicenseManager*", "*LicenseForm*"); Mods = @("LicenseV183") },
+    @{ Pat = @("*AtomicFile*");                    Mods = @("TestSessionStore", "RecipeStorage", "StationCache", "MesV168", "LicenseV183") },
     # --- Models ---
     @{ Pat = @("*DeviceConfig*");                   Mods = @("ModelDefaults", "SettingsValidate", "PolicyV167", "MesV168", "ProcessPolicyV170", "DeviceConfig.ParseFanIpCandidates", "DeviceManagerIntegration", "PowerReportV174") },
     @{ Pat = @("*IoOutputChannelRemap*");           Mods = @("IoOutputChannelRemap", "SettingsValidate") },

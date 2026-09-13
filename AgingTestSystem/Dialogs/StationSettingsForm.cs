@@ -569,8 +569,9 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 把当前窗口的配方（名称 / 延时 / 极限温度 / 负压阈值 / 显示模式）保存到本地配方列表
-        /// 有同名配方时由 SaveWithDuplicateCheck 询问是否覆盖更新
+        /// <summary>
+        /// 把当前窗口的配方（名称 / 延时 / 极限温度 / 负压阈值 / 显示模式）保存到本地配方列表。
+        /// 有同名配方时本窗弹窗问是否覆盖（确认才覆盖，取消则不存）。
         /// </summary>
         /// <param name="delayStart">延时开启时间</param>
         /// <param name="delayArrive">延时到达时间</param>
@@ -588,7 +589,16 @@ namespace AgingTestSystem.Dialogs
                 IsEnabled = true
             };
 
-            RecipeStorage.SaveWithDuplicateCheck(_recipes, recipe);
+            if (RecipeStorage.FindDuplicateIndex(_recipes, recipe.Name) >= 0)
+            {
+                var confirm = MessageBox.Show(
+                    $"已存在配方 \"{recipe.Name}\"，是否覆盖更新该配方？",
+                    "配方已存在",
+                    MessageBoxButtons.OKCancel,
+                    MessageBoxIcon.Question);
+                if (confirm != DialogResult.OK) return;
+            }
+            RecipeStorage.SaveRecipe(_recipes, recipe, true);
         }
 
         /// <summary>

@@ -111,8 +111,10 @@ namespace AgingTestSystem.Models
                 StartTime = this.StartTime,
                 CollectTime = this.CollectTime,
                 // 数组深拷贝，避免外部修改影响原对象
-                InputStatus = (bool[])this.InputStatus?.Clone(),
-                OutputStatus = (bool[])this.OutputStatus?.Clone()
+                // 【大扫荡】null→空数组不回 null：字段缺省非空，下游 Length/[0] 不判空，
+                // 某处置 null 后 Clone→广播→面板即 NRE（ApplyData 有守卫别处没有）。
+                InputStatus = (bool[])this.InputStatus?.Clone() ?? new bool[0],
+                OutputStatus = (bool[])this.OutputStatus?.Clone() ?? new bool[0]
             };
         }
     }

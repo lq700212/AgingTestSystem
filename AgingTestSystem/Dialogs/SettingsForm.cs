@@ -1290,7 +1290,16 @@ namespace AgingTestSystem.Dialogs
                 {
                     if (!string.IsNullOrEmpty(popup.ResultValue))
                     {
-                        grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
+                        // 【大扫荡】宿主存活守卫：设置表开着 popup 时直接关设置表
+                        //（拥有者关闭连带关 popup），或搜索过滤重建行后 rowIndex 过期，
+                        // 裸写 grid 即 ObjectDisposed/越界。守卫不满足=放弃回写（用户已关窗，值不要了）。
+                        if (!this.IsDisposed && !this.Disposing && this.IsHandleCreated
+                            && !grid.IsDisposed && !grid.Disposing
+                            && rowIndex >= 0 && rowIndex < grid.Rows.Count
+                            && grid.Columns.Contains("colValue"))
+                        {
+                            grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
+                        }
                         // 值可能变化，重新按内容算行高
                         LayoutSections();
                     }
@@ -1337,7 +1346,16 @@ namespace AgingTestSystem.Dialogs
                 {
                     if (!string.IsNullOrEmpty(popup.ResultValue))
                     {
-                        grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
+                        // 【大扫荡】宿主存活守卫：设置表开着 popup 时直接关设置表
+                        //（拥有者关闭连带关 popup），或搜索过滤重建行后 rowIndex 过期，
+                        // 裸写 grid 即 ObjectDisposed/越界。守卫不满足=放弃回写（用户已关窗，值不要了）。
+                        if (!this.IsDisposed && !this.Disposing && this.IsHandleCreated
+                            && !grid.IsDisposed && !grid.Disposing
+                            && rowIndex >= 0 && rowIndex < grid.Rows.Count
+                            && grid.Columns.Contains("colValue"))
+                        {
+                            grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
+                        }
                         // 值可能变化，重新按内容算行高
                         LayoutSections();
                     }
@@ -1382,7 +1400,16 @@ namespace AgingTestSystem.Dialogs
                 {
                     if (popup.ResultValue != null)
                     {
-                        grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
+                        // 【大扫荡】宿主存活守卫：设置表开着 popup 时直接关设置表
+                        //（拥有者关闭连带关 popup），或搜索过滤重建行后 rowIndex 过期，
+                        // 裸写 grid 即 ObjectDisposed/越界。守卫不满足=放弃回写（用户已关窗，值不要了）。
+                        if (!this.IsDisposed && !this.Disposing && this.IsHandleCreated
+                            && !grid.IsDisposed && !grid.Disposing
+                            && rowIndex >= 0 && rowIndex < grid.Rows.Count
+                            && grid.Columns.Contains("colValue"))
+                        {
+                            grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
+                        }
                         // 值可能变化，重新按内容算行高
                         LayoutSections();
                     }
@@ -1427,7 +1454,16 @@ namespace AgingTestSystem.Dialogs
                 {
                     if (popup.ResultValue != null)
                     {
-                        grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
+                        // 【大扫荡】宿主存活守卫：设置表开着 popup 时直接关设置表
+                        //（拥有者关闭连带关 popup），或搜索过滤重建行后 rowIndex 过期，
+                        // 裸写 grid 即 ObjectDisposed/越界。守卫不满足=放弃回写（用户已关窗，值不要了）。
+                        if (!this.IsDisposed && !this.Disposing && this.IsHandleCreated
+                            && !grid.IsDisposed && !grid.Disposing
+                            && rowIndex >= 0 && rowIndex < grid.Rows.Count
+                            && grid.Columns.Contains("colValue"))
+                        {
+                            grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
+                        }
                         // 值可能变化，重新按内容算行高
                         LayoutSections();
                     }
@@ -1472,7 +1508,16 @@ namespace AgingTestSystem.Dialogs
                 {
                     if (popup.ResultValue != null)
                     {
-                        grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
+                        // 【大扫荡】宿主存活守卫：设置表开着 popup 时直接关设置表
+                        //（拥有者关闭连带关 popup），或搜索过滤重建行后 rowIndex 过期，
+                        // 裸写 grid 即 ObjectDisposed/越界。守卫不满足=放弃回写（用户已关窗，值不要了）。
+                        if (!this.IsDisposed && !this.Disposing && this.IsHandleCreated
+                            && !grid.IsDisposed && !grid.Disposing
+                            && rowIndex >= 0 && rowIndex < grid.Rows.Count
+                            && grid.Columns.Contains("colValue"))
+                        {
+                            grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
+                        }
                         // 值可能变化，重新按内容算行高
                         LayoutSections();
                     }
@@ -2051,7 +2096,8 @@ namespace AgingTestSystem.Dialogs
                 if (string.IsNullOrWhiteSpace(value)) return true;
                 RuleExpr.RuleExpression expr;
                 string exprErr;
-                if (RuleExpr.TryParse(value.Trim(), out expr, out exprErr)) return true;
+                // 【大扫荡】严格模式：未知变量保存时即拦（死规则：过了保存、运行时恒 false）。
+                if (RuleExpr.TryParse(value.Trim(), out expr, out exprErr, true)) return true;
                 error = "表达式错误：" + exprErr;
                 return false;
             }
@@ -2091,9 +2137,6 @@ namespace AgingTestSystem.Dialogs
                 case "ScannerBaudRate":
                 case "ScannerDataBits":
                 case "ScannerStopBits":
-                case "MesTimeoutMs":
-                case "MesRetryCount":
-                case "MesRetryIntervalMs":
                     if (!int.TryParse(value, out _)) { error = "应为整数"; return false; }
                     return true;
 
@@ -2148,6 +2191,35 @@ namespace AgingTestSystem.Dialogs
                         error = "应为 ≥0 的整数（0=未配置破空阀）";
                         return false;
                     }
+                    // 【大扫荡】上限 65535（Modbus 点号 16 位；与工位编号冲突由组合校验拦）。
+                    if (ventPoint > 65535) { error = "点位超出范围（≤65535）"; return false; }
+                    return true;
+
+                // MES 超时/重试（【大扫荡】以前只认整数：-1/99999999 全过，
+                // 后台线程长挂或 0 间隔空转。这里收范围，非法手改文件由运行时钳制兜底）。
+                case "MesTimeoutMs":
+                    int mesTimeout;
+                    if (!int.TryParse(value, out mesTimeout) || mesTimeout < 500 || mesTimeout > 120000)
+                    {
+                        error = "应为 500~120000 的整数（毫秒）";
+                        return false;
+                    }
+                    return true;
+                case "MesRetryCount":
+                    int mesRetry;
+                    if (!int.TryParse(value, out mesRetry) || mesRetry < 0 || mesRetry > 20)
+                    {
+                        error = "应为 0~20 的整数（次）";
+                        return false;
+                    }
+                    return true;
+                case "MesRetryIntervalMs":
+                    int mesInterval;
+                    if (!int.TryParse(value, out mesInterval) || mesInterval < 0 || mesInterval > 600000)
+                    {
+                        error = "应为 0~600000 的整数（毫秒）";
+                        return false;
+                    }
                     return true;
 
                 // 其余为字符串类（端口名、IP、关键词、校验位等），不做强制校验
@@ -2186,23 +2258,38 @@ namespace AgingTestSystem.Dialogs
         /// 【V1.70】改为静态（入参 config），供工艺策略窗复用同一条保存路。
         /// </summary>
         /// <param name="config">内存中的设备配置（读现值用）</param>
-        /// <param name="changes">本次收集到的全部修改（key → 界面值）</param>
+        /// <param name="changes">本次收集到的全部修改（key → 界面值）；null=只验内存现值（热更告警用）</param>
         /// <returns>矛盾描述；null=组合合法</returns>
-        private static string CheckPolicyCombination(DeviceConfig config, Dictionary<string, string> changes)
+        public static string CheckPolicyCombination(DeviceConfig config, Dictionary<string, string> changes)
         {
+            if (config == null) return "内部错误：配置为空";
             bool shutdown = ResolveEffectiveBool(changes, "FanTempShutdownEnabled", config.FanTempShutdownEnabled);
             float limitC = ResolveEffectiveFloat(changes, "FanTempAlarmLimitC", config.FanTempAlarmLimitC);
             CompletionAction action = ResolveEffectiveEnum(changes, "CompletionAction", config.CompletionAction);
             int ventPoint = ResolveEffectiveInt(changes, "VentValveDoPoint", config.VentValveDoPoint);
             bool ventEnabled = ResolveEffectiveBool(changes, "VentValveEnabled", config.VentValveEnabled);
-            return AgingSequencer.ValidatePolicyCombination(shutdown, limitC, action, ventPoint, ventEnabled);
+            string combo = AgingSequencer.ValidatePolicyCombination(shutdown, limitC, action, ventPoint, ventEnabled);
+            if (combo != null) return combo;
+            // 【大扫荡】破空阀点位碰撞：配成某台阀/电编号 → 启动该台"开阀后同一 ID 写关"，
+            // 真空永不建立还极难排查（保存时拦，运行侧 MapOutputChannel 双拦是第二道）。
+            if (ventPoint > 0)
+            {
+                int first = config.TotalInputs + 1;
+                int last = config.TotalInputs + 2 * config.TotalBarometers;
+                if (ventPoint >= first && ventPoint <= last)
+                {
+                    return $"破空阀点位 {ventPoint} 与工位阀/载台电编号冲突" +
+                        $"（{first}~{last} 已被 {config.TotalBarometers} 台工位占用），请换预留点位";
+                }
+            }
+            return null;
         }
 
-        /// <summary>取某项的生效值：本次改了用本次的，否则用内存现值（下同三个）。</summary>
+        /// <summary>取某项的生效值：本次改了用本次的，否则用内存现值（下同三个；changes 可 null）。</summary>
         private static bool ResolveEffectiveBool(Dictionary<string, string> changes, string key, bool current)
         {
             string v;
-            if (changes.TryGetValue(key, out v) && bool.TryParse((v ?? "").Trim(), out bool b)) return b;
+            if (changes != null && changes.TryGetValue(key, out v) && bool.TryParse((v ?? "").Trim(), out bool b)) return b;
             return current;
         }
 
@@ -2210,7 +2297,7 @@ namespace AgingTestSystem.Dialogs
         private static float ResolveEffectiveFloat(Dictionary<string, string> changes, string key, float current)
         {
             string v;
-            if (changes.TryGetValue(key, out v) && float.TryParse((v ?? "").Trim(), out float f)) return f;
+            if (changes != null && changes.TryGetValue(key, out v) && float.TryParse((v ?? "").Trim(), out float f)) return f;
             return current;
         }
 
@@ -2218,7 +2305,7 @@ namespace AgingTestSystem.Dialogs
         private static int ResolveEffectiveInt(Dictionary<string, string> changes, string key, int current)
         {
             string v;
-            if (changes.TryGetValue(key, out v) && int.TryParse((v ?? "").Trim(), out int i)) return i;
+            if (changes != null && changes.TryGetValue(key, out v) && int.TryParse((v ?? "").Trim(), out int i)) return i;
             return current;
         }
 
@@ -2227,7 +2314,7 @@ namespace AgingTestSystem.Dialogs
         {
             string v;
             object parsed;
-            if (changes.TryGetValue(key, out v)
+            if (changes != null && changes.TryGetValue(key, out v)
                 && (parsed = ProjectPolicyStore.ParseValue(typeof(CompletionAction), v)) != null)
             {
                 return (CompletionAction)parsed;

@@ -733,7 +733,12 @@ namespace AgingTestSystem.Tests
         // =====================================================================
         private static void DeviceManagerIntegrationTests()
         {
-            EnterCleanDir(); // TestSession.json / Logs\ 全部落隔离目录
+            // 【大扫荡】快照绝对路径化后走 BaseDirOverride 隔离（finally 复位）。
+            string integDir = EnterCleanDir(); // TestSession.json / Logs\ 全部落隔离目录
+            var integBase = typeof(TestSessionStore).GetField("BaseDirOverride",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+            if (integBase != null) integBase.SetValue(null, integDir);
+            string integSnap = System.IO.Path.Combine(integDir, "TestSession.json");
 
             FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
             DeviceManager dm = BuildTestManager(out reader, out io, out config);
@@ -848,7 +853,7 @@ namespace AgingTestSystem.Tests
                 reader.SetPressure(4, -92m); // -92 ≤ -90 到位 → 会自动上电进入 Aging
 
                 Check("[恢复] 在测期间生成任务快照文件",
-                    WaitUntil(() => File.Exists("TestSession.json"), 2000));
+                    WaitUntil(() => File.Exists(integSnap), 2000));
                 Check("[恢复] 上电进入老化后仍在测(GetTestingCount=1)",
                     WaitUntil(() => io.ReadOutput(PowerOut(config, 4)), 2500) && dm.GetTestingCount() == 1);
 
@@ -889,6 +894,7 @@ namespace AgingTestSystem.Tests
                 try { dm.StopAll(); } catch { }
                 try { dm.Dispose(); } catch { }
                 try { TestSessionStore.Clear(); } catch { }
+                try { if (integBase != null) integBase.SetValue(null, null); } catch { }
             }
         }
 

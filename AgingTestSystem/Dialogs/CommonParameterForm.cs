@@ -216,6 +216,15 @@ namespace AgingTestSystem.Dialogs
             // 通讯异常（result 为 null）
             if (result == null)
             {
+                // 【大扫荡】记中断事件：内存阈值已是新值、硬件未知写到哪，
+                // 以前只弹框，追溯链里无痕（关窗中断连框都不弹）。
+                try
+                {
+                    AgingTestSystem.Services.TestEventLogger.Write("", 0, "阈值批量写中断",
+                        $"目标 {thresholdValue} kPa，写入过程通讯异常，硬件与内存阈值可能不一致，请重进本窗重试",
+                        sn: "", recipe: "", result: "");
+                }
+                catch { }
                 MessageBox.Show("批量设置失败，请检查气压表通讯连接", "错误",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
@@ -257,10 +266,20 @@ namespace AgingTestSystem.Dialogs
             // ===== 部分失败：列出失败台号，窗口保持打开便于重试 =====
             // 失败原因一般是：断电 / 掉线 / 从站地址拨错 / 设备损坏，
             // 一次列出所有失败台，避免逐台弹窗（失败几十台不用点几十次确认）。
+            // 【大扫荡】失败台硬件仍是旧阈值（内存已是新值）：明示+记事件，
+            // 以前只说"重试"，不说口径已分叉。
             string failedText = string.Join("、", failedList);
+            try
+            {
+                AgingTestSystem.Services.TestEventLogger.Write("", 0, "阈值部分失败",
+                    $"目标 {thresholdValue} kPa，成功 {successCount} 台，失败台 {failedText} 仍是旧阈值",
+                    sn: "", recipe: "", result: "");
+            }
+            catch { }
             MessageBox.Show(
                 $"设置完成！成功 {successCount} 台，失败 {failedList.Count} 台。\r\n" +
                 $"失败台号：{failedText}\r\n\r\n" +
+                "注意：失败台硬件仍是旧阈值（软件已按新值判定），重试前该台口径不一致。\r\n" +
                 "提示：失败通常表示该台气压表断电 / 掉线 / 从站地址拨错 / 损坏，\r\n" +
                 "请检查硬件后点击【保存设置】重试。\r\n\r\n" +
                 "【小数位核对】若仪表本机显示值与设定值差 10 倍，\r\n" +

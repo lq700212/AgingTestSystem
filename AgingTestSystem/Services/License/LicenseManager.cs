@@ -242,7 +242,15 @@ namespace AgingTestSystem.Services.License
 
             // 第 3 关：点数（证里最大工位数 < 本机配置即拦，防 36 点的证跑 72 点的线）。
             int needStations = totalStations > 0 ? totalStations : 0;
-            if (info.maxStations <= 0 || needStations > info.maxStations)
+            if (info.maxStations <= 0)
+            {
+                // 【大扫荡】点数字段缺失/非法≠超配：单独报非法，不误导用户去"升级点数"。
+                res.Status = LicenseStatus.Blocked;
+                res.Message = "授权文件损坏（最大工数字段缺失或非法），请重新导入商务签发的 License.lic。";
+                res.TitleSuffix = "[授权无效]";
+                return res;
+            }
+            if (needStations > info.maxStations)
             {
                 res.Status = LicenseStatus.Blocked;
                 res.Message = string.Format("本授权最大工位数 {0}，本机配置 {1}，超配不允许启动。\n\n请联系商务升级点数。",
@@ -264,8 +272,9 @@ namespace AgingTestSystem.Services.License
             if (over > ExpireGraceDays)
             {
                 res.Status = LicenseStatus.Blocked;
-                res.Message = string.Format("授权已于 {0:yyyy-MM-dd} 到期（超宽限 {1} 天），不允许启动。\n\n请联系商务续费。",
-                    exp, ExpireGraceDays);
+                // 【大扫荡】显示实际超期天数（以前传常量 7，超期 30 天也显示"超宽限 7 天"）。
+                res.Message = string.Format("授权已于 {0:yyyy-MM-dd} 到期（已超期 {1} 天，宽限 {2} 天），不允许启动。\n\n请联系商务续费。",
+                    exp, over, ExpireGraceDays);
                 res.TitleSuffix = "[授权到期]";
                 return res;
             }
@@ -378,7 +387,7 @@ namespace AgingTestSystem.Services.License
             {
                 string path = Path.Combine(BaseDir(), LicenseFileName);
                 if (!File.Exists(path)) return false;
-                string text = File.ReadAllText(path, Encoding.UTF8);
+                string text = AtomicFile.SafeReadAllText(path, Encoding.UTF8);
                 return LicenseInfo.TryParseFile(text, out info, out signatureB64);
             }
             catch { return false; }
@@ -461,7 +470,8 @@ namespace AgingTestSystem.Services.License
                     if (comps.Count > 0) root["components"] = comps;
                 }
                 catch { }
-                File.WriteAllText(Path.Combine(BaseDir(), LicenseFileName),
+                // 【大扫荡】原子写。
+                AtomicFile.WriteAllText(Path.Combine(BaseDir(), LicenseFileName),
                     root.ToString(Formatting.Indented), Encoding.UTF8);
                 return true;
             }
@@ -479,7 +489,7 @@ namespace AgingTestSystem.Services.License
             {
                 string path = Path.Combine(BaseDir(), LicenseFileName);
                 if (!File.Exists(path)) return list;
-                var root = JObject.Parse(File.ReadAllText(path, Encoding.UTF8));
+                var root = JObject.Parse(AtomicFile.SafeReadAllText(path, Encoding.UTF8));
                 var arr = root["components"] as JArray;
                 if (arr == null) return list;
                 foreach (var t in arr) list.Add((string)t ?? "");
@@ -514,7 +524,7 @@ namespace AgingTestSystem.Services.License
                 string path = Path.Combine(BaseDir(), TrialFileName);
                 if (File.Exists(path))
                 {
-                    string raw = File.ReadAllText(path, Encoding.UTF8).Trim();
+                    string raw = AtomicFile.SafeReadAllText(path, Encoding.UTF8).Trim();
                     // DPAPI 密文优先解；明文兜底（UpdateRunStamps 在 DPAPI 失败时写过明文，
                     // 读必须认这两种，否则"写了读不回"试用首跑日期会丢）。见 UpdateRunStamps 注释。
                     string plain = raw.StartsWith(MesCrypto.Prefix, StringComparison.Ordinal)
@@ -575,7 +585,8 @@ namespace AgingTestSystem.Services.License
                 string enc = MesCrypto.Protect(plain);
                 if (enc == null) enc = plain;   // DPAPI 失败（如测试隔离环境）就明文记，
                 // 试用防线降级但不断启动闸（真现场 Windows DPAPI 一定可用）。
-                File.WriteAllText(Path.Combine(BaseDir(), TrialFileName), enc, Encoding.UTF8);
+                // 【大扫荡】原子写（与配方/快照同病）。
+                AtomicFile.WriteAllText(Path.Combine(BaseDir(), TrialFileName), enc, Encoding.UTF8);
             }
             catch { }
             try

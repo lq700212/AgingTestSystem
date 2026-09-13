@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using Newtonsoft.Json;
@@ -102,12 +102,13 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 保存指定工位的配置缓存（存在则覆盖）并落盘
+        /// 保存指定工位的配置缓存（存在则覆盖）并落盘。
+        /// 【大扫荡】非法 DeviceId（≤0）直接拒绝入库（以前 0/负数照存照落盘）。
         /// </summary>
         /// <param name="entry">要保存的缓存条目</param>
         public static void Save(StationCacheEntry entry)
         {
-            if (entry == null) return;
+            if (entry == null || entry.DeviceId <= 0) return;
 
             lock (_lock)
             {
@@ -157,7 +158,7 @@ namespace AgingTestSystem.Services
             {
                 if (!File.Exists(CacheFilePath)) return;
 
-                string jsonContent = File.ReadAllText(CacheFilePath);
+                string jsonContent = AtomicFile.SafeReadAllText(CacheFilePath);
                 List<StationCacheEntry> list =
                     JsonConvert.DeserializeObject<List<StationCacheEntry>>(jsonContent);
 
@@ -180,7 +181,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 把内存缓存序列化写入 JSON 文件
+        /// 把内存缓存序列化写入 JSON 文件（【大扫荡】原子写）。
         /// </summary>
         private static void WriteToFile()
         {
@@ -188,7 +189,7 @@ namespace AgingTestSystem.Services
             {
                 string jsonContent =
                     JsonConvert.SerializeObject(new List<StationCacheEntry>(_cache.Values), Formatting.Indented);
-                File.WriteAllText(CacheFilePath, jsonContent);
+                AtomicFile.WriteAllText(CacheFilePath, jsonContent);
             }
             catch (Exception ex)
             {

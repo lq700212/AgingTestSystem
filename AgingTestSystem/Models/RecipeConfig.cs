@@ -59,5 +59,25 @@ namespace AgingTestSystem.Models
         /// 是否启用
         /// </summary>
         public bool IsEnabled { get; set; } = true;
+
+        /// <summary>
+        /// 深拷贝（【大扫荡】编辑窗先改副本：校验失败时原对象不受污染；
+        /// 以前就地改，校验一半失败前半字段已脏）。
+        /// </summary>
+        public RecipeConfig Clone()
+        {
+            return new RecipeConfig
+            {
+                Id = this.Id,
+                Name = this.Name,
+                NegativePressure = this.NegativePressure,
+                DisplayMode = this.DisplayMode,
+                DelayTime = this.DelayTime,
+                StartTime = this.StartTime,
+                LimitTemperature = this.LimitTemperature,
+                CreateTime = this.CreateTime,
+                IsEnabled = this.IsEnabled
+            };
+        }
     }
 }

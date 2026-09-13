@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using AgingTestSystem.Models;
@@ -81,7 +81,13 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 当前已登录的用户（未登录时为 null）
         /// </summary>
-        public UserAccount CurrentUser { get; private set; }
+        public UserAccount CurrentUser
+        {
+            // 【大扫荡】对外只给副本：调用方改返回对象的 Password 也污染不了内部。
+            get { return _currentUser != null ? _currentUser.Clone() : null; }
+            private set { _currentUser = value; }
+        }
+        private UserAccount _currentUser;
 
         /// <summary>
         /// dev 最高权限账号名（V1.64）。
@@ -112,8 +118,8 @@ namespace AgingTestSystem.Services
         {
             get
             {
-                return CurrentUser != null &&
-                    string.Equals(CurrentUser.Username, DevUsername, StringComparison.OrdinalIgnoreCase);
+                return _currentUser != null &&
+                    string.Equals(_currentUser.Username, DevUsername, StringComparison.OrdinalIgnoreCase);
             }
         }
 
@@ -179,7 +185,7 @@ namespace AgingTestSystem.Services
                 }
 
                 // 读取文件内容
-                string jsonContent = File.ReadAllText(UserDataFilePath);
+                string jsonContent = AtomicFile.SafeReadAllText(UserDataFilePath);
 
                 // 反序列化 JSON
                 List<UserAccount> userList = JsonConvert.DeserializeObject<List<UserAccount>>(jsonContent);
@@ -221,6 +227,13 @@ namespace AgingTestSystem.Services
                         {
                             _users[user.Role].Add(user);
                             keptBizAdmin = true;
+                        }
+                        else
+                        {
+                            // 【大扫荡】多余业务管理员照历史约定丢弃，但点名记一笔
+                            //（以前无声消失，下次存盘永久擦除，排障时对不上数）。
+                            System.Diagnostics.Debug.WriteLine(
+                                "[用户管理] 手改文件含多余业务管理员，已忽略: {0}", user.Username);
                         }
                     }
                     else
@@ -321,8 +334,8 @@ namespace AgingTestSystem.Services
                 // 序列化 JSON（格式化输出，方便阅读）
                 string jsonContent = JsonConvert.SerializeObject(userList, Formatting.Indented);
 
-                // 写入文件
-                File.WriteAllText(UserDataFilePath, jsonContent);
+                // 写入文件（【大扫荡】原子写：不断电写半截）
+                AtomicFile.WriteAllText(UserDataFilePath, jsonContent);
 
                 System.Diagnostics.Debug.WriteLine("[用户管理] 用户数据保存成功");
                 return true;
@@ -381,10 +394,12 @@ namespace AgingTestSystem.Services
             }
 
             // 在目标角色的账号列表中匹配用户名和密码
+            // 【大扫荡】大小写不敏感（与注册/改名查重口径一致；以前精确匹配，
+            // 存"dev"输"DEV"报用户名错误、但该名又注册不了，口径分裂）。
             foreach (UserAccount account in accounts)
             {
                 // 用户名不匹配则继续查找下一个账号
-                if (!string.Equals(account.Username, trimmedUsername, StringComparison.Ordinal))
+                if (!string.Equals(account.Username, trimmedUsername, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
@@ -396,8 +411,9 @@ namespace AgingTestSystem.Services
                 }
 
                 // 登录成功，记录当前用户
-                CurrentUser = account;
-                return LoginResult.Ok(account);
+                // 【大扫荡】存副本：调用方拿到 LoginResult.User 后改什么都污染不了内部。
+                CurrentUser = account.Clone();
+                return LoginResult.Ok(account.Clone());
             }
 
             return LoginResult.Fail("用户名错误");
@@ -412,6 +428,23 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
+        /// 按角色+用户名找内部账号对象（【大扫荡】写操作统一入口：调用方传的可能是
+        /// GetAccounts/LoginResult 的副本，按值定位内部对象再改，改副本等于没改）。
+        /// 大小写不敏感（与登录/查重口径一致）。
+        /// </summary>
+        private UserAccount FindInternal(UserRole role, string username)
+        {
+            if (string.IsNullOrWhiteSpace(username)) return null;
+            if (!_users.TryGetValue(role, out List<UserAccount> accounts)) return null;
+            foreach (var a in accounts)
+            {
+                if (a != null && string.Equals(a.Username, username.Trim(),
+                    StringComparison.OrdinalIgnoreCase)) return a;
+            }
+            return null;
+        }
+
+        /// <summary>
         /// 修改指定账号的用户名（仅管理员可调用；V1.64 起操作管理员组账号须 dev 在场）。
         /// </summary>
         /// <param name="account">要修改的账号</param>
@@ -420,7 +453,7 @@ namespace AgingTestSystem.Services
         public (bool Success, string Message) UpdateUsername(UserAccount account, string newUsername)
         {
             // 权限校验：必须管理员才能修改
-            if (CurrentUser == null || CurrentUser.Role != UserRole.Administrator)
+            if (_currentUser == null || _currentUser.Role != UserRole.Administrator)
             {
                 return (false, "权限不足：只有管理员可以修改用户名");
             }
@@ -430,8 +463,15 @@ namespace AgingTestSystem.Services
                 return (false, "未找到目标账号");
             }
 
+            // 【大扫荡】按值定位内部对象（调用方传的可能是副本，改副本等于没改）。
+            UserAccount target = FindInternal(account.Role, account.Username);
+            if (target == null)
+            {
+                return (false, "未找到目标账号");
+            }
+
             // 【V1.64】dev 账号不允许改名：改了名隐藏入口就对不上了，且自愈会再种一个 dev 出来造成混乱
-            if (IsDevUsername(account.Username))
+            if (IsDevUsername(target.Username))
             {
                 return (false, "dev 账号不允许改名");
             }
@@ -456,7 +496,7 @@ namespace AgingTestSystem.Services
 
             // 【V1.64】业务管理员的改名只有 dev 能动：普通管理员管操作员/技术员，
             // 管理员组的人事权收归 dev（防管理员之间互相改名捣乱）
-            if (account.Role == UserRole.Administrator && !IsDevLoggedIn)
+            if (target.Role == UserRole.Administrator && !IsDevLoggedIn)
             {
                 return (false, "只有 dev 最高权限可以修改管理员账号");
             }
@@ -466,7 +506,7 @@ namespace AgingTestSystem.Services
             {
                 foreach (var other in accountList)
                 {
-                    if (ReferenceEquals(other, account))
+                    if (ReferenceEquals(other, target))
                     {
                         continue;
                     }
@@ -477,7 +517,14 @@ namespace AgingTestSystem.Services
                 }
             }
 
-            account.Username = trimmed;
+            string oldName = target.Username;
+            target.Username = trimmed;
+            // 改的是当前登录账号：同步当前会话名（否则会话还叫旧名）
+            if (_currentUser != null && string.Equals(_currentUser.Username, oldName,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                _currentUser.Username = trimmed;
+            }
 
             // 修改成功后保存到文件
             SaveUsersToFile();
@@ -500,9 +547,16 @@ namespace AgingTestSystem.Services
         public (bool Success, string Message) ChangeOwnPassword(string oldPassword, string newPassword)
         {
             // 必须已登录才能修改自己的密码
-            if (CurrentUser == null)
+            if (_currentUser == null)
             {
                 return (false, "当前未登录，无法修改密码");
+            }
+
+            // 【大扫荡】定位内部对象改（CurrentUser 是副本，改它等于没改）。
+            UserAccount self = FindInternal(_currentUser.Role, _currentUser.Username);
+            if (self == null)
+            {
+                return (false, "当前账号不存在");
             }
 
             // 当前密码不能为空
@@ -512,7 +566,7 @@ namespace AgingTestSystem.Services
             }
 
             // 验证当前密码是否正确（哈希比对）
-            if (!PasswordHasher.Verify(oldPassword, CurrentUser.Password))
+            if (!PasswordHasher.Verify(oldPassword, self.Password))
             {
                 return (false, "当前密码错误");
             }
@@ -529,19 +583,20 @@ namespace AgingTestSystem.Services
             }
 
             // 新密码不能与当前密码相同（哈希比对，判断是否仍是同一明文）
-            if (PasswordHasher.Verify(newPassword, CurrentUser.Password))
+            if (PasswordHasher.Verify(newPassword, self.Password))
             {
                 return (false, "新密码不能与当前密码相同");
             }
 
             // 修改当前登录用户的密码（存哈希，明文不落盘）
-            CurrentUser.Password = PasswordHasher.Hash(newPassword);
+            self.Password = PasswordHasher.Hash(newPassword);
+            _currentUser.Password = self.Password;
 
             // 修改成功后保存到文件
             SaveUsersToFile();
 
             // 密码已变更，清除该角色记住的登录信息（避免下次自动填充旧密码导致登录失败）
-            ClearRememberedLogin(CurrentUser.Role);
+            ClearRememberedLogin(_currentUser.Role);
 
             return (true, "密码修改成功");
         }
@@ -556,7 +611,7 @@ namespace AgingTestSystem.Services
         public (bool Success, string Message) UpdatePassword(UserAccount account, string newPassword)
         {
             // 权限校验：必须管理员才能修改
-            if (CurrentUser == null || CurrentUser.Role != UserRole.Administrator)
+            if (_currentUser == null || _currentUser.Role != UserRole.Administrator)
             {
                 return (false, "权限不足：只有管理员可以修改密码");
             }
@@ -566,8 +621,15 @@ namespace AgingTestSystem.Services
                 return (false, "未找到目标账号");
             }
 
+            // 【大扫荡】按值定位内部对象（调用方传的可能是副本）。
+            UserAccount target = FindInternal(account.Role, account.Username);
+            if (target == null)
+            {
+                return (false, "未找到目标账号");
+            }
+
             // 【V1.64】管理员组密码重置权收归 dev（含 dev 自身：普通管理员连 dev 的边都碰不到）
-            if (account.Role == UserRole.Administrator && !IsDevLoggedIn)
+            if (target.Role == UserRole.Administrator && !IsDevLoggedIn)
             {
                 return (false, "只有 dev 最高权限可以修改管理员账号");
             }
@@ -584,7 +646,13 @@ namespace AgingTestSystem.Services
             }
 
             // 存哈希，明文不落盘
-            account.Password = PasswordHasher.Hash(newPassword);
+            target.Password = PasswordHasher.Hash(newPassword);
+            // 改的是当前登录账号：同步会话副本
+            if (_currentUser != null && string.Equals(_currentUser.Username, target.Username,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                _currentUser.Password = target.Password;
+            }
 
             // 修改成功后保存到文件
             SaveUsersToFile();
@@ -593,15 +661,21 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 获取指定角色下的全部账号（用于登录下拉框/用户管理窗体显示）
+        /// 获取指定角色下的全部账号（用于登录下拉框/用户管理窗体显示）。
+        /// 【大扫荡】返回副本：调用方强转/改密码都污染不了内部。
         /// </summary>
         /// <param name="role">目标角色</param>
-        /// <returns>账号列表（角色不存在时返回空列表）</returns>
+        /// <returns>账号列表副本（角色不存在时返回空列表）</returns>
         public IReadOnlyList<UserAccount> GetAccounts(UserRole role)
         {
             if (_users.TryGetValue(role, out List<UserAccount> accounts))
             {
-                return accounts;
+                var copy = new List<UserAccount>(accounts.Count);
+                foreach (var a in accounts)
+                {
+                    if (a != null) copy.Add(a.Clone());
+                }
+                return copy;
             }
             return new List<UserAccount>();
         }
@@ -618,7 +692,7 @@ namespace AgingTestSystem.Services
         public (bool Success, string Message) AddAccount(UserRole role, string username, string password)
         {
             // 权限校验：必须管理员才能添加账号
-            if (CurrentUser == null || CurrentUser.Role != UserRole.Administrator)
+            if (_currentUser == null || _currentUser.Role != UserRole.Administrator)
             {
                 return (false, "权限不足：只有管理员可以添加账号");
             }
@@ -709,7 +783,7 @@ namespace AgingTestSystem.Services
         public (bool Success, string Message) RemoveAccount(UserRole role, string username)
         {
             // 权限校验：必须管理员才能删除账号
-            if (CurrentUser == null || CurrentUser.Role != UserRole.Administrator)
+            if (_currentUser == null || _currentUser.Role != UserRole.Administrator)
             {
                 return (false, "权限不足：只有管理员可以删除账号");
             }
@@ -757,9 +831,11 @@ namespace AgingTestSystem.Services
             accounts.Remove(target);
 
             // 若删除的是当前登录账号，恢复为未登录状态
-            if (ReferenceEquals(CurrentUser, target))
+            // 【大扫荡】按用户名比对（CurrentUser 是副本，ReferenceEquals 永假）。
+            if (_currentUser != null && string.Equals(_currentUser.Username, target.Username,
+                StringComparison.OrdinalIgnoreCase))
             {
-                CurrentUser = null;
+                _currentUser = null;
             }
 
             // 删除成功后保存到文件
@@ -781,12 +857,12 @@ namespace AgingTestSystem.Services
         /// <returns>有权限返回 true，无权限返回 false</returns>
         public bool HasPermission(UserRole requiredRole)
         {
-            if (CurrentUser == null)
+            if (_currentUser == null)
             {
                 // 未登录视为操作员权限（最低）
                 return UserRole.Operator >= requiredRole;
             }
-            return CurrentUser.Role >= requiredRole;
+            return _currentUser.Role >= requiredRole;
         }
 
         /// <summary>
@@ -849,7 +925,7 @@ namespace AgingTestSystem.Services
                     return;
                 }
 
-                string jsonContent = File.ReadAllText(RememberedLoginFilePath);
+                string jsonContent = AtomicFile.SafeReadAllText(RememberedLoginFilePath);
                 List<RememberedLogin> list = JsonConvert.DeserializeObject<List<RememberedLogin>>(jsonContent);
                 if (list == null)
                 {
@@ -876,7 +952,7 @@ namespace AgingTestSystem.Services
             {
                 List<RememberedLogin> list = new List<RememberedLogin>(_rememberedLogins.Values);
                 string jsonContent = JsonConvert.SerializeObject(list, Formatting.Indented);
-                File.WriteAllText(RememberedLoginFilePath, jsonContent);
+                AtomicFile.WriteAllText(RememberedLoginFilePath, jsonContent);
             }
             catch (Exception ex)
             {
@@ -885,25 +961,26 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 密码编码（Base64 混淆，仅用于"记住密码"回填登录框）
-        ///
-        /// 【与 Users.json 哈希的关系】
-        /// 记住密码必须能还原出明文去填充登录框（Login 用明文再哈希比对），
-        /// 所以这里不能像 Users.json 那样用不可逆哈希；只能用可逆编码。
-        /// 该文件仅存本地、已被 gitignore，且泄露面仅限本机登录便利性，
-        /// 与账号体系的主密码存储（PBKDF2 哈希）是两条独立的安全路径。
+        /// 密码编码（【大扫荡】DPAPI 本机加密存"记住密码"，替代 Base64 明文可逆。
+        /// 拷走 RememberedLogin.json 也解不开——与 MES 密钥同口径。
+        /// 老 Base64 文件读回 null（当没记住过，重输一次即可；项目未上线不做兼容）。
         /// </summary>
         private string EncodePassword(string password)
-            => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(password));
+        {
+            string enc = MesCrypto.Protect(password);
+            return enc ?? "";
+        }
 
         /// <summary>
-        /// 密码解码（对应 EncodePassword）
+        /// 密码解码（对应 EncodePassword；老格式/损坏返回 null）。
         /// </summary>
         private string DecodePassword(string encoded)
         {
             try
             {
-                return System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(encoded));
+                if (string.IsNullOrEmpty(encoded)) return null;
+                // 老 Base64 格式无 DPAPI 前缀 → Unprotect 拒绝（返回 null），当没记住过。
+                return MesCrypto.Unprotect(encoded);
             }
             catch (Exception ex)
             {

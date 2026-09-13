@@ -1318,7 +1318,12 @@ namespace AgingTestSystem.Views
         private bool TryHitRowButton(Point p, out int row)
         {
             row = -1;
-            if (p.X < Scaled(_columns * _layout.PanelColumnWidth) || p.Y < 0 || p.Y >= Scaled(_rows * _layout.GetEffectiveRowHeight())) return false;
+            // 【大扫荡】补右界：以前按钮列右侧空白也命中整行翻选；
+            // 右界=绘制右界（左界+列宽，含 2px 视觉容差，与 TryHitPanel 左界口径一致）。
+            int left = Scaled(_columns * _layout.PanelColumnWidth);
+            int right = left + Scaled(_layout.RowSelectButtonColumnWidth);
+            if (p.X < left || p.X >= right
+                || p.Y < 0 || p.Y >= Scaled(_rows * _layout.GetEffectiveRowHeight())) return false;
             row = p.Y / Scaled(_layout.GetEffectiveRowHeight());
             return row >= 0 && row < _rows;
         }

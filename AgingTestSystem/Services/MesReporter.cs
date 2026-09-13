@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
@@ -34,15 +34,31 @@ namespace AgingTestSystem.Services
         /// </summary>
         public static Func<string, string, Dictionary<string, string>, int, bool> Transport;
 
-        /// <summary>离线缓存文件名（程序运行目录，相对路径——回归隔离靠 EnterCleanDir 切 cwd）</summary>
+        /// <summary>离线缓存文件名（程序运行目录；绝对路径，见 QueuePath）。</summary>
         public const string QueueFileName = "MesQueue.json";
 
         /// <summary>离线缓存上限（条）。MES 长期不通时丢最旧的（保内存），丢时记日志。</summary>
         private const int MaxBacklog = 5000;
 
+        /// <summary>内存待发队列上限（条）。以前无界：MES 宕机 + 报警风暴时无限膨胀
+        /// 直到 OOM。超限丢最旧（worker 消费时若发生过丢弃，记一条事件说明）。</summary>
+        private const int MaxQueue = 2000;
+
+        /// <summary>目录覆盖测试缝（回归隔离用，生产恒 null；用例赋值后 try/finally 复位）。</summary>
+        internal static string BaseDirOverride;
+
+        /// <summary>复用的 HttpClient（【大扫荡】以前每次发送 new 一个：高频上报
+        /// TIME_WAIT 堆积；单例+每次设 Timeout。工控机目标地址固定，无 DNS 刷新问题）。</summary>
+        private static readonly Lazy<System.Net.Http.HttpClient> _httpClient =
+            new Lazy<System.Net.Http.HttpClient>(() => new System.Net.Http.HttpClient(), true);
+
         private readonly DeviceConfig _config;
         private readonly object _lock = new object();
         private readonly Queue<MesItem> _queue = new Queue<MesItem>();
+        /// <summary>队列满丢弃计数（worker 消费时记一条事件说明丢了多少，不每条刷屏）。</summary>
+        private int _queueDropped;
+        /// <summary>上次缓存落盘时刻（落盘节流：报警风暴时不每条全量写文件）。</summary>
+        private DateTime _lastBacklogSave = DateTime.MinValue;
         private Thread _worker;
         private AutoResetEvent _signal;
         private bool _stop;
@@ -104,6 +120,21 @@ namespace AgingTestSystem.Services
                 };
                 lock (_lock)
                 {
+                    // 【大扫荡】已释放后不再建线程：直接进离线缓存落盘（以前事件无声丢失）。
+                    if (_disposed || _alreadyDisposed)
+                    {
+                        var single = LoadBacklog();
+                        single.Add(item);
+                        while (single.Count > MaxBacklog) single.RemoveAt(0);
+                        SaveBacklog(single);
+                        return;
+                    }
+                    // 【大扫荡】队列上限：超限丢最旧（计数由 worker 消费时统一记事件）。
+                    if (_queue.Count >= MaxQueue)
+                    {
+                        _queue.Dequeue();
+                        _queueDropped++;
+                    }
                     _queue.Enqueue(item);
                     EnsureWorker();
                     if (_signal != null) _signal.Set();
@@ -137,17 +168,34 @@ namespace AgingTestSystem.Services
             MesMapping.ParseFieldMap(fieldMapRaw, out map, out errors);
             if (map.Count > 0)
             {
+                // 【大扫荡】改名即改名：命中映射的本站键删除，不再"复制一份原名一起发"。
+                // 以前配 eqId=device 会同时发出 device 和 eqId，严格 schema 的 MES
+                // 拒收或内部字段外泄。未命中的本站键照常直通。
                 var renamed = new Dictionary<string, string>();
                 foreach (var kv in payload)
                 {
-                    renamed[kv.Key] = kv.Value;   // 先保留原名
+                    renamed[kv.Key] = kv.Value;
                 }
                 foreach (var kv in map)
                 {
-                    string v;
-                    if (payload.TryGetValue(kv.Value, out v))
+                    // 【大扫荡】本站键大小写不敏感匹配：映射写 eqId=Device 也能命中
+                    // payload 的 device（以前精确匹配，大小写一变改名静默失效）。
+                    string hitKey = null;
+                    foreach (var pk in payload.Keys)
                     {
-                        renamed[kv.Key] = v;      // MES名=本站值
+                        if (string.Equals(pk, kv.Value, StringComparison.OrdinalIgnoreCase))
+                        {
+                            hitKey = pk;
+                            break;
+                        }
+                    }
+                    if (hitKey != null)
+                    {
+                        renamed[kv.Key] = payload[hitKey];   // MES名=本站值
+                        if (!string.Equals(kv.Key, hitKey, StringComparison.OrdinalIgnoreCase))
+                        {
+                            renamed.Remove(hitKey);   // 原名删掉，真改名
+                        }
                     }
                 }
                 payload = renamed;
@@ -235,6 +283,20 @@ namespace AgingTestSystem.Services
                     if (_signal != null) _signal.WaitOne(5000);
                     if (_stop) return;
 
+                    // 队列满丢弃过：记一条事件说明（不每条刷屏，CSV 里留痕）。
+                    int dropped = _queueDropped;
+                    if (dropped > 0)
+                    {
+                        _queueDropped = 0;
+                        try
+                        {
+                            TestEventLogger.Write("", 0, "MES队列满",
+                                $"MES 不通期间内存队列已满，丢弃最旧 {dropped} 条（离线缓存上限 {MaxBacklog} 条）",
+                                sn: "", recipe: "", result: "");
+                        }
+                        catch { }
+                    }
+
                     // 1) 先冲离线缓存（旧的先发，保序）
                     if (backlog.Count > 0)
                     {
@@ -266,16 +328,29 @@ namespace AgingTestSystem.Services
                             backlog.Add(item);
                             // 缓存上限：丢最旧（MES 久不通时保内存不爆）
                             while (backlog.Count > MaxBacklog) backlog.RemoveAt(0);
-                            SaveBacklog(backlog);
+                            SaveBacklogThrottled(backlog);
                         }
                         // 成功了就继续下一条；本轮开头发过缓存，网络通了缓存自然就清了
                     }
+                    // 循环末补落一次（节流跳过的脏缓存不丢）。
+                    SaveBacklogThrottled(backlog, true);
                 }
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[MES上报] 后台线程异常退出: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// 缓存落盘（节流版）：2s 内只落一次，报警风暴时不每条全量写文件；
+        /// flush=true 或超 2s 才真写。调用方（Dispose/循环末）传 flush 补落。
+        /// </summary>
+        private void SaveBacklogThrottled(List<MesItem> backlog, bool flush = false)
+        {
+            if (!flush && (DateTime.Now - _lastBacklogSave).TotalSeconds < 2) return;
+            _lastBacklogSave = DateTime.Now;
+            SaveBacklog(backlog);
         }
 
         /// <summary>发一条（按配置重试；全灭返回 false）。重试 sleep 在后台线程，不卡业务。</summary>
@@ -285,15 +360,31 @@ namespace AgingTestSystem.Services
             int interval = _config != null ? Math.Max(0, _config.MesRetryIntervalMs) : 0;
             for (int attempt = 0; ; attempt++)
             {
+                if (_stop) return false;   // 【大扫荡】退出不硬等：以前 Sleep 里收不到 _stop
                 if (PostOnce(item)) return true;
                 if (attempt >= retries) return false;
-                if (interval > 0) Thread.Sleep(Math.Min(interval, 10000));
+                // 【大扫荡】去掉 10s 静默钳制：配 60s 间隔实际按 10s 重试=重试风暴；
+                // 分片 Sleep，退出即醒（Join 不空等）。
+                SleepInterruptible(interval);
+            }
+        }
+
+        /// <summary>可中断 Sleep（500ms 一片，_stop 置位即醒）。</summary>
+        private void SleepInterruptible(int millis)
+        {
+            int waited = 0;
+            while (waited < millis && !_stop)
+            {
+                int slice = Math.Min(500, millis - waited);
+                if (slice <= 0) break;
+                Thread.Sleep(slice);
+                waited += slice;
             }
         }
 
         /// <summary>
         /// 发一次 HTTP POST（或 Fake transport）。2xx=成功；其余/异常=失败。
-        /// 超时只影响本条（HttpClient per-call，量小无所谓复用）。
+        /// HttpClient 进程单例复用（TIME_WAIT 不堆积），Timeout 按条设。
         /// </summary>
         private bool PostOnce(MesItem item)
         {
@@ -303,20 +394,18 @@ namespace AgingTestSystem.Services
                 {
                     return Transport(item.Url, item.Json, item.Headers, TimeoutMs());
                 }
-                using (var client = new HttpClient())
+                var client = _httpClient.Value;
+                client.Timeout = TimeSpan.FromMilliseconds(Math.Max(500, TimeoutMs()));
+                using (var req = new HttpRequestMessage(HttpMethod.Post, item.Url))
                 {
-                    client.Timeout = TimeSpan.FromMilliseconds(Math.Max(500, TimeoutMs()));
-                    using (var req = new HttpRequestMessage(HttpMethod.Post, item.Url))
+                    req.Content = new StringContent(item.Json ?? "", Encoding.UTF8, "application/json");
+                    // 鉴权头挂请求头（Authorization 放内容头是非法的，挂错会 401）
+                    foreach (var h in item.Headers)
                     {
-                        req.Content = new StringContent(item.Json ?? "", Encoding.UTF8, "application/json");
-                        // 鉴权头挂请求头（Authorization 放内容头是非法的，挂错会 401）
-                        foreach (var h in item.Headers)
-                        {
-                            req.Headers.TryAddWithoutValidation(h.Key, h.Value);
-                        }
-                        var resp = client.SendAsync(req).GetAwaiter().GetResult();
-                        return resp != null && ((int)resp.StatusCode >= 200 && (int)resp.StatusCode < 300);
+                        req.Headers.TryAddWithoutValidation(h.Key, h.Value);
                     }
+                    var resp = client.SendAsync(req).GetAwaiter().GetResult();
+                    return resp != null && ((int)resp.StatusCode >= 200 && (int)resp.StatusCode < 300);
                 }
             }
             catch (Exception ex)
@@ -333,7 +422,15 @@ namespace AgingTestSystem.Services
 
         private static string QueuePath()
         {
-            return QueueFileName;   // 相对路径：产品运行时=cwd=程序目录；回归隔离靠 EnterCleanDir
+            // 【大扫荡】绝对路径：以前裸相对路径跟 CWD 走，快捷方式起始位置不同
+            // 缓存写散多处，补发永远找不到旧缓存（与 TestSessionStore 同病）。
+            string dir = BaseDirOverride;
+            if (string.IsNullOrEmpty(dir))
+            {
+                try { dir = AppDomain.CurrentDomain.BaseDirectory; }
+                catch { dir = "."; }
+            }
+            return Path.Combine(dir, QueueFileName);
         }
 
         private static List<MesItem> LoadBacklog()
@@ -342,7 +439,7 @@ namespace AgingTestSystem.Services
             {
                 string path = QueuePath();
                 if (!File.Exists(path)) return new List<MesItem>();
-                var list = JsonConvert.DeserializeObject<List<MesItem>>(File.ReadAllText(path));
+                var list = JsonConvert.DeserializeObject<List<MesItem>>(AtomicFile.SafeReadAllText(path));
                 return list ?? new List<MesItem>();
             }
             catch
@@ -375,6 +472,24 @@ namespace AgingTestSystem.Services
             _alreadyDisposed = true;
             try
             {
+                // 【大扫荡】内存余量转存离线缓存再走：以前 _queue 里没发的直接丢。
+                try
+                {
+                    List<MesItem> left;
+                    lock (_lock)
+                    {
+                        left = new List<MesItem>(_queue);
+                        _queue.Clear();
+                    }
+                    if (left.Count > 0)
+                    {
+                        var all = LoadBacklog();
+                        all.AddRange(left);
+                        while (all.Count > MaxBacklog) all.RemoveAt(0);
+                        SaveBacklog(all);
+                    }
+                }
+                catch { /* 转存失败不拖退出 */ }
                 _stop = true;
                 if (_signal != null) _signal.Set();
                 if (_worker != null) _worker.Join(2000);   // 最多等2秒，不拖退出
