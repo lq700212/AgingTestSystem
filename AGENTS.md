@@ -329,6 +329,28 @@
 - **自绘控件销毁放 GDI**：WorkstationGridView 的 6 个缓存画笔/画刷在 `Designer.Dispose` 释放
   （光靠 RebuildThemeBrushes 覆盖只堵了换主题，堵不住控件销毁泄漏）。
 
+## 复查补齐铁律（V1.84.1，大扫荡提交后逐文件复查沉淀）
+
+- **缓存必须带"脏读指纹"**：路径键缓存只比路径=手改文件读脏。指纹=路径+长度+写时间
+  （`ProjectPolicyStore.StampCache/CacheStillFresh`），Save 后刷新；手改即生效是老行为，缓存不能丢。
+- **原子写用 `File.Replace` 不用"删+搬"**：删搬窗口读方靠重试兜，崩溃恰在窗内仍读空；
+  同目录=同卷无跨卷坑；崩溃残留 tmp 顺手清（`AtomicFile` 唯一口）。
+- **递归防护数"真递归"**：平坦路过不消耗预算（规则解析器：括号分支+一元符分支才计数，
+  ParseOr 本体不计）；只盖一半的防护不如不写——复查要问"另一条递归路呢"。
+- **守卫收敛唯一入口**：5 处 popup 回写守卫收成 `TryWritePopupCell`（守卫不过直接 return，
+  连 `LayoutSections` 都别碰）；散写 5 份=改 1 漏 4 的温床。
+- **纯函数约定无例外**：判定逻辑（破空阀碰撞）直接写 UI 层=单测够不着，必须搬进
+  `AgingSequencer` 纯函数 + 用例（V1.67 约定，复查也要执行）。
+- **急停记账与抛异常分开**：风机停失败→快照 Clear + 急停事件照做，然后原堆栈重抛
+  （`ExceptionDispatchInfo`，`throw ex` 抹堆栈）；"没停掉"看得见，"已停"不留尾巴。
+- **热更清状态带上静态信息**：`RebuildStationArrays` 清数组/缓存时 `_stationInfo` 同步清
+  （持 `_stationInfoLock`，不与 `_stateLock` 嵌套；加锁前全仓核查反向持锁顺序）。
+- **用例假绿三查**：①反射探针先验"探针本身有效"（`Disposed` 是事件不是属性、`nativeBrush`
+  在基类、`??true` 恒绿）；②存在性断言改前后差值（旧运行残留行即绿）；③新修逻辑无用例=
+  没修（DeviceManager 行为 tests 进 `DeviceManagerSweep` 模块，Fake 注入+短数组+反射）。
+- **文案方向错也是 bug**："多于 64 列"写成"≤64列"、注释称"含容差"实际严格——复查要把
+  注释/报错文案当代码读；缺省值两处手抄即分叉，收敛唯一工厂（`DefaultRcCurrentValue`）。
+
 ## 构建与验证命令
 
 ```powershell

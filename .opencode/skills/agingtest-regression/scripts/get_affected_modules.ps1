@@ -56,7 +56,7 @@ $Map = @(
     # --- Services (logic) ---
     @{ Pat = @("*PasswordHasher*");                 Mods = @("PasswordHasher") },
     @{ Pat = @("*UserManager*");                    Mods = @("UserManager") },
-    @{ Pat = @("*DeviceManager*");                  Mods = @("DeviceManagerIntegration", "DeviceManagerExtended", "DeviceManagerPolicy", "DeviceManagerMes", "DeviceManagerRules", "AgingBusinessModel", "TestSessionStore", "PowerReportV174") },
+    @{ Pat = @("*DeviceManager*");                  Mods = @("DeviceManagerIntegration", "DeviceManagerExtended", "DeviceManagerPolicy", "DeviceManagerMes", "DeviceManagerRules", "DeviceManagerSweep", "AgingBusinessModel", "TestSessionStore", "PowerReportV174") },
     @{ Pat = @("*AgingSequencer*");                 Mods = @("AgingSequencer", "DeviceManagerIntegration", "DeviceManagerExtended", "DeviceManagerPolicy") },
     @{ Pat = @("*ProjectPolicyStore*", "*PolicyEnums*"); Mods = @("PolicyV167", "SettingsValidate", "DeviceManagerPolicy", "ProcessPolicyV170", "PowerReportV174") },
     @{ Pat = @("*ProjectProfile*");                 Mods = @("PolicyV167") },

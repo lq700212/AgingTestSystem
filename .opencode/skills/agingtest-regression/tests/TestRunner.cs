@@ -191,6 +191,7 @@ namespace AgingTestSystem.Tests
                 { "DeviceManagerMes", DeviceManagerMesTests },
                 { "DeviceManagerRules", DeviceManagerRulesTests },
                 { "DeviceManagerIdentity", DeviceManagerIdentityTests },
+                { "DeviceManagerSweep", DeviceManagerSweepTests },
                 { "ProcessPolicyV170", ProcessPolicyTests },
                 { "UiStyleV172_1", UiStyleV172_1Tests },
                 { "UiFinalizerV172_14", UiFinalizerV172_14Tests },
@@ -1939,6 +1940,17 @@ namespace AgingTestSystem.Tests
                 AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffVentAndBeep, 225, false) != null);
             Check("无阀+纯蜂鸣放行（蜂鸣无硬件要求）",
                 AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffAndBeep, 0, false) == null);
+            // 【复查补齐】破空阀点位碰撞纯函数（TotalInputs=16/72台：输出区 17~160）
+            Check("点位0=未配置不拦",
+                AgingSequencer.ValidateVentPointCollision(0, 16, 72) == null);
+            Check("点位落在工位阀区被拦(17)",
+                AgingSequencer.ValidateVentPointCollision(17, 16, 72) != null);
+            Check("点位落在载台电区被拦(160)",
+                AgingSequencer.ValidateVentPointCollision(160, 16, 72) != null);
+            Check("预留点位放行(200)",
+                AgingSequencer.ValidateVentPointCollision(200, 16, 72) == null);
+            Check("输入区点位放行(8)",
+                AgingSequencer.ValidateVentPointCollision(8, 16, 72) == null);
 
             // ── ProjectPolicyStore.ParseValue：大小写兼容，非法回null ──
             Check("枚举正常解析",
@@ -2320,6 +2332,12 @@ namespace AgingTestSystem.Tests
                     ProjectPolicyStore.GetRaw("ZeroDurationPolicy") == "Block");
                 Check("没存的项回null(走机器缺省)",
                     ProjectPolicyStore.GetRaw("EmptySnPolicy") == null);
+                // 【复查补齐】手改文件即生效：缓存按"路径+长度+写时间"验证，不读脏
+                var handDict = new Dictionary<string, string> { { "ZeroDurationPolicy", "Allow" } };
+                File.WriteAllText(policyPath,
+                    Newtonsoft.Json.JsonConvert.SerializeObject(handDict));
+                Check("手改Policy.json后Load见新值(缓存不脏)",
+                    ProjectPolicyStore.GetRaw("ZeroDurationPolicy") == "Allow");
             }
             finally
             {
@@ -2804,6 +2822,12 @@ namespace AgingTestSystem.Tests
             string deepOk = new string('(', 10) + "1" + new string(')', 10);
             RuleEngine.ParseRuleList("浅嵌套 | " + deepOk, out defs, out rerrs);
             Check("浅嵌套正常过", rerrs.Count == 0 && defs.Count == 1);
+            // 【复查补齐】连写一元符同样吃深度预算（以前只数括号，"!!!!…"走漏）
+            string deepBang = new string('!', 100) + "1>0";
+            RuleEngine.ParseRuleList("深取反 | " + deepBang, out defs, out rerrs);
+            Check("超深连写!被拦(防栈溢出)", rerrs.Count == 1 && rerrs[0].Contains("嵌套"));
+            RuleEngine.ParseRuleList("浅取反 | !!(1>0)", out defs, out rerrs);
+            Check("浅取反正常过", rerrs.Count == 0 && defs.Count == 1);
             var many = new System.Text.StringBuilder();
             for (int i = 0; i < 25; i++) many.AppendLine("r" + i + " | 1>0");
             RuleEngine.ParseRuleList(many.ToString(), out defs, out rerrs);
@@ -3570,6 +3594,13 @@ namespace AgingTestSystem.Tests
                 bool tmpLeft = false;
                 foreach (string f in Directory.GetFiles(dir, "*.tmp_*")) { tmpLeft = true; break; }
                 Check("原子写无临时残留", !tmpLeft);
+                // 【复查补齐】二次覆盖走 File.Replace 原子替换：旧文件被完整替换、无残留
+                Services.AtomicFile.WriteAllText(atomPath, "第二版内容");
+                Check("覆盖写内容完整",
+                    File.ReadAllText(atomPath, Encoding.UTF8).Contains("第二版内容"));
+                tmpLeft = false;
+                foreach (string f in Directory.GetFiles(dir, "*.tmp_*")) { tmpLeft = true; break; }
+                Check("覆盖写无临时残留", !tmpLeft);
             }
             finally { try { File.Delete(atomPath); } catch { } }
 
@@ -4609,26 +4640,42 @@ namespace AgingTestSystem.Tests
                 grid.Dispose();
                 // 【大扫荡】缓存画笔/画刷随控件销毁释放（Designer.Dispose 补的），
                 // 防 GDI 句柄泄漏（以前只在换主题时覆盖释放）。
+                // 【复查补齐】以前用 GetProperty("Disposed")——那是事件不是属性，
+                // 反射拿 null 再 ??true，恒绿假绿。改走 Control.IsDisposed 公开属性。
                 try
                 {
                     var tg2 = typeof(WorkstationGridView);
                     string[] brs = { "_brushSetButton", "_brushSelectChecked", "_penBorder", "_brushValueBox", "_brushRowSelect", "_brushSelectUnchecked" };
-                    var lines = (grid.GetType().GetProperty("Disposed", BindingFlags.Instance | BindingFlags.Public)?.GetValue(grid) as bool?) ?? true;
-                    Check("网格Dispose后已释放", lines);
-                    Check("网格GDI缓存已随释放",
-                        brs.All(n =>
+                    var isDispProp = tg2.GetProperty("IsDisposed",
+                        BindingFlags.Instance | BindingFlags.Public);
+                    bool isDisp = isDispProp != null
+                        && (bool)isDispProp.GetValue(grid, null);
+                    Check("网格Dispose后已释放", isDispProp != null && isDisp);
+                    // 6 个缓存对象必须"找得到字段 + 读得到内部句柄 + 句柄已归零"，
+                    // 三项缺一即假绿：字段名写错/运行时改名会当场变红。
+                    // 注意 nativeBrush 在基类 Brush 上（private 不继承），必须沿继承链找。
+                    int probed = 0;
+                    bool allZero = brs.All(n =>
+                    {
+                        var f = tg2.GetField(n, BindingFlags.NonPublic | BindingFlags.Instance);
+                        if (f == null) return false;
+                        var v = f.GetValue(grid);
+                        if (v == null) return false;
+                        // .NET Framework 的 Pen/Brush 无 IsReleased，反射取内部 GDI 句柄：
+                        // 释放后 nativePen/nativeBrush 应为 IntPtr.Zero。
+                        System.Reflection.FieldInfo hf = null;
+                        for (Type t = v.GetType(); t != null && hf == null; t = t.BaseType)
                         {
-                            var f = tg2.GetField(n, BindingFlags.NonPublic | BindingFlags.Instance);
-                            var v = f?.GetValue(grid);
-                            if (v == null) return true;
-                            // .NET Framework 的 Pen/Brush 无 IsReleased，反射取内部 GDI 句柄：
-                            // 释放后 nativePen/nativeBrush 应为 IntPtr.Zero（无法直接读则降级签名）。
-                            var hf = v.GetType().GetField("nativePen", BindingFlags.NonPublic | BindingFlags.Instance)
-                                ?? v.GetType().GetField("nativeBrush", BindingFlags.NonPublic | BindingFlags.Instance);
-                            if (hf == null) return true;
-                            var ptr = hf.GetValue(v) as IntPtr?;
-                            return ptr.HasValue && ptr.Value == IntPtr.Zero;
-                        }));
+                            hf = t.GetField("nativePen", BindingFlags.NonPublic | BindingFlags.Instance)
+                                ?? t.GetField("nativeBrush", BindingFlags.NonPublic | BindingFlags.Instance);
+                        }
+                        if (hf == null) return false;
+                        var ptr = hf.GetValue(v) as IntPtr?;
+                        bool zero = ptr.HasValue && ptr.Value == IntPtr.Zero;
+                        if (zero) probed++;
+                        return zero;
+                    });
+                    Check("网格GDI缓存已随释放(6个句柄归零)", allZero && probed == 6);
                 }
                 catch { }
             }
@@ -5855,6 +5902,14 @@ namespace AgingTestSystem.Tests
             List<string> badErrs;
             ReportColumns.Parse("时间=nosuchfield", out badCols, out badErrs);
             Check("未知字段报错且丢弃", badCols.Count == 0 && badErrs.Count > 0);
+            // 【复查补齐】列数上限（到64即停，不先吃满内存）
+            var manyCols = new System.Text.StringBuilder();
+            for (int ci = 0; ci < 200; ci++) { if (ci > 0) manyCols.Append(';'); manyCols.Append("列" + ci + "=time"); }
+            List<ReportColumns.Column> capCols;
+            List<string> capErrs;
+            ReportColumns.Parse(manyCols.ToString(), out capCols, out capErrs);
+            Check("200列截断到64且报错",
+                capCols.Count == ReportColumns.MaxColumns && capErrs.Count > 0);
             const BindingFlags Flags = BindingFlags.NonPublic | BindingFlags.Static;
             var miValidate = typeof(SettingsForm).GetMethod("ValidateValue", Flags);
             if (miValidate != null)
@@ -5942,6 +5997,12 @@ namespace AgingTestSystem.Tests
             Check("空字典解析零项零错", dmOpts.Count == 0 && dmErrs.Count == 0);
             DisplayModeOptions.Parse("白场,红场,白场", out dmOpts, out dmErrs);
             Check("重复提醒且保留首个", dmOpts.Count == 2 && dmErrs.Count > 0);
+            // 【复查补齐】超限即停（到上限break，不先吃满内存；以前全量进表再截断）
+            var manyModes = new System.Text.StringBuilder();
+            for (int mi = 0; mi < 200; mi++) { if (mi > 0) manyModes.Append(','); manyModes.Append("模式" + mi); }
+            DisplayModeOptions.Parse(manyModes.ToString(), out dmOpts, out dmErrs);
+            Check("200项截断到上限且报错",
+                dmOpts.Count == DisplayModeOptions.MaxOptionCount && dmErrs.Count > 0);
             string canon, derr;
             var dictOpts = DisplayModeOptions.Preset();
             Check("空输入=清空通过",

@@ -64,9 +64,13 @@ namespace AgingTestSystem.Services
         /// （= 全部回退 App.config/DeviceConfig 缺省，即现状行为，安全）。
         /// 【大扫荡】路径键缓存：录入窗/校验高频调 GetRaw/Resolve，以前每次读文件+
         /// 反序列化；路径变（切项目）/Save 后自动失效，测试换目录也安全。
+        /// 【复查补齐】缓存按"路径+长度+写时间"三元验证：以前只比路径，手改 Policy.json
+        /// 后重进设置窗读到的还是旧值（改前每次 Load 都读文件，手改即生效）。
         /// </summary>
         private static readonly object _cacheLock = new object();
         private static string _cachedPath;
+        private static long _cachedLen = -1;
+        private static long _cachedWriteTicks = -1;
         private static Dictionary<string, string> _cachedDict;
 
         public static Dictionary<string, string> Load()
@@ -77,7 +81,8 @@ namespace AgingTestSystem.Services
                 lock (_cacheLock)
                 {
                     if (_cachedDict != null && string.Equals(_cachedPath, path,
-                        StringComparison.OrdinalIgnoreCase))
+                        StringComparison.OrdinalIgnoreCase)
+                        && CacheStillFresh(path))
                     {
                         return new Dictionary<string, string>(_cachedDict);
                     }
@@ -85,7 +90,7 @@ namespace AgingTestSystem.Services
                 Dictionary<string, string> fresh = LoadFromFile(path);
                 lock (_cacheLock)
                 {
-                    _cachedPath = path;
+                    StampCache(path);
                     _cachedDict = fresh;
                     return new Dictionary<string, string>(fresh);
                 }
@@ -95,6 +100,33 @@ namespace AgingTestSystem.Services
                 System.Diagnostics.Debug.WriteLine($"[项目策略] 加载失败回退缺省: {ex.Message}");
                 return new Dictionary<string, string>();
             }
+        }
+
+        /// <summary>缓存指纹是否仍有效（文件不存在=空字典，长度-1/时间-1 即指纹）。</summary>
+        private static bool CacheStillFresh(string path)
+        {
+            try
+            {
+                if (!File.Exists(path)) return _cachedLen < 0;
+                var fi = new FileInfo(path);
+                return fi.Length == _cachedLen
+                    && fi.LastWriteTimeUtc.Ticks == _cachedWriteTicks;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>记录当前文件的缓存指纹（调用方已持 _cacheLock）。</summary>
+        private static void StampCache(string path)
+        {
+            _cachedPath = path;
+            try
+            {
+                if (!File.Exists(path)) { _cachedLen = -1; _cachedWriteTicks = -1; return; }
+                var fi = new FileInfo(path);
+                _cachedLen = fi.Length;
+                _cachedWriteTicks = fi.LastWriteTimeUtc.Ticks;
+            }
+            catch { _cachedLen = -2; _cachedWriteTicks = -2; }
         }
 
         private static Dictionary<string, string> LoadFromFile(string path)
@@ -141,10 +173,10 @@ namespace AgingTestSystem.Services
                 }
             }
             AtomicFile.WriteAllText(PolicyFilePath, JsonConvert.SerializeObject(dict, Formatting.Indented));
-            // 写完即刷新缓存（下次 Load 命中新值，不读脏）。
+            // 写完即刷新缓存（含新指纹，下次 Load 命中新值，不读脏）。
             lock (_cacheLock)
             {
-                _cachedPath = PolicyFilePath;
+                StampCache(PolicyFilePath);
                 _cachedDict = dict;
             }
         }

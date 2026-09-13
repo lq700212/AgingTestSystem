@@ -12,7 +12,8 @@ namespace AgingTestSystem.Services
     /// 策略全回缺省（按错误工艺跑），全程无告警。原子写=先写临时文件再改名替换，
     /// 读方永远看到"旧全份或新全份"，没有中间态。
     ///
-    /// 【实现】写 同目录.tmp_GUID → Move 覆盖目标（同卷改名是原子操作）。
+    /// 【实现】写 同目录.tmp_GUID → 原子替换目标（File.Replace=Win32 ReplaceFile，
+    /// 同卷改名是原子操作，读方永远看到"旧全份或新全份"，没有中间态）。
     /// 失败抛异常（调用方决定拦/告警）；临时文件残留清掉，清不掉不管。
     /// </summary>
     public static class AtomicFile
@@ -30,16 +31,35 @@ namespace AgingTestSystem.Services
                 File.WriteAllText(tmp, content ?? "", encoding);
                 if (File.Exists(path))
                 {
-                    // 先删后搬：.NET Framework 无 File.Replace 跨卷语义坑，
-                    // 同目录内"删+搬"窗口极小，读方失败重试一次即可（见 SafeReadAllText）。
-                    File.Delete(path);
+                    // 【复查补齐】File.Replace 原子替换：以前"先删后搬"中间有读空窗
+                    //（读方靠 50ms 重试兜，崩溃恰在窗内仍可能读空）。
+                    // 同目录=同卷，Replace 无跨卷坑；目标不存在时才走 Move。
+                    File.Replace(tmp, path, null);
                 }
-                File.Move(tmp, path);
+                else
+                {
+                    File.Move(tmp, path);
+                }
             }
             finally
             {
                 try { if (File.Exists(tmp)) File.Delete(tmp); }
                 catch { /* 残留临时文件不阻塞，下次覆盖 */ }
+                // 上次崩溃残留的同名前缀 tmp 顺手清掉（防目录积灰；清不掉不管）。
+                try
+                {
+                    string self = Path.GetFileName(tmp);
+                    foreach (string stale in Directory.GetFiles(dir ?? ".",
+                        Path.GetFileName(path) + ".tmp_*"))
+                    {
+                        if (!string.Equals(Path.GetFileName(stale), self,
+                            StringComparison.OrdinalIgnoreCase))
+                        {
+                            try { File.Delete(stale); } catch { }
+                        }
+                    }
+                }
+                catch { }
             }
         }
 

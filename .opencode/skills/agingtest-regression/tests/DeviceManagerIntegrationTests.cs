@@ -79,6 +79,12 @@ namespace AgingTestSystem.Tests
                 var list = new List<BarometerData>();
                 for (int i = 1; i <= _total; i++) list.Add(ReadData(i));
                 list.AddRange(_extraReads); // 超长数组：模拟实现有 bug 的读取器
+                // 【复查补齐】短数组：只回前 N 台，模拟实现返回短数组的读取器
+                //（编排侧必须按"尾部通讯失败"处理，不能静默 stale）。
+                if (_returnCount.HasValue && list.Count > _returnCount.Value)
+                {
+                    list.RemoveRange(_returnCount.Value, list.Count - _returnCount.Value);
+                }
                 return list.ToArray();
             }
 
@@ -126,6 +132,14 @@ namespace AgingTestSystem.Tests
             public void AddExtraRead(BarometerData data)
             {
                 lock (_lock) { _extraReads.Add(data); }
+            }
+
+            private int? _returnCount;
+
+            /// <summary>只返回前 N 台数据（模拟返回短数组的读取器；传 null 恢复全量）</summary>
+            public void SetReturnCount(int? n)
+            {
+                lock (_lock) { _returnCount = n; }
             }
 
             public void ClearExtraReads()
@@ -180,6 +194,8 @@ namespace AgingTestSystem.Tests
             {
                 lock (_lock)
                 {
+                    _attempted.Add(outputId);   // 先记尝试（含抛异常的），供"下发过"断言
+                    if (_throwOnWrite) throw new InvalidOperationException("Fake IO 写失败注入");
                     if (outputId >= 1 && outputId <= _outputs.Length)
                     {
                         _outputs[outputId - 1] = state;
@@ -210,6 +226,21 @@ namespace AgingTestSystem.Tests
             public bool EverPowerOn(int outputId)
             {
                 lock (_lock) return _everOn.Contains(outputId);
+            }
+
+            private bool _throwOnWrite;
+            private readonly List<int> _attempted = new List<int>();
+
+            /// <summary>写失败注入开关（模拟耦合器掉线瞬间的下发抛异常；默认关）</summary>
+            public void SetThrowOnWrite(bool on)
+            {
+                lock (_lock) { _throwOnWrite = on; }
+            }
+
+            /// <summary>是否尝试写过某输出点（含被注入失败吞掉的尝试）</summary>
+            public bool WasAttempted(int outputId)
+            {
+                lock (_lock) return _attempted.Contains(outputId);
             }
         }
 
@@ -1399,6 +1430,24 @@ namespace AgingTestSystem.Tests
             finally { try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
         }
 
+        /// <summary>当日事件 CSV 含标记的行数（前后差值断言，防旧运行残留行假绿）</summary>
+        private static int CountCsvMarker(string marker)
+        {
+            try
+            {
+                string file = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs",
+                    "TestLog_" + DateTime.Now.ToString("yyyyMMdd") + ".csv");
+                if (!File.Exists(file)) return 0;
+                int n = 0;
+                foreach (string line in File.ReadAllLines(file))
+                {
+                    if (line.Contains(marker)) n++;
+                }
+                return n;
+            }
+            catch { return 0; }
+        }
+
         /// <summary>取当日 CSV 里某台某事件的最后一行（V1.76 列序拆列；无则 null）</summary>
         private static string[] FindCsvRow(int deviceId, string evt)
         {
@@ -1434,6 +1483,434 @@ namespace AgingTestSystem.Tests
                 return false;
             }
             catch { return false; }
+        }
+
+        // =====================================================================
+        // 15d. 大扫荡行为锁（V1.84 复查补齐：编排核心修复当时只修了产品代码，
+        // DeviceManager 行为没有回归用例锁，15/15b 全是老行为）。
+        // 用 Fake 写失败注入 + 短数组 + 反射，直接锁：
+        // 上电失败回滚 / 停止先写后清 / 短数组尾部按读失败 / 广播按总数 /
+        // SkipVacuum 启动定格 / 报警原因文案 / 下料认领原子化 / 热更重建数组 /
+        // 急停关破空阀 / 订阅异常隔离 / 负延时钳零。
+        // =====================================================================
+        private static void DeviceManagerSweepTests()
+        {
+            string dir = EnterCleanDir();
+            var fBase = typeof(TestSessionStore).GetField("BaseDirOverride",
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+            if (fBase != null) fBase.SetValue(null, dir);
+            try
+            {
+                SweepPowerFailRollback();
+                SweepStopWriteBeforeClear();
+                SweepShortArrayAndBroadcast();
+                SweepSkipVacuumFreeze();
+                SweepAlarmReasons();
+                SweepJudgeClaim();
+                SweepRebuildArrays();
+                SweepStopAllVent();
+                SweepStopAllFanFail();
+                SweepSubscriberIsolation();
+                SweepNegativeDelay();
+            }
+            finally
+            {
+                try { if (fBase != null) fBase.SetValue(null, null); } catch { }
+            }
+        }
+
+        /// <summary>反射调 DeviceManager 私有方法（ClassifyAlarm 原因文案用）</summary>
+        private static object InvokeDm(DeviceManager dm, string name, params object[] args)
+        {
+            var mi = typeof(DeviceManager).GetMethod(name,
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            return mi.Invoke(dm, args);
+        }
+
+        /// <summary>停采集定时器（反射探测/改状态时防 30ms 采集循环竞态，用完必须 Start）</summary>
+        private static void PauseCollect(DeviceManager dm)
+        {
+            var t = GetDmField(dm, "_collectTimer") as System.Timers.Timer;
+            if (t != null) t.Stop();
+        }
+
+        private static void ResumeCollect(DeviceManager dm)
+        {
+            var t = GetDmField(dm, "_collectTimer") as System.Timers.Timer;
+            if (t != null) t.Start();
+        }
+
+        // ---------- S1 上电写失败回滚：不断假 PASS，恢复后自动补上电 ----------
+        private static void SweepPowerFailRollback()
+        {
+            FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+            DeviceManager dm = BuildTestManager(out reader, out io, out config);
+            try
+            {
+                dm.StartTesting(new[] { 1 });
+                Check("[大扫荡][上电回滚] 开阀",
+                    WaitUntil(() => io.ReadOutput(ValveOut(config, 1)), 2000));
+                int pwFailBefore = CountCsvMarker("上电失败");
+                io.SetThrowOnWrite(true);          // 耦合器恰在上电瞬间掉线
+                reader.SetPressure(1, -95m);       // 压力到位 → 下一轮即尝试上电
+                int pwr = PowerOut(config, 1);
+                Check("[大扫荡][上电回滚] 上电被尝试下发",
+                    WaitUntil(() => io.WasAttempted(pwr), 2000));
+                Thread.Sleep(200);                 // 再跑几轮：确认回滚态稳定
+                Check("[大扫荡][上电回滚] 写失败台仍在测（等重试，不死不假PASS）",
+                    dm.GetTestingStates()[0]);
+                Check("[大扫荡][上电回滚] 载台实际没带电",
+                    !io.ReadOutput(pwr) && !io.EverPowerOn(pwr));
+                Check("[大扫荡][上电回滚] 记上电失败事件",
+                    WaitUntil(() => CountCsvMarker("上电失败") > pwFailBefore, 2000));
+                io.SetThrowOnWrite(false);         // 耦合器恢复
+                Check("[大扫荡][上电回滚] 恢复后自动补上电",
+                    WaitUntil(() => io.ReadOutput(pwr), 3000));
+            }
+            finally { try { io.SetThrowOnWrite(false); } catch { } try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
+        }
+
+        // ---------- S2 停止先写后清：写失败抛，状态不清、台还显示在测 ----------
+        private static void SweepStopWriteBeforeClear()
+        {
+            FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+            DeviceManager dm = BuildTestManager(out reader, out io, out config);
+            try
+            {
+                dm.StartTesting(new[] { 2 });
+                Check("[大扫荡][停止] 开阀",
+                    WaitUntil(() => io.ReadOutput(ValveOut(config, 2)), 2000));
+                io.SetThrowOnWrite(true);
+                bool threw = false;
+                try { dm.StopTesting(new[] { 2 }); }
+                catch { threw = true; }
+                Check("[大扫荡][停止] 写失败抛给调用方", threw);
+                Check("[大扫荡][停止] 状态不清、台还显示在测",
+                    dm.GetTestingStates()[1]);
+                io.SetThrowOnWrite(false);
+                dm.StopTesting(new[] { 2 });
+                Check("[大扫荡][停止] 恢复后停干净",
+                    !dm.GetTestingStates()[1] && !io.ReadOutput(ValveOut(config, 2)));
+            }
+            finally { try { io.SetThrowOnWrite(false); } catch { } try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
+        }
+
+        // ---------- S3 短数组尾部按读失败 + S4 广播按总数 ----------
+        private static void SweepShortArrayAndBroadcast()
+        {
+            FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+            DeviceManager dm = BuildTestManager(out reader, out io, out config);
+            BarometerData[] got = null;
+            EventHandler<BarometerData[]> sub = (s, d) => { got = d; };
+            try
+            {
+                // 在测台才标 Fault（空闲台不断言：失联分支只处理在测台，
+                // 空闲台看"在线计数"），故先启动 3/4 再截断。
+                int commBefore = CountCsvMarker("通讯故障");
+                reader.SetPressure(3, -95m);
+                reader.SetPressure(4, -95m);
+                reader.SetReturnCount(2);   // 只回前 2 台：模拟短数组读取器
+                dm.StartTesting(new[] { 3, 4 });
+                Check("[大扫荡][短数组] 尾部按失联标Fault",
+                    WaitUntil(() =>
+                    {
+                        var d3 = dm.GetBarometerData(3);
+                        var d4 = dm.GetBarometerData(4);
+                        return d3 != null && d4 != null
+                            && d3.Status == DeviceStatus.Fault
+                            && d4.Status == DeviceStatus.Fault;
+                    }, 4000));
+                Check("[大扫荡][短数组] 失联关阀断电",
+                    !io.ReadOutput(ValveOut(config, 3)) && !io.ReadOutput(PowerOut(config, 3)));
+                Check("[大扫荡][短数组] 记通讯故障事件",
+                    CountCsvMarker("通讯故障") > commBefore);
+                Check("[大扫荡][短数组] 头部正常台不受牵连",
+                    dm.GetBarometerData(1).Status != DeviceStatus.Fault
+                    && dm.GetBarometerData(2).Status != DeviceStatus.Fault);
+                dm.OnBatchDataUpdated += sub;
+                Thread.Sleep(300);
+                Check("[大扫荡][广播] 短数组下广播仍按总数（下游按索引取不錯位）",
+                    got != null && got.Length == config.TotalBarometers);
+            }
+            finally
+            {
+                try { dm.OnBatchDataUpdated -= sub; } catch { }
+                try { reader.SetReturnCount(null); } catch { }
+                try { dm.ResetDevices(new[] { 3, 4 }); } catch { }
+                try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { }
+            }
+        }
+
+        // ---------- S5 SkipVacuum 启动定格：运行中翻开关不影响在跑任务 ----------
+        private static void SweepSkipVacuumFreeze()
+        {
+            FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+            DeviceManager dm = BuildTestManager(out reader, out io, out config);
+            try
+            {
+                config.SkipVacuum = false;
+                dm.StartTesting(new[] { 1 });
+                Check("[大扫荡][定格] 启动进入在测",
+                    WaitUntil(() => dm.GetTestingStates()[0], 2000));
+                var frozen = GetDmField(dm, "_sessionSkipVacuum") as bool[];
+                Check("[大扫荡][定格] 启动定格false", frozen != null && frozen[0] == false);
+                config.SkipVacuum = true;   // 运行中翻开关
+                Thread.Sleep(200);
+                frozen = GetDmField(dm, "_sessionSkipVacuum") as bool[];
+                Check("[大扫荡][定格] 运行中翻开关不改定格", frozen != null && frozen[0] == false);
+            }
+            finally { try { config.SkipVacuum = false; } catch { } try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
+        }
+
+        // ---------- S6 报警原因文案：超时/越限/DI 各说各的 ----------
+        private static void SweepAlarmReasons()
+        {
+            FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+            DeviceManager dm = BuildTestManager(out reader, out io, out config);
+            try
+            {
+                dm.StartTesting(new[] { 4 });
+                Check("[大扫荡][原因] 4号进入在测",
+                    WaitUntil(() => dm.GetTestingStates()[3], 2000));
+                PauseCollect(dm);
+                try
+                {
+                    var confirms = GetDmField(dm, "_vacuumConfirmTimes") as DateTime[];
+                    var opens = GetDmField(dm, "_valveOpenTimes") as DateTime[];
+                    // DI 触点开关默认关：先开（helper 读实时值，热切生效）
+                    config.UseDiAlarmContact = true;
+                    // 越限：窗口已过（确认态），压力 0 > -5
+                    confirms[3] = DateTime.MinValue;
+                    object r1 = InvokeDm(dm, "ClassifyAlarm",
+                        new BarometerData { DeviceId = 4, VacuumPressure = 0m });
+                    string reason1 = (string)r1.GetType().GetField("Reason").GetValue(r1);
+                    Check("[大扫荡][原因] 越限说越限",
+                        (bool)r1.GetType().GetField("IsAlarm").GetValue(r1)
+                        && reason1 != null && reason1.Contains("越限"));
+                    // 超时：窗口内 + 开阀 5 秒前 + 压力不到位
+                    confirms[3] = DateTime.Now;
+                    opens[3] = DateTime.Now.AddSeconds(-5);
+                    object r2 = InvokeDm(dm, "ClassifyAlarm",
+                        new BarometerData { DeviceId = 4, VacuumPressure = 0m });
+                    string reason2 = (string)r2.GetType().GetField("Reason").GetValue(r2);
+                    Check("[大扫荡][原因] 超时说超时不说越限",
+                        reason2 != null && reason2.Contains("超时") && !reason2.Contains("越限"));
+                    // DI：窗口已过 + 压力到位 + 触点闭合
+                    confirms[3] = DateTime.MinValue;
+                    object r3 = InvokeDm(dm, "ClassifyAlarm",
+                        new BarometerData
+                        {
+                            DeviceId = 4,
+                            VacuumPressure = -95m,
+                            InputStatus = new bool[] { true }
+                        });
+                    string reason3 = (string)r3.GetType().GetField("Reason").GetValue(r3);
+                    Check("[大扫荡][原因] DI说触点",
+                        reason3 != null && reason3.Contains("DI"));
+                }
+                finally { ResumeCollect(dm); }
+                // 行为 wiring：真跑出超时，边沿日志用的就是 Reason（以前写"压力越限"）。
+                // 重开确认窗（开阀已久，下一轮即超时），压力恒不到位。
+                PauseCollect(dm);
+                try
+                {
+                    var confirms2 = GetDmField(dm, "_vacuumConfirmTimes") as DateTime[];
+                    confirms2[3] = DateTime.Now;
+                }
+                finally { ResumeCollect(dm); }
+                reader.SetPressure(4, 0m);   // 恒不到位 → 600ms 宽限耗尽
+                Check("[大扫荡][原因] 超时Fault",
+                    WaitUntil(() =>
+                    {
+                        var d = dm.GetBarometerData(4);
+                        return d != null && d.Status == DeviceStatus.Fault;
+                    }, 4000));
+                string[] row = FindCsvRow(4, "报警(FAIL)");
+                Check("[大扫荡][原因] 报警行记超时原因",
+                    row != null && row.Length > 7 && row[7].Contains("真空建立超时"));
+            }
+            finally
+            {
+                try { config.UseDiAlarmContact = false; } catch { }
+                try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { }
+            }
+        }
+
+        // ---------- S7 负延时钳零 ----------
+        private static void SweepNegativeDelay()
+        {
+            FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+            DeviceManager dm = BuildTestManager(out reader, out io, out config);
+            try
+            {
+                dm.SetStationDelayTimes(1, TimeSpan.FromSeconds(-5), null);
+                var info = dm.GetStationInfo(1);
+                Check("[大扫荡][延时] 负延时钳零",
+                    info != null && info.DelayTime == TimeSpan.Zero);
+            }
+            finally { try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
+        }
+
+        // ---------- S10 下料认领原子化：同一台连判两次，第二判进 skipped ----------
+        private static void SweepJudgeClaim()
+        {
+            FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+            DeviceManager dm = BuildTestManager(out reader, out io, out config);
+            try
+            {
+                PauseCollect(dm);
+                try
+                {
+                    // 缓存里造一个 Completed 台（持 _cacheLock 防采集竞态改字典结构）
+                    var cacheLock = GetDmField(dm, "_cacheLock");
+                    var cache = GetDmField(dm, "_barometerDataCache")
+                        as Dictionary<int, BarometerData>;
+                    lock (cacheLock)
+                    {
+                        BarometerData e;
+                        if (!cache.TryGetValue(1, out e) || e == null)
+                        {
+                            e = new BarometerData { DeviceId = 1 };
+                            cache[1] = e;
+                        }
+                        e.Status = DeviceStatus.Completed;
+                    }
+                }
+                finally { ResumeCollect(dm); }
+                int[] judged, skipped;
+                dm.RecordUnloadJudge(new[] { 1 }, true, "", "", out judged, out skipped);
+                Check("[大扫荡][认领] 首判认领",
+                    judged.Length == 1 && judged[0] == 1 && skipped.Length == 0);
+                int[] judged2, skipped2;
+                dm.RecordUnloadJudge(new[] { 1 }, false, "X", "报废", out judged2, out skipped2);
+                Check("[大扫荡][认领] 重判进skipped（无双判定行）",
+                    judged2.Length == 0 && skipped2.Length == 1 && skipped2[0] == 1);
+            }
+            finally { try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
+        }
+
+        // ---------- S9 热更重建数组 + 工位静态信息同步清 ----------
+        private static void SweepRebuildArrays()
+        {
+            FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+            DeviceManager dm = BuildTestManager(out reader, out io, out config);
+            try
+            {
+                dm.SetStationSerialNumber(3, "旧项目SN");
+                config.TotalBarometers = 6;
+                dm.RebuildStationArrays();
+                Check("[大扫荡][重建] 调大后数组跟上",
+                    dm.GetTestingStates().Length == 6);
+                Thread.Sleep(200);   // 采集照跑（读器只回4台，5/6走短数组分支），不抛
+                Check("[大扫荡][重建] 重建后采集存活",
+                    dm.GetTestingCount() == 0 && dm.GetOnlineCount() == 4);
+                config.TotalBarometers = 4;
+                dm.RebuildStationArrays();
+                Check("[大扫荡][重建] 调小后数组跟上",
+                    dm.GetTestingStates().Length == 4);
+                Check("[大扫荡][重建] 旧项目SN绑定已清",
+                    dm.GetStationInfo(3) == null);
+            }
+            finally
+            {
+                try { config.TotalBarometers = 4; dm.RebuildStationArrays(); } catch { }
+                try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { }
+            }
+        }
+
+        // ---------- S8 急停关破空阀 ----------
+        private static void SweepStopAllVent()
+        {
+            FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+            DeviceManager dm = BuildTestManager(out reader, out io, out config);
+            try
+            {
+                config.VentValveDoPoint = 200;   // Fake 输出空间 240 内合法
+                io.WriteOutput(200, true);       // 模拟完成泄压后阀开着
+                dm.StopAll();
+                Check("[大扫荡][急停] 破空阀同关", !io.ReadOutput(200));
+            }
+            finally
+            {
+                try { config.VentValveDoPoint = 0; } catch { }
+                try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { }
+            }
+        }
+
+        /// <summary>Stop 抛异常的风机（急停风机失败路径用）</summary>
+        private sealed class ThrowingFan : AgingTestSystem.Interfaces.IFanController
+        {
+            public bool IsConnected => true;
+            public string ActiveIp => "FAKE-FAN";
+            public event EventHandler<string> OnError { add { } remove { } }
+            public bool Connect(DeviceConfig config) { return true; }
+            public void Disconnect() { }
+            public bool ReconnectNow() { return true; }
+            public FanData ReadStatus() { return null; }
+            public bool StartFixedValue() { return true; }
+            public bool Stop() { throw new InvalidOperationException("Fake 风机停失败注入"); }
+            public void Dispose() { }
+        }
+
+        // ---------- S12 急停风机失败：记账照做（快照清+事件记），异常仍抛 ----------
+        private static void SweepStopAllFanFail()
+        {
+            var config = new DeviceConfig();
+            config.TotalBarometers = 4;
+            config.TotalInputs = 80;
+            config.TotalOutputs = 160;
+            config.CollectInterval = 30;
+            config.VacuumConfirmTimeoutMs = 600;
+            config.CommunicationLossAlarmCount = 3;
+            config.AlarmPressureThresholdKPa = -5m;
+            config.FanEnabled = false;
+            var reader = new FakeBarometerReader(config.TotalBarometers);
+            var io = new FakeIoController(config.TotalInputs + config.TotalOutputs);
+            for (int i = 1; i <= config.TotalBarometers; i++) reader.SetPressure(i, 0m);
+            DeviceManager dm = null;
+            try
+            {
+                dm = new DeviceManager(config, reader, io, new ThrowingFan());
+                Check("[大扫荡][急停] 风机注入版启动成功", dm.Start());
+                int stopFailBefore = CountCsvMarker("送风机停止失败");
+                bool threw = false;
+                try { dm.StopAll(); }
+                catch (InvalidOperationException) { threw = true; }
+                Check("[大扫荡][急停] 风机失败仍抛给UI", threw);
+                Check("[大扫荡][急停] 快照照清（下次不问恢复）",
+                    TestSessionStore.Load() == null);
+                Check("[大扫荡][急停] 急停事件照记且点名风机",
+                    CountCsvMarker("送风机停止失败") > stopFailBefore);
+            }
+            finally { try { if (dm != null) dm.Dispose(); } catch { } }
+        }
+
+        // ---------- S11 订阅异常隔离：坏订阅者不影响好订阅者与采集 ----------
+        private static void SweepSubscriberIsolation()
+        {
+            FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+            DeviceManager dm = BuildTestManager(out reader, out io, out config);
+            EventHandler<BarometerData[]> bad = (s, d) =>
+            {
+                throw new InvalidOperationException("订阅者bug");
+            };
+            BarometerData[] got = null;
+            EventHandler<BarometerData[]> good = (s, d) => { got = d; };
+            try
+            {
+                dm.OnBatchDataUpdated += bad;
+                dm.OnBatchDataUpdated += good;
+                Thread.Sleep(300);
+                Check("[大扫荡][订阅] 坏订阅不影响好订阅",
+                    got != null && got.Length == config.TotalBarometers);
+                Check("[大扫荡][订阅] 采集照跑", dm.GetOnlineCount() == 4);
+            }
+            finally
+            {
+                try { dm.OnBatchDataUpdated -= bad; } catch { }
+                try { dm.OnBatchDataUpdated -= good; } catch { }
+                try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { }
+            }
         }
     }
 }

@@ -243,7 +243,16 @@ namespace AgingTestSystem.Models
         /// 关电流时本行高按 0 解析（见 TopToBottomAlignTo 注释），SN 回到 93，布局与原来一致；
         /// 开时面板有效高度 +21（205→226），下游 SN/配方/延时/按钮整体下移 21，间距全都不变。
         /// 面板高改变的联动语义见类头"完整锚定链（V1.77）"。</summary>
-        public ElementRect RcCurrentValue { get; set; } = new ElementRect { X = 65, Y = 90, Width = 85, Height = 21, LeftAlignTo = "SNValue", RightToLeftAlignTo = "VacuumOpen", RightToLeftGap = 3, TopToBottomAlignTo = "PressureValue", TopToBottomGap = 2 };
+        public ElementRect RcCurrentValue { get; set; } = DefaultRcCurrentValue();
+
+        /// <summary>
+        /// 电流行缺省矩形唯一出处（属性初始值与旧 json 自愈共用，改坐标只改这里）。
+        /// 每次返回新实例（调用方会就地改坐标，禁给共享引用）。
+        /// </summary>
+        public static ElementRect DefaultRcCurrentValue()
+        {
+            return new ElementRect { X = 65, Y = 90, Width = 85, Height = 21, LeftAlignTo = "SNValue", RightToLeftAlignTo = "VacuumOpen", RightToLeftGap = 3, TopToBottomAlignTo = "PressureValue", TopToBottomGap = 2 };
+        }
 
         /// <summary>SN 值框（V1.58.7 加宽 148；V1.58.14 右缘对齐锚定设置按钮；
         /// 【V1.77】Y 改由 TopToBottomAlignTo="CurrentValue"+TopToBottomGap=3 自上而下定位：
@@ -411,9 +420,11 @@ namespace AgingTestSystem.Models
                     {
                         // 【大扫荡】旧 json 自愈：V1.77 前的文件无 RcCurrentValue（null），
                         // 以前开电流行静默丢整行且零提示；现在补缺省，旧文件开电流即显示。
+                        // 【复查补齐】缺省值唯一出处 DefaultRcCurrentValue（与属性初始值同源，
+                        // 以前这里手抄一份，改一边忘另一边即分叉）。
                         if (cfg.RcCurrentValue == null)
                         {
-                            cfg.RcCurrentValue = new ElementRect { X = 65, Y = 90, Width = 85, Height = 21, LeftAlignTo = "SNValue", RightToLeftAlignTo = "VacuumOpen", RightToLeftGap = 3, TopToBottomAlignTo = "PressureValue", TopToBottomGap = 2 };
+                            cfg.RcCurrentValue = DefaultRcCurrentValue();
                         }
                         cfg.ResolveAnchors();   // 解析面板锚定 + 元素间锚定（V1.58.13/1.58.14）
                         return cfg;

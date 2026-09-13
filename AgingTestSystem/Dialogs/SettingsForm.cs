@@ -1266,6 +1266,23 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
+        /// popup 回写单元格（宿主存活守卫唯一入口：5 个 Show*Popup 共用）。
+        /// 设置表开着 popup 时用户可直接关设置表（拥有者关闭连带关 popup），
+        /// 或搜索过滤重建行后 rowIndex 过期——裸写 grid 即 ObjectDisposed/越界。
+        /// </summary>
+        /// <returns>true=已写回；false=宿主已死/行过期，调用方直接 return
+        /// （值不要了，LayoutSections 也别碰，控件可能已释放）</returns>
+        private bool TryWritePopupCell(DataGridView grid, int rowIndex, object value)
+        {
+            if (this.IsDisposed || this.Disposing || !this.IsHandleCreated) return false;
+            if (grid == null || grid.IsDisposed || grid.Disposing) return false;
+            if (rowIndex < 0 || rowIndex >= grid.Rows.Count) return false;
+            if (!grid.Columns.Contains("colValue")) return false;
+            grid.Rows[rowIndex].Cells["colValue"].Value = value;
+            return true;
+        }
+
+        /// <summary>
         /// 弹出候选 IP 列表编辑器，并把编辑结果写回单元格。
         /// </summary>
         private void ShowIpListPopup(DataGridView grid, int rowIndex, string currentValue)
@@ -1292,14 +1309,11 @@ namespace AgingTestSystem.Dialogs
                     {
                         // 【大扫荡】宿主存活守卫：设置表开着 popup 时直接关设置表
                         //（拥有者关闭连带关 popup），或搜索过滤重建行后 rowIndex 过期，
-                        // 裸写 grid 即 ObjectDisposed/越界。守卫不满足=放弃回写（用户已关窗，值不要了）。
-                        if (!this.IsDisposed && !this.Disposing && this.IsHandleCreated
-                            && !grid.IsDisposed && !grid.Disposing
-                            && rowIndex >= 0 && rowIndex < grid.Rows.Count
-                            && grid.Columns.Contains("colValue"))
-                        {
-                            grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
-                        }
+                        // 裸写 grid 即 ObjectDisposed/越界。守卫不满足=放弃回写并直接返回
+                        //（用户已关窗，值不要了；LayoutSections 也别碰，控件可能已释放）。
+                        // 【复查补齐】以前只守了写格，LayoutSections 照跑——关窗竞态下
+                        // 照样摸已释放控件，守卫等于只修了一半。
+                        if (!TryWritePopupCell(grid, rowIndex, popup.ResultValue)) return;
                         // 值可能变化，重新按内容算行高
                         LayoutSections();
                     }
@@ -1348,14 +1362,11 @@ namespace AgingTestSystem.Dialogs
                     {
                         // 【大扫荡】宿主存活守卫：设置表开着 popup 时直接关设置表
                         //（拥有者关闭连带关 popup），或搜索过滤重建行后 rowIndex 过期，
-                        // 裸写 grid 即 ObjectDisposed/越界。守卫不满足=放弃回写（用户已关窗，值不要了）。
-                        if (!this.IsDisposed && !this.Disposing && this.IsHandleCreated
-                            && !grid.IsDisposed && !grid.Disposing
-                            && rowIndex >= 0 && rowIndex < grid.Rows.Count
-                            && grid.Columns.Contains("colValue"))
-                        {
-                            grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
-                        }
+                        // 裸写 grid 即 ObjectDisposed/越界。守卫不满足=放弃回写并直接返回
+                        //（用户已关窗，值不要了；LayoutSections 也别碰，控件可能已释放）。
+                        // 【复查补齐】以前只守了写格，LayoutSections 照跑——关窗竞态下
+                        // 照样摸已释放控件，守卫等于只修了一半。
+                        if (!TryWritePopupCell(grid, rowIndex, popup.ResultValue)) return;
                         // 值可能变化，重新按内容算行高
                         LayoutSections();
                     }
@@ -1402,14 +1413,11 @@ namespace AgingTestSystem.Dialogs
                     {
                         // 【大扫荡】宿主存活守卫：设置表开着 popup 时直接关设置表
                         //（拥有者关闭连带关 popup），或搜索过滤重建行后 rowIndex 过期，
-                        // 裸写 grid 即 ObjectDisposed/越界。守卫不满足=放弃回写（用户已关窗，值不要了）。
-                        if (!this.IsDisposed && !this.Disposing && this.IsHandleCreated
-                            && !grid.IsDisposed && !grid.Disposing
-                            && rowIndex >= 0 && rowIndex < grid.Rows.Count
-                            && grid.Columns.Contains("colValue"))
-                        {
-                            grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
-                        }
+                        // 裸写 grid 即 ObjectDisposed/越界。守卫不满足=放弃回写并直接返回
+                        //（用户已关窗，值不要了；LayoutSections 也别碰，控件可能已释放）。
+                        // 【复查补齐】以前只守了写格，LayoutSections 照跑——关窗竞态下
+                        // 照样摸已释放控件，守卫等于只修了一半。
+                        if (!TryWritePopupCell(grid, rowIndex, popup.ResultValue)) return;
                         // 值可能变化，重新按内容算行高
                         LayoutSections();
                     }
@@ -1456,14 +1464,11 @@ namespace AgingTestSystem.Dialogs
                     {
                         // 【大扫荡】宿主存活守卫：设置表开着 popup 时直接关设置表
                         //（拥有者关闭连带关 popup），或搜索过滤重建行后 rowIndex 过期，
-                        // 裸写 grid 即 ObjectDisposed/越界。守卫不满足=放弃回写（用户已关窗，值不要了）。
-                        if (!this.IsDisposed && !this.Disposing && this.IsHandleCreated
-                            && !grid.IsDisposed && !grid.Disposing
-                            && rowIndex >= 0 && rowIndex < grid.Rows.Count
-                            && grid.Columns.Contains("colValue"))
-                        {
-                            grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
-                        }
+                        // 裸写 grid 即 ObjectDisposed/越界。守卫不满足=放弃回写并直接返回
+                        //（用户已关窗，值不要了；LayoutSections 也别碰，控件可能已释放）。
+                        // 【复查补齐】以前只守了写格，LayoutSections 照跑——关窗竞态下
+                        // 照样摸已释放控件，守卫等于只修了一半。
+                        if (!TryWritePopupCell(grid, rowIndex, popup.ResultValue)) return;
                         // 值可能变化，重新按内容算行高
                         LayoutSections();
                     }
@@ -1510,14 +1515,11 @@ namespace AgingTestSystem.Dialogs
                     {
                         // 【大扫荡】宿主存活守卫：设置表开着 popup 时直接关设置表
                         //（拥有者关闭连带关 popup），或搜索过滤重建行后 rowIndex 过期，
-                        // 裸写 grid 即 ObjectDisposed/越界。守卫不满足=放弃回写（用户已关窗，值不要了）。
-                        if (!this.IsDisposed && !this.Disposing && this.IsHandleCreated
-                            && !grid.IsDisposed && !grid.Disposing
-                            && rowIndex >= 0 && rowIndex < grid.Rows.Count
-                            && grid.Columns.Contains("colValue"))
-                        {
-                            grid.Rows[rowIndex].Cells["colValue"].Value = popup.ResultValue;
-                        }
+                        // 裸写 grid 即 ObjectDisposed/越界。守卫不满足=放弃回写并直接返回
+                        //（用户已关窗，值不要了；LayoutSections 也别碰，控件可能已释放）。
+                        // 【复查补齐】以前只守了写格，LayoutSections 照跑——关窗竞态下
+                        // 照样摸已释放控件，守卫等于只修了一半。
+                        if (!TryWritePopupCell(grid, rowIndex, popup.ResultValue)) return;
                         // 值可能变化，重新按内容算行高
                         LayoutSections();
                     }
@@ -2272,17 +2274,9 @@ namespace AgingTestSystem.Dialogs
             if (combo != null) return combo;
             // 【大扫荡】破空阀点位碰撞：配成某台阀/电编号 → 启动该台"开阀后同一 ID 写关"，
             // 真空永不建立还极难排查（保存时拦，运行侧 MapOutputChannel 双拦是第二道）。
-            if (ventPoint > 0)
-            {
-                int first = config.TotalInputs + 1;
-                int last = config.TotalInputs + 2 * config.TotalBarometers;
-                if (ventPoint >= first && ventPoint <= last)
-                {
-                    return $"破空阀点位 {ventPoint} 与工位阀/载台电编号冲突" +
-                        $"（{first}~{last} 已被 {config.TotalBarometers} 台工位占用），请换预留点位";
-                }
-            }
-            return null;
+            // 【复查补齐】判定本体在 AgingSequencer 纯函数（V1.67 约定），这里只调。
+            return AgingSequencer.ValidateVentPointCollision(
+                ventPoint, config.TotalInputs, config.TotalBarometers);
         }
 
         /// <summary>取某项的生效值：本次改了用本次的，否则用内存现值（下同三个；changes 可 null）。</summary>

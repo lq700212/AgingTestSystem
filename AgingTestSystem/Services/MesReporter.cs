@@ -405,7 +405,12 @@ namespace AgingTestSystem.Services
                         req.Headers.TryAddWithoutValidation(h.Key, h.Value);
                     }
                     var resp = client.SendAsync(req).GetAwaiter().GetResult();
-                    return resp != null && ((int)resp.StatusCode >= 200 && (int)resp.StatusCode < 300);
+                    // 【复查补齐】响应必须释放：以前每次上报漏一个 HttpResponseMessage，
+                    // 内容流/Socket 全靠终结器回收，报警风暴时句柄堆积。
+                    using (resp)
+                    {
+                        return resp != null && ((int)resp.StatusCode >= 200 && (int)resp.StatusCode < 300);
+                    }
                 }
             }
             catch (Exception ex)
@@ -457,7 +462,8 @@ namespace AgingTestSystem.Services
                     if (File.Exists(QueuePath())) File.Delete(QueuePath());
                     return;
                 }
-                File.WriteAllText(QueuePath(), JsonConvert.SerializeObject(backlog));
+                // 【复查补齐】原子写：与快照/配方同口径，断电写半截不再截断缓存静默丢补发。
+                AtomicFile.WriteAllText(QueuePath(), JsonConvert.SerializeObject(backlog));
             }
             catch (Exception ex)
             {

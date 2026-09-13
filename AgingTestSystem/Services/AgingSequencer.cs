@@ -239,6 +239,33 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
+        /// 破空阀点位碰撞校验（【复查补齐】纯函数：V1.67 约定"判定类分支先写纯函数"，
+        /// 以前逻辑直接写在 SettingsForm.CheckPolicyCombination 里，单测够不着）。
+        ///
+        /// 【为什么会撞】破空阀是全局单阀，走独立 DO 点；工位阀/载台电按
+        /// TotalInputs+id / TotalInputs+TotalBarometers+id 编址。若破空阀点位配进
+        /// 工位编号区间，启动该台"开阀后同一 ID 写关"→ 真空永不建立还极难排查。
+        /// </summary>
+        /// <param name="ventPoint">破空阀点位（≤0=未配置，不校验）</param>
+        /// <param name="totalInputs">DI 总数（输入占用 1~TotalInputs，输出从 TotalInputs+1 起）</param>
+        /// <param name="totalBarometers">工位数（每台占 阀编号+电编号 共 2 个输出点）</param>
+        /// <returns>矛盾描述；null=无碰撞</returns>
+        public static string ValidateVentPointCollision(int ventPoint, int totalInputs, int totalBarometers)
+        {
+            if (ventPoint <= 0) return null;
+            if (totalInputs < 0) totalInputs = 0;
+            if (totalBarometers <= 0) return null;
+            int first = totalInputs + 1;
+            int last = totalInputs + 2 * totalBarometers;
+            if (ventPoint >= first && ventPoint <= last)
+            {
+                return $"破空阀点位 {ventPoint} 与工位阀/载台电编号冲突"
+                    + $"（{first}~{last} 已被 {totalBarometers} 台工位占用），请换预留点位";
+            }
+            return null;
+        }
+
+        /// <summary>
         /// 送风机超温是否应全线联停（【V1.66 新增】纯函数）。
         ///
         /// 【为什么是全线不是单台】全机只有一个温度探头（送风机控制屏 0x0002），

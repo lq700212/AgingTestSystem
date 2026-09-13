@@ -51,9 +51,10 @@ namespace AgingTestSystem.Services
             foreach (string item in raw.Split(Separators))
             {
                 // 【大扫荡】到上限即停：以前先全量进表再截断，10 万脏项先吃满内存。
+                // 【复查补齐】文案修正：超限是"多于 20 个"，以前写"≤20个"反了。
                 if (options.Count >= MaxOptionCount)
                 {
-                    errors.Add("选项太多（≤" + MaxOptionCount + "个），已截断保留前 " + MaxOptionCount + " 个");
+                    errors.Add("选项太多（＞" + MaxOptionCount + "个），已截断保留前 " + MaxOptionCount + " 个");
                     break;
                 }
                 string t = (item ?? "").Trim();
