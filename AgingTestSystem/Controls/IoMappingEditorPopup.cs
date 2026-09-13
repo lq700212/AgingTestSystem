@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
+using AgingTestSystem.Models;
 
 namespace AgingTestSystem.Controls
 {
@@ -28,6 +29,20 @@ namespace AgingTestSystem.Controls
         private bool _closing;
 
         /// <summary>
+        /// 可视化连线页打开中（【V1.81.1】防 OnDeactivate 误杀）：
+        /// OpenVisual 用 ShowDialog(this) 打开模态连线页，模态窗激活瞬间本弹窗失焦，
+        /// 若按老逻辑走 OnDeactivate→CloseAsCancel，本弹窗关闭会连带 owned 的模态窗一起被销毁，
+        /// 现象就是"点了可视化连线…却进不去"。此旗置位期间失焦不关，关模态窗后复位。
+        /// </summary>
+        private bool _visualOpen;
+
+        /// <summary>
+        /// 建池用配置（目标池按 TotalOutputs 等算；null 则用缺省配置，
+        /// 可视化页照常能开，池子按 72/80/160 缺省值算）。
+        /// </summary>
+        private readonly DeviceConfig _config;
+
+        /// <summary>
         /// 提交后的值（原配置格式，分号分隔），未提交时为 null
         /// </summary>
         public string ResultValue { get; private set; }
@@ -36,8 +51,18 @@ namespace AgingTestSystem.Controls
         /// 构造弹出框
         /// </summary>
         /// <param name="currentValue">当前配置值（如 "0x2000@0x00->0x2009@0x00;0x2008@0x00->0x2009@0x01"）</param>
-        public IoMappingEditorPopup(string currentValue)
+        public IoMappingEditorPopup(string currentValue) : this(currentValue, null)
         {
+        }
+
+        /// <summary>
+        /// 构造弹出框（带配置：可视化连线页的点位池按它算；系统设置表把 _config 传进来）。
+        /// </summary>
+        /// <param name="currentValue">当前配置值</param>
+        /// <param name="config">设备配置（可为 null，null 则用缺省值建池）</param>
+        public IoMappingEditorPopup(string currentValue, DeviceConfig config)
+        {
+            _config = config;
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
             ShowInTaskbar = false;
@@ -159,6 +184,12 @@ namespace AgingTestSystem.Controls
             _btnDelete = CreateButton("删除选中", new Point(118, 198), new Size(88, 30), Sunny.UI.UIStyle.Orange);
             _btnDelete.Click += (s, e) => DeleteSelected();
             Controls.Add(_btnDelete);
+
+            // 【V1.81】可视化连线：打开与通讯测试窗同一张连线页（草稿模式：只改映射，
+            // 开关归设置表另一行管，确定后写回本表格，等用户按"保存设置"统一落盘）
+            var btnVisual = CreateButton("可视化连线…", new Point(214, 198), new Size(130, 30), Sunny.UI.UIStyle.Blue);
+            btnVisual.Click += (s, e) => OpenVisual();
+            Controls.Add(btnVisual);
 
             // 取消 / 确定（【V1.54b】弹窗宽 640，按钮靠右：取消 X=640-12-152=476，确定 X=640-12-82=546）
             _btnCancel = CreateButton("取消", new Point(476, 198), new Size(62, 30), Sunny.UI.UIStyle.Gray);
@@ -325,6 +356,63 @@ namespace AgingTestSystem.Controls
             Close();
         }
 
+        /// <summary>
+        /// 打开可视化连线页（草稿模式：与通讯测试窗同一张页，只改映射不碰开关；
+        /// 确定后写回本表格，再点本弹窗"确定"进单元格，最后由设置表"保存设置"落盘）。
+        /// 进页前把表格里"正在改还没确定"的值灌进去，出来后再整表装回，不丢行。
+        /// 【V1.81.1】_visualOpen 守卫见字段注释：否则模态窗激活即触发 OnDeactivate 自杀。
+        /// </summary>
+        private void OpenVisual()
+        {
+            DeviceConfig cfg = _config ?? new DeviceConfig();
+            using (var form = new Dialogs.IoRemapVisualForm(cfg))
+            {
+                // 【V1.60】弹窗打开前按当前主题着色（与本弹窗 Show 前 ApplyTo 同规矩）
+                Services.ThemeManager.ApplyTo(form);
+                form.ShowEnableSwitch = false;
+                form.SaveButtonText = "确定";
+                form.SetInitialMappings(BuildValueFromTable());
+                _visualOpen = true;
+                try
+                {
+                    if (form.ShowDialog(this) != DialogResult.OK || !form.Confirmed) return;
+                }
+                finally
+                {
+                    _visualOpen = false;
+                }
+                LoadValue(Services.IoRemapValidator.Serialize(form.ResultMappings));
+            }
+        }
+
+        /// <summary>
+        /// 把当前表格各行换算回配置格式（与 Confirm 同口径，但静默跳过未填完/自环行：
+        /// 进可视化页只是"带草稿过去"，校验留到可视化页 Validator + 本弹窗确定时做）。
+        /// </summary>
+        private string BuildValueFromTable()
+        {
+            _dgv.EndEdit();
+            var parts = new List<string>();
+            foreach (DataGridViewRow row in _dgv.Rows)
+            {
+                if (row.IsNewRow) continue;
+                if (!TryGetDecimal(row, "colSrcReg", out decimal srcRegDec) ||
+                    !TryGetDecimal(row, "colSrcCh", out decimal srcChDec) ||
+                    !TryGetDecimal(row, "colDstReg", out decimal dstRegDec) ||
+                    !TryGetDecimal(row, "colDstCh", out decimal dstChDec))
+                {
+                    continue;
+                }
+                int srcReg = (int)srcRegDec;
+                int srcCh = (int)srcChDec;
+                int dstReg = (int)dstRegDec;
+                int dstCh = (int)dstChDec;
+                if (srcReg == dstReg && srcCh == dstCh) continue;
+                parts.Add($"0x{srcReg:X4}@0x{srcCh:X2}->0x{dstReg:X4}@0x{dstCh:X2}");
+            }
+            return string.Join(";", parts);
+        }
+
         /// <summary>取某行某列的值；空值返回 false（跳过未填写的行）</summary>
         private static bool TryGetDecimal(DataGridViewRow row, string column, out decimal value)
         {
@@ -359,16 +447,14 @@ namespace AgingTestSystem.Controls
             }
         }
 
-        /// <summary>点击弹出框外部（窗体失焦）视为取消</summary>
+        /// <summary>点击弹出框外部（窗体失焦）视为取消（可视化连线页打开中除外，见 _visualOpen）</summary>
         protected override void OnDeactivate(EventArgs e)
         {
             base.OnDeactivate(e);
-            if (!_closing)
-            {
-                ResultValue = null;
-                _closing = true;
-                Close();
-            }
+            if (_closing || _visualOpen) return;
+            ResultValue = null;
+            _closing = true;
+            Close();
         }
     }
 }

@@ -3,6 +3,79 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md).
 
+## V1.81.2 — 连线窗屏中 + 去双缓冲治卡顿/错位（2026-09-13，用户现场反馈）
+
+### 改动范围
+- `Dialogs/IoRemapVisualForm.cs` — `StartPosition` 改 `CenterScreen`（调用方有主窗也有小弹窗，
+  `CenterParent` 会跟着小弹窗跑偏甚至出屏；用户要求不管谁打开都在屏幕正中）。
+- `Controls/IoRemapGraphControl.cs` — ①关双缓冲直画屏幕 DC：`DoubleBuffered=true` 逼全部
+  `TextRenderer` 走离屏慢路径（GDI 每处约 2.2ms，V1.57.3 血泪），可见区 25 行×2 处≈110ms/帧，
+  滚快了"字出不来"还拖影（看着像错位）；现 `UserPaint|AllPaintingInWmPaint` +
+  `OnPaintBackground` 留空 + 按裁剪区自填白底，不闪；②文字布局态预截断（`Row.MainText` +
+  `Ellipsize` 二分截断，`Paint` 里不再量字，正文+徽标必进框）。
+- 回归 `IoRemapTests` +5 条（窗体 `CenterScreen`、画布双缓冲关闭、`Ellipsize` 装得下/截断/零宽）。
+
+### 验证
+- harness 6/6：居中双断言、双缓冲关闭、全部节点行正文+徽标实测装框（0 坏行）、
+  屏幕重绘 20 次 300ms（平均 15ms）、21 档跳滚 63ms；真屏抓图文字清晰装框。
+- 附带结论（已回写全局技能 `winforms-ui-debug` 坑 43）：PrintWindow 在**滚动过、无双缓冲**的
+  画布上会丢 GDI 文字（框在字无），真屏 `CopyFromScreen` 深色像素计数双面裁定产品无辜；
+  此类窗体视觉证据一律走置顶真屏截图。
+- `build_and_test.ps1` 全量 1505 断言全绿（V1.81.1 的 1500 + 本次 5）；终结器审计 HIGH=0。
+
+## V1.81.1 — 连线页两修：设置表进不去 + 浏览卡/错位（2026-09-13，用户现场反馈）
+
+### 改动范围
+- `Controls/IoMappingEditorPopup.cs` — `_visualOpen` 守卫：`OpenVisual` 用 `ShowDialog(this)` 开模态页时，
+  模态激活瞬间本弹窗失焦，老 `OnDeactivate→Close` 自杀会连带 owned 模态窗一起被销毁（"点了进不去"根因）；
+  守卫期内失焦不关，关模态窗后复位（`try/finally`，异常也复位）。
+- `Controls/IoRemapGraphControl.cs` — ①错位：布局只在 `Paint` 里按 `e.Graphics.DpiX` 现算
+  （`EnsureLayout`，以前构造时无句柄猜 1.0，与 pt 字体真实 DPI 打架致字比框大），`Bounds` 与字体永同基准；
+  ②卡顿：`e.ClipRectangle` 转虚拟坐标裁剪，只画可见行/线（176 行全画是"浏览卡"来源），
+  另连线画序、滚动 MinSize 去抖等小修。
+- `Dialogs/IoRemapVisualForm.cs` — `ShowEnableSwitch`/`SaveButtonText` 由"构造后赋值无效"改为属性
+  （草稿模式开关藏不住的潜 bug 同修，占位左移加 once 守卫防重复搬偏）。
+- 回归 `IoRemapTests` +2 条（反射直调 `OnDeactivate`：失焦自关旧行为保留 / 连线中豁免）。
+
+### 验证
+- harness 端到端 6/6：设置表流程真调 `OpenVisual`→模态页出现（截图）→定时关→表格弹窗存活；
+  176 点全称最长 213px < 238px 框宽；单行裁剪绘制量仅全量 1/16；30 次全量离屏平均 23ms。
+- `build_and_test.ps1` 全量 1500 断言全绿（V1.81 的 26 + 本次 2）；终结器审计 HIGH=0。
+
+## V1.81 — 端口映射可视化配置：通道右键 + 连线页（2026-09-13，用户点名）
+
+### 改动范围
+- `Services/IoRemapValidator.cs`（新增）— 映射校验纯函数：新建拦截（源唯一/目标独占/自环/通道越界）
+  + `WithoutSource`/`FindBySource`/`IsTargetUsed`/`Serialize`（与 `ParseAll` 互逆的唯一序列化口）。
+- `Services/IoRemapCatalog.cs`（新增）— 点位池纯函数：源池=全部输出、目标池=仅预留/全部空闲两档，
+  点位来自 `IoMapBuilder`（改总数自动适应，不手写地址）。
+- `Controls/IoRemapGraphControl.cs`（新增）— 可复用连线控件：左源右目标自绘双列 + 贝塞尔连线，
+  点选连线/点线选中/右键删除，绘制与命中同一套 DPI 缩放布局。
+- `Dialogs/IoRemapVisualForm.cs`（新增）— 可视化配置窗：开关 + 目标池/源分组筛选 + 连线图 +
+  映射清单（双向同步选择）+ 保存/取消；自己不落盘，调用方决定提交路径。
+- `Dialogs/CommunicationTestForm.cs` — 三页可点灯（负压/载台/预留 DO）共用右键菜单：
+  映射到备用通道…（预选源进连线页）/ 取消本通道映射（直接删+落盘）/ 查看映射去向 /
+  打开端口映射配置…；保存走 `SettingsForm.PersistChanges`（与设置表同一条路），即时生效。
+- `Controls/IoMappingEditorPopup.cs` + `Dialogs/SettingsForm.cs` — 表格编辑器加"可视化连线…"
+  按钮（草稿模式复用同一连线页，确定写回表格，等"保存设置"统一落盘；开关归另一行管）。
+- `.opencode/skills/agingtest-regression/` — `IoRemapTests` 新增 26 条（校验拦截 7 + 删查序列化 9 +
+  点位池 10）；`get_affected_modules.ps1` 登记 4 个新文件 + 通讯窗/UI 映射行补 `IoOutputChannelRemap`。
+
+### 为什么这么改
+- 现场坏通道以前只能手写 `0x2000@0x00->0x2009@0x00` 字符串，写错位号静默失效（V1.62 血泪），
+  现点两下即连线，目标独占/重复源/自环当场拦截，老配置多源同目标照常加载（只拦新建，不改现场行为）。
+- 三个入口（右键/设置表/连线页）共用 `Validator` + `Catalog` + 同一张页：规则改一处三处生效，
+  以后加"拖拽连线/按寄存器选池"只动控件与目录层，不动校验与落盘。
+- 落盘只有一条路（`PersistChanges`，IoBackup 两 key 非结构型→内存热回写）：测试窗保存即测，
+  设置表走单元格→"保存设置"，两边不打架。
+
+### 验证
+- 构建一次过（仅两条旧警告）；终结器审计 HIGH=0。
+- `build_and_test.ps1 -Affected`（改到 TestRunner 自身→兜底全量）1498 断言全绿（V1.81.1 起 1500，见上）。
+- harness 直构双窗 12/12：三页 160 灯全挂菜单、Y000 反查 0x2000/ch0、源池 160/目标池 16/
+  预选源命中、合法连线 2→3；`PrintWindow` 双截图目检（徽标/连线/清单/按钮齐全，连线压字已改到节点下层）。
+- `README.md` 对话框表 + `docs/通讯接入.md` 备用映射 + 回归 skill 覆盖表同步（1472→1498）。
+
 ## V1.80 — 通讯测试预留点位页 + 顶栏改"通讯模块状态"（2026-09-13，用户点名两件）
 
 ### 改动范围

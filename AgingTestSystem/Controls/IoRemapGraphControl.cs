@@ -1,0 +1,963 @@
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Windows.Forms;
+using AgingTestSystem.Models;
+using AgingTestSystem.Services;
+
+namespace AgingTestSystem.Controls
+{
+    /// <summary>
+    /// 备用映射可视化连线控件（可复用的 UserControl：通讯测试窗、系统设置表共用）。
+    ///
+    /// 【界面】（纯自绘，一套坐标，走 AutoScroll 滚动）
+    /// ┌──────────────────────────────────────────────────────────────┐
+    /// │ 源通道（待映射，n）              目标通道（备用，m）           │ ← 列头（随滚动条吸顶？不吸顶，随内容滚）
+    /// │ ┌─真空电磁阀────────┐          ┌─预留输出────────┐            │
+    /// │ │Y000 真空电磁阀-1  │╲        │ │Y220 预留输出-145│            │
+    /// │ │Y001 真空电磁阀-2 →╲═══════►│ │Y221 预留输出-146│            │ ← 贝塞尔连线 = 已配映射
+    /// │ │...              │ ╱        │ │...              │            │
+    /// │ └─────────────────┘╱          └─────────────────┘            │
+    /// │                                                              │
+    /// │ 已映射源 = 浅橙底 + 右侧徽标"→0x2009@0x00"；被占目标 = 浅灰底  │
+    /// │ + 徽标"已被Y000占用"；选中源 = 浅蓝底 + 蓝框；悬停 = 高亮框   │
+    /// └──────────────────────────────────────────────────────────────┘
+    ///
+    /// 【交互】（用户评审结论：点选连线，触屏可点；拖拽以后再加）
+    ///   1. 左键点左侧源节点 → 选中（浅蓝），底部状态条提示"再点右侧目标完成连线"；
+    ///   2. 选中源后再点右侧目标节点 → 触发 MappingProposed（校验+落盘由宿主窗做，
+    ///      本控件不管配置只管画，方便以后嵌到别处）；
+    ///   3. 左键点连线 → 选中该映射（变红），右键可"删除此映射"；
+    ///   4. 点空白处 / 重复点已选中源 → 取消选择。
+    ///
+    /// 【通用性设计】
+    ///   - 数据全外置：SetData(源池, 目标池, 映射表) 灌入，池子由 IoRemapCatalog 按配置算，
+    ///     本控件不认 0x2009、不认 72 路，改总数/换耦合器自动适应；
+    ///   - 占用徽标由映射表现算（目标独占拦截是 Validator 的事，画出来是本控件的事）；
+    ///   - 映射中"有一端被筛选掉"的线画不出（两端节点必须同时可见），宿主窗用映射列表
+    ///     兜底展示，不丢数据（切池/切分组只是"没画"，映射还在）。
+    ///
+    /// 【高 DPI】自绘坐标按 e.Graphics.DpiX / 96 缩放（字体用 pt 天然跟 DPI，不用手算；
+    /// 矩形/行高/线宽手乘，见 WorkstationGridView 约定）；命中检测与绘制用同一套布局，
+    /// 不会"看着对点着偏"。
+    /// </summary>
+    public class IoRemapGraphControl : UserControl
+    {
+        // ===================== 公开事件 =====================
+
+        /// <summary>选中变化（源/映射任一变化即触发，宿主窗用它刷状态条与删除按钮）</summary>
+        public event EventHandler SelectionChanged;
+
+        /// <summary>
+        /// 连线提议（源已选 + 点了目标）：宿主窗调 IoRemapValidator 校验，
+        /// 合法则加入映射表后重新 SetData；本控件不直接改表。
+        /// </summary>
+        public event Action<int, int, int, int> MappingProposed;
+
+        /// <summary>删除映射请求（右键点连线/已映射源 → 删除此映射）</summary>
+        public event Action<IoOutputChannelRemap> MappingDeleteRequested;
+
+        // ===================== 行布局模型 =====================
+
+        /// <summary>画布上一行：分组标题 或 端点节点（左右列各有一套）</summary>
+        private sealed class Row
+        {
+            public bool IsHeader;
+            public string HeaderText;
+            public IoRemapEndpoint Endpoint;
+            public Rectangle Bounds;
+
+            /// <summary>
+            /// 装框后的正文（FitRowTexts 按"正文+徽标≤框宽"预截断，末尾加…；
+            /// 绘制时直接用，不再量字——量字放布局态，Paint 只管画才跟手）。
+            /// </summary>
+            public string MainText;
+        }
+
+        /// <summary>
+        /// 自绘画布。
+        ///
+        /// 【V1.81.2 有意不用 DoubleBuffered】TextRenderer 走 GDI，在离屏缓冲上每处约 2.2ms
+        /// （AGENTS 的 V1.57.3 血泪：离屏大图上 2247ms，屏幕 DC 上近 0ms）。
+        /// 本画布可见区 ~25 行 × 2 处文字，双缓冲下每帧 100ms+，滚快了"字出不来"还拖影
+        /// （看着像错位）。改直画屏幕 DC（近 0ms）+ OnPaint 自填白底（不闪）+ 可见区裁剪，
+        /// GDI+ 的贝塞尔直画同样快，无需预渲染（预渲染是另一条红线，同样禁止）。
+        /// </summary>
+        private sealed class CanvasPanel : Panel
+        {
+            public CanvasPanel()
+            {
+                DoubleBuffered = false;
+                ResizeRedraw = true;
+                SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint, true);
+            }
+
+            /// <summary>背景由 OnPaint 按裁剪区自填白底，不走默认擦除（擦一遍画一遍=闪）</summary>
+            protected override void OnPaintBackground(PaintEventArgs e)
+            {
+            }
+        }
+
+        private readonly CanvasPanel _canvas;
+        private readonly ToolTip _tip;
+
+        private List<IoRemapEndpoint> _sources = new List<IoRemapEndpoint>();
+        private List<IoRemapEndpoint> _targets = new List<IoRemapEndpoint>();
+        private List<IoOutputChannelRemap> _mappings = new List<IoOutputChannelRemap>();
+
+        private readonly List<Row> _srcRows = new List<Row>();
+        private readonly List<Row> _tgtRows = new List<Row>();
+
+        /// <summary>
+        /// 布局所用 DPI 缩放（【V1.81.1】错位根因：以前 ComputeLayout 在 SetData 时按
+        /// "有无句柄"猜缩放（构造时常为 1.0），而 Paint 里 pt 字体按真实 DPI 放大，
+        /// 两套基准打架 → 字比框大、加载即错位。现布局只在 Paint 里按 e.Graphics.DpiX
+        /// 现算（EnsureLayout），Bounds 与字体永远同基准，不会再错位）。
+        /// </summary>
+        private float _layoutScale;
+
+        /// <summary>布局脏标记（数据/宽度变化后置位，Paint 里重算；平时直接复用，不重复算）</summary>
+        private bool _layoutDirty = true;
+
+        /// <summary>当前布局度量（与 _srcRows/_tgtRows 同一次算出，绘制与命中共用）</summary>
+        private Metrics _metrics;
+
+        /// <summary>选中的源键（"寄存器:通道"，如 "8192:0"；null = 未选）</summary>
+        private string _selSrcKey;
+
+        /// <summary>选中的目标键（仅高亮用，不触发连线；连线必须先选源）</summary>
+        private string _selTgtKey;
+
+        /// <summary>选中的映射（存源键+目标键，SetData 换表后仍能对上）</summary>
+        private string _selMapSrcKey;
+        private string _selMapDstKey;
+
+        private Row _hoverRow;
+        private int _hoverLineIndex = -1;
+        private string _lastTipText = "";
+
+        // 右键菜单命中（按下右键瞬间记下，避免 Opening 时再算一遍坐标）
+        private int _ctxLineIndex = -1;
+        private Row _ctxRow;
+        private readonly ContextMenuStrip _lineMenu;
+        private readonly ToolStripMenuItem _miDeleteMap;
+
+        private readonly Font _fontNode = new Font("微软雅黑", 9F);
+        private readonly Font _fontHead = new Font("微软雅黑", 10F, FontStyle.Bold);
+        private readonly Font _fontBadge = new Font("微软雅黑", 8F);
+
+        /// <summary>构造：建画布 + 提示 + 右键菜单并挂事件</summary>
+        public IoRemapGraphControl()
+        {
+            _canvas = new CanvasPanel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.White,
+                AutoScroll = true
+            };
+            _canvas.Paint += Canvas_Paint;
+            _canvas.MouseClick += Canvas_MouseClick;
+            _canvas.MouseMove += Canvas_MouseMove;
+            _canvas.MouseLeave += Canvas_MouseLeave;
+            _canvas.MouseDown += Canvas_MouseDown;
+            // 宽度变了只标脏，真正重算等下一次 Paint（那时才有准的 DPI），防反复 CreateGraphics
+            _canvas.SizeChanged += (s, e) => { _layoutDirty = true; _canvas.Invalidate(); };
+            Controls.Add(_canvas);
+
+            // 悬停提示（无容器手写 Dispose，见下方 Dispose(bool)）
+            _tip = new ToolTip();
+
+            // 右键菜单：只在"点中连线/已映射源"时出现（Opening 里按 _ctx* 显隐）
+            _lineMenu = new ContextMenuStrip();
+            _miDeleteMap = new ToolStripMenuItem("删除此映射");
+            _miDeleteMap.Click += (s, e) => RaiseDeleteFromContext();
+            _lineMenu.Items.Add(_miDeleteMap);
+        }
+
+        /// <summary>
+        /// 释放自建资源（画布是子控件由基类释放；tip/菜单/字体无容器，必须手放，
+        /// 否则 Sunny/原生输入框类资源进终结器线程，见 ControlDisposeHelper 头注释）。
+        /// </summary>
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                try { if (_tip != null) _tip.Dispose(); } catch { }
+                try { if (_lineMenu != null) _lineMenu.Dispose(); } catch { }
+                try { if (_fontNode != null) _fontNode.Dispose(); } catch { }
+                try { if (_fontHead != null) _fontHead.Dispose(); } catch { }
+                try { if (_fontBadge != null) _fontBadge.Dispose(); } catch { }
+            }
+            base.Dispose(disposing);
+        }
+
+        // ===================== 公开 API =====================
+
+        /// <summary>
+        /// 灌入数据并重画（宿主窗在池切换/分组筛选/映射增删后调用；选中态中"已不存在"的自动清除）。
+        /// 三个集合可为 null（视为无），内部做拷贝，调用方改自己的表不影响已显示。
+        /// </summary>
+        public void SetData(List<IoRemapEndpoint> sources, List<IoRemapEndpoint> targets,
+            List<IoOutputChannelRemap> mappings)
+        {
+            _sources = sources != null ? new List<IoRemapEndpoint>(sources) : new List<IoRemapEndpoint>();
+            _targets = targets != null ? new List<IoRemapEndpoint>(targets) : new List<IoRemapEndpoint>();
+            _mappings = mappings != null ? new List<IoOutputChannelRemap>(mappings) : new List<IoOutputChannelRemap>();
+
+            // 选中态自愈：源/映射已不在新数据里就清除，不留"选中了个不存在的东西"
+            if (_selSrcKey != null && FindEndpoint(_sources, _selSrcKey) == null) _selSrcKey = null;
+            if (_selTgtKey != null && FindEndpoint(_targets, _selTgtKey) == null) _selTgtKey = null;
+            if (_selMapSrcKey != null && FindMapping(_selMapSrcKey, _selMapDstKey) == null)
+            {
+                _selMapSrcKey = null;
+                _selMapDstKey = null;
+            }
+            _hoverRow = null;
+            _hoverLineIndex = -1;
+
+            // 只标脏不计算：无句柄时算出的缩放是猜的（错位根因），等 Paint 用真 DPI 算
+            _layoutDirty = true;
+            _canvas.Invalidate();
+        }
+
+        /// <summary>
+        /// 预选源（右键"映射到备用通道…"进来时调）：选中并滚到该节点；找不到返回 false。
+        /// </summary>
+        public bool PreselectSource(int reg, int ch)
+        {
+            string key = reg + ":" + ch;
+            if (FindEndpoint(_sources, key) == null) return false;
+            _selSrcKey = key;
+            _selTgtKey = null;
+            _selMapSrcKey = null;
+            _selMapDstKey = null;
+            EnsureLayoutForScroll();
+            ScrollToSource(key);
+            _canvas.Invalidate();
+            RaiseSelectionChanged();
+            return true;
+        }
+
+        /// <summary>清空全部选中（连线成功后宿主窗可调，视觉回到"一张白纸"）</summary>
+        public void ClearSelection()
+        {
+            _selSrcKey = null;
+            _selTgtKey = null;
+            _selMapSrcKey = null;
+            _selMapDstKey = null;
+            _canvas.Invalidate();
+            RaiseSelectionChanged();
+        }
+
+        /// <summary>
+        /// 按映射选中连线（宿主窗的映射清单点一行 → 画布对应连线变红；
+        /// 映射两端被筛选藏起时选中记下但画不出线，返回 false 告诉调用方）。
+        /// </summary>
+        public bool SelectMapping(int srcReg, int srcCh, int dstReg, int dstCh)
+        {
+            _selMapSrcKey = srcReg + ":" + srcCh;
+            _selMapDstKey = dstReg + ":" + dstCh;
+            _selSrcKey = null;
+            _selTgtKey = null;
+            _canvas.Invalidate();
+            RaiseSelectionChanged();
+            return FindMapping(_selMapSrcKey, _selMapDstKey) != null
+                && FindRow(_srcRows, _selMapSrcKey) != null
+                && FindRow(_tgtRows, _selMapDstKey) != null;
+        }
+
+        /// <summary>当前选中的源端点（未选返回 null）</summary>
+        public IoRemapEndpoint SelectedSource
+        {
+            get { return _selSrcKey != null ? FindEndpoint(_sources, _selSrcKey) : null; }
+        }
+
+        /// <summary>当前选中的映射（未选返回 null）</summary>
+        public IoRemapEndpoint SelectedTarget
+        {
+            get { return _selTgtKey != null ? FindEndpoint(_targets, _selTgtKey) : null; }
+        }
+
+        /// <summary>当前选中的映射（点连线选中；未选返回 null）</summary>
+        public IoOutputChannelRemap SelectedMapping
+        {
+            get
+            {
+                if (_selMapSrcKey == null) return null;
+                return FindMapping(_selMapSrcKey, _selMapDstKey);
+            }
+        }
+
+        // ===================== 布局（绘制与命中同一套） =====================
+
+        /// <summary>布局度量（DPI 缩放后）：列宽/行高/边距，绘制与命中检测共用</summary>
+        private struct Metrics
+        {
+            public int LeftX, LeftW, RightX, RightW, HeadH, NodeH, Gap, GroupH, Margin;
+            public int VirtualW;
+        }
+
+        /// <summary>
+        /// 保证布局与传入 Graphics 同基准（Paint 入口调；缩放没变且不脏直接返回，零开销）。
+        /// </summary>
+        private void EnsureLayout(Graphics g)
+        {
+            float s = (g != null) ? g.DpiX / 96f : 1f;
+            if (s < 1f) s = 1f;
+            if (!_layoutDirty && s == _layoutScale) return;
+            ComputeLayout(s);
+            _layoutScale = s;
+            _layoutDirty = false;
+            // 有真 DC 才量字截断（屏幕 DC 上量字快；离屏 DC 量字慢但布局态低频，无妨）
+            if (g != null)
+            {
+                try { FitRowTexts(g); }
+                catch { }
+            }
+        }
+
+        /// <summary>
+        /// 非绘制路径的布局保证（预选滚动要在 Paint 之前拿到 Bounds）：
+        /// 有句柄就现取真 DPI，无句柄用上次基准（Paint 时还会再对一次，不会错位）。
+        /// </summary>
+        private void EnsureLayoutForScroll()
+        {
+            if (!_layoutDirty) return;
+            try
+            {
+                if (_canvas != null && !_canvas.IsDisposed && _canvas.IsHandleCreated)
+                {
+                    using (Graphics g = _canvas.CreateGraphics())
+                    {
+                        EnsureLayout(g);
+                        return;
+                    }
+                }
+            }
+            catch { }
+            ComputeLayout(_layoutScale > 0 ? _layoutScale : 1f);
+            _layoutDirty = false;
+        }
+
+        /// <summary>按缩放算一套度量（96DPI 下基准：列宽 250/250，节点高 26，行隙 6）</summary>
+        private Metrics BuildMetrics(float s, int clientW)
+        {
+            var m = new Metrics
+            {
+                Margin = (int)(10 * s),
+                LeftX = (int)(10 * s),
+                LeftW = (int)(250 * s),
+                RightW = (int)(250 * s),
+                HeadH = (int)(30 * s),
+                NodeH = (int)(26 * s),
+                Gap = (int)(6 * s),
+                GroupH = (int)(22 * s)
+            };
+            // 右列右对齐：画布窄时按最小虚宽撑出滚动条，宽时贴右
+            int minW = m.Margin * 2 + m.LeftW + (int)(120 * s) + m.RightW;
+            int viewW = Math.Max(clientW, minW);
+            m.VirtualW = Math.Max(viewW, minW);
+            m.RightX = m.VirtualW - m.Margin - m.RightW;
+            return m;
+        }
+
+        /// <summary>
+        /// 按缩放算出所有行的 Bounds（虚拟坐标）并记度量 + 设 AutoScrollMinSize。
+        /// 注意：绘制时 e.Graphics 先 TranslateTransform(AutoScrollPosition.X, AutoScrollPosition.Y)
+        /// （值为负），鼠标坐标转虚拟坐标则减去它（见 ToVirtual）。
+        /// </summary>
+        private void ComputeLayout(float s)
+        {
+            if (_canvas == null || _canvas.IsDisposed) return;
+            if (s < 1f) s = 1f;
+
+            Metrics m = BuildMetrics(s, _canvas.ClientSize.Width);
+            _metrics = m;
+
+            BuildRows(_sources, m.LeftX, m.LeftW, m.HeadH, m.NodeH, m.Gap, m.GroupH, _srcRows);
+            BuildRows(_targets, m.RightX, m.RightW, m.HeadH, m.NodeH, m.Gap, m.GroupH, _tgtRows);
+
+            int totalH = m.HeadH + m.Margin;
+            foreach (var r in _srcRows) totalH = Math.Max(totalH, r.Bounds.Bottom);
+            foreach (var r in _tgtRows) totalH = Math.Max(totalH, r.Bounds.Bottom);
+            totalH += m.Margin;
+            try
+            {
+                // 值不变不重设：Paint 里调布局时重设 MinSize 会引发二次布局，抖动
+                var want = new Size(0, totalH);
+                if (_canvas.AutoScrollMinSize != want) _canvas.AutoScrollMinSize = want;
+            }
+            catch { }
+        }
+
+        /// <summary>按功能分组建行（同功能连续才合组，源池已按寄存器排序，分组自然连续）</summary>
+        private static void BuildRows(List<IoRemapEndpoint> eps, int x, int w,
+            int headH, int nodeH, int gap, int groupH, List<Row> rows)
+        {            rows.Clear();
+            int y = headH;
+            string lastGroup = null;
+            foreach (var e in eps)
+            {
+                if (e.GroupTitle != lastGroup)
+                {
+                    lastGroup = e.GroupTitle;
+                    rows.Add(new Row
+                    {
+                        IsHeader = true,
+                        HeaderText = lastGroup,
+                        Bounds = new Rectangle(x, y, w, groupH)
+                    });
+                    y += groupH + gap;
+                }
+                rows.Add(new Row
+                {
+                    IsHeader = false,
+                    Endpoint = e,
+                    // 默认全文；FitRowTexts 在有 DC 时按框宽截断（无 DC 就显示全文，不断言）
+                    MainText = e != null ? e.DisplayText : "",
+                    Bounds = new Rectangle(x, y, w, nodeH)
+                });
+                y += nodeH + gap;
+            }
+        }
+
+        /// <summary>
+        /// 按框宽预截断每行正文（布局态做，Paint 里不再量字）：
+        /// 可用宽 = 框宽 - 左右各 6 -（徽标宽 + 6，如有徽标）；超了末尾加…。
+        /// 徽标用 8pt 量、正文用 9pt 量（与绘制同字体，量出来即画出来，
+        /// 不会"量着装得下、画着溢出去"）。
+        /// </summary>
+        private void FitRowTexts(Graphics g)
+        {
+            FitRows(g, _srcRows, true);
+            FitRows(g, _tgtRows, false);
+        }
+
+        private void FitRows(Graphics g, List<Row> rows, bool isSource)
+        {
+            foreach (var r in rows)
+            {
+                if (r.IsHeader || r.Endpoint == null) continue;
+                string badge = isSource ? SourceBadge(r.Endpoint) : TargetBadge(r.Endpoint);
+                int avail = r.Bounds.Width - 12;
+                if (badge != null)
+                {
+                    try { avail -= (TextRenderer.MeasureText(g, badge, _fontBadge).Width + 6); }
+                    catch { avail -= 90; }
+                }
+                string full = r.Endpoint.DisplayText ?? "";
+                int fullW;
+                try { fullW = TextRenderer.MeasureText(g, full, _fontNode).Width; }
+                catch { r.MainText = full; continue; }
+                r.MainText = (fullW <= avail) ? full : Ellipsize(g, full, _fontNode, avail);
+            }
+        }
+
+        /// <summary>截断加…（二分找最长前缀，保证结果整体≤maxWidth；框太窄保底只留"…"）</summary>
+        private static string Ellipsize(IDeviceContext dc, string text, Font font, int maxWidth)
+        {
+            const string dots = "…";
+            if (string.IsNullOrEmpty(text)) return "";
+            if (maxWidth <= 0) return "";
+            int dotW;
+            try { dotW = TextRenderer.MeasureText(dc, dots, font).Width; }
+            catch { return text; }
+            if (dotW >= maxWidth) return dots;
+            int lo = 0, hi = text.Length;
+            while (lo < hi)
+            {
+                int mid = (lo + hi + 1) / 2;
+                int w;
+                try { w = TextRenderer.MeasureText(dc, text.Substring(0, mid), font).Width; }
+                catch { break; }
+                if (w + dotW <= maxWidth) lo = mid;
+                else hi = mid - 1;
+            }
+            if (lo <= 0) return dots;
+            if (lo >= text.Length) return text;
+            return text.Substring(0, lo) + dots;
+        }
+
+        // ===================== 绘制 =====================
+
+        private void Canvas_Paint(object sender, PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+            // 布局与绘制同基准 + 脏了就地重算（错位根因见 _layoutScale 注释）
+            EnsureLayout(g);
+            Metrics m = _metrics;
+            // 切到虚拟坐标：滚动偏移是负值，直接平移即可
+            g.TranslateTransform(_canvas.AutoScrollPosition.X, _canvas.AutoScrollPosition.Y);
+
+            // 可见区（虚拟坐标）：只画与它相交的行/线。160 行全画就是"浏览卡"的来源，
+            // 屏幕一次只看 ~25 行，裁掉剩下 85%（AGENTS 自绘性能红线：e.ClipRectangle 反推范围）。
+            Rectangle vClip = ToVirtual(e.ClipRectangle);
+
+            // 自填白底（OnPaintBackground 已禁默认擦除，这里按裁剪区填一次，不闪也不留残影）
+            using (var bg = new SolidBrush(_canvas.BackColor))
+            {
+                g.FillRectangle(bg, vClip);
+            }
+
+            // 列头
+            DrawHead(g, m, m.LeftX, m.LeftW, string.Format("源通道（待映射，{0}）", _sources.Count));
+            DrawHead(g, m, m.RightX, m.RightW, string.Format("目标通道（备用，{0}）", _targets.Count));
+
+            // 空态
+            if (_srcRows.Count == 0)
+                DrawEmpty(g, m.LeftX, m.LeftW, "无源通道（请检查总数配置）");
+            if (_tgtRows.Count == 0)
+                DrawEmpty(g, m.RightX, m.RightW, "无备用目标（预留点已用完可切“全部空闲”）");
+
+            // 连线画在节点下层（先画线后画节点，横穿时不断字；选中红线照样从节点边缘露出）
+            // 两端节点必须同时可见才画；被筛选掉的不画，宿主窗列表兜底。
+            // 两端都不在可见区的不画（长跨度连线的中间段滚出屏幕就不花钱）。
+            for (int i = 0; i < _mappings.Count; i++)
+            {
+                var map = _mappings[i];
+                if (map == null) continue;
+                Row s = FindRow(_srcRows, map.SourceRegister + ":" + map.SourceChannel);
+                Row t = FindRow(_tgtRows, map.TargetRegister + ":" + map.TargetChannel);
+                if (s == null || t == null) continue;
+                if (!s.Bounds.IntersectsWith(vClip) && !t.Bounds.IntersectsWith(vClip)) continue;
+                bool selected = (map.SourceRegister + ":" + map.SourceChannel == _selMapSrcKey)
+                    && (map.TargetRegister + ":" + map.TargetChannel == _selMapDstKey);
+                bool hovered = (i == _hoverLineIndex);
+                DrawLink(g, s.Bounds, t.Bounds, selected, hovered);
+            }
+
+            // 预连线（源已选 + 悬停在目标上：灰色虚线"预告"点下去会连到哪）
+            if (_selSrcKey != null && _hoverRow != null && !_hoverRow.IsHeader
+                && IsTargetRow(_hoverRow))
+            {
+                Row s = FindRow(_srcRows, _selSrcKey);
+                if (s != null)
+                {
+                    using (var pen = new Pen(Color.Gray, 1.5f))
+                    {
+                        pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash;
+                        DrawBezier(g, pen, s.Bounds, _hoverRow.Bounds);
+                    }
+                }
+            }
+
+            foreach (var r in _srcRows)
+            {
+                if (r.Bounds.IntersectsWith(vClip)) DrawRow(g, r, true);
+            }
+            foreach (var r in _tgtRows)
+            {
+                if (r.Bounds.IntersectsWith(vClip)) DrawRow(g, r, false);
+            }
+        }
+
+        private void DrawHead(Graphics g, Metrics m, int x, int w, string text)
+        {
+            var rc = new Rectangle(x, m.Margin, w, m.HeadH - m.Margin);
+            using (var bg = new SolidBrush(Color.FromArgb(237, 243, 253)))
+                g.FillRectangle(bg, rc);
+            TextRenderer.DrawText(g, text, _fontHead, rc,
+                Color.FromArgb(30, 80, 160),
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+        }
+
+        private void DrawEmpty(Graphics g, int x, int w, string text)
+        {
+            var rc = new Rectangle(x, 40, w, 30);
+            TextRenderer.DrawText(g, text, _fontNode, rc, Color.Gray,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak);
+        }
+
+        /// <summary>画一行（分组条 / 端点节点，徽标规则见类头注释）</summary>
+        private void DrawRow(Graphics g, Row r, bool isSource)
+        {
+            if (r.IsHeader)
+            {
+                using (var bg = new SolidBrush(Color.FromArgb(245, 245, 245)))
+                    g.FillRectangle(bg, r.Bounds);
+                TextRenderer.DrawText(g, r.HeaderText, _fontHead, r.Bounds, Color.DimGray,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+                return;
+            }
+
+            var e = r.Endpoint;
+            string key = e.Key;
+            bool selected = isSource ? (key == _selSrcKey) : (key == _selTgtKey);
+            bool hovered = (r == _hoverRow);
+            string badge = isSource ? SourceBadge(e) : TargetBadge(e);
+
+            Color fill = Color.White;
+            Color border = Color.FromArgb(180, 180, 180);
+            if (isSource && badge != null) { fill = Color.FromArgb(255, 247, 230); border = Color.FromArgb(220, 155, 40); }
+            if (!isSource && badge != null) { fill = Color.FromArgb(242, 242, 242); border = Color.FromArgb(200, 90, 90); }
+            if (selected) { fill = Color.FromArgb(232, 241, 255); border = Color.FromArgb(48, 112, 238); }
+
+            using (var bg = new SolidBrush(fill))
+                g.FillRectangle(bg, r.Bounds);
+            float bw = (selected || hovered) ? 2f : 1f;
+            Color bc = hovered ? Color.FromArgb(48, 112, 238) : border;
+            using (var pen = new Pen(bc, bw))
+                g.DrawRectangle(pen, r.Bounds);
+
+            // 正文左对齐，徽标右对齐（徽标 null 就是空闲端点，不画；
+            // 正文是布局态截好的 MainText，绘制宽度必进框，不会压徽标/出框）
+            var textRc = new Rectangle(r.Bounds.X + 6, r.Bounds.Y, r.Bounds.Width - 12, r.Bounds.Height);
+            Color tc = (isSource && badge != null) ? Color.FromArgb(120, 80, 10) : Color.FromArgb(48, 48, 48);
+            TextRenderer.DrawText(g, r.MainText ?? e.DisplayText, _fontNode, textRc, tc,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+            if (badge != null)
+            {
+                TextRenderer.DrawText(g, badge, _fontBadge, textRc, Color.FromArgb(150, 90, 90),
+                    TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+            }
+        }
+
+        /// <summary>源徽标：已映射返回"→0x2009@0x00"；未映射返回 null</summary>
+        private string SourceBadge(IoRemapEndpoint e)
+        {
+            var map = IoRemapValidator.FindBySource(_mappings, e.Register, e.Channel);
+            if (map == null) return null;
+            return "→" + IoRemapValidator.Describe(map.TargetRegister, map.TargetChannel);
+        }
+
+        /// <summary>目标徽标：被占用返回"已被Y000占用"；空闲返回 null</summary>
+        private string TargetBadge(IoRemapEndpoint e)
+        {
+            foreach (var map in _mappings)
+            {
+                if (map == null) continue;
+                if (map.TargetRegister == e.Register && map.TargetChannel == e.Channel)
+                {
+                    var src = FindEndpoint(_sources, map.SourceRegister + ":" + map.SourceChannel);
+                    string who = src != null ? src.IoName : IoRemapValidator.Describe(map.SourceRegister, map.SourceChannel);
+                    return "已被" + who + "占用";
+                }
+            }
+            return null;
+        }
+
+        /// <summary>画一条映射连线（贝塞尔 + 目标端箭头；选中红加粗，悬停橙）</summary>
+        private void DrawLink(Graphics g, Rectangle src, Rectangle dst, bool selected, bool hovered)
+        {
+            Color c = selected ? Color.Red : (hovered ? Color.Orange : Color.DodgerBlue);
+            float w = selected ? 3f : 2f;
+            using (var pen = new Pen(c, w))
+            {
+                DrawBezier(g, pen, src, dst);
+            }
+            // 箭头（小三角，指向目标节点左边缘中点）
+            Point tip = new Point(dst.Left, dst.Top + dst.Height / 2);
+            Point[] tri = { tip, new Point(tip.X - 8, tip.Y - 5), new Point(tip.X - 8, tip.Y + 5) };
+            using (var br = new SolidBrush(selected ? Color.Red : Color.DodgerBlue))
+                g.FillPolygon(br, tri);
+        }
+
+        private static void DrawBezier(Graphics g, Pen pen, Rectangle src, Rectangle dst)
+        {
+            Point p0 = new Point(src.Right, src.Top + src.Height / 2);
+            Point p3 = new Point(dst.Left, dst.Top + dst.Height / 2);
+            int mx = (p0.X + p3.X) / 2;
+            using (var path = new System.Drawing.Drawing2D.GraphicsPath())
+            {
+                path.AddBezier(p0, new Point(mx, p0.Y), new Point(mx, p3.Y), p3);
+                g.DrawPath(pen, path);
+            }
+        }
+
+        // ===================== 鼠标交互 =====================
+
+        /// <summary>客户区坐标 → 虚拟坐标（AutoScrollPosition 是负偏移，反向加回）</summary>
+        private Point ToVirtual(Point client)
+        {
+            return new Point(client.X - _canvas.AutoScrollPosition.X, client.Y - _canvas.AutoScrollPosition.Y);
+        }
+
+        /// <summary>客户区矩形 → 虚拟矩形（可见区裁剪用，与上面同口径）</summary>
+        private Rectangle ToVirtual(Rectangle client)
+        {
+            Point p = ToVirtual(new Point(client.X, client.Y));
+            return new Rectangle(p.X, p.Y, client.Width, client.Height);
+        }
+
+        private void Canvas_MouseClick(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Right) return;   // 右键走 MouseDown 菜单，不参与选择
+            Point v = ToVirtual(e.Location);
+
+            Row hit = HitRow(v);
+            if (hit != null && !hit.IsHeader)
+            {
+                if (IsSourceRow(hit))
+                {
+                    // 点源：重复点=取消；换源=改选；同时清掉连线选中（一次只表达一件事）
+                    string key = hit.Endpoint.Key;
+                    _selSrcKey = (key == _selSrcKey) ? null : key;
+                    _selTgtKey = null;
+                    _selMapSrcKey = null;
+                    _selMapDstKey = null;
+                    _canvas.Invalidate();
+                    RaiseSelectionChanged();
+                    return;
+                }
+                // 点目标：有源已选=提议连线；无源=只高亮 + 提示先选源
+                if (_selSrcKey != null)
+                {
+                    var src = FindEndpoint(_sources, _selSrcKey);
+                    if (src != null)
+                    {
+                        var handler = MappingProposed;
+                        string keepSel = _selSrcKey;
+                        _selSrcKey = null;   // 提议发出即收回选中（成败都一样，视觉不残留）
+                        _canvas.Invalidate();
+                        RaiseSelectionChanged();
+                        if (handler != null)
+                            handler(src.Register, src.Channel, hit.Endpoint.Register, hit.Endpoint.Channel);
+                        else
+                            _selSrcKey = keepSel;   // 无人处理则恢复选中（设计器预览时）
+                        return;
+                    }
+                }
+                _selTgtKey = hit.Endpoint.Key;
+                _selMapSrcKey = null;
+                _selMapDstKey = null;
+                _canvas.Invalidate();
+                RaiseSelectionChanged();
+                return;
+            }
+
+            int line = HitLine(v);
+            if (line >= 0)
+            {
+                var map = _mappings[line];
+                _selMapSrcKey = map.SourceRegister + ":" + map.SourceChannel;
+                _selMapDstKey = map.TargetRegister + ":" + map.TargetChannel;
+                _selSrcKey = null;
+                _selTgtKey = null;
+                _canvas.Invalidate();
+                RaiseSelectionChanged();
+                return;
+            }
+
+            // 点空白：全清
+            if (_selSrcKey != null || _selTgtKey != null || _selMapSrcKey != null)
+            {
+                ClearSelection();
+            }
+        }
+
+        private void Canvas_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Right) return;
+            Point v = ToVirtual(e.Location);
+            _ctxLineIndex = HitLine(v);
+            _ctxRow = HitRow(v);
+            bool canDelete = false;
+            if (_ctxLineIndex >= 0) canDelete = true;
+            else if (_ctxRow != null && !_ctxRow.IsHeader && IsSourceRow(_ctxRow)
+                && IoRemapValidator.FindBySource(_mappings,
+                    _ctxRow.Endpoint.Register, _ctxRow.Endpoint.Channel) != null)
+                canDelete = true;
+            _miDeleteMap.Visible = canDelete;
+            if (canDelete)
+            {
+                try { _lineMenu.Show(_canvas, e.Location); } catch { }
+            }
+        }
+
+        private void Canvas_MouseMove(object sender, MouseEventArgs e)
+        {
+            Point v = ToVirtual(e.Location);
+            Row hit = HitRow(v);
+            int line = (hit == null) ? HitLine(v) : -1;   // 节点优先，空白处才算连线
+            if (hit != _hoverRow || line != _hoverLineIndex)
+            {
+                bool borderOnly = (hit == _hoverRow) && (line != _hoverLineIndex);
+                _hoverRow = hit;
+                _hoverLineIndex = line;
+                _canvas.Invalidate();   // 全重画最稳（节点<300，连线<64，无性能压力）
+                UpdateTip();
+            }
+            try
+            {
+                _canvas.Cursor = (hit != null && !hit.IsHeader) || line >= 0
+                    ? Cursors.Hand : Cursors.Default;
+            }
+            catch { }
+        }
+
+        private void Canvas_MouseLeave(object sender, EventArgs e)
+        {
+            _hoverRow = null;
+            _hoverLineIndex = -1;
+            UpdateTip();
+            _canvas.Invalidate();
+        }
+
+        /// <summary>悬停提示内容（节点全称 / 连线两端 / 空白清掉）</summary>
+        private void UpdateTip()
+        {
+            string text = "";
+            if (_hoverRow != null && !_hoverRow.IsHeader && _hoverRow.Endpoint != null)
+            {
+                var ep = _hoverRow.Endpoint;
+                text = IsSourceRow(_hoverRow)
+                    ? ep.FullText + "（左键选中，再点右侧目标连线）"
+                    : ep.FullText + "（先在左侧选源，再点我完成连线）";
+            }
+            else if (_hoverLineIndex >= 0 && _hoverLineIndex < _mappings.Count)
+            {
+                var map = _mappings[_hoverLineIndex];
+                if (map != null)
+                    text = string.Format("{0} → {1}（左键选中，右键可删除）",
+                        IoRemapValidator.Describe(map.SourceRegister, map.SourceChannel),
+                        IoRemapValidator.Describe(map.TargetRegister, map.TargetChannel));
+            }
+            if (text != _lastTipText)
+            {
+                _lastTipText = text;
+                try { _tip.SetToolTip(_canvas, text); } catch { }
+            }
+        }
+
+        private void RaiseDeleteFromContext()
+        {
+            IoOutputChannelRemap map = null;
+            if (_ctxLineIndex >= 0 && _ctxLineIndex < _mappings.Count)
+                map = _mappings[_ctxLineIndex];
+            else if (_ctxRow != null && !_ctxRow.IsHeader && _ctxRow.Endpoint != null)
+                map = IoRemapValidator.FindBySource(_mappings,
+                    _ctxRow.Endpoint.Register, _ctxRow.Endpoint.Channel);
+            _ctxLineIndex = -1;
+            _ctxRow = null;
+            if (map == null) return;
+            var handler = MappingDeleteRequested;
+            if (handler != null) handler(map);
+        }
+
+        private void RaiseSelectionChanged()
+        {
+            try
+            {
+                if (SelectionChanged != null) SelectionChanged(this, EventArgs.Empty);
+            }
+            catch { }
+            UpdateTip();
+        }
+
+        // ===================== 命中与查找 =====================
+
+        private bool IsSourceRow(Row r) { return _srcRows.Contains(r); }
+        private bool IsTargetRow(Row r) { return _tgtRows.Contains(r); }
+
+        private Row HitRow(Point v)
+        {
+            foreach (var r in _srcRows)
+            {
+                if (!r.IsHeader && r.Bounds.Contains(v)) return r;
+            }
+            foreach (var r in _tgtRows)
+            {
+                if (!r.IsHeader && r.Bounds.Contains(v)) return r;
+            }
+            return null;
+        }
+
+        /// <summary>连线命中（采样贝塞尔 24 段折线，点到折线距离 &lt;5px 即中）</summary>
+        private int HitLine(Point v)
+        {
+            for (int i = 0; i < _mappings.Count; i++)
+            {
+                var map = _mappings[i];
+                if (map == null) continue;
+                Row s = FindRow(_srcRows, map.SourceRegister + ":" + map.SourceChannel);
+                Row t = FindRow(_tgtRows, map.TargetRegister + ":" + map.TargetChannel);
+                if (s == null || t == null) continue;
+                if (DistanceToBezier(v, s.Bounds, t.Bounds) < 5) return i;
+            }
+            return -1;
+        }
+
+        private static float DistanceToBezier(Point v, Rectangle src, Rectangle dst)
+        {
+            PointF p0 = new PointF(src.Right, src.Top + src.Height / 2f);
+            PointF p3 = new PointF(dst.Left, dst.Top + dst.Height / 2f);
+            float mx = (p0.X + p3.X) / 2f;
+            PointF c1 = new PointF(mx, p0.Y);
+            PointF c2 = new PointF(mx, p3.Y);
+            float best = float.MaxValue;
+            PointF prev = p0;
+            for (int i = 1; i <= 24; i++)
+            {
+                float t = i / 24f;
+                PointF cur = BezierPoint(p0, c1, c2, p3, t);
+                best = Math.Min(best, DistancePointToSegment(v, prev, cur));
+                prev = cur;
+            }
+            return best;
+        }
+
+        private static PointF BezierPoint(PointF p0, PointF c1, PointF c2, PointF p3, float t)
+        {
+            float u = 1 - t;
+            float x = u * u * u * p0.X + 3 * u * u * t * c1.X + 3 * u * t * t * c2.X + t * t * t * p3.X;
+            float y = u * u * u * p0.Y + 3 * u * u * t * c1.Y + 3 * u * t * t * c2.Y + t * t * t * p3.Y;
+            return new PointF(x, y);
+        }
+
+        private static float DistancePointToSegment(Point v, PointF a, PointF b)
+        {
+            float dx = b.X - a.X, dy = b.Y - a.Y;
+            float len2 = dx * dx + dy * dy;
+            if (len2 < 0.0001f) return (float)Math.Sqrt((v.X - a.X) * (v.X - a.X) + (v.Y - a.Y) * (v.Y - a.Y));
+            float t = ((v.X - a.X) * dx + (v.Y - a.Y) * dy) / len2;
+            t = Math.Max(0, Math.Min(1, t));
+            float px = a.X + t * dx - v.X, py = a.Y + t * dy - v.Y;
+            return (float)Math.Sqrt(px * px + py * py);
+        }
+
+        private static Row FindRow(List<Row> rows, string key)
+        {
+            foreach (var r in rows)
+            {
+                if (!r.IsHeader && r.Endpoint != null && r.Endpoint.Key == key) return r;
+            }
+            return null;
+        }
+
+        private void ScrollToSource(string key)
+        {
+            Row r = FindRow(_srcRows, key);
+            if (r == null) return;
+            try
+            {
+                // setter 取正值（getter 是负偏移，符号坑见 ProcessPolicyForm 画布注释）
+                int y = Math.Max(0, r.Bounds.Y - 60);
+                _canvas.AutoScrollPosition = new Point(0, y);
+            }
+            catch { }
+        }
+
+        private static IoRemapEndpoint FindEndpoint(List<IoRemapEndpoint> list, string key)
+        {
+            if (list == null || key == null) return null;
+            foreach (var e in list)
+            {
+                if (e != null && e.Key == key) return e;
+            }
+            return null;
+        }
+
+        private IoOutputChannelRemap FindMapping(string srcKey, string dstKey)
+        {
+            if (srcKey == null || dstKey == null) return null;
+            foreach (var m in _mappings)
+            {
+                if (m == null) continue;
+                if (m.SourceRegister + ":" + m.SourceChannel == srcKey
+                    && m.TargetRegister + ":" + m.TargetChannel == dstKey)
+                    return m;
+            }
+            return null;
+        }
+    }
+}
