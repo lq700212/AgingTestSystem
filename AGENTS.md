@@ -98,6 +98,8 @@
   - Sunny 控件默认 Style=Inherited，吃样式字体：名/值两套标签要么都不写 Font
     （同源永不分叉），要么两边写死同一套——只写一边必大小眼（V1.72 实锤：
     lblFanState 单写 9Bold，与继承 12 的名标签对不上，删字解决）。
+    只加粗不动字号时走代码（构造里按控件当前字号或 Bold，V1.78 先例），不进 Designer
+   （Designer 写死字号即与继承字号分叉）。
   - `is Button/TextBox/ComboBox` 认不出 Sunny 自绘控件（UIButton/UITextBox/
     UIComboBox 不是原生子类；UILabel 是 Label 子类无碍）：类型判断改 Sunny 类型，
     ThemeManager 按类型名走分支；按钮改色走 `ApplyButtonColors`，读显示色走
