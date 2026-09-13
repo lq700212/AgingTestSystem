@@ -48,6 +48,8 @@
             this.rootScrollPanel = new System.Windows.Forms.Panel();
             this.tableLayoutPanelMain = new System.Windows.Forms.TableLayoutPanel();
             this.tableLayoutPanelTop = new System.Windows.Forms.TableLayoutPanel();
+            this.pnlProject = new System.Windows.Forms.Panel();
+            this.lblProjectPrefix = new Sunny.UI.UILabel();
             this.lblProject = new Sunny.UI.UILabel();
             this.panelPermission = new System.Windows.Forms.FlowLayoutPanel();
             this.lblPermissionPrefix = new Sunny.UI.UILabel();
@@ -91,6 +93,7 @@
             this.rootScrollPanel.SuspendLayout();
             this.tableLayoutPanelMain.SuspendLayout();
             this.tableLayoutPanelTop.SuspendLayout();
+            this.pnlProject.SuspendLayout();
             this.tableLayoutPanelMenu.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainerMain)).BeginInit();
             this.splitContainerMain.Panel2.SuspendLayout();
@@ -149,7 +152,7 @@
             this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
             this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
             this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 15F));
-            this.tableLayoutPanelTop.Controls.Add(this.lblProject, 0, 0);
+            this.tableLayoutPanelTop.Controls.Add(this.pnlProject, 0, 0);
             this.tableLayoutPanelTop.Controls.Add(this.panelPermission, 1, 0);
             this.tableLayoutPanelTop.Controls.Add(this.lblCommStatusLabel, 2, 0);
             this.tableLayoutPanelTop.Controls.Add(this.lblCommStatus, 3, 0);
@@ -161,18 +164,51 @@
             this.tableLayoutPanelTop.Size = new System.Drawing.Size(1274, 24);
             this.tableLayoutPanelTop.TabIndex = 0;
             //
-            // lblProject - 当前项目显示（【V1.72.7 新增】切错项目=跑错工艺，顶栏首屏可见防呆；
+            //
+            // pnlProject - 当前项目显示容器（【V1.79】原单个 lblProject 拆为"前缀 + 项目名"两个标签：
+            // 前缀 lblProjectPrefix 常规体、项目名 lblProject 加粗，与权限/通讯"前缀常规、值加粗"同口径）。
+            // 不用 FlowLayoutPanel 装：项目名要 AutoEllipsis（超长省略号不断行），流式布局给不出
+            // 约束宽度；普通 Panel + 前缀 Dock=Left + 项目名 Dock=Fill，Fill 拿到剩余宽度后省略号正常工作。
+            // 背景 SystemColors.Control 与顶栏一致，观感与原来单个标签相同。
+            //
+            this.pnlProject.BackColor = System.Drawing.SystemColors.Control;
+            this.pnlProject.Controls.Add(this.lblProject);
+            this.pnlProject.Controls.Add(this.lblProjectPrefix);
+            this.pnlProject.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.pnlProject.Location = new System.Drawing.Point(3, 0);
+            this.pnlProject.Margin = new System.Windows.Forms.Padding(3, 0, 3, 0);
+            this.pnlProject.Name = "pnlProject";
+            this.pnlProject.Size = new System.Drawing.Size(503, 24);
+            this.pnlProject.TabIndex = 4;
+            //
+            // lblProjectPrefix - 固定前缀"当前项目："（常规体不加粗，【V1.79】用户点名；
+            // 必须 AutoSize=false：AutoSize + Dock=Left 只取首选高度（与 Fill 的项目名差约 10px 错位），
+            // 关掉后 Dock=Left 撑满容器高度 + MiddleLeft 垂直居中；宽度由构造按 PreferredWidth 收，
+            // 跟字号/DPI 走，不写死像素）。
+            //
+            this.lblProjectPrefix.AutoSize = false;
+            this.lblProjectPrefix.Dock = System.Windows.Forms.DockStyle.Left;
+            this.lblProjectPrefix.Location = new System.Drawing.Point(0, 0);
+            this.lblProjectPrefix.Margin = new System.Windows.Forms.Padding(0);
+            this.lblProjectPrefix.Name = "lblProjectPrefix";
+            this.lblProjectPrefix.Size = new System.Drawing.Size(77, 24);
+            this.lblProjectPrefix.TabIndex = 0;
+            this.lblProjectPrefix.Text = "当前项目：";
+            this.lblProjectPrefix.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            //
+            // lblProject - 项目名（【V1.72.7 新增】切错项目=跑错工艺，顶栏首屏可见防呆；
             // 项目名由 UpdateProjectDisplay 回填（构造一次 + 每次热加载刷新一次，【V1.72.10】切换无需重启）；
-            // Dock=Fill 占满第 1 列（【V1.72.8】标题删后项目移到该列，40% 宽），
+            // Dock=Fill 占容器剩余宽度（【V1.72.8】标题删后项目移到第 1 列，40% 宽），
             // 超长项目名 AutoEllipsis 省略号不断行）。
             //
             this.lblProject.AutoEllipsis = true;
             this.lblProject.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblProject.Location = new System.Drawing.Point(3, 0);
+            this.lblProject.Location = new System.Drawing.Point(0, 0);
+            this.lblProject.Margin = new System.Windows.Forms.Padding(0);
             this.lblProject.Name = "lblProject";
-            this.lblProject.Size = new System.Drawing.Size(503, 24);
-            this.lblProject.TabIndex = 4;
-            this.lblProject.Text = "当前项目：烧屏测试";
+            this.lblProject.Size = new System.Drawing.Size(426, 24);
+            this.lblProject.TabIndex = 1;
+            this.lblProject.Text = "烧屏测试";
             this.lblProject.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             //
             // panelPermission - 当前操作权限显示容器（V1.19.7：拆为"前缀 + 角色名"两个标签）
@@ -620,6 +656,8 @@
             this.tableLayoutPanelMain.PerformLayout();
             this.tableLayoutPanelTop.ResumeLayout(false);
             this.tableLayoutPanelTop.PerformLayout();
+            this.pnlProject.ResumeLayout(false);
+            this.pnlProject.PerformLayout();
             this.tableLayoutPanelMenu.ResumeLayout(false);
             this.splitContainerMain.Panel2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.splitContainerMain)).EndInit();
@@ -649,7 +687,11 @@
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelMain;
         /// <summary>顶部信息栏容器</summary>
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelTop;
-        /// <summary>当前项目显示标签（【V1.72.7 新增】顶栏第 1 列，构造里回填项目名）</summary>
+        /// <summary>当前项目显示容器（【V1.79】顶栏第 1 列：前缀 + 项目名两个标签，背景与顶栏一致）</summary>
+        private System.Windows.Forms.Panel pnlProject;
+        /// <summary>固定前缀"当前项目："（常规体不加粗，V1.79 用户点名）</summary>
+        private Sunny.UI.UILabel lblProjectPrefix;
+        /// <summary>项目名标签（【V1.72.7 新增】容器内 Dock=Fill，构造里回填项目名；V1.78 起加粗）</summary>
         private Sunny.UI.UILabel lblProject;
         /// <summary>当前操作权限显示容器（V1.19.7：拆为前缀+角色名两个标签）</summary>
         private System.Windows.Forms.FlowLayoutPanel panelPermission;

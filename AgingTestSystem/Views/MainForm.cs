@@ -33,7 +33,8 @@ namespace AgingTestSystem.Views
     ///
     /// 窗体布局说明：
     /// ┌─────────────────────────────────────────────────────────┐
-    /// │ 老化测试系统V1.00  │ 当前操作权限: 操作员 │ PLC连接状态: 已连接 │
+    /// │ 当前项目:烧屏测试 │ 当前操作权限: 操作员 │ 通讯连接状态: 已连接/未连接 │
+    /// │ (前缀常规+名加粗)  │ (前缀常规+角色名加粗) │ (标签常规+状态值加粗，=IO耦合器，V1.16.1) │
     /// ├─────────────────────────────────────────────────────────┤
         /// │ [用户权限] [参数设置] [日志记录] [关于] │（V1.64：深色按钮从关于右侧收进关于下拉，仅 dev 可见）
     /// ├──────────────────────────────┬──────────────────────────┤
@@ -197,6 +198,11 @@ namespace AgingTestSystem.Views
             // 【V1.78】顶栏/状态区加粗（用户点名：项目/权限/通讯/运行状态/监视全加粗）。
             // 放构造里按当前字号原样加粗，详见 ApplyHeaderBoldFonts 注释（为什么不动 Designer）。
             ApplyHeaderBoldFonts();
+
+            // 【V1.79】项目前缀标签定宽：Designer 里 AutoSize=false + Dock=Left（撑满高度居中），
+            // 宽度这里按 PreferredWidth 收——"当前项目："五个字刚好包住，跟运行字号/DPI 走，
+            // 写死像素换字号就夹字、多留又挤项目名。必须在加粗之后收（粗体比常规体宽）。
+            lblProjectPrefix.Width = lblProjectPrefix.PreferredWidth;
 
             // 【V1.60 深色/浅色主题】读出上次保存的主题并给主窗体着色（按钮等语义色原样保留，
             // 详见 ThemeManager 类头"配色约定"）。
@@ -2394,11 +2400,11 @@ namespace AgingTestSystem.Views
         /// </summary>
         private void ApplyHeaderBoldFonts()
         {
-            // 顶栏：项目 + 权限（前缀/角色名成对） + 通讯（标签/状态成对）
+            // 顶栏：项目名（值加粗） + 权限角色名 + 通讯状态值。
+            // 【V1.79】三个前缀/标签（lblProjectPrefix/lblPermissionPrefix/lblCommStatusLabel）
+            // 保持常规体——"前缀常规、值加粗"，主次分明（用户点名）。
             SetBold(lblProject);
-            SetBold(lblPermissionPrefix);
             SetBold(lblPermissionRole);
-            SetBold(lblCommStatusLabel);
             SetBold(lblCommStatus);
             // 运行状态组：分组标题"运行状态" + 状态文本
             SetBold(groupBoxStatus);
@@ -2463,14 +2469,18 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 顶栏显示当前项目（【V1.72.7 新增】切错项目=跑错工艺，首屏可见防呆）。
-        /// 【V1.72.10 热更】构造时设一次 + 每次热加载后刷新一次（两处调用，
-        /// 无需订阅事件）。超长项目名由 lblProject.AutoEllipsis 省略号收尾不断行。
+        /// 【V1.79】拆为"前缀 + 项目名"两个标签（pnlProject 内横排：lblProjectPrefix 固定"当前项目："
+        /// 常规体，lblProject 只装项目名、加粗；与权限"前缀常规、值加粗"同口径）。
+        /// panelPermission 用 FlowLayoutPanel 够用（两段都 AutoSize），这里必须用普通 Panel +
+        /// 前缀 Dock=Left + 项目名 Dock=Fill——项目名要 AutoEllipsis，流式布局给不出约束宽度。
+        /// 构造时设一次 + 每次热加载后刷新一次（两处调用，无需订阅事件）。
+        /// 超长项目名由 lblProject.AutoEllipsis 省略号收尾不断行。
         /// </summary>
         /// <param name="projectName">生效的项目名（EnsureActiveProfile/热加载传入，null 兜底烧屏测试）</param>
         private void UpdateProjectDisplay(string projectName)
         {
             if (lblProject == null) return;
-            lblProject.Text = "当前项目：" + (string.IsNullOrWhiteSpace(projectName) ? "烧屏测试" : projectName.Trim());
+            lblProject.Text = string.IsNullOrWhiteSpace(projectName) ? "烧屏测试" : projectName.Trim();
         }
 
         /// <summary>
