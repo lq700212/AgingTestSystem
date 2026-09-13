@@ -45,21 +45,32 @@ namespace AgingTestSystem.Controls
                 | ControlStyles.ResizeRedraw, true);
             Size = new Size(20, 18);
             Cursor = Cursors.Hand;
+            // 【V1.86复查】TabStop 收进构造自包含：本控件是装饰性图标按钮，
+            // Tab 顺序里停它只会干扰录入/复制主流程（键盘用户复制/导出读真值，
+            // 不依赖眼睛态）；原来只写在 LicenseForm.Designer 里，别人 new 一个
+            // 就默认可 Tab，自包含后在哪用都不分叉。
+            TabStop = false;
         }
 
         protected override void OnPaint(PaintEventArgs e)
         {
+            // 【V1.86复查】极小尺寸守卫：布局/DPI 抖动把图标压到几像素时，
+            // eye 矩形宽/高会变 0 甚至负数，DrawEllipse 即抛 ArgumentException，
+            // 而 Paint 抛异常会一路炸到窗体。不画就是了，小到看不见画了也白画。
+            if (Width < 8 || Height < 10) return;
             Graphics g = e.Graphics;
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             g.Clear(BackColor);
             // 眼睛外轮廓：横向椭圆，左右各留 2px、上下留 4px
             Rectangle eye = new Rectangle(2, 4, Width - 5, Height - 9);
+            if (eye.Width <= 0 || eye.Height <= 0) return;
             using (Pen pen = new Pen(Color.FromArgb(96, 96, 96), 1.5f))
             using (SolidBrush brush = new SolidBrush(Color.FromArgb(96, 96, 96)))
             {
                 g.DrawEllipse(pen, eye);
                 // 瞳孔：眼睛中心的小圆，直径约轮廓短轴的一半
                 int d = Math.Min(eye.Width, eye.Height) / 2;
+                if (d <= 0) return;
                 int cx = eye.X + eye.Width / 2, cy = eye.Y + eye.Height / 2;
                 if (_shown)
                 {

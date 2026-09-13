@@ -19,6 +19,8 @@ namespace AgingTestSystem.Dialogs
     /// 会被输入框整体盖住（V1.86 血泪，见 AGENTS 叠放控件层级三锁）；
     /// 运行时由 LicenseForm.cs 的 PositionEye 按 ClientSize 精确定位并随 Resize 跟随；
     /// MinimumSize 锁缩小（V1.71 绝对布局窗统一做法）。
+    /// 【字体家规】Designer 不写 Font（状态行加粗在 .cs 里按当前字号 Bold，
+    /// V1.78 先例）：Designer 写死字号即与继承/换肤字号分叉，VS 重写还转字面串。
     /// </summary>
     partial class LicenseForm
     {
@@ -73,7 +75,6 @@ namespace AgingTestSystem.Dialogs
             this.Padding = new Padding(10, 45, 10, 10);
             this._lblStatus.Location = new Point(16, 50);
             this._lblStatus.Size = new Size(510, 30);
-            this._lblStatus.Font = new Font(this.Font, FontStyle.Bold);
             this._lblMachine.Location = new Point(16, 88);
             this._lblMachine.Size = new Size(510, 22);
             this._lblMachine.Text = "本机机器码（发给商务签发授权，一机一证）：";

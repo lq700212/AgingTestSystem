@@ -3532,9 +3532,17 @@ namespace AgingTestSystem.Tests
                         // 眼睛是显示框的子控件：天然浮在输入框上（比"窗体级叠放"稳，
                         // V1.86 血泪：窗体级叠加被输入框整体盖住，见 AGENTS 叠放控件层级三锁）
                         Check("眼睛是显示框子控件", eyeIcon.Parent == mBox);
+                        // 【V1.86复查】旧断言只验"框内偏右"(Left>0)，眼睛贴左缘也绿。
+                        // 收紧到 PositionEye 公式位（右缘-2px，容差1px 防DPI取整）。
                         Check("眼睛贴显示框右缘内侧",
-                            eyeIcon.Location.X + eyeIcon.Width <= mBox.ClientSize.Width - 1
-                            && eyeIcon.Left > 0);
+                            Math.Abs(eyeIcon.Location.X
+                                - (mBox.ClientSize.Width - eyeIcon.Width - 2)) <= 1,
+                            "x=" + eyeIcon.Location.X + " expect="
+                            + (mBox.ClientSize.Width - eyeIcon.Width - 2));
+                        // 【V1.86复查】被内层编辑框盖住时几何全对但看不见点不到
+                        // （本坑本尊），必须锁"最前"：子控件集合里序号0=最上。
+                        Check("眼睛浮在最前(未被内层编辑框盖住)",
+                            mBox.Controls.GetChildIndex(eyeIcon) == 0);
                         Check("眼睛垂直居中于显示框",
                             Math.Abs((eyeIcon.Location.Y + eyeIcon.Height / 2f)
                                 - mBox.ClientSize.Height / 2f) <= 2f);
@@ -3558,7 +3566,9 @@ namespace AgingTestSystem.Tests
                         Check("点眼睛→可见态(Shown=true)", eyeIcon.Shown == true);
                         Check("悬停换隐藏",
                             tipObj != null && wantShown != null && tipObj.GetToolTip(eyeIcon) == wantShown);
-                        Check("显隐不丢值", mBox.Text == keep && !string.IsNullOrWhiteSpace(keep), keep);
+                        // 机器码原文不打进日志（长度即可，防用例输出外泄本机指纹）。
+                        Check("显隐不丢值", mBox.Text == keep && !string.IsNullOrWhiteSpace(keep),
+                            "len=" + (keep ?? "").Length);
                         if (eyeHandler != null) eyeHandler.Invoke(eyeFrm, new object[] { eyeIcon, EventArgs.Empty });
                         Check("再点→掩码回去", mBox.PasswordChar == '●');
                         Check("再点→隐藏态(Shown=false)", eyeIcon.Shown == false);
