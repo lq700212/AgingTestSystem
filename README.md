@@ -13,6 +13,9 @@ WinForms 桌面程序（.NET Framework 4.7.2 / C#）：监控 72 台气压表真
 | 业务流（测试/报警/送风机） | 下文「4. 核心业务流」 |
 | 改动历史 | 下文「8. 版本历史」+ `CHANGELOG.md` |
 | 现场调试 | 主程序"关于"菜单：**通讯测试 / 送风机测试**（技术员及以上；复用主程序共享连接，不自建连接） |
+| 现场操作培训 | [`docs/现场工程师培训手册.md`](docs/现场工程师培训手册.md)（开机→生产→报警处理→点检→禁忌，照着做） |
+| AI 接手开发 | [`docs/AI开发引导.md`](docs/AI开发引导.md)（10 分钟：项目速览+代码地图+高频任务 cookbook+验证闭环；规范仍以 `AGENTS.md` 为准） |
+| 内部开发接手 | [`docs/内部开发人员说明.md`](docs/内部开发人员说明.md)（地图+同步清单+红线索引，规范唯一源仍是 `AGENTS.md`） |
 
 > 原独立测试工程（`ModbusRtuBarometerTest` / `ModbusTcpIoControllerTest` / `ModbusTCPFanControllerTest` / `SerialScannerTest`）
 > 已删除，其测试逻辑已合并进主程序与 `docs/通讯接入.md`。
