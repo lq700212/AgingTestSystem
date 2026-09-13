@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Threading.Tasks;
@@ -22,7 +23,7 @@ namespace AgingTestSystem.Dialogs
     /// ├──────────────────────────────────────────────────┤
     /// │ pnlHeader：● UILedBulb 连接指示灯 + 连接状态文字    │ ← 顶部状态条
     /// ├──────────────────────────────────────────────────┤
-    /// │ tabControl（UITabControl，两个 UIPage 页）        │
+    /// │ tabControl（UITabControl，三个 UIPage 页）         │
     /// │ ┌────────────────────────────────────────────┐   │
     /// │ │ ①负压开关测试 页：panelGridVacuum           │   │
     /// │ │   72 路真空电磁阀 Y000~Y107，寄存器0x2000~  │   │
@@ -31,6 +32,12 @@ namespace AgingTestSystem.Dialogs
     /// │ │ ②载台上电测试 页：panelGridPowerOn         │   │
     /// │ │   72 路载台上电 Y110~Y217，寄存器0x2004~   │   │
     /// │ │   0x2008，9×8 圆形灯按钮                   │   │
+    /// │ ├────────────────────────────────────────────┤   │
+    /// │ │ ③预留点位 页（V1.80 新增）：SpareGrid       │   │
+    /// │ │   上半 panelSpareDi：预留 DI 只读状态灯     │   │
+    /// │ │   （默认 X110~X117 共 8 路，FC0x04 读）     │   │
+    /// │ │   下半 panelSpareDo：预留 DO 可点圆形灯     │   │
+    /// │ │   （默认 Y220~Y237 共 16 路，读-改-写）     │   │
     /// │ └────────────────────────────────────────────┘   │
     /// ├──────────────────────────────────────────────────┤
     /// │ pnlBottom：[连接测试][全部关闭][读取状态]         │
@@ -39,11 +46,21 @@ namespace AgingTestSystem.Dialogs
     /// └──────────────────────────────────────────────────┘
     /// 圆形灯按钮：每个通道一个自绘 CircleButton，点击控制该路 ON/OFF。
     ///
+    /// 【预留点位页设计（V1.80 新增）】
+    ///   - 点位表不手写：构造时按 IoMapBuilder.Build(_config) 取 Function=Unknown 的点，
+    ///     随 TotalInputs/TotalOutputs 改配置自适应（默认预留 DI=73~80/X110~X117 8 路，
+    ///     预留 DO=145~160/Y220~Y237 16 路）；无预留时两区显示"无预留"空态。
+    ///   - DI 只读：经 DeviceManager.GetAllInputs()（FC0x04，与采集同源）刷新状态灯；
+    ///     状态定时器坚持不发报文，DI 只在"读取状态"/进页自动刷新。
+    ///   - DO 可写：一律读-改-写。0x2009 同时是备用映射目标（见问题确认清单#106），
+    ///     映射启用时自动保位（ComputePreserveMask）：两边写同一寄存器互不覆盖。
+    ///   - 一键遍历：预留页只遍历 DO（DI 驱动不了）；三个网格统一走 ISweepableGrid 接口。
+    ///
     /// 【一键遍历（V1.22 新增）】
     ///   - 点击底部"一键遍历"按钮（紫），对当前页签的测试做"通断跑马灯"检测：
     ///     每 500ms 只点亮一路通道、其余全部熄灭，72 路循环往复，用于快速检查每路
     ///     DO 输出接线是否通断正常；再次点击（变红"停止遍历"）立即停止并全部关闭。
-    ///   - 负压开关测试 / 载台上电测试 两个页签都支持；运行中切换页签会自动停止遍历。
+    ///   - 负压开关测试 / 载台上电测试 / 预留点位测试（只遍历 DO）三个页签都支持；运行中切换页签会自动停止遍历。
     ///   - 性能：单拍在后台线程执行（写寄存器 + 读回真实状态），完成后切回 UI 线程
     ///     刷新按钮，界面不卡顿；上一拍未完成时自动跳过下一拍，避免任务堆积。
     ///   - 实时反馈：每拍写完后读回 10 个寄存器，用真实通断状态更新圆形灯按钮，
@@ -103,13 +120,16 @@ namespace AgingTestSystem.Dialogs
         /// （与共享连接的 _syncRoot 无关；后者由 ModbusTcpIoController 负责，保证对连接本身不并发）</summary>
         private readonly object _modbusLock = new object();
 
-        // ===================== 两个测试网格 =====================
+        // ===================== 三个测试网格 =====================
 
         /// <summary>负压开关测试网格（72 路真空电磁阀 Y000~Y107）</summary>
         private readonly ChannelGrid _vacuumGrid;
 
         /// <summary>载台上电测试网格（72 路载台上电 Y110~Y217）</summary>
         private readonly ChannelGrid _carrierGrid;
+
+        /// <summary>预留点位网格（V1.80 新增：上半预留 DI 只读灯 + 下半预留 DO 可点灯）</summary>
+        private readonly SpareGrid _spareGrid;
 
         // ===================== 一键遍历（通断跑马灯） =====================
 
@@ -126,9 +146,9 @@ namespace AgingTestSystem.Dialogs
         private int _sweepChannelIndex;
 
         /// <summary>当前遍历的目标测试网格（按下"一键遍历"时所在页签对应的网格）</summary>
-        private ChannelGrid _sweepGrid;
+        private ISweepableGrid _sweepGrid;
 
-        /// <summary>当前遍历的测试名称（负压开关测试 / 载台上电测试，仅用于日志显示）</summary>
+        /// <summary>当前遍历的测试名称（负压开关测试 / 载台上电测试 / 预留点位测试，仅用于日志显示）</summary>
         private string _sweepGridName;
 
         // ===================== 共享连接状态 / 自动连接 =====================
@@ -144,7 +164,7 @@ namespace AgingTestSystem.Dialogs
         /// 与"已释放窗体上建新句柄"两类 InvalidOperationException；volatile 保证后台线程立即可见。</summary>
         private volatile bool _closed;
 
-        /// <summary>构造函数：复用主程序的共享连接，创建两个测试网格</summary>
+        /// <summary>构造函数：复用主程序的共享连接，创建三个测试网格</summary>
         /// <param name="deviceManager">设备管理器（拥有 IO 耦合器共享连接；通过它完成连接与原始寄存器读写）</param>
         public CommunicationTestForm(DeviceManager deviceManager)
         {
@@ -167,7 +187,7 @@ namespace AgingTestSystem.Dialogs
             _statusTimer.Interval = 1000;
             _statusTimer.Tick += StatusTimer_Tick;
 
-            // 创建两个测试网格（各自建自己的 9×8 圆形灯按钮）
+            // 创建三个测试网格（各自建自己的圆形灯按钮；预留网格点位来自 IoMapBuilder）
             _vacuumGrid = new ChannelGrid(this, panelGridVacuum,
                 RegAddresses: new[] { 0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2009 },
                 RowToRegIndex: new[] { 0, 0, 1, 1, 2, 2, 3, 3, 4 },
@@ -183,6 +203,10 @@ namespace AgingTestSystem.Dialogs
                 RowBitValues: BuildBytePairRowBits(row0High: true),
                 RowIoNames: BuildCarrierIoNames(),
                 OwnedMask: new[] { 0xFF00, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0x0000 });
+
+            // 【V1.80】预留点位网格：点位表来自 IoMapBuilder（Function=Unknown），
+            // 在自己的两个面板里建灯（DI 只读 + DO 可点），标题行显示实际路数/地址段
+            _spareGrid = new SpareGrid(this, panelSpareDi, panelSpareDo, lblSpareDiTitle, lblSpareDoTitle);
         }
 
         // ===================== 连接状态指示 =====================
@@ -540,7 +564,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 读取 DO 区全部 10 个寄存器（0x2000~0x2009），更新两个测试网格的按钮状态与标签。
+        /// 读取 DO 区全部 10 个寄存器（0x2000~0x2009），更新三个测试网格的按钮状态与标签。
         /// 一次性读回，两测试共享的 0x2004 各自按自己的字节解析，互不干扰。
         /// </summary>
         private void ReadAllStatus()
@@ -568,6 +592,9 @@ namespace AgingTestSystem.Dialogs
 
                 _vacuumGrid.SetButtonsFromRegisters(values);
                 _carrierGrid.SetButtonsFromRegisters(values);
+                // 【V1.80】预留页同步：DO 灯按快照刷新 + DI 灯实时读（FC0x04）
+                _spareGrid.SetButtonsFromRegisters(values);
+                _spareGrid.RefreshDiInputs();
 
                 AppendLog(string.Format(
                     "[读取] 0x2000=0x{0:X4} 0x2001=0x{1:X4} 0x2002=0x{2:X4} 0x2003=0x{3:X4} 0x2004=0x{4:X4} " +
@@ -577,12 +604,14 @@ namespace AgingTestSystem.Dialogs
             }
         }
 
-        /// <summary>全部关闭：0x2000~0x2009 全写 0，两个测试网格全部按钮置 OFF（现场应急用）</summary>
+        /// <summary>全部关闭：0x2000~0x2009 全写 0，三个测试网格全部按钮置 OFF（现场应急用）</summary>
         private void AllOff()
         {
-            // 1) 本地状态全部清零
+            // 1) 本地状态全部清零（预留 DI 灯是只读镜像不清零；预留 DO 灯本地灭，
+            // 设备侧由下面的 0x2000~0x2009 清零循环覆盖，默认配置预留 DO 就在 0x2009 内）
             _vacuumGrid.ClearAll();
             _carrierGrid.ClearAll();
+            _spareGrid.ClearDoButtons();
 
             // 2) 把 10 个寄存器全部写 0
             if (!_connected)
@@ -788,21 +817,37 @@ namespace AgingTestSystem.Dialogs
         /// <summary>
         /// 开始一键遍历：锁定当前页签对应的测试网格，启动 500ms 跑马灯定时器，
         /// 并立即点亮第一路（不用等一个周期）。
+        /// 页签 0=负压开关测试，1=载台上电测试，2=预留点位测试（只遍历 DO）。
         /// </summary>
         private void StartSweep()
         {
             // 【V1.72.15】排队回调（状态定时断连/页签切换）关后进到这里即丢弃，不碰按钮/定时器。
             if (_closed || IsDisposed || Disposing) return;
-            // 按当前页签确定要遍历的测试网格（0=负压开关测试，1=载台上电测试）
+            // 按当前页签确定要遍历的测试网格
             if (tabControl.SelectedIndex == 0)
             {
                 _sweepGrid = _vacuumGrid;
                 _sweepGridName = "负压开关测试";
             }
-            else
+            else if (tabControl.SelectedIndex == 1)
             {
                 _sweepGrid = _carrierGrid;
                 _sweepGridName = "载台上电测试";
+            }
+            else
+            {
+                _sweepGrid = _spareGrid;
+                _sweepGridName = "预留点位测试";
+            }
+
+            // 预留页无 DO 可遍历时（如配置把通道用满）直接提示，不启动定时器
+            // （否则 SweepChannelCount=0 会在 worker 里除零）
+            if (_sweepGrid.SweepChannelCount == 0)
+            {
+                UIMessageBox.Show("当前配置无可遍历通道（预留点位为空）。", "提示",
+                    UIStyle.Orange, UIMessageBoxButtons.OK, true, 0);
+                _sweepGrid = null;
+                return;
             }
 
             _sweepActive = true;
@@ -810,7 +855,7 @@ namespace AgingTestSystem.Dialogs
             btnSweep.Text = "停止遍历";
             btnSweep.Style = UIStyle.Red;
             _sweepTimer.Start();
-            AppendLog($"[遍历] 开始 {_sweepGridName} 一键遍历：72 路通断跑马灯，每路点亮 500ms，循环检测");
+            AppendLog($"[遍历] 开始 {_sweepGridName} 一键遍历：{_sweepGrid.SweepChannelCount} 路通断跑马灯，每路点亮 500ms，循环检测");
 
             // 立即执行第一拍（后台线程），无需等待第一个 500ms 周期
             StartSweepStep();
@@ -881,17 +926,15 @@ namespace AgingTestSystem.Dialogs
                 }
 
                 int idx = _sweepChannelIndex;
-                int row = idx / 8;
-                int col = idx % 8;
-                ChannelGrid grid = _sweepGrid;
+                ISweepableGrid grid = _sweepGrid;
 
-                // 1) 纯计算：全灭后只点亮 (row, col) 的寄存器值（含备用映射 0x2009）
-                int[] regs = grid.ComputeSweepRegisters(row, col);
+                // 1) 纯计算：全灭后只点亮第 idx 路的寄存器值（含备用映射 0x2009）
+                int[] regs = grid.ComputeSweepRegisters(idx);
 
-                // 2) 加锁写回设备（每个寄存器一次，读-改-写保留共享字节）
+                // 2) 加锁写回设备（读-改-写保留共享字节/映射位）
                 // 【V1.72.15】写前再查关闭：计算与写之间关窗即停手。
                 if (_closed || IsDisposed || Disposing) return;
-                WriteSweepRegisters(grid, regs);
+                grid.ApplySweepRegisters(regs);
 
                 // 3) 读回 10 个寄存器，用于按钮实时反映真实通断
                 ushort[] readBack = null;
@@ -905,12 +948,11 @@ namespace AgingTestSystem.Dialogs
                 }
 
                 // 推进到下一路（单 worker 串行执行，无并发竞争）
-                _sweepChannelIndex = (idx + 1) % 72;
+                _sweepChannelIndex = (idx + 1) % grid.SweepChannelCount;
 
                 // 切回 UI 线程：用读回的真实值刷新按钮状态 + 完成一圈提示
                 int idxForLog = idx;
-                int litRow = row;
-                int litCol = col;
+                int totalForLog = grid.SweepChannelCount;
                 RunOnUi(() =>
                 {
                     // 【V1.72.14】排队期间关窗即丢弃，不碰已释放的圆形灯按钮/提示窗。
@@ -928,17 +970,16 @@ namespace AgingTestSystem.Dialogs
                     catch { return; }
                     if (idxForLog == 0)
                     {
-                        AppendLog($"[遍历] {_sweepGridName} 完成一整圈（72 路通断检测），继续下一圈...");
+                        AppendLog($"[遍历] {_sweepGridName} 完成一整圈（{totalForLog} 路通断检测），继续下一圈...");
                     }
 
-                    // 当前点亮的通道若已映射到备用通道：按钮仍显示旧通道名（RowIoNames），
+                    // 当前点亮的通道若已映射到备用通道：按钮仍显示旧通道名，
                     // 但弹窗告知用户实际输出的通道是哪一个（现场一眼可辨，避免误以为原通道在工作）
-                    int litAbsReg = grid.RegAddresses[grid.RowToRegIndex[litRow]];
-                    int litCh = CommunicationTestForm.ChannelOf(grid.RowBitValues[litRow, litCol]);
-                    if (IsRemapSource(litAbsReg, litCh))
+                    if (grid.GetSweepChannelLocation(idxForLog, out int litAbsReg, out int litCh)
+                        && IsRemapSource(litAbsReg, litCh))
                     {
                         (int dstReg, int dstBit) = MapChannel(litAbsReg, litCh);
-                        ShowRemapNotice(grid.RowIoNames[litRow, litCol], litAbsReg, litCh, dstReg, dstBit);
+                        ShowRemapNotice(grid.GetSweepChannelName(idxForLog), litAbsReg, litCh, dstReg, dstBit);
                     }
                 });
             }
@@ -954,49 +995,6 @@ namespace AgingTestSystem.Dialogs
             finally
             {
                 _sweepStepBusy = false;
-            }
-        }
-
-        /// <summary>
-        /// 后台线程安全地写遍历寄存器（加锁串行化）：按本网格 OwnedMask 读-改-写，每寄存器一次，
-        /// 并下发备用映射目标 0x2009。不逐条写日志（避免 500ms 一拍刷屏）。
-        /// </summary>
-        private void WriteSweepRegisters(ChannelGrid grid, int[] regs)
-        {
-            // 【V1.72.15】关后停硬件写（与 SweepStepWorker 双保险）。
-            if (_closed || IsDisposed || Disposing) return;
-            lock (_modbusLock)
-            {
-                if (!_connected) return;
-
-                for (int i = 0; i < 5; i++)
-                {
-                    // 本网格不拥有的寄存器跳过（如 0x2000 对载台电网格 OwnedMask=0）
-                    if (grid.OwnedMask[i] == 0) continue;
-
-                    int addr = grid.RegAddresses[i];
-                    int ownedMask = grid.OwnedMask[i];
-                    ushort writeValue;
-                    if (ownedMask == 0xFFFF)
-                    {
-                        // 整寄存器归本网格所有，直接写
-                        writeValue = (ushort)(regs[i] & 0xFFFF);
-                    }
-                    else
-                    {
-                        // 共享寄存器读-改-写：保留对方测试拥有的字节
-                        ushort[] cur = ReadRegs((ushort)addr, 1);
-                        ushort current = (cur != null && cur.Length > 0) ? cur[0] : (ushort)0;
-                        writeValue = (ushort)((current & ~ownedMask) | (regs[i] & ownedMask));
-                    }
-                    if (!WriteReg((ushort)addr, writeValue))
-                    {
-                        return;   // 断开：交给状态定时器统一处理
-                    }
-                }
-
-                // 备用映射目标寄存器（0x2009）一并下发：读-改-写保留另一测试的映射位
-                WriteBackupRegister(grid, regs[5]);
             }
         }
 
@@ -1034,6 +1032,7 @@ namespace AgingTestSystem.Dialogs
         /// <summary>
         /// 遍历运行中切换页签时自动停止：一键遍历只作用于按下时所在的测试，
         /// 防止跑马灯误控制另一测试的输出通道。
+        /// 【V1.80】切进预留页时自动刷新一次（DI 灯平时不轮询，进页看最新）。
         /// </summary>
         private void tabControl_SelectedIndexChanged(object sender, EventArgs e)
         {
@@ -1041,6 +1040,35 @@ namespace AgingTestSystem.Dialogs
             {
                 StopSweep();
                 AppendLog("[遍历] 检测到切换页签，已停止遍历");
+            }
+            if (!_closed && tabControl.SelectedIndex == 2 && _connected && !_sweepActive)
+            {
+                RefreshSparePage();
+            }
+        }
+
+        /// <summary>
+        /// 刷新预留页（V1.80）：DO 灯按输出区快照同步 + DI 灯实时读；切进预留页与
+        /// "读取状态"共用。未连接时静默返回（灯保持旧态，不误报全灭）。
+        /// </summary>
+        private void RefreshSparePage()
+        {
+            if (_closed || IsDisposed || Disposing || !_connected) return;
+            lock (_modbusLock)
+            {
+                if (!_connected) return;
+                int regCount = (_config.TotalOutputs + 15) / 16;
+                ushort[] regs = ReadRegs((ushort)_config.IoOutputRegisterStartAddress, (ushort)regCount);
+                if (regs == null || regs.Length < regCount)
+                {
+                    AppendLog("[读取] 预留输出快照读取失败（连接已断开）");
+                    return;
+                }
+                var values = new int[regs.Length];
+                for (int i = 0; i < regs.Length; i++) values[i] = regs[i] & 0xFFFF;
+                _spareGrid.SetButtonsFromRegisters(values);
+                _spareGrid.RefreshDiInputs();
+                AppendLog($"[读取] 预留点位已刷新（DO 快照 {regCount} 个寄存器 + DI 实时）");
             }
         }
 
@@ -1102,10 +1130,42 @@ namespace AgingTestSystem.Dialogs
         }
 
         // ========================================================================
+        //  一键遍历接口（V1.80 新增）：三个测试网格（负压 / 载台 / 预留 DO）统一抽象，
+        //  SweepStepWorker 只认接口，不认具体网格类。
+        //  - ComputeSweepRegisters / ApplySweepRegisters 传的是"本网格自解释负载"：
+        //    ChannelGrid 用 6 元数组（[0~4]=业务寄存器，[5]=备用映射目标）；
+        //    SpareGrid 用 2 元数组（[0]=寄存器地址，[1]=该寄存器期望值）；
+        //    生产消费同一实现，不混用。
+        // ========================================================================
+        public interface ISweepableGrid
+        {
+            /// <summary>一键遍历总路数（负压/载台=72，预留 DO=配置点数，默认 16）</summary>
+            int SweepChannelCount { get; }
+
+            /// <summary>第 index 路的显示通道名（如 Y000 / Y220，仅日志/提示用）</summary>
+            string GetSweepChannelName(int index);
+
+            /// <summary>纯计算（可在后台线程调用）：模拟"全灭后只点亮第 index 路"的寄存器负载</summary>
+            int[] ComputeSweepRegisters(int index);
+
+            /// <summary>加锁写回设备（读-改-写保留共享位；未连接/关窗后静默丢弃，不逐条记日志）</summary>
+            void ApplySweepRegisters(int[] regs);
+
+            /// <summary>按读回的 DO 区寄存器快照刷新按钮 ON/OFF（与读快照同基址：0x2000 起或配置输出起始）</summary>
+            void SetButtonsFromRegisters(int[] values);
+
+            /// <summary>遍历停止时全灭并写回设备</summary>
+            void SweepAllOff();
+
+            /// <summary>第 index 路的物理位置（寄存器地址 + 通道号 0~15），供映射提示用</summary>
+            bool GetSweepChannelLocation(int index, out int absReg, out int channel);
+        }
+
+        // ========================================================================
         //  通道网格类：管理某一个测试（9 行 × 8 列圆形灯按钮）的映射表、按钮、
         //  寄存器值与行标签，以及点击写入逻辑。两个测试各自持有一个实例。
         // ========================================================================
-        public sealed class ChannelGrid
+        public sealed class ChannelGrid : ISweepableGrid
         {
             private readonly CommunicationTestForm _owner;
 
@@ -1426,6 +1486,68 @@ namespace AgingTestSystem.Dialogs
                 return regs;
             }
 
+            /// <summary>一键遍历总路数（9×8=72）</summary>
+            public int SweepChannelCount => 72;
+
+            /// <summary>第 index 路的通道名（index = row*8+col）</summary>
+            public string GetSweepChannelName(int index) => RowIoNames[index / 8, index % 8];
+
+            /// <summary>一键遍历用：线性序号版（转调行列版，行为一致）</summary>
+            public int[] ComputeSweepRegisters(int index) => ComputeSweepRegisters(index / 8, index % 8);
+
+            /// <summary>
+            /// 后台线程安全地写遍历寄存器（加锁串行化）：按本网格 OwnedMask 读-改-写，每寄存器一次，
+            /// 并下发备用映射目标 0x2009。不逐条写日志（避免 500ms 一拍刷屏）。
+            /// 【V1.80】原窗体 WriteSweepRegisters 下沉到网格：三个网格各管各的写语义，worker 只认接口。
+            /// </summary>
+            public void ApplySweepRegisters(int[] regs)
+            {
+                // 【V1.72.15】关后停硬件写（与 SweepStepWorker 双保险）。
+                if (_owner._closed || _owner.IsDisposed || _owner.Disposing) return;
+                lock (_owner._modbusLock)
+                {
+                    if (!_owner._connected) return;
+
+                    for (int i = 0; i < 5; i++)
+                    {
+                        // 本网格不拥有的寄存器跳过（如 0x2000 对载台电网格 OwnedMask=0）
+                        if (OwnedMask[i] == 0) continue;
+
+                        int addr = RegAddresses[i];
+                        int ownedMask = OwnedMask[i];
+                        ushort writeValue;
+                        if (ownedMask == 0xFFFF)
+                        {
+                            // 整寄存器归本网格所有，直接写
+                            writeValue = (ushort)(regs[i] & 0xFFFF);
+                        }
+                        else
+                        {
+                            // 共享寄存器读-改-写：保留对方测试拥有的字节
+                            ushort[] cur = _owner.ReadRegs((ushort)addr, 1);
+                            ushort current = (cur != null && cur.Length > 0) ? cur[0] : (ushort)0;
+                            writeValue = (ushort)((current & ~ownedMask) | (regs[i] & ownedMask));
+                        }
+                        if (!_owner.WriteReg((ushort)addr, writeValue))
+                        {
+                            return;   // 断开：交给状态定时器统一处理
+                        }
+                    }
+
+                    // 备用映射目标寄存器（0x2009）一并下发：读-改-写保留另一测试的映射位
+                    _owner.WriteBackupRegister(this, regs[5]);
+                }
+            }
+
+            /// <summary>第 index 路的物理位置（寄存器地址 + 通道号 0~15），供映射提示用</summary>
+            public bool GetSweepChannelLocation(int index, out int absReg, out int channel)
+            {
+                int row = index / 8, col = index % 8;
+                absReg = RegAddresses[RowToRegIndex[row]];
+                channel = CommunicationTestForm.ChannelOf(RowBitValues[row, col]);
+                return true;
+            }
+
             /// <summary>
             /// 本网格在备用映射目标寄存器（RegAddresses[5]，默认 0x2009）中"拥有"的位掩码：
             /// 由所有"目标寄存器 = RegAddresses[5] 且 源通道属于本网格拥有的物理通道"的映射目标通道累加。
@@ -1493,6 +1615,462 @@ namespace AgingTestSystem.Dialogs
                         _owner.WriteRegister(this, regIndex, r);
                     }
                 }
+            }
+        }
+
+        // ========================================================================
+        //  预留点位网格（V1.80 新增）：上半预留 DI 只读状态灯 + 下半预留 DO 手动点动。
+        //
+        //  【点位来源】构造时按 IoMapBuilder.Build(config) 取 Function=Unknown 的点，
+        //  地址/路数全部来自映射表（默认 DI=73~80/X110~X117 共 8 路，
+        //  DO=145~160/Y220~Y237 共 16 路），改 TotalInputs/TotalOutputs 配置自动适应；
+        //  无预留时对应区显示"无预留"空态，窗体照常打开。
+        //
+        //  【DI 只读灯】状态经 DeviceManager.GetAllInputs()（FC0x04，与采集同源）刷新，
+        //  灯复用 CircleButton（Enabled=false 禁点击，纯看）；刷新入口只有两个：
+        //  "读取状态"按钮 / 切进预留页自动刷新——状态定时器坚持不发报文，不管 DI。
+        //
+        //  【DO 可点灯】点击 toggle + 读-改-写。所在寄存器（默认 0x2009）同时是
+        //  备用映射目标（问题确认清单#106 备案的双重身份），映射启用时按下式保位，
+        //  两边写同一寄存器互不覆盖；映射关闭时 preserve=0 即整寄存器直写。
+        // ========================================================================
+        public sealed class SpareGrid : ISweepableGrid
+        {
+            private readonly CommunicationTestForm _owner;
+            private readonly DeviceConfig _config;
+
+            /// <summary>预留输入点（IoId 升序，来自 IoMapBuilder，Function=Unknown）</summary>
+            private readonly List<IoPointDefinition> _spareInputs = new List<IoPointDefinition>();
+
+            /// <summary>预留输出点（IoId 升序）</summary>
+            private readonly List<IoPointDefinition> _spareOutputs = new List<IoPointDefinition>();
+
+            /// <summary>DI 状态灯（与 _spareInputs 一一对应，只读）</summary>
+            private CircleButton[] _diLamps = new CircleButton[0];
+
+            /// <summary>DO 点动灯（与 _spareOutputs 一一对应，可点）</summary>
+            private CircleButton[] _doButtons = new CircleButton[0];
+
+            /// <summary>
+            /// 构造预留网格：在两个面板里建灯并写好标题行。
+            /// </summary>
+            /// <param name="owner">所属窗体（连接/读写/映射查询/日志都走它）</param>
+            /// <param name="diPanel">预留 DI 灯容器</param>
+            /// <param name="doPanel">预留 DO 灯容器</param>
+            /// <param name="diTitle">DI 区标题行（显示实际路数/地址段）</param>
+            /// <param name="doTitle">DO 区标题行</param>
+            public SpareGrid(CommunicationTestForm owner, UIPanel diPanel, UIPanel doPanel,
+                UILabel diTitle, UILabel doTitle)
+            {
+                _owner = owner;
+                _config = owner._config;
+
+                // 点位表：只取预留（Function=Unknown），输入/输出分开（IoMapBuilder 已按 IoId 升序）
+                try
+                {
+                    var map = IoMapBuilder.Build(_config);
+                    foreach (var p in map)
+                    {
+                        if (p.Function != IoFunction.Unknown) continue;
+                        if (p.Type == IoType.Input) _spareInputs.Add(p);
+                        else _spareOutputs.Add(p);
+                    }
+                }
+                catch
+                {
+                    // 配置非法时 Build 抛异常：两区留空显示"无预留"，窗体照常打开，
+                    // 用户去系统设置把 TotalInputs/TotalOutputs 改合法再进
+                }
+
+                BuildLamps(diPanel, isInput: true);
+                BuildLamps(doPanel, isInput: false);
+                RefreshTitles(diTitle, doTitle);
+
+                // 映射启用时所在寄存器双重身份：提示一次，后续读写自动保位（见 PreserveMaskFor）
+                if (_config.IoBackupChannelMappingEnabled && _spareOutputs.Count > 0)
+                {
+                    _owner.AppendLog("[预留] 备用映射已启用：预留 DO 与映射目标共用寄存器，写入自动保位互不覆盖");
+                }
+            }
+
+            /// <summary>由 Io 点定义反推寄存器地址与位（与 ModbusTcpIoController 口径一致：
+            /// 输入 IoId=1→起始+0/bit0，输出 TotalInputs+1→输出起始+0/bit0）</summary>
+            private void RegBitOf(IoPointDefinition p, out int reg, out int bit)
+            {
+                if (p.Type == IoType.Input)
+                {
+                    int bitIndex = p.IoId - 1;
+                    reg = _config.IoInputRegisterStartAddress + bitIndex / 16;
+                    bit = bitIndex % 16;
+                }
+                else
+                {
+                    int outIndex = p.IoId - 1 - _config.TotalInputs;
+                    reg = _config.IoOutputRegisterStartAddress + outIndex / 16;
+                    bit = outIndex % 16;
+                }
+            }
+
+            /// <summary>动态建灯：按寄存器分组（地址升序），组内按位升序，每 8 位一排；
+            /// 行标签"0x地址 高/低字节 + 首~尾通道名"，与另两页同观感。无点位时显示空态。</summary>
+            private void BuildLamps(UIPanel panel, bool isInput)
+            {
+                const int buttonSize = 56;
+                const int gapX = 8;
+                const int gapY = 14;
+                const int rowLabelWidth = 210;
+                const int gridLeft = 12;
+                const int gridTop = 6;
+
+                var points = isInput ? _spareInputs : _spareOutputs;
+                if (points.Count == 0)
+                {
+                    var empty = new UILabel
+                    {
+                        AutoSize = false,
+                        Size = new Size(panel.Width - 24, 40),
+                        Location = new Point(gridLeft, gridTop + 10),
+                        Text = isInput
+                            ? $"当前配置无预留输入（TotalInputs={_config.TotalInputs}，通道已用满）"
+                            : $"当前配置无预留输出（TotalOutputs={_config.TotalOutputs}，通道已用满）",
+                        TextAlign = ContentAlignment.MiddleLeft,
+                        Font = new Font("微软雅黑", 10.5F),
+                        ForeColor = Color.Gray
+                    };
+                    panel.Controls.Add(empty);
+                    return;
+                }
+
+                // 下标按 (寄存器, 位) 排序后分排：同寄存器连续 8 位一排
+                var order = new List<int>();
+                for (int i = 0; i < points.Count; i++) order.Add(i);
+                order.Sort((a, b) =>
+                {
+                    RegBitOf(points[a], out int ra, out int ba);
+                    RegBitOf(points[b], out int rb, out int bb);
+                    int c = ra.CompareTo(rb);
+                    return c != 0 ? c : ba.CompareTo(bb);
+                });
+                var rows = new List<List<int>>();
+                var rowRegs = new List<int>();
+                var rowLowByte = new List<bool>();
+                int lastReg = -1, lastChunk = -1;
+                foreach (int i in order)
+                {
+                    RegBitOf(points[i], out int reg, out int bit);
+                    int chunk = bit / 8;
+                    if (reg != lastReg || chunk != lastChunk || rows[rows.Count - 1].Count >= 8)
+                    {
+                        rows.Add(new List<int>());
+                        rowRegs.Add(reg);
+                        rowLowByte.Add(chunk == 0);
+                        lastReg = reg;
+                        lastChunk = chunk;
+                    }
+                    rows[rows.Count - 1].Add(i);
+                }
+
+                // 顶部列号（1~8，与另两页一致）
+                for (int c = 0; c < 8; c++)
+                {
+                    Label colHeader = new Label();
+                    colHeader.AutoSize = false;
+                    colHeader.Size = new Size(buttonSize, 22);
+                    colHeader.Location = new Point(gridLeft + rowLabelWidth + c * (buttonSize + gapX), gridTop);
+                    colHeader.Text = (c + 1).ToString();
+                    colHeader.TextAlign = ContentAlignment.MiddleCenter;
+                    colHeader.Font = new Font("宋体", 10F, FontStyle.Bold);
+                    colHeader.ForeColor = Color.DarkSlateGray;
+                    colHeader.BackColor = panel.BackColor;
+                    panel.Controls.Add(colHeader);
+                }
+
+                var buttons = new CircleButton[points.Count];
+                for (int r = 0; r < rows.Count; r++)
+                {
+                    int y = gridTop + 28 + r * (buttonSize + gapY);
+
+                    Label rowLabel = new Label();
+                    rowLabel.AutoSize = false;
+                    rowLabel.Size = new Size(rowLabelWidth, buttonSize);
+                    rowLabel.Location = new Point(gridLeft, y);
+                    rowLabel.TextAlign = ContentAlignment.MiddleLeft;
+                    rowLabel.Font = new Font("宋体", 9.5F, FontStyle.Regular);
+                    rowLabel.ForeColor = Color.Black;
+                    rowLabel.BackColor = Color.FromArgb(245, 245, 245);
+                    rowLabel.BorderStyle = BorderStyle.FixedSingle;
+                    int first = rows[r][0], last = rows[r][rows[r].Count - 1];
+                    rowLabel.Text = string.Format("0x{0:X4} {1}\n{2}~{3}",
+                        rowRegs[r], rowLowByte[r] ? "低字节" : "高字节",
+                        points[first].PhysicalAddress, points[last].PhysicalAddress);
+                    panel.Controls.Add(rowLabel);
+
+                    for (int c = 0; c < rows[r].Count; c++)
+                    {
+                        int pi = rows[r][c];
+                        CircleButton btn = new CircleButton();
+                        btn.Size = new Size(buttonSize, buttonSize);
+                        btn.Location = new Point(gridLeft + rowLabelWidth + c * (buttonSize + gapX), y);
+                        btn.Text = points[pi].PhysicalAddress;
+                        btn.Row = pi;
+                        btn.Col = c;
+                        RegBitOf(points[pi], out int br, out int bb);
+                        btn.BitValue = 1 << bb;
+                        if (isInput)
+                        {
+                            // 只读灯：禁点击（不触发 Click），鼠标保持默认箭头
+                            btn.Enabled = false;
+                            btn.Cursor = Cursors.Default;
+                        }
+                        else
+                        {
+                            btn.Click += (s, e2) => OnDoClick((CircleButton)s);
+                        }
+                        buttons[pi] = btn;
+                        panel.Controls.Add(btn);
+                    }
+                }
+
+                if (isInput) _diLamps = buttons;
+                else _doButtons = buttons;
+            }
+
+            /// <summary>标题行写实际路数/地址段（配置自适应，构造时一次性写好）</summary>
+            private void RefreshTitles(UILabel diTitle, UILabel doTitle)
+            {
+                diTitle.Text = _spareInputs.Count == 0
+                    ? "预留输入监视（只读）：当前配置无预留输入"
+                    : string.Format("预留输入监视（只读，共{0}路：{1}~{2}，随读取状态/进页刷新）",
+                        _spareInputs.Count,
+                        _spareInputs[0].PhysicalAddress,
+                        _spareInputs[_spareInputs.Count - 1].PhysicalAddress);
+                if (_spareOutputs.Count == 0)
+                {
+                    doTitle.Text = "预留输出测试（可点）：当前配置无预留输出";
+                    return;
+                }
+                var regs = DistinctDoRegs();
+                string regText = regs.Count == 1
+                    ? string.Format("@0x{0:X4}", regs[0])
+                    : string.Format("@{0}个寄存器(0x{1:X4}起)", regs.Count, regs[0]);
+                doTitle.Text = string.Format("预留输出测试（可点，共{0}路：{1}~{2} {3}）",
+                    _spareOutputs.Count,
+                    _spareOutputs[0].PhysicalAddress,
+                    _spareOutputs[_spareOutputs.Count - 1].PhysicalAddress,
+                    regText);
+            }
+
+            /// <summary>预留 DO 所在的不同寄存器地址（升序）</summary>
+            private List<int> DistinctDoRegs()
+            {
+                var regs = new List<int>();
+                foreach (var p in _spareOutputs)
+                {
+                    RegBitOf(p, out int reg, out int bit);
+                    if (!regs.Contains(reg)) regs.Add(reg);
+                }
+                regs.Sort();
+                return regs;
+            }
+
+            /// <summary>
+            /// 某寄存器的映射保位掩码：备用映射启用时，目标落在本寄存器的映射目标位必须保留
+            /// （预留 DO 与映射目标共用寄存器，两边写互不覆盖）；关闭时返回 0 即整寄存器直写。
+            /// </summary>
+            private int PreserveMaskFor(int reg)
+            {
+                if (!_config.IoBackupChannelMappingEnabled) return 0;
+                return ComputePreserveMask(_config.IoBackupChannelMappings, reg);
+            }
+
+            /// <summary>
+            /// 纯函数：由映射表算某目标寄存器的保位掩码（目标落该寄存器的映射目标位 OR）。
+            /// null/非法通道一律跳过，返回 0 即"无位需保"——调用方直写。
+            /// </summary>
+            public static int ComputePreserveMask(List<IoOutputChannelRemap> mappings, int targetReg)
+            {
+                if (mappings == null) return 0;
+                int mask = 0;
+                foreach (var m in mappings)
+                {
+                    if (m == null || m.TargetRegister != targetReg) continue;
+                    if (m.TargetChannel < 0 || m.TargetChannel > 15) continue;
+                    mask |= (1 << m.TargetChannel);
+                }
+                return mask;
+            }
+
+            /// <summary>
+            /// 纯函数：读-改-写合并值 =（现值 & 保位）|（期望 & ~保位）。
+            /// 保位=0 时即期望直写；断读（现值取 0）时保位退化为 0，比写错映射位安全。
+            /// </summary>
+            public static int ComputeWriteValue(int current, int desired, int preserveMask)
+            {
+                return (current & preserveMask) | (desired & ~preserveMask);
+            }
+
+            /// <summary>DO 灯点击：toggle + 读-改-写所在寄存器（只写这一路所在的寄存器）</summary>
+            private void OnDoClick(CircleButton btn)
+            {
+                if (btn == null) return;
+                int idx = btn.Row;
+                if (idx < 0 || idx >= _spareOutputs.Count) return;
+                var p = _spareOutputs[idx];
+                RegBitOf(p, out int reg, out int bit);
+
+                // 与另两网格一致：被映射走的源通道先提示实际输出通道
+                if (_owner.IsRemapSource(reg, bit))
+                {
+                    (int dstReg, int dstBit) = _owner.MapChannel(reg, bit);
+                    _owner.ShowRemapNotice(p.PhysicalAddress, reg, bit, dstReg, dstBit);
+                }
+
+                btn.IsOn = !btn.IsOn;
+                WriteDoRegisters(reg);
+            }
+
+            /// <summary>写单个预留 DO 寄存器：期望=本寄存器内 ON 灯的位 OR（被映射走的源位剔除），
+            /// 映射保位保留，未连接/失败只记日志不抛。</summary>
+            private void WriteDoRegisters(int reg)
+            {
+                // 【V1.72.15】关后停硬件写
+                if (_owner._closed || _owner.IsDisposed || _owner.Disposing) return;
+                if (!_owner._connected)
+                {
+                    _owner.AppendLog($"[警告] 未连接，无法写入预留输出。请先点击“连接测试”。(0x{reg:X4})");
+                    return;
+                }
+                lock (_owner._modbusLock)
+                {
+                    if (!_owner._connected)
+                    {
+                        _owner.AppendLog($"[警告] 未连接，无法写入预留输出。请先点击“连接测试”。(0x{reg:X4})");
+                        return;
+                    }
+                    int desired = 0;
+                    for (int i = 0; i < _spareOutputs.Count; i++)
+                    {
+                        RegBitOf(_spareOutputs[i], out int r, out int b);
+                        if (r != reg || !_doButtons[i].IsOn) continue;
+                        if (_owner.IsRemapSource(r, b)) continue;   // 被映射走的源位不写源寄存器
+                        desired |= (1 << b);
+                    }
+                    int preserve = PreserveMaskFor(reg);
+                    ushort[] cur = _owner.ReadRegs((ushort)reg, 1);
+                    ushort current = (cur != null && cur.Length > 0) ? cur[0] : (ushort)0;
+                    int w = ComputeWriteValue(current, desired, preserve);
+                    if (!_owner.WriteReg((ushort)reg, (ushort)w))
+                    {
+                        _owner.AppendLog($"[错误] 写入 0x{reg:X4} 失败（连接已断开，主程序后台自动重连中）");
+                        return;
+                    }
+                    _owner.AppendLog($"[写入] 预留输出  0x{reg:X4} = 0x{w:X4}");
+                }
+            }
+
+            /// <summary>
+            /// 刷新 DI 灯（必在 UI 线程调：碰 IsOn→Invalidate）。
+            /// 未连接/读失败时灯保持旧态并记日志，不误报全灭。
+            /// </summary>
+            public void RefreshDiInputs()
+            {
+                if (_owner._closed || _owner.IsDisposed || _owner.Disposing) return;
+                if (_spareInputs.Count == 0) return;
+                if (!_owner._connected) return;
+                bool[] all;
+                try { all = _owner._deviceManager.GetAllInputs(); }
+                catch { all = null; }
+                if (all == null || all.Length < _config.TotalInputs)
+                {
+                    _owner.AppendLog("[警告] 预留输入读取失败（返回点数不足），状态灯保持上次值");
+                    return;
+                }
+                for (int i = 0; i < _spareInputs.Count; i++)
+                {
+                    int ioId = _spareInputs[i].IoId;
+                    _diLamps[i].IsOn = ioId >= 1 && ioId <= all.Length && all[ioId - 1];
+                }
+            }
+
+            /// <summary>全部 DO 灯本地熄灭（不写设备：写设备由 AllOff 的清零循环统一处理）</summary>
+            public void ClearDoButtons()
+            {
+                foreach (var b in _doButtons) b.IsOn = false;
+            }
+
+            // ===================== ISweepableGrid（一键遍历只走 DO，DI 驱动不了） =====================
+
+            /// <summary>一键遍历总路数 = 预留 DO 路数（默认 16）</summary>
+            public int SweepChannelCount => _spareOutputs.Count;
+
+            /// <summary>第 index 路的通道名（如 Y220）</summary>
+            public string GetSweepChannelName(int index) => _spareOutputs[index].PhysicalAddress;
+
+            /// <summary>
+            /// 纯计算：模拟"全灭后只点亮第 index 路"——返回 2 元负载 [寄存器地址, 该寄存器期望值]；
+            /// 被映射走的源位期望为 0（信号走映射目标，不从源寄存器出）。
+            /// </summary>
+            public int[] ComputeSweepRegisters(int index)
+            {
+                RegBitOf(_spareOutputs[index], out int reg, out int bit);
+                int value = _owner.IsRemapSource(reg, bit) ? 0 : (1 << bit);
+                return new int[] { reg, value };
+            }
+
+            /// <summary>加锁写回设备：单寄存器读-改-写（保映射位）；未连接/关窗后静默丢弃</summary>
+            public void ApplySweepRegisters(int[] regs)
+            {
+                // 【V1.72.15】关后停硬件写（与 SweepStepWorker 双保险）。
+                if (_owner._closed || _owner.IsDisposed || _owner.Disposing) return;
+                lock (_owner._modbusLock)
+                {
+                    if (!_owner._connected) return;
+                    int reg = regs[0];
+                    int desired = regs[1] & 0xFFFF;
+                    int preserve = PreserveMaskFor(reg);
+                    ushort[] cur = _owner.ReadRegs((ushort)reg, 1);
+                    ushort current = (cur != null && cur.Length > 0) ? cur[0] : (ushort)0;
+                    _owner.WriteReg((ushort)reg, (ushort)ComputeWriteValue(current, desired, preserve));
+                }
+            }
+
+            /// <summary>按读回的 DO 区快照刷新 DO 灯（values 基址=配置输出起始；越界灯保持旧态）</summary>
+            public void SetButtonsFromRegisters(int[] values)
+            {
+                if (values == null) return;
+                int outputBase = _config.IoOutputRegisterStartAddress;
+                for (int i = 0; i < _spareOutputs.Count; i++)
+                {
+                    RegBitOf(_spareOutputs[i], out int reg, out int bit);
+                    if (_owner.IsRemapSource(reg, bit))
+                    {
+                        // 被映射走的源通道：灯跟映射目标位（与 ChannelGrid 一致）
+                        (int dstReg, int dstBit) = _owner.MapChannel(reg, bit);
+                        int dstIdx = dstReg - outputBase;
+                        if (dstIdx >= 0 && dstIdx < values.Length)
+                            _doButtons[i].IsOn = (values[dstIdx] & (1 << dstBit)) != 0;
+                        continue;
+                    }
+                    int idx = reg - outputBase;
+                    if (idx < 0 || idx >= values.Length) continue;
+                    _doButtons[i].IsOn = (values[idx] & (1 << bit)) != 0;
+                }
+            }
+
+            /// <summary>遍历停止时全灭并写回设备（未连接只灭本地灯）</summary>
+            public void SweepAllOff()
+            {
+                foreach (var b in _doButtons) b.IsOn = false;
+                if (!_owner._connected) return;
+                foreach (int reg in DistinctDoRegs())
+                    WriteDoRegisters(reg);
+            }
+
+            /// <summary>第 index 路的物理位置（寄存器地址 + 通道号 0~15）</summary>
+            public bool GetSweepChannelLocation(int index, out int absReg, out int channel)
+            {
+                RegBitOf(_spareOutputs[index], out absReg, out channel);
+                return true;
             }
         }
 

@@ -381,7 +381,7 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 连接状态变更事件（【V1.16.1】语义 = IO 耦合器是否连接）
-        /// 顶部"通讯连接状态"只判断耦合器（阀 / 载台电控制）是否连通：
+        /// 顶部"通讯模块状态"只判断耦合器（阀 / 载台电控制）是否连通：
         /// - true = 耦合器已连上；false = 耦合器未连上（气压表 / 送风机状态不并入本事件）。
         /// 送风机是可选设备，其连接状态见 <see cref="OnFanDataUpdated"/>。
         /// </summary>
@@ -431,7 +431,7 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// IO 耦合器当前是否已连接（【V1.16.1 新增】）
-        /// 顶部"通讯连接状态"标签的数据源：只反映耦合器（阀 / 载台电控制）是否连通。
+        /// 顶部"通讯模块状态"标签的数据源：只反映耦合器（阀 / 载台电控制）是否连通。
         /// 后台读/写失败时会自动置 false，TryReconnectIo 自动重连成功后置 true。
         /// </summary>
         public bool IsIoConnected => _ioController.IsConnected;
@@ -686,7 +686,7 @@ namespace AgingTestSystem.Services
                 if (_fanTimer != null) _fanTimer.Start();
 
                 // 触发连接状态变更事件（【V1.16.1】语义：IO 耦合器是否连接）
-                // 顶部"通讯连接状态"只判断耦合器（阀 / 载台电控制）是否连通，
+                // 顶部"通讯模块状态"只判断耦合器（阀 / 载台电控制）是否连通，
                 // 不再用气压表串口状态冒充耦合器状态。
                 _lastIoConnected = ioConnected;
                 OnConnectionStatusChanged?.Invoke(this, ioConnected);
@@ -779,7 +779,7 @@ namespace AgingTestSystem.Services
             // ===== 状态边沿检测 =====
             // 每个采集周期比对一次"当前耦合器连接状态"与"上次上报的状态"：
             // 连上 → 上报 true，断开（读/写失败自动置 false）→ 上报 false，
-            // 顶部"通讯连接状态"标签据此实时显示耦合器是否连接。
+            // 顶部"通讯模块状态"标签据此实时显示耦合器是否连接。
             bool ioConnectedNow = _ioController.IsConnected;
             if (ioConnectedNow != _lastIoConnected)
             {

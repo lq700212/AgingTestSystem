@@ -80,7 +80,7 @@ namespace AgingTestSystem.Services
         /// 读/写请求抛出"连接层异常"（Socket 异常 / IO 异常 / 超时）说明耦合器已断开
         /// （Modbus 异常响应不算断开——那说明设备在线、只是报功能码错误）。
         /// 一旦判定断开就把 _isConnected 置 false，让上层（DeviceManager.TryReconnectIo）
-        /// 能感知并自动重连，顶部"通讯连接状态"标签也能如实显示"未连接"，
+        /// 能感知并自动重连，顶部"通讯模块状态"标签也能如实显示"未连接"，
         /// 而不是网络断了还一直显示"已连接"。
         /// </summary>
         /// <param name="ex">读/写时捕获到的异常</param>
