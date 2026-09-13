@@ -123,6 +123,8 @@
     <Compile Include="Services\RuleExpr.cs" />
     <Compile Include="Services\RuleEngine.cs" />
     <Compile Include="Services\ControlDisposeHelper.cs" />
+    <Compile Include="Services\IoRemapValidator.cs" />
+    <Compile Include="Services\IoRemapCatalog.cs" />
     <Compile Include="Services\ReportColumns.cs" />
     <Compile Include="Services\DisplayModeOptions.cs" />
     <Compile Include="Services\DeviceManager.cs" />
@@ -146,6 +148,9 @@
     </Compile>
     <Compile Include="Controls\IoMappingEditorPopup.cs">
       <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Controls\IoRemapGraphControl.cs">
+      <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="Controls\ReportColumnsEditorPopup.cs">
       <SubType>Form</SubType>
@@ -281,6 +286,9 @@
       <DependentUpon>StationSettingsForm.cs</DependentUpon>
     </Compile>
     <Compile Include="Dialogs\CommunicationTestForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Dialogs\IoRemapVisualForm.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Dialogs\CommunicationTestForm.Designer.cs">

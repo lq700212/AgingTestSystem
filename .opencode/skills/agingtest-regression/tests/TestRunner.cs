@@ -693,6 +693,117 @@ namespace AgingTestSystem.Tests
             Check("null→空列表 error=null", list.Count == 0 && err == null);
             list = IoOutputChannelRemap.ParseAll(" ; ； ", out err);
             Check("纯分隔符→空列表 error=null", list.Count == 0 && err == null);
+
+            // ── V1.81 可视化连线：Validator 新建拦截 + 序列化往返 ──
+            var existing = IoOutputChannelRemap.ParseAll(
+                "0x2000@0x00->0x2009@0x00;0x2001@0x05->0x2009@0x07", out err);
+            string verr;
+            Check("V181合法新连线通过", IoRemapValidator.ValidateNewMapping(
+                existing, 0x2002, 3, 0x2009, 1, out verr) && verr == null);
+            Check("V181空表+null表都放行",
+                IoRemapValidator.ValidateNewMapping(null, 0x2000, 0, 0x2009, 0, out verr)
+                && IoRemapValidator.ValidateNewMapping(new List<IoOutputChannelRemap>(), 0x2000, 0, 0x2009, 0, out verr));
+            Check("V181重复源被拦截",
+                !IoRemapValidator.ValidateNewMapping(existing, 0x2000, 0, 0x2009, 2, out verr) && verr != null);
+            Check("V181重复目标被拦截（独占）",
+                !IoRemapValidator.ValidateNewMapping(existing, 0x2003, 1, 0x2009, 0, out verr) && verr != null && verr.Contains("占用"));
+            Check("V181自环被拦截",
+                !IoRemapValidator.ValidateNewMapping(existing, 0x2000, 1, 0x2000, 1, out verr) && verr != null);
+            Check("V181源通道16越界被拦截",
+                !IoRemapValidator.ValidateNewMapping(existing, 0x2000, 16, 0x2009, 3, out verr) && verr != null);
+            Check("V181目标通道-1越界被拦截",
+                !IoRemapValidator.ValidateNewMapping(existing, 0x2000, 1, 0x2009, -1, out verr) && verr != null);
+            Check("V181老配置多源同目标照常加载（只拦新建不拦加载）",
+                IoOutputChannelRemap.ParseAll("0x2000@0x00->0x2009@0x00;0x2001@0x01->0x2009@0x00", out err).Count == 2);
+
+            var pruned = IoRemapValidator.WithoutSource(existing, 0x2000, 0);
+            Check("V181按源删除剩1条且不动原表",
+                pruned.Count == 1 && existing.Count == 2 && pruned[0].SourceRegister == 0x2001);
+            Check("V181删不存在的源返回等价拷贝",
+                IoRemapValidator.WithoutSource(existing, 0x2008, 0).Count == 2);
+            Check("V181null表删除返回空表",
+                IoRemapValidator.WithoutSource(null, 0x2000, 0).Count == 0);
+            Check("V181按源查找命中/落空",
+                IoRemapValidator.FindBySource(existing, 0x2001, 5) != null
+                && IoRemapValidator.FindBySource(existing, 0x2008, 0) == null);
+            Check("V181目标占用判断",
+                IoRemapValidator.IsTargetUsed(existing, 0x2009, 7)
+                && !IoRemapValidator.IsTargetUsed(existing, 0x2009, 3));
+
+            string ser = IoRemapValidator.Serialize(existing);
+            Check("V181序列化格式与解析器同口径",
+                ser == "0x2000@0x00->0x2009@0x00;0x2001@0x05->0x2009@0x07");
+            var roundtrip = IoOutputChannelRemap.ParseAll(ser, out err);
+            Check("V181序列化→解析往返一致",
+                err == null && roundtrip.Count == 2
+                && roundtrip[1].SourceRegister == 0x2001 && roundtrip[1].TargetChannel == 7);
+            Check("V181空表序列化为空串", IoRemapValidator.Serialize(null) == "" && IoRemapValidator.Serialize(new List<IoOutputChannelRemap>()) == "");
+            Check("V181单端描述格式", IoRemapValidator.Describe(0x2000, 10) == "0x2000@0x0A");
+
+            // ── V1.81 可视化连线：Catalog 点位池（缺省 72/80/160 配置） ──
+            var defCfg = new DeviceConfig();
+            var srcs = IoRemapCatalog.BuildSourceEndpoints(defCfg);
+            var spareTgts = IoRemapCatalog.BuildTargetEndpoints(defCfg, IoRemapTargetPool.SpareOnly);
+            var freeTgts = IoRemapCatalog.BuildTargetEndpoints(defCfg, IoRemapTargetPool.AllFreeOutputs);
+            Check("V181源池=全部输出160路", srcs.Count == 160);
+            Check("V181备用目标池=16路", spareTgts.Count == 16);
+            Check("V181全空闲目标池=160路", freeTgts.Count == 160);
+            Check("V181源池首点Y000@0x2000 bit0",
+                srcs.Count > 0 && srcs[0].IoName == "Y000" && srcs[0].Register == 0x2000 && srcs[0].Channel == 0);
+            Check("V181载台上电-1落0x2004 bit8",
+                srcs.Exists(e => e.DeviceName == "载台上电-1" && e.Register == 0x2004 && e.Channel == 8));
+            Check("V181备用首点Y220@0x2009 bit0",
+                spareTgts.Count > 0 && spareTgts[0].IoName == "Y220" && spareTgts[0].Register == 0x2009 && spareTgts[0].Channel == 0);
+            Check("V181分组标题三类齐全",
+                IoRemapCatalog.GroupTitleOf(IoFunction.VacuumValve) == "真空电磁阀"
+                && IoRemapCatalog.GroupTitleOf(IoFunction.CarrierPower) == "载台上电"
+                && IoRemapCatalog.GroupTitleOf(IoFunction.Unknown) == "预留输出");
+            Check("V181非法配置返回空池不抛",
+                IoRemapCatalog.BuildSourceEndpoints(new DeviceConfig { TotalBarometers = 72, TotalInputs = 1, TotalOutputs = 1 }).Count == 0);
+            Check("V181null配置返回空池不抛", IoRemapCatalog.BuildSourceEndpoints(null).Count == 0);
+
+            // ── V1.81.1 表格弹窗失焦守卫（反射直调 OnDeactivate，无需 Show 真窗） ──
+            // 背景：OpenVisual 用 ShowDialog(this) 开模态连线页，模态激活瞬间表格弹窗失焦，
+            // 无守卫时 OnDeactivate 自杀会连带 owned 模态窗一起销毁（现场"进不去"）。
+            var mDeact = typeof(IoMappingEditorPopup).GetMethod("OnDeactivate",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            var fVisual = typeof(IoMappingEditorPopup).GetField("_visualOpen",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            var popClose = new IoMappingEditorPopup("", new DeviceConfig());
+            mDeact.Invoke(popClose, new object[] { EventArgs.Empty });
+            Check("V181失焦自关旧行为保留（点外部取消）", popClose.IsDisposed);
+            try { popClose.Dispose(); } catch { }
+            var popKeep = new IoMappingEditorPopup("", new DeviceConfig());
+            fVisual.SetValue(popKeep, true);
+            mDeact.Invoke(popKeep, new object[] { EventArgs.Empty });
+            Check("V181连线页打开中失焦不自杀", !popKeep.IsDisposed);
+            try { popKeep.Dispose(); } catch { }
+
+            // ── V1.81.2 连线窗结构锁（纯构造+反射，不 Show 真窗） ──
+            var vform = new IoRemapVisualForm(new DeviceConfig());
+            Check("V181连线窗一律屏幕居中", vform.StartPosition == FormStartPosition.CenterScreen);
+            var vgraph = typeof(IoRemapVisualForm).GetField("_graph",
+                BindingFlags.NonPublic | BindingFlags.Instance).GetValue(vform);
+            var vcanvas = vgraph.GetType().GetField("_canvas",
+                BindingFlags.NonPublic | BindingFlags.Instance).GetValue(vgraph);
+            bool vdbl = (bool)typeof(Control).GetProperty("DoubleBuffered",
+                BindingFlags.NonPublic | BindingFlags.Instance).GetValue(vcanvas, null);
+            Check("V181画布双缓冲关闭（直画屏幕DC防GDI离屏慢）", vdbl == false);
+            try { vform.Dispose(); } catch { }
+            var mEllip = typeof(IoRemapGraphControl).GetMethod("Ellipsize",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            using (var bmp1 = new Bitmap(1, 1))
+            using (var gg = Graphics.FromImage(bmp1))
+            using (var f9 = new Font("微软雅黑", 9f))
+            {
+                string fit = (string)mEllip.Invoke(null, new object[] { gg, "Y000 真空电磁阀-1", f9, 10000 });
+                Check("V181装得下原样返回", fit == "Y000 真空电磁阀-1");
+                string cut = (string)mEllip.Invoke(null, new object[] { gg, "Y000 真空电磁阀-1", f9, 60 });
+                Check("V181装不下截断加…且不超宽",
+                    cut.EndsWith("…") && TextRenderer.MeasureText(cut, f9).Width <= 60);
+                string dot = (string)mEllip.Invoke(null, new object[] { gg, "Y000 真空电磁阀-1", f9, 0 });
+                Check("V181零宽保底空串", dot == "");
+            }
         }
 
         // =====================================================================

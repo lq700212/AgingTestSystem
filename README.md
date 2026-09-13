@@ -78,7 +78,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Views/MainForm.cs` | 主窗体：面板区（9×8）、菜单下拉、状态栏（"在线"全部离线标红，V1.24）、权限控制、扫码事件、操作区按钮；菜单栏 4 按钮（V1.64 起深色切换从"关于"右侧收进关于下拉，仅 dev 可见） |
 | `Views/WorkstationGridView.cs` | 工位网格（自绘大画布，V1.51）：1 个 UserControl 画全部面板 + 行全选列，滚动零撕裂；文字绝对坐标绘制无模糊；布局外部化（程序目录 PanelLayout.json 可改坐标/颜色/字号/文字，无需重编译）；坐标命中实现长按选中/设置按钮/选中框/行全选/悬停提示；V1.60 起 SetDarkMode 跟随全局主题（语义状态色不动） |
 | `Models/PanelLayoutConfig.cs` | 工位面板布局配置模型（V1.51）：面板网格尺寸/面板内各元素坐标/字体/颜色（"R,G,B"）/按钮与提示文字；`LoadOrDefault` 文件缺失或损坏回退内置默认；V1.58.13~1.58.19 起全部元素改为"锚定"解析（右缘/上缘/下缘/对齐/垂直居中，改面板宽高自动联动），字段全表见类头注释 |
-| `Dialogs/CommunicationTestForm.cs` | 通讯测试窗体（IO 耦合器 DO 输出测试，负压阀/载台上电两页 9×8 灯按钮 + V1.80 预留点位页（预留 DI 只读灯 + 预留 DO 可点灯，点位来自 IoMapBuilder）+ 一键遍历） |
+| `Dialogs/CommunicationTestForm.cs` | 通讯测试窗体（IO 耦合器 DO 输出测试，负压阀/载台上电两页 9×8 灯按钮 + V1.80 预留点位页（预留 DI 只读灯 + 预留 DO 可点灯，点位来自 IoMapBuilder）+ 一键遍历 + V1.81 通道右键端口映射（可视化连线页，保存走设置表同一条路即时生效）） |
 | `Dialogs/FanTestForm.cs` | 送风机测试窗体（定值启停 + 温湿度显示） |
 | `Dialogs/SettingsForm.cs` | 系统设置（管理员，按分类编辑 App.config 全部配置项 + V1.67“工艺策略”分类（策略存项目 Policy.json）；写回 exe.config/Policy.json 保存即生效，连接参数自动重连；仅设备数量/布局/模拟开关等结构型配置重启生效；说明悬停 tooltip 超 40 字换行） |
 | `Dialogs/HomeLayoutEditorForm.cs` | 主页区域调整编辑器（V1.58，管理员）：自绘预览 + 拖动四条边缘实时改标题栏/菜单栏/右侧区/状态栏尺寸，保存写 `HomeLayout.json` 即生效，无需重编译 |

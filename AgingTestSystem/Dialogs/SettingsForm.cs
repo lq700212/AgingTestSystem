@@ -1317,7 +1317,7 @@ namespace AgingTestSystem.Dialogs
         /// </summary>
         private void ShowIoMappingPopup(DataGridView grid, int rowIndex, string currentValue)
         {
-            var popup = new Controls.IoMappingEditorPopup(currentValue);
+            var popup = new Controls.IoMappingEditorPopup(currentValue, _config);
 
             // 定位到该单元格正下方
             Rectangle cellRect = grid.GetCellDisplayRectangle(grid.Columns["colValue"].Index, rowIndex, true);

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Threading.Tasks;
@@ -102,6 +103,14 @@ namespace AgingTestSystem.Dialogs
     ///   - 点击被映射的通道（手动 toggle 或一键遍历点亮）都会弹出**非模态悬浮提示窗**
     ///     （RemapNoticeForm，不阻塞流程、不抢焦点，可保持打开继续操作其他窗口）告知
     ///     "该通道已做备用通道映射、实际输出通道是哪个寄存器第几路"并在日志追加映射记录。
+    ///
+    /// 【右键映射（V1.81 新增）】
+    ///   - 负压/载台/预留 DO 的圆形灯支持右键菜单：映射到备用通道…（打开可视化连线页并
+    ///     预选该源，点目标即连线）/ 取消本通道映射（直接删 + 落盘）/ 查看映射去向 /
+    ///     打开端口映射配置…（不预选，全图总览）。
+    ///   - 可视化连线页（IoRemapVisualForm）：左列源通道、右列备用目标，点选连线；
+    ///     目标独占（一个备用只接一个源，IoRemapValidator 拦截）；保存走
+    ///     SettingsForm.PersistChanges（与设置表同一条落盘路），写 App.config 即时生效。
     /// </summary>
     public partial class CommunicationTestForm : UIForm
     {
@@ -159,6 +168,21 @@ namespace AgingTestSystem.Dialogs
         /// <summary>非模态映射提示窗（复用同一实例，多次触发只更新文本，不重复弹窗）</summary>
         private RemapNoticeForm _remapNoticeForm;
 
+        /// <summary>通道右键菜单（三页可点灯共用一份实例，Opening 时按点的按钮动态改文案/使能）</summary>
+        private ContextMenuStrip _remapMenu;
+
+        /// <summary>右键项：映射到备用通道…（带当前通道名）</summary>
+        private ToolStripMenuItem _miRemapTo;
+
+        /// <summary>右键项：取消本通道映射（未映射时置灰）</summary>
+        private ToolStripMenuItem _miCancelRemap;
+
+        /// <summary>右键项：查看映射去向（未映射时置灰）</summary>
+        private ToolStripMenuItem _miViewRemap;
+
+        /// <summary>右键项：打开端口映射配置…（总览，不预选）</summary>
+        private ToolStripMenuItem _miOpenVisual;
+
         /// <summary>窗体已关闭标记（V1.72.14 新增）：OnFormClosed 首行置 true，后台遍历/连接线程的
         /// RunOnUi/AppendLog 见到即直接丢弃，不再 BeginInvoke/Invoke，避免"句柄已销毁后跨线程碰 txtLog"
         /// 与"已释放窗体上建新句柄"两类 InvalidOperationException；volatile 保证后台线程立即可见。</summary>
@@ -207,6 +231,9 @@ namespace AgingTestSystem.Dialogs
             // 【V1.80】预留点位网格：点位表来自 IoMapBuilder（Function=Unknown），
             // 在自己的两个面板里建灯（DI 只读 + DO 可点），标题行显示实际路数/地址段
             _spareGrid = new SpareGrid(this, panelSpareDi, panelSpareDo, lblSpareDiTitle, lblSpareDoTitle);
+
+            // 【V1.81】右键端口映射：三页可点灯共用一份菜单（预留 DI 只读灯不挂）
+            BuildRemapMenu();
         }
 
         // ===================== 连接状态指示 =====================
@@ -222,6 +249,9 @@ namespace AgingTestSystem.Dialogs
 
             // 启动连接状态定时器（每 1s 跟随主程序共享连接的实时状态刷新 LED，不发报文）
             _statusTimer.Start();
+
+            // 【V1.81】右键入口一次性提示（现场第一次打开即知道，不用翻文档）
+            AppendLog("[提示] 通道灯支持右键：映射到备用通道 / 取消映射 / 查看去向（可视化连线，保存即时生效）");
 
             // 打开即复用主程序共享连接：后台线程执行，不阻塞界面
             AutoConnect();
@@ -480,6 +510,15 @@ namespace AgingTestSystem.Dialogs
                 }
             }
             catch { _remapNoticeForm = null; }
+            try
+            {
+                if (_remapMenu != null)
+                {
+                    _remapMenu.Dispose();
+                    _remapMenu = null;
+                }
+            }
+            catch { _remapMenu = null; }
 
             base.OnFormClosed(e);
         }
@@ -698,6 +737,208 @@ namespace AgingTestSystem.Dialogs
             catch { }
 
             AppendLog($"[映射] 通道 {ioName}（0x{srcReg:X4} 通道{srcCh + 1}）→ 实际输出 0x{dstReg:X4} 通道{dstCh + 1}");
+        }
+
+        // ===================== 右键端口映射（V1.81 新增） =====================
+        //
+        // 【三页一套菜单】负压 72 灯 + 载台 72 灯 + 预留 DO 灯共用一份 ContextMenuStrip，
+        // 点哪路、那路有没有映射，全在 Opening 现算（SourceControl 反查按钮→通道）。
+        // 以后加第四页可点灯：建灯处挂 _remapMenu + GetChannelInfoFromButton 加一行即可。
+        // ========================================================================
+
+        /// <summary>
+        /// 建右键菜单并挂到三页全部可点灯上（预留 DI 只读灯不挂：Enabled=false 的灯本来也点不出菜单）。
+        /// </summary>
+        private void BuildRemapMenu()
+        {
+            _remapMenu = new ContextMenuStrip();
+            _miRemapTo = new ToolStripMenuItem("映射到备用通道…");
+            _miRemapTo.Click += (s, e) => OpenRemapVisualForButton();
+            _miCancelRemap = new ToolStripMenuItem("取消本通道映射");
+            _miCancelRemap.Click += (s, e) => CancelRemapForButton();
+            _miViewRemap = new ToolStripMenuItem("查看映射去向");
+            _miViewRemap.Click += (s, e) => ViewRemapForButton();
+            _miOpenVisual = new ToolStripMenuItem("打开端口映射配置…");
+            _miOpenVisual.Click += (s, e) => OpenRemapVisual(null, null);
+            _remapMenu.Items.Add(_miRemapTo);
+            _remapMenu.Items.Add(_miCancelRemap);
+            _remapMenu.Items.Add(_miViewRemap);
+            _remapMenu.Items.Add(new ToolStripSeparator());
+            _remapMenu.Items.Add(_miOpenVisual);
+            _remapMenu.Opening += RemapMenu_Opening;
+
+            for (int r = 0; r < 9; r++)
+            {
+                for (int c = 0; c < 8; c++)
+                {
+                    _vacuumGrid.Buttons[r, c].ContextMenuStrip = _remapMenu;
+                    _carrierGrid.Buttons[r, c].ContextMenuStrip = _remapMenu;
+                }
+            }
+            _spareGrid.AttachDoContextMenu(_remapMenu);
+        }
+
+        /// <summary>
+        /// 菜单弹出前：按点的按钮反查通道，动态改文案/使能。
+        /// 未映射的路"取消/查看"置灰；已映射的路把"源→目标"直接写进菜单，一眼可辨。
+        /// </summary>
+        private void RemapMenu_Opening(object sender, CancelEventArgs e)
+        {
+            // 关窗竞态：菜单排队弹出时窗体已关，直接取消，不碰已释放的按钮
+            if (_closed || IsDisposed || Disposing) { e.Cancel = true; return; }
+            CircleButton btn = (_remapMenu != null) ? _remapMenu.SourceControl as CircleButton : null;
+            int reg, ch;
+            string ioName, gridName;
+            if (btn == null || !GetChannelInfoFromButton(btn, out reg, out ch, out ioName, out gridName))
+            {
+                e.Cancel = true;
+                return;
+            }
+            if (!IsRemapSource(reg, ch))
+            {
+                _miRemapTo.Text = string.Format("映射到备用通道…（{0}）", ioName);
+                _miCancelRemap.Text = "取消本通道映射";
+                _miCancelRemap.Enabled = false;
+                _miViewRemap.Text = "查看映射去向";
+                _miViewRemap.Enabled = false;
+                return;
+            }
+            int dstReg, dstBit;
+            {
+                var mapped = MapChannel(reg, ch);
+                dstReg = mapped.reg;
+                dstBit = mapped.bit;
+            }
+            _miRemapTo.Text = string.Format("映射到备用通道…（{0}，已映射）", ioName);
+            _miCancelRemap.Text = string.Format("取消本通道映射（{0}→0x{1:X4}@0x{2:X2}）", ioName, dstReg, dstBit);
+            _miCancelRemap.Enabled = true;
+            _miViewRemap.Text = string.Format("查看映射去向（实际输出 0x{0:X4} 第 {1} 路）", dstReg, dstBit + 1);
+            _miViewRemap.Enabled = true;
+        }
+
+        /// <summary>
+        /// 由右键按钮反查通道信息（负压→载台→预留 DO 依次用引用比对定位；
+        /// 引用比对而非行列号，因为三页行列号重叠，行列对不上号）。
+        /// </summary>
+        /// <returns>true=找到，false=未知按钮（菜单直接取消）</returns>
+        private bool GetChannelInfoFromButton(CircleButton btn,
+            out int reg, out int ch, out string ioName, out string gridName)
+        {
+            if (_vacuumGrid.TryGetChannelInfo(btn, out reg, out ch, out ioName))
+            {
+                gridName = "负压开关测试";
+                return true;
+            }
+            if (_carrierGrid.TryGetChannelInfo(btn, out reg, out ch, out ioName))
+            {
+                gridName = "载台上电测试";
+                return true;
+            }
+            if (_spareGrid.TryGetDoChannelInfo(btn, out reg, out ch, out ioName))
+            {
+                gridName = "预留点位测试";
+                return true;
+            }
+            gridName = null;
+            return false;
+        }
+
+        /// <summary>右键"映射到备用通道…"：打开可视化连线页并预选该源，用户只需再点一个目标</summary>
+        private void OpenRemapVisualForButton()
+        {
+            CircleButton btn = (_remapMenu != null) ? _remapMenu.SourceControl as CircleButton : null;
+            int reg, ch;
+            string ioName, gridName;
+            if (btn == null || !GetChannelInfoFromButton(btn, out reg, out ch, out ioName, out gridName)) return;
+            OpenRemapVisual(reg, ch);
+        }
+
+        /// <summary>
+        /// 打开端口映射可视化配置页（模态）。保存后走 SettingsForm.PersistChanges 写
+        /// App.config（与设置表同一条落盘路，IoBackup 两 key 非结构型，内存即时热回写），
+        /// 成功后刷新三页灯态 + 记日志；失败弹原因，不关窗（用户可改完重试）。
+        /// </summary>
+        /// <param name="preselectReg">预选源寄存器（null=不预选，全图总览）</param>
+        /// <param name="preselectCh">预选源通道（0~15）</param>
+        private void OpenRemapVisual(int? preselectReg, int? preselectCh)
+        {
+            if (_closed || IsDisposed || Disposing) return;
+            using (var form = new IoRemapVisualForm(_config))
+            {
+                // 【V1.60】新窗打开前按当前主题着色
+                Services.ThemeManager.ApplyTo(form);
+                form.SaveButtonText = "保存并生效";
+                if (preselectReg != null) form.PreselectSource(preselectReg.Value, preselectCh.Value);
+                if (form.ShowDialog(this) != DialogResult.OK || !form.Confirmed) return;
+
+                var changes = new Dictionary<string, string>();
+                changes["IoBackupChannelMappingEnabled"] = form.ResultEnabled ? "true" : "false";
+                changes["IoBackupChannelMappings"] = Services.IoRemapValidator.Serialize(form.ResultMappings);
+                SettingsForm.PersistResult presult;
+                string perror;
+                if (!SettingsForm.PersistChanges(_config, changes, out presult, out perror))
+                {
+                    UIMessageBox.Show(perror, "保存失败", UIStyle.Red, UIMessageBoxButtons.OK, true, 0);
+                    return;
+                }
+                AppendLog(string.Format("[映射] 端口映射已保存并生效：{0} 条，开关={1}",
+                    form.ResultMappings.Count, form.ResultEnabled ? "启用" : "关闭"));
+                RefreshAfterMappingChange();
+            }
+        }
+
+        /// <summary>右键"取消本通道映射"：只删这一源，开关不动（可能还有别的映射在用），落盘即生效</summary>
+        private void CancelRemapForButton()
+        {
+            CircleButton btn = (_remapMenu != null) ? _remapMenu.SourceControl as CircleButton : null;
+            int reg, ch;
+            string ioName, gridName;
+            if (btn == null || !GetChannelInfoFromButton(btn, out reg, out ch, out ioName, out gridName)) return;
+            if (!IsRemapSource(reg, ch)) return;
+
+            var next = Services.IoRemapValidator.WithoutSource(_config.IoBackupChannelMappings, reg, ch);
+            var changes = new Dictionary<string, string>();
+            changes["IoBackupChannelMappings"] = Services.IoRemapValidator.Serialize(next);
+            SettingsForm.PersistResult presult;
+            string perror;
+            if (!SettingsForm.PersistChanges(_config, changes, out presult, out perror))
+            {
+                UIMessageBox.Show(perror, "保存失败", UIStyle.Red, UIMessageBoxButtons.OK, true, 0);
+                return;
+            }
+            AppendLog(string.Format("[映射] 已取消 {0}（0x{1:X4}@0x{2:X2}）的映射，剩余 {3} 条",
+                ioName, reg, ch, next.Count));
+            RefreshAfterMappingChange();
+        }
+
+        /// <summary>右键"查看映射去向"：复用点击已映射通道的悬浮提示（不阻塞，可继续操作）</summary>
+        private void ViewRemapForButton()
+        {
+            CircleButton btn = (_remapMenu != null) ? _remapMenu.SourceControl as CircleButton : null;
+            int reg, ch;
+            string ioName, gridName;
+            if (btn == null || !GetChannelInfoFromButton(btn, out reg, out ch, out ioName, out gridName)) return;
+            if (!IsRemapSource(reg, ch)) return;
+            var mapped = MapChannel(reg, ch);
+            ShowRemapNotice(ioName, reg, ch, mapped.reg, mapped.bit);
+        }
+
+        /// <summary>
+        /// 映射变更后刷新灯态：已连接就重读 10 个寄存器（按新映射解析，灯=真值）；
+        /// 未连接只刷行标签（本地值没变，映射下次读写/读取时起效）。
+        /// </summary>
+        private void RefreshAfterMappingChange()
+        {
+            if (_closed || IsDisposed || Disposing) return;
+            if (_connected)
+            {
+                ReadAllStatus();
+            }
+            else
+            {
+                _vacuumGrid.RefreshRowLabels();
+                _carrierGrid.RefreshRowLabels();
+            }
         }
 
         /// <summary>
@@ -1314,6 +1555,31 @@ namespace AgingTestSystem.Dialogs
                         RowByteDesc[r],
                         CurrentRegValues[regIdx]);
                 }
+            }
+
+            /// <summary>
+            /// 由按钮反查通道信息（右键菜单用）：引用比对确认按钮归属本网格，
+            /// 再算出寄存器/通道/IO 名。行列号三页重叠，只能用引用认，不认号。
+            /// </summary>
+            /// <returns>true=是本网格的按钮，false=不是（调用方继续问下一个网格）</returns>
+            public bool TryGetChannelInfo(CircleButton btn, out int reg, out int ch, out string ioName)
+            {
+                reg = 0;
+                ch = 0;
+                ioName = null;
+                if (btn == null || Buttons == null) return false;
+                for (int r = 0; r < 9; r++)
+                {
+                    for (int c = 0; c < 8; c++)
+                    {
+                        if (!ReferenceEquals(Buttons[r, c], btn)) continue;
+                        reg = RegAddresses[RowToRegIndex[r]];
+                        ch = CommunicationTestForm.ChannelOf(btn.BitValue);
+                        ioName = RowIoNames[r, c];
+                        return true;
+                    }
+                }
+                return false;
             }
 
             /// <summary>
@@ -1996,6 +2262,39 @@ namespace AgingTestSystem.Dialogs
             public void ClearDoButtons()
             {
                 foreach (var b in _doButtons) b.IsOn = false;
+            }
+
+            /// <summary>给全部 DO 灯挂右键菜单（DI 只读灯不挂；与另两网格同一份菜单）</summary>
+            public void AttachDoContextMenu(ContextMenuStrip menu)
+            {
+                if (_doButtons == null || menu == null) return;
+                foreach (var b in _doButtons)
+                {
+                    if (b != null) b.ContextMenuStrip = menu;
+                }
+            }
+
+            /// <summary>
+            /// 由按钮反查 DO 通道信息（右键菜单用）：引用比对确认归属，
+            /// 再由点位表算出寄存器/通道/IO 名。
+            /// </summary>
+            /// <returns>true=是本网格的 DO 灯，false=不是</returns>
+            public bool TryGetDoChannelInfo(CircleButton btn, out int reg, out int ch, out string ioName)
+            {
+                reg = 0;
+                ch = 0;
+                ioName = null;
+                if (btn == null || _doButtons == null) return false;
+                for (int i = 0; i < _doButtons.Length; i++)
+                {
+                    if (!ReferenceEquals(_doButtons[i], btn)) continue;
+                    if (i < 0 || i >= _spareOutputs.Count) return false;
+                    var p = _spareOutputs[i];
+                    RegBitOf(p, out reg, out ch);
+                    ioName = p.PhysicalAddress;
+                    return true;
+                }
+                return false;
             }
 
             // ===================== ISweepableGrid（一键遍历只走 DO，DI 驱动不了） =====================
