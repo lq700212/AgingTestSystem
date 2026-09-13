@@ -3,6 +3,79 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md).
 
+## V1.83.1 — 授权代码审查修复（2026-09-13，用户："仔细检查有没有bug，要绝对稳定0BUG"）
+
+### 改动范围（V1.83 新代码全量审查，6 处）
+
+- **标题后缀堆叠（真 bug，`MainForm.ApplyLicenseStatus`）**：以前 `Contains` 判定追加，
+  试用转正/续费换证后老后缀赖着不走（`[试用版剩余29天] [已授权至…]` 越挂越长）。
+  改为首次记干净标题、每次重拼（替换语义），拼串抽纯函数 `WithLicenseSuffix` 锁回归；
+- **空指纹证放行（fail-closed，`LicenseManager.CheckMachine`）**：证里 `machine` 为空时
+  老代码跳过总指纹比对、漂移分支拿刚落盘的本机分量自己跟自己比（全命中→放行+警告）。
+  现空指纹直接阻断（签发端强制 64 位，空值只有手造一种来源）；
+- **分量段注释纠错**：老注释称"篡改分量占不了便宜"不准确（读源码伪造分量与 patch exe
+  同级 effort，防的是顺手拷机）。行为不变（换一块盘仍放行+警告），只把威胁模型写实；
+- **授权窗 ToolTip 泄漏（`LicenseForm`）**：只读模式的 `new ToolTip()` 是局部变量、
+  无容器托管，按终结器审计家规收进字段 `_tipImport` 并在 `Dispose` 释放；
+- **签发工具加固（`tools/LicenseKeyGen`）**：`--machine` 加十六进制字符校验
+  （以前只查 64 位长度）；JSON 转义补 `\r\n\t`（项目名含换行以前会拼出断行 JSON，
+  产品端整张证解析失败）；
+- **影响面映射补洞（`get_affected_modules.ps1`）**：`*Program*` 以前映射空模块，
+  只改产品 `Program.cs`（启动授权闸）会算出 NONE 跳过回归，现归入 `LicenseV183`。
+
+### 验证
+
+- `build_and_test.ps1` 全量 **1562 断言全绿**（V1.83 起 1557 + 本次 5 条：
+  空指纹阻断 1 + 标题后缀纯函数 4）；签发工具 csc 独立编译通过，
+  非法指纹（非 64 位/非十六进制）签发拒绝已手工验证；
+  `tools/LicenseKeyGen/*.exe` 进 `.gitignore`（本地编译产物防手滑入库）。
+
+## V1.83 — 工艺策略窗补齐漏项 + 软件授权（机器码 + RSA2048 离线授权）（2026-09-13）
+
+### 改动范围（用户："ProcessPolicyForm 是不是少配置项" + "软件当作通用产品拷到别家机器改配置就能用，商业打击"）
+
+- **工艺策略窗补齐 8 个漏项**（`PolicyGraph.cs` + `ProcessPolicyForm.cs`）：
+  - 报警联动节点 +`AlarmPressureThresholdKPa`/`AlarmWhenPressureHigherThanThreshold`
+    （报警阈值以前只能去系统设置/公共参数窗改，驾驶舱看得到报警改不了阈值，收进本节点）；
+  - 完成下电节点 +`VentValveEnabled`（本机装破空阀总闸；保存后按热回写值即时刷新
+    `VentValveDoPoint` 点位行的显隐，不用切节点才看到）；
+  - MES 上报节点 +`MesEnabled`（以前节点上显示"开关：开/关"却无处可改，看得到改不了）；
+  - 上电老化节点 +`DisplayModeEnabled`/`DisplayModes`（画面维度归属上电阶段）；
+  - 下料判定节点由"纯展示"改为有 key：+`EventIdentityMode`+`ReportColumns`，
+    指引文案从"无 key 才显示"改成"有 key 也照显（页脚灰字）"；
+  - 副标题同步显示新 key 的生效值（阈值/破空阀/画面开关/口径报表列数），改完当场看得见；
+  - `ShortEnum` 补 `RecordTime→现值`/`StartSnapshot→定格`；新增 `DisplayModeCountOf`/
+    `ReportColumnCountOf` 纯函数。
+- **软件授权（自研机器码 + RSA2048 离线，新增 4 个新文件 + 签发工具）**：
+  - `Services/License/MachineFingerprint.cs` — 主板/CPU/系统盘/MachineGuid 四取三
+    WMI 指纹（同 `ScannerService` 同路），SHA256 总指纹 + 分量指纹，去分组/格式化；
+  - `Services/License/LicenseInfo.cs` — 授权载荷（v/machine/project/expiry/maxStations/
+    featuresMes/featuresRules/serial/issued）+ 规范串（签发端与产品端逐字节一致的唯一口径）；
+  - `Services/License/LicenseManager.cs` — 启动闸：读证→验签→机器/项目/点数/有效期
+    四道关→无证试用 30 天分支；机器漂移容忍（总指纹对不上再数分量，只换一块硬件
+    放行+警告）；持证过期 7 天宽限不断线；功能超范围只警告不阻断；试用双记
+    （DPAPI 文件 + 注册表取最早首跑）+ 时钟回拨对冲（生效 now=max(现在,上次运行)）；
+  - `Dialogs/LicenseForm.cs` — 机器码显示/复制/导出 + 授权文件导入（导入仅管理员；
+    启动闸阻断时以 canEdit 打开，导对重查，还过不去才退出）；
+  - `Program.cs` — 启动闸挂在 `Application.Run` 之前（Blocked 弹授权窗；试用将尽/
+    过期宽限/功能超范围每天最多弹一次，防开发/冒烟刷屏）；主窗体标题栏挂
+    `[已授权至…]`/`[试用版剩余N天]` 后缀（`MainForm.ApplyLicenseStatus`），【关于】+
+    "软件授权"菜单项；
+  - `tools/LicenseKeyGen/` — 公司内部签发工具（csc 可直接编）：`genkeys` 生成
+    密钥对与公钥贴回 `LicenseManager`；`issue --machine <64位指纹> --expiry
+    --stations [--project --mes --rules --serial --out]` 签发证；`verify` 自检。
+    私钥 `license_private.xml` 已 gitignore，绝不进产品仓库。
+- `.gitignore` +`License.lic`/`License.trial`/`license_private.xml`（运行时数据/机密）。
+- 回归 +`LicenseV183` 模块 26 条 + `ProcessPolicyV170` 补齐锁 11 条；
+  `get_affected_modules.ps1` 登记 License* 映射。
+
+### 验证
+- `build_and_test.ps1` 全量 1557 断言全绿（V1.82 的 1522 + 补齐 35）；`LicenseV183`
+  覆盖：规范串稳定/签名互逆（改项目/换钥匙/改文件一字全拦）、持证四道关
+  （机器不对/漂移放行/项目限定/点数超配/过期宽限/过期8天拦/功能超范围警告）、
+  试用双记（首跑放行/31天拦/时钟回拨不延长，纯走隔离目录+隔离注册表+运行时测试密钥）。
+- 授权窗构造（只读模式导入禁用/机器码非空）不断言弹窗。
+
 ## V1.82 — 连线页缩放平移 + 首尾遮挡修复（2026-09-13，用户"滚轮缩放/中键拖画布/AutoCAD效果 + 上下滑动后两端被挡"）
 
 ### 改动范围

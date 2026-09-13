@@ -267,9 +267,39 @@
 | `AgingTestSystem/Services/RecipeAutoCompleteProvider.cs` | 配方名称自动检索 |
 | `AgingTestSystem/Services/ThemeManager.cs` | 深色/浅色主题服务（V1.60；AppTheme 配置 + 双向映射表着色；新窗体打开前 ApplyTo） |
 | `AgingTestSystem/Dialogs/SettingsForm.cs` | 系统设置（配置项编辑、校验、保存） |
+| `AgingTestSystem/Services/License/*` + `Dialogs/LicenseForm.cs` | 软件授权（V1.83；一机一证 RSA2048 离线授权，细化约定见下方"软件授权铁律"） |
+| `tools/LicenseKeyGen/Program.cs` | 授权签发工具（公司内部，私钥 `license_private.xml` gitignore 绝不入库；`genkeys`/`issue`/`verify`，中文参数用 cmd 跑，防 PS5.1 乱码） |
 | `AgingTestSystem/Controls/DataGridViewNumericUpDownCell.cs` | 数字/下拉单元格控件 |
 | `.opencode/skills/agingtest-regression/` | 项目最终测试验证技能：冒烟 + 全量回归用例（tests/TestRunner.cs 为用例源码，新用例一律沉淀于此） |
 | `CHANGELOG.md` | 版本改动记录（最新在前，V1.xx 小节） |
+
+## 软件授权铁律（V1.83 新增；涉及授权/签发/试用的改动必读）
+
+- **私钥永不出公司**：`tools/LicenseKeyGen/license_private.xml`（RSA2048）gitignore 绝不入库，
+  丢 U 盘离线备份；产品 `LicenseManager.PublicKeyXml` 只嵌公钥。**换公钥=老证全废**，只在密钥泄露时换。
+- **规范串唯一口径**：`LicenseInfo.CanonicalString` 是签名/验签的共同基准，**改字段必须同步
+  改 `KeyGen.issue` 的手拼 canonical 和载荷 JSON 并升级 `v`**（少改一处=已签发证全验不过，查 KeyGen verify）。
+- **一机一证 + 四道关**：机器指纹（主板/CPU/系统盘/MachineGuid 四取三 SHA256，总指纹命中即过，
+  对不上再数分量：只差一块硬件放行+警告、差两块以上=换整机拦截）→ 项目（空=通用版 / 非空=限定版，
+  新项目名即拦）→ 点数（72/36/16 按档）→ 有效期（过期 7 天内宽限不断线，超 7 天阻断）。
+  拷贝文件夹到新工控机 = 机器关直接拦，这是"客户不能自部署新项目"的生意防线。
+- **试用防删库双记**：首跑时间 = min(DPAPI 文件 License.trial, 注册表 LicenseFirstRun) 取最早；
+  时钟回拨用"上次运行时间"对冲（生效 now=max(现在,上次)）。文件读取必须兼容 DPAPI 密文与
+  DPAPI 失败时的明文兜底两种格式（写过读不回 = 试用永不结束，P4 用例实锤）。`UpdateRunStamps`
+  遇 firstRun=MinValue 必须写 `NONE`/跳过注册表，**禁止把 0001-01-01 垃圾日期写进去**
+  （否则 ReadRunStamps 取 Min 把它当最早首跑，used 恒 0）。
+- **测试缝规矩**：`UtcNowFunc/BaseDirOverride/PublicKeyXmlOverride/RegistryPathOverride` 是
+  LicenseManager 的静态测试缝，用例全部反射赋值 + **try/finally 复位 null**（MesReporter.Transport 同先例）；
+  注册表路径必须给 GUID 子键隔离、跑完删键，绝不污染开发机 HKCU。
+- **启动与显示**：启动闸挂在 `Program.Main` 的 `Application.Run` 前（Blocked 弹 `LicenseForm` 可导入重查，
+  仍不过才退出；试用将尽/过期宽限/功能超范围提醒用 `MarkNotifiedToday` 每天最多弹一次）；
+  主窗标题栏挂 `[已授权至…]`/`[试用版剩余N天]` 后缀（**替换语义**：`ApplyLicenseStatus`
+  首次记干净标题、每次经纯函数 `WithLicenseSuffix` 重拼，禁 `Contains` 追加——V1.83.1
+  血泪：试用转正后双后缀堆叠），【关于→软件授权】显示/导出机器码/导入授权（导入仅管理员）。
+- **运行文件跟机器**：`License.lic`/`License.trial` 住程序目录（gitignore，绝不入库）；
+  授权窗 `SaveLicenseFile` 保留导入文件的分量段（无则按本机补），防外来证漂移放水。
+- **签发工具运行**：中文项目名用 **cmd 窗口 / .bat / ProcessStartInfo** 传参（PS5.1 `&` 会把中文
+  转成 U+FFFD，KeyGen 已加乱码硬停防线）；签发完跑 `verify` 自检。
 
 ## 构建与验证命令
 
