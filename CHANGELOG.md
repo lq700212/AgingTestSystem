@@ -3,6 +3,36 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md).
 
+## V1.79 — 顶栏项目拆分+前缀常规体（2026-09-13，用户点名）
+
+### 改动范围
+- `Views/MainForm.Designer.cs` — 顶栏第 1 列改放 `pnlProject`（背景与顶栏一致），
+  内装 `lblProjectPrefix`（固定"当前项目："，常规体）+ `lblProject`（只装项目名，加粗）。
+  前缀 `AutoSize=false + Dock=Left`（撑满高度居中），项目名 `Dock=Fill + AutoEllipsis`。
+- `Views/MainForm.cs` — `UpdateProjectDisplay` 只写项目名（前缀是固定控件不再拼接）；
+  构造加 `lblProjectPrefix.Width = PreferredWidth` 定宽（跟字号/DPI，不写死像素）；
+  `ApplyHeaderBoldFonts` 去掉 `lblPermissionPrefix`/`lblCommStatusLabel`——
+  "前缀常规、值加粗"，主次分明；头部 ASCII 图顶栏行同步。
+
+### 为什么这么改
+- 用户点名：权限前缀、通讯标签取消加粗；项目拆两段后"当前项目："也不加粗。
+- 不用 FlowLayoutPanel 装项目：项目名要 `AutoEllipsis`，流式布局给不出约束宽度；
+  普通 Panel + Left/Fill 才能既定宽前缀又省略号（见 Designer 注释）。
+- 探针实锤坑：`AutoSize + Dock=Left` 高度只取首选（24px），与 Fill 的值（34px）
+  上下错位约 10px——必须关 AutoSize 让 Dock 撑满，截图目检确认对齐。
+
+### 调研结论（lblCommStatus 归属：是 IO 耦合器）
+- 顶栏"通讯连接状态"（`lblCommStatusLabel` + `lblCommStatus`）语义 = **IO 耦合器**
+  （阀/载台电源控制，`IIoController`，真实实现 `ModbusTcpIoController`）是否连接，
+  数据源 `DeviceManager.IsIoConnected` + `OnConnectionStatusChanged` 边沿事件。
+- 气压表串口、扫码枪、送风机都不在内（V1.16.1 起 decoupling，见 `MainForm` 1168 行注释）。
+
+### 验证
+- 构建一次过；harness 直构 MainForm 探针 19/19：前缀文本/常规体、项目名加粗、
+  前缀值同字号、紧贴无重叠等高、百字长名省略号收尾且宽度不变；顶栏截图目检通过；
+  探针产物已清（`out179/` + 临时 cs 全删）。
+- `build_and_test.ps1 -Affected` 子集 308 断言全绿（含 Designer/主题模块）。
+
 ## V1.78 — 主窗顶栏/状态区加粗（2026-09-13，用户点名）
 
 ### 改动范围
