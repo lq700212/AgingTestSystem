@@ -878,6 +878,22 @@ namespace AgingTestSystem.Tests
                     loneMain.EndsWith("…") && TextRenderer.MeasureText(loneMain, ff).Width <= 250 - 12);
             }
             try { gtest.Dispose(); } catch { }
+
+            // ── V1.81.4 连线包围盒裁剪（纯静态判交，反射直调；中段穿屏不断是断连根因） ──
+            var mCross = typeof(IoRemapGraphControl).GetMethod("LinkCrossesClip",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Check("V181连线裁剪两端可见画", (bool)mCross.Invoke(null, new object[] {
+                new Rectangle(10, 100, 250, 26), new Rectangle(500, 100, 250, 26),
+                new Rectangle(0, 0, 800, 600) }));
+            Check("V181长连线中段穿屏也画", (bool)mCross.Invoke(null, new object[] {
+                new Rectangle(10, 0, 250, 26), new Rectangle(500, 2000, 250, 26),
+                new Rectangle(0, 900, 800, 600) }));
+            Check("V181连线全在屏外不画", !(bool)mCross.Invoke(null, new object[] {
+                new Rectangle(10, 0, 250, 26), new Rectangle(500, 100, 250, 26),
+                new Rectangle(0, 900, 800, 600) }));
+            Check("V181连线水平无交不画", !(bool)mCross.Invoke(null, new object[] {
+                new Rectangle(10, 100, 100, 26), new Rectangle(200, 100, 100, 26),
+                new Rectangle(500, 0, 800, 600) }));
         }
 
         // =====================================================================

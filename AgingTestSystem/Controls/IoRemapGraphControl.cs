@@ -536,34 +536,47 @@ namespace AgingTestSystem.Controls
 
             // 连线画在节点下层（先画线后画节点，横穿时不断字；选中红线照样从节点边缘露出）
             // 两端节点必须同时可见才画；被筛选掉的不画，宿主窗列表兜底。
-            // 两端都不在可见区的不画（长跨度连线的中间段滚出屏幕就不花钱）。
-            for (int i = 0; i < _mappings.Count; i++)
+            // 抗锯齿只开在线段上（GDI 文字不受影响，矩形边框保持锐利）。
+            var savedMode = g.SmoothingMode;
+            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            try
             {
-                var map = _mappings[i];
-                if (map == null) continue;
-                Row s = FindRow(_srcRows, map.SourceRegister + ":" + map.SourceChannel);
-                Row t = FindRow(_tgtRows, map.TargetRegister + ":" + map.TargetChannel);
-                if (s == null || t == null) continue;
-                if (!s.Bounds.IntersectsWith(vClip) && !t.Bounds.IntersectsWith(vClip)) continue;
-                bool selected = (map.SourceRegister + ":" + map.SourceChannel == _selMapSrcKey)
-                    && (map.TargetRegister + ":" + map.TargetChannel == _selMapDstKey);
-                bool hovered = (i == _hoverLineIndex);
-                DrawLink(g, Off(s.Bounds, ox, oy), Off(t.Bounds, ox, oy), selected, hovered);
-            }
-
-            // 预连线（源已选 + 悬停在目标上：灰色虚线"预告"点下去会连到哪）
-            if (_selSrcKey != null && _hoverRow != null && !_hoverRow.IsHeader
-                && IsTargetRow(_hoverRow))
-            {
-                Row s = FindRow(_srcRows, _selSrcKey);
-                if (s != null)
+                for (int i = 0; i < _mappings.Count; i++)
                 {
-                    using (var pen = new Pen(Color.Gray, 1.5f))
+                    var map = _mappings[i];
+                    if (map == null) continue;
+                    Row s = FindRow(_srcRows, map.SourceRegister + ":" + map.SourceChannel);
+                    Row t = FindRow(_tgtRows, map.TargetRegister + ":" + map.TargetChannel);
+                    if (s == null || t == null) continue;
+                    // 包围盒判交（禁只看两端点）：中段穿过可见区、两端都在屏外的长连线也必须画，
+                    // 否则滚屏后新露出的条带只有白底没有线 → 线段断连（V1.81.4 血泪）。
+                    if (!LinkCrossesClip(s.Bounds, t.Bounds, vClip)) continue;
+                    bool selected = (map.SourceRegister + ":" + map.SourceChannel == _selMapSrcKey)
+                        && (map.TargetRegister + ":" + map.TargetChannel == _selMapDstKey);
+                    bool hovered = (i == _hoverLineIndex);
+                    // 箭头属于目标端：目标滚出去了就不画箭头，只画穿过可见区的线段
+                    bool drawArrow = t.Bounds.IntersectsWith(vClip);
+                    DrawLink(g, Off(s.Bounds, ox, oy), Off(t.Bounds, ox, oy), selected, hovered, drawArrow);
+                }
+
+                // 预连线（源已选 + 悬停在目标上：灰色虚线"预告"点下去会连到哪）
+                if (_selSrcKey != null && _hoverRow != null && !_hoverRow.IsHeader
+                    && IsTargetRow(_hoverRow))
+                {
+                    Row s = FindRow(_srcRows, _selSrcKey);
+                    if (s != null)
                     {
-                        pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash;
-                        DrawBezier(g, pen, Off(s.Bounds, ox, oy), Off(_hoverRow.Bounds, ox, oy));
+                        using (var pen = new Pen(Color.Gray, 1.5f))
+                        {
+                            pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash;
+                            DrawBezier(g, pen, Off(s.Bounds, ox, oy), Off(_hoverRow.Bounds, ox, oy));
+                        }
                     }
                 }
+            }
+            finally
+            {
+                g.SmoothingMode = savedMode;
             }
 
             foreach (var r in _srcRows)
@@ -668,7 +681,11 @@ namespace AgingTestSystem.Controls
         }
 
         /// <summary>画一条映射连线（贝塞尔 + 目标端箭头；选中红加粗，悬停橙）</summary>
-        private void DrawLink(Graphics g, Rectangle src, Rectangle dst, bool selected, bool hovered)
+        /// <summary>
+        /// 画一条映射连线（贝塞尔 + 目标端箭头；选中红加粗，悬停橙）。
+        /// src/dst 已是设备坐标；drawArrow=false 时只画线（目标滚出屏，箭头无处可落）。
+        /// </summary>
+        private void DrawLink(Graphics g, Rectangle src, Rectangle dst, bool selected, bool hovered, bool drawArrow)
         {
             Color c = selected ? Color.Red : (hovered ? Color.Orange : Color.DodgerBlue);
             float w = selected ? 3f : 2f;
@@ -676,11 +693,33 @@ namespace AgingTestSystem.Controls
             {
                 DrawBezier(g, pen, src, dst);
             }
+            if (!drawArrow) return;
             // 箭头（小三角，指向目标节点左边缘中点）
             Point tip = new Point(dst.Left, dst.Top + dst.Height / 2);
             Point[] tri = { tip, new Point(tip.X - 8, tip.Y - 5), new Point(tip.X - 8, tip.Y + 5) };
             using (var br = new SolidBrush(selected ? Color.Red : Color.DodgerBlue))
                 g.FillPolygon(br, tri);
+        }
+
+        /// <summary>
+        /// 连线包围盒判交（裁剪用，代替"两端点判交"）。
+        /// 贝塞尔曲线必落在控制点包围盒内（p0/c1/c2/p3 的外包矩形），
+        /// 用它判交：保守（偶尔多画几段）但绝无漏网——中段穿屏、两端屏外的长线不会被裁断。
+        /// 反之只看两端点：滚屏后新露出的条带只有白底没有线，就是"线段断连"。
+        /// </summary>
+        /// <param name="src">源节点 bounds（虚拟坐标，与命中检测同口径）</param>
+        /// <param name="dst">目标节点 bounds（虚拟坐标）</param>
+        /// <param name="vClip">可见区（虚拟坐标）</param>
+        /// <returns>true=曲线可能穿过可见区，必须画</returns>
+        private static bool LinkCrossesClip(Rectangle src, Rectangle dst, Rectangle vClip)
+        {
+            // 控制点：p0=(src右,源中线) c1=(mx,源中线) c2=(mx,目标中线) p3=(dst左,目标中线)，
+            // 与 DrawBezier 同口径（改一处必须改另一处）；包围盒取四点外包即可。
+            int x0 = Math.Min(src.Right, dst.Left);
+            int x1 = Math.Max(src.Right, dst.Left);
+            int y0 = Math.Min(src.Top, dst.Top);
+            int y1 = Math.Max(src.Bottom, dst.Bottom);
+            return x1 >= vClip.Left && x0 <= vClip.Right && y1 >= vClip.Top && y0 <= vClip.Bottom;
         }
 
         private static void DrawBezier(Graphics g, Pen pen, Rectangle src, Rectangle dst)
