@@ -46,3 +46,13 @@ RememberedLogin.json
 
 # 在测任务快照（断电恢复用，V1.59 起程序运行时自动生成/删除）
 TestSession.json
+
+# ===== 软件授权运行时文件（V1.83 起：跟机器，绝不入库） =====
+# License.lic：客户工控机上的授权文件（RSA 签名，一机一证），签发后拷机导入
+License.lic
+# License.trial：试用期/上次运行时间戳（DPAPI 保护，防删库重置试用，删了按首次运行重计）
+License.trial
+# 签发端私钥（只在公司保管，丢了=无法再签发；公钥嵌在 LicenseManager.cs 里随产品发布）
+license_private.xml
+# 签发工具本地编译产物（csc 在源码目录直出 exe，防手滑入库；工具源码 .cs 照常入库）
+tools/LicenseKeyGen/*.exe

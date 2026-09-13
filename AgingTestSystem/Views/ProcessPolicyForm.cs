@@ -337,6 +337,20 @@ namespace AgingTestSystem.Views
                 _pnlEditors.Controls.Add(info);
                 _btnSaveNode.Enabled = false;
             }
+            else if (!string.IsNullOrEmpty(def.Info))
+            {
+                // 【V1.83】有 key 也有说明的节点（下料判定）：编辑器下面追加灰字指引。
+                // 以前 Info 只在无 key 时显示；下料节点收进事件口径/报表列后有 key 了，
+                // "判定口径在完成下电改"的指引不能丢，改成页脚保留（不占编辑器名额）。
+                var foot = new Sunny.UI.UILabel
+                {
+                    Location = new Point(0, y),
+                    Size = new Size(270, 60),
+                    Text = def.Info,
+                    ForeColor = Color.Gray
+                };
+                _pnlEditors.Controls.Add(foot);
+            }
             UpdateStatus($"已选中【{def.Title}】，改完点“保存本节点”。");
         }
 
@@ -509,6 +523,10 @@ namespace AgingTestSystem.Views
 
             foreach (string k in presult.SavedKeys) SavedKeys.Add(k);
             _dirty = false;
+            // 【V1.83】破空阀总闸翻转后刷新右栏：VentValveDoPoint 行的显隐是按
+            // _config.VentValveEnabled 即时判定的（见 RebuildEditors），刚保存完
+            // 内存已热回写，这里重建一次右栏，点位行当场出现/消失，不用切节点才看到。
+            if (presult.SavedKeys.Contains("VentValveEnabled")) RebuildEditors();
             if (_canvas != null) _canvas.RefreshCounts();
             string msg = "已保存并即时生效。";
             if (presult.StructuralChanged.Count > 0) msg += "（含重启生效项）";

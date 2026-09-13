@@ -161,6 +161,12 @@
     <Compile Include="Services\RecipeAutoCompleteProvider.cs" />
     <Compile Include="Services\StationSettingsCache.cs" />
     <Compile Include="Services\ThemeManager.cs" />
+    <Compile Include="Services\License\LicenseInfo.cs" />
+    <Compile Include="Services\License\MachineFingerprint.cs" />
+    <Compile Include="Services\License\LicenseManager.cs" />
+    <Compile Include="Dialogs\LicenseForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Views\WorkstationGridView.cs">
       <SubType>UserControl</SubType>
     </Compile>

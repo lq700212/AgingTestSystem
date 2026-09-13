@@ -20,6 +20,7 @@
 //   12d. RuleExprV169            —— 规则表达式解析求值 + 规则表 + 执行器（假时钟）
 //   12e. ProcessPolicyV170          —— 流程图静态文本 + 布局存取（纯函数，零 UI）
 //   12f. PowerReportV174          —— 电流骨架(Mock/桩/接线/规则变量) + 报表列 + 显示字典
+//   12g. LicenseV183              —— 授权签名验签 + 四道关 + 试用双记（隔离目录+隔离注册表+运行时测试密钥）
 //
 //  【怎么跑】
 //  不直接运行本文件。用本 skill 目录 scripts\run_unit_tests.ps1：
@@ -196,6 +197,7 @@ namespace AgingTestSystem.Tests
                 { "LegacyRecipeGuard", LegacyRecipeGuardTests },
                 { "DesignerStabilityV172_16", DesignerStabilityV172_16Tests },
                 { "PowerReportV174", PowerReportV174Tests },
+                { "LicenseV183", LicenseTests },
             };
 
             // 参数约定：无参=全量；"模块A,模块B"=子集（大小写不敏感）；
@@ -2820,6 +2822,18 @@ namespace AgingTestSystem.Tests
         // =====================================================================
         // 12e. 工艺策略静态图（V1.70：拓扑画死，文本按配置生成，纯函数零 UI）
         // =====================================================================
+        /// <summary>某节点是否挂了某 key（V1.83 补齐锁用，找不到节点返回 false）。</summary>
+        private static bool NodeHasKey(string nodeId, string key)
+        {
+            var n = Views.PolicyGraph.FindNode(nodeId);
+            if (n == null || n.Keys == null) return false;
+            foreach (var k in n.Keys)
+            {
+                if (k.Key == key) return true;
+            }
+            return false;
+        }
+
         private static void ProcessPolicyTests()
         {
             // ── 拓扑完整性锁：8 节点 8 边，id 全可查 ──
@@ -2842,17 +2856,17 @@ namespace AgingTestSystem.Tests
                     || Views.PolicyGraph.FindNode(e.To) == null) edgesOk = false;
             }
             Check("边端点全是已知节点", edgesOk);
-            // 每个可编辑节点至少挂1个 key（点谁都有东西可改）；unload 是唯一纯展示节点
+            // 每个节点至少挂1个 key（点谁都有东西可改）；unload 有 key 也有说明
+            //（【V1.83】下料节点收进事件口径/报表列，指引文案改页脚保留）。
             bool keysOk = true;
             foreach (var n in Views.PolicyGraph.Nodes)
             {
-                if (n.Id == "unload")
-                {
-                    if (n.Keys.Count != 0 || string.IsNullOrEmpty(n.Info)) keysOk = false;
-                }
-                else if (n.Keys.Count == 0) keysOk = false;
+                if (n.Keys.Count == 0) keysOk = false;
             }
-            Check("可编辑节点全挂key（unload纯展示带说明）", keysOk);
+            var unload = Views.PolicyGraph.FindNode("unload");
+            Check("8节点全挂key（V1.83起unload也有口径/报表）",
+                keysOk && unload != null && unload.Keys.Count > 0
+                && !string.IsNullOrEmpty(unload.Info));
             // 节点 key 必须全是 DeviceConfig 真属性（防挂错名存不上）
             bool propsOk = true;
             foreach (var n in Views.PolicyGraph.Nodes)
@@ -2888,6 +2902,26 @@ namespace AgingTestSystem.Tests
                 && linesOf("mes").Contains("0 组"));
             Check("未知节点空行", Views.PolicyGraph.BuildNodeLines("bogus", dc, zero).Length == 0);
             Check("配置null空行", Views.PolicyGraph.BuildNodeLines("start", null, zero).Length == 0);
+
+            // ── V1.83 补齐锁：驾驶舱漏的 4 策略 + 阈值 + 双总闸全挂上节点 ──
+            Func<string, bool> hasKey = key =>
+            {
+                foreach (var n in Views.PolicyGraph.Nodes)
+                    foreach (var k in n.Keys)
+                        if (k.Key == key) return true;
+                return false;
+            };
+            Check("阈值挂报警节点", NodeHasKey("alarm", "AlarmPressureThresholdKPa") && hasKey("AlarmWhenPressureHigherThanThreshold"));
+            Check("破空总闸挂完成节点", NodeHasKey("done", "VentValveEnabled"));
+            Check("MES总闸挂上报节点", NodeHasKey("mes", "MesEnabled"));
+            Check("画面维度挂上电节点", NodeHasKey("power", "DisplayModeEnabled") && hasKey("DisplayModes"));
+            Check("口径报表挂下料节点", NodeHasKey("unload", "EventIdentityMode") && hasKey("ReportColumns"));
+            // 缺省副标题把新 key 显示出来（改了当场看得见，不用去设置表核对）
+            Check("报警缺省含阈值-5kPa", linesOf("alarm").Contains("-5"));
+            Check("完成缺省破空阀无", linesOf("done").Contains("无"));
+            Check("上电缺省画面关", linesOf("power").Contains("画面：关"));
+            Check("下料缺省口径现值报表缺省",
+                linesOf("unload").Contains("现值") && linesOf("unload").Contains("缺省"));
 
             // ── 策略切换文本跟着变 ──
             dc.SkipVacuum = true;
@@ -3149,6 +3183,253 @@ namespace AgingTestSystem.Tests
                     tb.Dispose();
                     stxt.Dispose();
                 }
+            }
+        }
+
+        // =====================================================================
+        // 12g. LicenseV183 —— 软件授权（一机一证 + 试用双记，V1.83 新增）
+        //     隔离三件套：BaseDirOverride（证/试用文件进临时目录）+
+        //     RegistryPathOverride（试用第二记进 GUID 子键，跑完删键）+
+        //     PublicKeyXmlOverride（运行时现造测试密钥对，不碰产品私钥）。
+        //     三缝全经反射赋值，finally 复位 null（MesReporter.Transport 同先例）。
+        // =====================================================================
+        private static void LicenseTests()
+        {
+            string dir = EnterCleanDir();   // 证与试用文件全落这里，不碰仓库与 bin
+            string regPath = @"Software\AgingTestSystem_UT_" + Guid.NewGuid().ToString("N");
+            var t = typeof(Services.License.LicenseManager);
+            var fBase = t.GetField("BaseDirOverride", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            var fKey = t.GetField("PublicKeyXmlOverride", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            var fNow = t.GetField("UtcNowFunc", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            var fReg = t.GetField("RegistryPathOverride", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            Check("授权测试缝齐全（隔离三件套+时钟）",
+                fBase != null && fKey != null && fNow != null && fReg != null);
+            if (fBase == null || fKey == null || fNow == null || fReg == null) return;
+
+            // 运行时现造测试密钥对（2048；只活在内存，跑完即焚，不碰产品私钥）。
+            string testPub;
+            string testPriv;
+            using (var rsa = new System.Security.Cryptography.RSACryptoServiceProvider(2048))
+            {
+                testPub = rsa.ToXmlString(false);
+                testPriv = rsa.ToXmlString(true);
+            }
+            string otherPub;
+            using (var rsa2 = new System.Security.Cryptography.RSACryptoServiceProvider(2048))
+            {
+                otherPub = rsa2.ToXmlString(false);
+            }
+            DateTime t0 = new DateTime(2026, 9, 13, 0, 0, 0, DateTimeKind.Utc);
+
+            fBase.SetValue(null, dir);
+            fKey.SetValue(null, testPub);
+            fReg.SetValue(null, regPath);
+            fNow.SetValue(null, (Func<DateTime>)(() => t0));
+            try
+            {
+                // ── 规范串稳定：同值同串，改一字就变（签名逐字节认它） ──
+                var a = new Services.License.LicenseInfo { project = "烧屏测试", maxStations = 72 };
+                var b = new Services.License.LicenseInfo { project = "烧屏测试", maxStations = 72 };
+                Check("同值规范串一致", a.CanonicalString() == b.CanonicalString());
+                b.maxStations = 36;
+                Check("改值规范串变", a.CanonicalString() != b.CanonicalString());
+
+                // ── 签名互逆：对了过，改载荷/换钥匙都不过 ──
+                string sig = Services.License.LicenseManager.SignForIssuer(a, testPriv);
+                Check("签发有签名", !string.IsNullOrEmpty(sig));
+                Check("原样验签过", Services.License.LicenseManager.VerifySignature(a, sig));
+                var tampered = new Services.License.LicenseInfo { project = "新项目", maxStations = 72 };
+                Check("改项目签不过", !Services.License.LicenseManager.VerifySignature(tampered, sig));
+                fKey.SetValue(null, otherPub);
+                Check("换钥匙签不过", !Services.License.LicenseManager.VerifySignature(a, sig));
+                fKey.SetValue(null, testPub);
+
+                // ── 落盘往返：Save→Load→验签一条龙（文件进隔离目录） ──
+                string fp;
+                try { fp = Services.License.MachineFingerprint.Ungroup(Services.License.MachineFingerprint.Compute()); }
+                catch { fp = ""; }
+                Check("本机指纹可算（64hex）", !string.IsNullOrEmpty(fp) && fp.Length == 64, fp);
+                var lic = new Services.License.LicenseInfo
+                {
+                    machine = fp, project = "烧屏测试", expiry = "2027-09-01",
+                    maxStations = 72, featuresMes = true, featuresRules = true,
+                    serial = "UT001", issued = "2026-09-13",
+                };
+                string sig2 = Services.License.LicenseManager.SignForIssuer(lic, testPriv);
+                Check("授权文件落盘",
+                    Services.License.LicenseManager.SaveLicenseFile(lic, sig2)
+                    && File.Exists(Path.Combine(dir, "License.lic")));
+                Services.License.LicenseInfo back;
+                string backSig;
+                Check("授权文件读回",
+                    Services.License.LicenseManager.TryLoadLicense(out back, out backSig)
+                    && back != null && back.project == "烧屏测试" && backSig == sig2);
+
+                // ── 持证四道关：全对放行，错一道拦一道 ──
+                var ok = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, true, true);
+                Check("持证全对放行", ok.Allowed && ok.Status == Services.License.LicenseStatus.Authorized, ok.Message);
+                Check("标题挂到期", ok.TitleSuffix.Contains("2027-09-01"), ok.TitleSuffix);
+                // （机器关单独测：重签发一张"别人机器"的证）
+                var otherComp = new List<string>();
+                for (int i = 0; i < Services.License.MachineFingerprint.ComponentNames.Length; i++)
+                    otherComp.Add(new string((char)('a' + (i + 1) % 26), 64));   // 假外来机分量
+                var other = new Services.License.LicenseInfo
+                {
+                    machine = new string('0', 64), project = "烧屏测试", expiry = "2027-09-01",
+                    maxStations = 72, serial = "UT002", issued = "2026-09-13",
+                };
+                string sigOther = Services.License.LicenseManager.SignForIssuer(other, testPriv);
+                Services.License.LicenseManager.SaveLicenseFile(other, sigOther, otherComp);
+                var mm = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
+                Check("机器不对阻断（分量全不对）", !mm.Allowed && mm.Message.Contains("机器"), mm.Message);
+                // 漂移容忍：只换一块硬件（3/4 分量命中）放行 + 警告
+                string[] curComp = Services.License.MachineFingerprint.GetComponentHashes();
+                var drift = new List<string>(curComp);
+                drift[0] = new string('f', 64);   // 换系统盘（board 分量变了）
+                var driftLic = new Services.License.LicenseInfo
+                {
+                    machine = new string('0', 64), project = "烧屏测试", expiry = "2027-09-01",
+                    maxStations = 72, serial = "UT007", issued = "2026-09-13",
+                };
+                Services.License.LicenseManager.SaveLicenseFile(driftLic,
+                    Services.License.LicenseManager.SignForIssuer(driftLic, testPriv), drift);
+                var dw = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
+                Check("换一块硬件漂移放行+警告",
+                    dw.Allowed && !string.IsNullOrEmpty(dw.FeatureWarning)
+                    && dw.FeatureWarning.Contains("硬件变更"), dw.FeatureWarning);
+                // 项目：限定版跑别的项目拦，通用版（空）放行
+                Services.License.LicenseManager.SaveLicenseFile(lic, sig2);
+                var pm = Services.License.LicenseManager.EnsureStartupLicense("新项目", 72, false, false);
+                Check("限定版跑新项目阻断", !pm.Allowed && pm.Message.Contains("新项目"), pm.Message);
+                var uni = new Services.License.LicenseInfo
+                {
+                    machine = fp, project = "", expiry = "2027-09-01",
+                    maxStations = 72, serial = "UT003", issued = "2026-09-13",
+                };
+                Services.License.LicenseManager.SaveLicenseFile(uni,
+                    Services.License.LicenseManager.SignForIssuer(uni, testPriv));
+                var um = Services.License.LicenseManager.EnsureStartupLicense("随便什么项目", 72, false, false);
+                Check("通用版不限项目", um.Allowed, um.Message);
+                // 点数：72 点的证跑 80 点的线拦
+                Services.License.LicenseManager.SaveLicenseFile(lic, sig2);
+                var sm = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 80, false, false);
+                Check("点数超配阻断", !sm.Allowed && sm.Message.Contains("80"), sm.Message);
+                // 有效期：昨天到期=宽限放行，8 天前到期=阻断
+                var exp1 = new Services.License.LicenseInfo
+                {
+                    machine = fp, project = "烧屏测试",
+                    expiry = t0.AddDays(-1).ToString("yyyy-MM-dd"),
+                    maxStations = 72, serial = "UT004", issued = "2026-09-13",
+                };
+                Services.License.LicenseManager.SaveLicenseFile(exp1,
+                    Services.License.LicenseManager.SignForIssuer(exp1, testPriv));
+                var g = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
+                Check("过期1天宽限放行",
+                    g.Allowed && g.Status == Services.License.LicenseStatus.GraceExpired, g.Message);
+                var exp8 = new Services.License.LicenseInfo
+                {
+                    machine = fp, project = "烧屏测试",
+                    expiry = t0.AddDays(-8).ToString("yyyy-MM-dd"),
+                    maxStations = 72, serial = "UT005", issued = "2026-09-13",
+                };
+                Services.License.LicenseManager.SaveLicenseFile(exp8,
+                    Services.License.LicenseManager.SignForIssuer(exp8, testPriv));
+                var e8 = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
+                Check("过期8天阻断", !e8.Allowed, e8.Message);
+                // 功能超范围：只警告不阻断（现场不断线）
+                var nofeat = new Services.License.LicenseInfo
+                {
+                    machine = fp, project = "烧屏测试", expiry = "2027-09-01",
+                    maxStations = 72, featuresMes = false, featuresRules = false,
+                    serial = "UT006", issued = "2026-09-13",
+                };
+                Services.License.LicenseManager.SaveLicenseFile(nofeat,
+                    Services.License.LicenseManager.SignForIssuer(nofeat, testPriv));
+                var fw = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, true, true);
+                Check("功能超范围放行+警告",
+                    fw.Allowed && !string.IsNullOrEmpty(fw.FeatureWarning), fw.FeatureWarning);
+                // 真改文件：落盘后改一个字符，验签即拦
+                Services.License.LicenseManager.SaveLicenseFile(lic, sig2);
+                string licPath = Path.Combine(dir, "License.lic");
+                string raw = File.ReadAllText(licPath);
+                File.WriteAllText(licPath, raw.Replace("烧屏测试", "烧屏测X"));
+                var mod = Services.License.LicenseManager.EnsureStartupLicense("烧屏测X", 72, false, false);
+                Check("改文件一个字即拦", !mod.Allowed, mod.Message);
+                // 空指纹证照样签名有效也不能放（V1.83.1 fail-closed：签发端强制64位，
+                // 空 machine 只有手造一种来源，不能按"没绑机器"放行）
+                var emptyFp = new Services.License.LicenseInfo
+                {
+                    machine = "", project = "烧屏测试", expiry = "2027-09-01",
+                    maxStations = 72, serial = "UT008", issued = "2026-09-13",
+                };
+                Services.License.LicenseManager.SaveLicenseFile(emptyFp,
+                    Services.License.LicenseManager.SignForIssuer(emptyFp, testPriv));
+                var ef = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
+                Check("空指纹证阻断", !ef.Allowed && ef.Message.Contains("绑定"), ef.Message);
+
+                // ── 无证试用：首跑放行 30 天，31 天拦，回拨占不到便宜 ──
+                try { File.Delete(licPath); } catch { }
+                try { File.Delete(Path.Combine(dir, "License.trial")); } catch { }
+                try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(regPath); } catch { }
+                var tr = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
+                Check("首跑试用放行", tr.Allowed
+                    && (tr.Status == Services.License.LicenseStatus.Trial
+                        || tr.Status == Services.License.LicenseStatus.TrialExpiring), tr.Message);
+                fNow.SetValue(null, (Func<DateTime>)(() => t0.AddDays(31)));
+                var te = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
+                Check("试用31天阻断", !te.Allowed, te.Message);
+                fNow.SetValue(null, (Func<DateTime>)(() => t0));   // 回到首跑日再new一轮
+                try { File.Delete(Path.Combine(dir, "License.trial")); } catch { }
+                try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(regPath); } catch { }
+                var tr2 = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
+                fNow.SetValue(null, (Func<DateTime>)(() => t0.AddDays(-5)));   // 回拨5天
+                var rb = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
+                Check("时钟回拨占不到便宜（剩余天数不变）",
+                    rb.Allowed && tr2.Allowed && rb.DaysLeft == tr2.DaysLeft,
+                    "回拨前" + tr2.DaysLeft + "天/回拨后" + rb.DaysLeft + "天");
+
+                // ── 授权窗构造（只读模式导入按钮禁用，不断言弹窗） ──
+                fNow.SetValue(null, (Func<DateTime>)(() => t0));
+                LicenseForm frm = null;
+                try
+                {
+                    frm = new LicenseForm(tr, false);
+                    var fb = typeof(LicenseForm).GetField("_btnImport",
+                        BindingFlags.NonPublic | BindingFlags.Instance);
+                    var btn = fb != null ? fb.GetValue(frm) as System.Windows.Forms.Control : null;
+                    Check("只读模式导入按钮禁用", btn != null && !btn.Enabled);
+                    var fm = typeof(LicenseForm).GetField("_txtMachine",
+                        BindingFlags.NonPublic | BindingFlags.Instance);
+                    var txt = fm != null ? fm.GetValue(frm) as System.Windows.Forms.Control : null;
+                    Check("窗体机器码非空", txt != null && !string.IsNullOrWhiteSpace(txt.Text), txt != null ? txt.Text : "?");
+                }
+                finally { try { if (frm != null) frm.Dispose(); } catch { } }
+
+                // ── 标题后缀只替换不堆叠（V1.83.1：试用转正/续费换证后老后缀不能赖着） ──
+                var mTitle = typeof(Views.MainForm).GetMethod("WithLicenseSuffix",
+                    BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                Check("标题后缀纯函数存在", mTitle != null);
+                if (mTitle != null)
+                {
+                    Func<string, string, string> merge = (b, s) =>
+                        (string)mTitle.Invoke(null, new object[] { b, s });
+                    Check("挂后缀",
+                        merge("老化测试系统", "[已授权至2027-09-01]") == "老化测试系统 [已授权至2027-09-01]");
+                    Check("空后缀原样返回", merge("老化测试系统", "") == "老化测试系统");
+                    Check("空标题不炸", merge(null, "[已授权至2027-09-01]") == " [已授权至2027-09-01]");
+                    // 注：真正的"换证不堆叠"靠 ApplyLicenseStatus 的 _licenseBaseTitle
+                    // （首次记干净标题、每次重拼），需完整主窗构造太重不直测；
+                    // 此处锁纯函数"只认干净标题"的契约：调用方永远传 base，不传当前 Text。
+                }
+            }
+            finally
+            {
+                // 测试缝复位 + 隔离注册表删键（生产行为零残留）
+                try { fBase.SetValue(null, null); } catch { }
+                try { fKey.SetValue(null, null); } catch { }
+                try { fNow.SetValue(null, null); } catch { }
+                try { fReg.SetValue(null, null); } catch { }
+                try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(regPath); } catch { }
             }
         }
 

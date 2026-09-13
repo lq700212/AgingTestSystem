@@ -79,6 +79,7 @@ $Map = @(
     @{ Pat = @("*AppLogFileWriter*");               Mods = @("AppLogFileWriter") },
     @{ Pat = @("*ThemeManager*");                   Mods = @("ThemeManager", "UiStyleV172_1") },
     @{ Pat = @("*ControlDisposeHelper*");           Mods = @("DesignerStabilityV172_16") },
+    @{ Pat = @("*LicenseInfo*", "*MachineFingerprint*", "*LicenseManager*", "*LicenseForm*"); Mods = @("LicenseV183") },
     # --- Models ---
     @{ Pat = @("*DeviceConfig*");                   Mods = @("ModelDefaults", "SettingsValidate", "PolicyV167", "MesV168", "ProcessPolicyV170", "DeviceConfig.ParseFanIpCandidates", "DeviceManagerIntegration", "PowerReportV174") },
     @{ Pat = @("*IoOutputChannelRemap*");           Mods = @("IoOutputChannelRemap", "SettingsValidate") },
@@ -90,7 +91,10 @@ $Map = @(
     @{ Pat = @("*TestSession*");                    Mods = @("TestSessionStore", "DeviceManagerIntegration", "DeviceManagerPolicy") },
     @{ Pat = @("*UserAccount*", "*UserRole*");      Mods = @("UserManager", "ModelRoundtrip") },
     # --- Entry point: covered by build + smoke stages, no regression modules ---
-    @{ Pat = @("*Program*");                        Mods = @() }
+    # 【V1.83.1】Program 之前映射空：只改产品 Program.cs（启动授权闸）会算出 NONE
+    # 跳过回归。启动闸逻辑归 LicenseV183 锁（签发工具 tools\LicenseKeyGen\Program.cs
+    # 同名命中，多跑一个便宜模块，无害）。
+    @{ Pat = @("*Program*");                        Mods = @("LicenseV183") }
 )
 
 # Files that force FULL no matter what (harness self-change must prove no

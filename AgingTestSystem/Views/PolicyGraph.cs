@@ -123,6 +123,10 @@ namespace AgingTestSystem.Views
                 {
                     new NodeKey("MaxTestDurationSeconds", "全局时长(秒)", EditorKind.Text),
                     new NodeKey("CompleteExpression", "完成表达式", EditorKind.Text),
+                    // 【V1.83】画面维度归属上电老化阶段：开关 + 字典都在本节点改，
+                    // 不用再去系统设置"工艺策略"分类里找。
+                    new NodeKey("DisplayModeEnabled", "启用画面维度", EditorKind.Bool),
+                    new NodeKey("DisplayModes", "画面字典(逗号分隔)", EditorKind.Text),
                 }
             },
             new NodeDef
@@ -133,6 +137,10 @@ namespace AgingTestSystem.Views
                 {
                     new NodeKey("CompletionJudgePolicy", "完成判定", EditorKind.Enum),
                     new NodeKey("CompletionAction", "完成动作", EditorKind.Enum),
+                    // 【V1.83】破空阀总闸收进本节点：无阀时点位行照常隐藏（见
+                    // ProcessPolicyForm.RebuildEditors），但开闸入口就在同一页，
+                    // 不用再跳去系统设置，改完保存即刷新点位行显隐。
+                    new NodeKey("VentValveEnabled", "本机装破空阀", EditorKind.Bool),
                     new NodeKey("VentValveDoPoint", "破空阀点位", EditorKind.Text),
                 }
             },
@@ -142,6 +150,10 @@ namespace AgingTestSystem.Views
                 DefaultRect = new Rectangle(430, 340, 240, 150),
                 Keys = new List<NodeKey>
                 {
+                    // 【V1.83】压力报警阈值/方向是报警联动的核心：以前只能去系统设置
+                    // "报警参数"或公共参数窗改，驾驶舱看得到报警却改不了阈值，收进本节点。
+                    new NodeKey("AlarmPressureThresholdKPa", "报警阈值(kPa)", EditorKind.Text),
+                    new NodeKey("AlarmWhenPressureHigherThanThreshold", "报警方向(高于阈值)", EditorKind.Bool),
                     new NodeKey("AgingPressureLossPolicy", "老化失压", EditorKind.Enum),
                     new NodeKey("VacuumFailKind", "真空责任", EditorKind.Enum),
                     new NodeKey("UseDiAlarmContact", "DI触点并入", EditorKind.Bool),
@@ -160,14 +172,24 @@ namespace AgingTestSystem.Views
                     new NodeKey("PowerLossPolicy", "恢复策略", EditorKind.Enum),
                 }
             },
+            // 【V1.83】下料判定不再是纯展示节点：事件身份口径（CSV/报表/MES
+            // 三处统一）与报表列配置归属"产出追溯"，在本节点改；完成判定口径
+            // （自动PASS/待判定）仍在【完成下电】节点改，Info 保留该指引。
             new NodeDef
             {
                 Id = "unload", Title = "下料判定",
                 DefaultRect = new Rectangle(430, 545, 240, 115),
-                Info = "待判定模式下，主界面操作区【下料判定】按钮录 PASS/FAIL。\r\n判定口径在【完成下电】节点改。"
+                Keys = new List<NodeKey>
+                {
+                    new NodeKey("EventIdentityMode", "事件身份口径", EditorKind.Enum),
+                    new NodeKey("ReportColumns", "报表列(空=缺省)", EditorKind.Multiline),
+                },
+                Info = "待判定模式下，主界面操作区【下料判定】按钮录 PASS/FAIL。\r\n完成判定口径在【完成下电】节点改。"
             },
             // 【V1.73】MES上报纯配置节点：触发器/字段映射/静态字段 3 个跟项目的 key
             // 全在这里改（连接类开关/地址跟机器，在系统设置 MES 对接分类里改）。
+            // 【V1.83】总闸 MesEnabled 收进本节点：以前节点上显示"开关：开/关"
+            // 却无处可改（看得到改不了），现在同一页翻开关。
             // 无连线（上报正交于流程），画布右下角，绘制顺序最后。
             new NodeDef
             {
@@ -175,6 +197,7 @@ namespace AgingTestSystem.Views
                 DefaultRect = new Rectangle(430, 700, 240, 125),
                 Keys = new List<NodeKey>
                 {
+                    new NodeKey("MesEnabled", "启用上报", EditorKind.Bool),
                     new NodeKey("MesTriggers", "上报触发器", EditorKind.Text),
                     new NodeKey("MesFieldMap", "字段映射", EditorKind.Multiline),
                     new NodeKey("MesStaticFields", "静态字段", EditorKind.Multiline),
@@ -255,17 +278,32 @@ namespace AgingTestSystem.Views
                     string expr = string.IsNullOrWhiteSpace(config.CompleteExpression)
                         ? "完成：时长到"
                         : "完成：时长到 或 表达式";
-                    return new string[] { dur, expr, $"老化 {counts.Aging} 台" };
+                    // 【V1.83】画面维度进副标题：关了就是现状（不显示不校验），开了显示字典规模。
+                    string dm = config.DisplayModeEnabled
+                        ? $"画面：开({DisplayModeCountOf(config)}项)"
+                        : "画面：关";
+                    return new string[] { dur, expr, dm, $"老化 {counts.Aging} 台" };
                 case "done":
+                    // 【V1.83】破空阀状态进副标题：无阀是现状（点位行隐藏），有阀显示点位。
+                    string vent = config.VentValveEnabled
+                        ? (config.VentValveDoPoint > 0
+                            ? $"破空阀：有(点{config.VentValveDoPoint})"
+                            : "破空阀：有(未配点位)")
+                        : "破空阀：无";
                     return new string[]
                     {
                         "判定：" + ShortEnum(config.CompletionJudgePolicy.ToString()),
                         "动作：" + ShortEnum(config.CompletionAction.ToString()),
+                        vent,
                         $"已完成 {counts.Completed} 台"
                     };
                 case "alarm":
+                    // 【V1.83】阈值进副标题：报警联动改完阈值当场看得见，不用再去设置表核对。
+                    string thr = "阈值：" + config.AlarmPressureThresholdKPa.ToString("0.##")
+                        + "kPa" + (config.AlarmWhenPressureHigherThanThreshold ? "(高于报)" : "(低于报)");
                     return new string[]
                     {
+                        thr,
                         $"规则 {RuleCountOf(config)} 条",
                         "责任：" + ShortEnum(config.VacuumFailKind.ToString()),
                         $"故障 {counts.Fault} 台"
@@ -277,10 +315,15 @@ namespace AgingTestSystem.Views
                         counts.Snapshot > 0 ? $"快照 {counts.Snapshot} 台待恢复" : "无待恢复快照"
                     };
                 case "unload":
+                    // 【V1.83】口径与报表规模进副标题：改完事件身份/报表列当场看得见。
+                    string ident = "口径：" + ShortEnum(config.EventIdentityMode.ToString());
+                    int repCount = ReportColumnCountOf(config);
+                    string rep = repCount < 0 ? "报表：缺省" : $"报表：{repCount}列";
                     return new string[]
                     {
                         config.CompletionJudgePolicy == CompletionJudgePolicy.PendingReview
                             ? $"待判定 {counts.PendingJudge} 台" : "自动PASS（免判定）",
+                        ident + " | " + rep,
                         "主界面【下料判定】录入"
                     };
                 case "mes":
@@ -359,6 +402,37 @@ namespace AgingTestSystem.Views
             catch { return 0; }
         }
 
+        /// <summary>
+        /// 报表列数（【V1.83】下料节点副标题用：留空=-1 表示缺省预设，不硬编码列数，
+        /// 预设变了副标题不用跟着改；配了返回实际解析出的列数，脏组按 0 计）。
+        /// </summary>
+        private static int ReportColumnCountOf(DeviceConfig config)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(config.ReportColumns)) return -1;
+                List<Services.ReportColumns.Column> cols;
+                List<string> errors;
+                Services.ReportColumns.Parse(config.ReportColumns, out cols, out errors);
+                return cols.Count;
+            }
+            catch { return 0; }
+        }
+
+        /// <summary>
+        /// 画面字典项数（【V1.83】上电节点副标题用：留空=缺省预设，返回预设规模；
+        /// 配了返回实际项数，脏输入按 0 计——保存时 ValidateValue 已拦，画布只看生效规模）。
+        /// </summary>
+        private static int DisplayModeCountOf(DeviceConfig config)
+        {
+            try
+            {
+                List<string> opts = Services.DisplayModeOptions.Resolve(config);
+                return opts != null ? opts.Count : 0;
+            }
+            catch { return 0; }
+        }
+
         /// <summary>静态字段组数（同上）。</summary>
         private static int StaticFieldCountOf(DeviceConfig config)
         {
@@ -393,6 +467,8 @@ namespace AgingTestSystem.Views
                 case "PowerOffAndBeep": return "蜂鸣";
                 case "PowerOffAndVent": return "泄压";
                 case "PowerOffVentAndBeep": return "鸣+泄";
+                case "RecordTime": return "现值";
+                case "StartSnapshot": return "定格";
                 default: return name;
             }
         }

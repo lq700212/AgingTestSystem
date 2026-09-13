@@ -67,6 +67,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Services/AppLogFileWriter.cs` | 主窗体 UI 操作日志落盘（Logs\AppLog_yyyyMMdd.log，按日期分文件，与文本框逐行一致，写失败静默） |
 | `Services/UserManager.cs` | 用户/登录/权限，Users.json 持久化（密码哈希，V1.58.22）；V1.64 起含 dev 最高权限账号（可删改管理员，dev 名系统保留） |
 | `Services/PasswordHasher.cs` | 密码哈希（PBKDF2-HMAC-SHA256，随机盐 + 10 万次迭代，`PBKDF2$迭代$盐$哈希` 自描述格式） |
+| `Services/License/*`（V1.83）+ `Dialogs/LicenseForm.cs` | 软件授权：机器码（主板/CPU/系统盘/MachineGuid WMI 指纹）+ RSA2048 离线授权文件（一机一证/限定版绑项目/按点数档/按年到期/7 天宽限；无证试用 30 天双记防删库+时钟回拨对冲）；启动闸在 Program.Run 前，主窗标题栏挂 `[已授权至…]`/`[试用版剩余N天]`，【关于→软件授权】导出机器码/导入授权；签发工具 `tools/LicenseKeyGen`（私钥 gitignore，公钥嵌产品） |
 | `Services/RecipeStorage.cs` | 配方列表持久化（V1.67 起跟项目走 `Projects/<项目>/Recipes.json`，启动加载/操作即写盘；SaveWithDuplicateCheck 同名覆盖保存，V1.25/1.26） |
 | `Services/StationSettingsCache.cs` | 工位配置缓存（V1.67 起跟项目走 `Projects/<项目>/StationSettings.json`，按工位缓存 SN/配方/延时/极限温度/负压阈值/显示模式，设置窗口下次打开自动回填，V1.26；V1.66 加后两项） |
 | `Services/ThemeManager.cs` | 深色/浅色主题服务（V1.60）：App.config 存 AppTheme（Light/Dark），双向映射表递归着色（语义色保留、按钮不动），打开窗体前 ApplyTo、切换时 ApplyToAllOpenForms |
@@ -229,6 +230,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 | 版本 | 要点 |
 | :--- | :--- |
+| V1.83 | 工艺策略窗补齐 8 漏项（报警阈值/方向+破空阀总闸+MES总闸+画面维度+事件口径+报表列，副标题同步显示生效值）+ 软件授权（机器码+ RSA2048 离线授权文件：一机一证/限定版绑项目/按点数/按年到期+7 天宽限；无证试用 30 天双记+时钟回拨对冲；启动闸+标题栏后缀+关于·软件授权窗+签发工具 tools/LicenseKeyGen） |
 | V1.75 | 报表列可视化表格（设置行点出弹窗：显示名文本+字段下拉+增删/上下移）+ 显示模式三窗真下拉（DropDownList字典单选，遗留值追加可见存时拦） |
 | V1.74 | 电流通用骨架（IPowerMeter+Mock/桩+开关+面板电流行直显（V1.77 前为悬停）+CSV列+规则current）+ 报表列可配（历史窗导出xlsx，缺省8列跟项目走）+ 显示模式字典（三窗校验+tooltip）+ 定格在测提示（仅对新启动生效） |
 | V1.77 | 面板电流直显（UsePowerMeter开=压力框下方加"电流："行，面板205→226行225→246，关=原来逐像素一致；悬停回退无提示） |
