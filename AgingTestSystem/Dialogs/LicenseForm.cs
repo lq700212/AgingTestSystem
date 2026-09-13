@@ -91,6 +91,9 @@ namespace AgingTestSystem.Dialogs
         /// 眼睛图标：默认掩码态文案（与 Designer 里 PasswordChar='●' 对上）。
         /// 眼睛是 _txtMachine 的子控件（Designer 已 Add），这里补：背景跟输入框、
         /// 抢最前（防被其内层编辑框盖住）、按当前尺寸精定位、并随 Resize 跟随。
+        /// 【V1.86复查】初始掩码态由代码显式收敛（PasswordChar='●'+Shown=false，
+        /// Designer 只管预览）：VS 重写 Designer 丢一行即"图标说隐藏、框是明文"分叉。
+        /// 状态行加粗放代码按当前字号 Bold（家规：Designer 不写死字体，防换肤分叉）。
         /// </summary>
         private void ApplyEditState()
         {
@@ -101,12 +104,36 @@ namespace AgingTestSystem.Dialogs
                 _tipImport = new ToolTip();
                 _tipImport.SetToolTip(_btnImport, "导入授权仅管理员可用，请先切换管理员权限。");
             }
+            // 状态行加粗：只加粗不动字号（按控件当前字号，V1.78 先例），不进 Designer。
+            try { _lblStatus.Font = new Font(_lblStatus.Font, FontStyle.Bold); }
+            catch { }
+            // 初始态代码收敛：默认掩码防偷窥（Designer 的 '●' 只是预览初值）。
+            _txtMachine.PasswordChar = '●';
+            _eyeIcon.Shown = false;
             _tipEye = new ToolTip();
             _eyeIcon.BackColor = _txtMachine.BackColor;
             _eyeIcon.BringToFront();
             PositionEye(_txtMachine, _eyeIcon);
-            _txtMachine.Resize += delegate { PositionEye(_txtMachine, _eyeIcon); };
+            // 【V1.86复查】具名订阅方便 Dispose 退订（匿名 delegate 退订不掉）；
+            // BackColorChanged 跟随换肤：ThemeManager.ApplyTo 在构造之后改输入框
+            // 底色，不跟的话白底眼睛贴在深色框上当场穿帮。
+            _txtMachine.Resize += TxtMachine_Resize;
+            _txtMachine.BackColorChanged += TxtMachine_BackColorChanged;
             _tipEye.SetToolTip(_eyeIcon, EyeTipMasked);
+        }
+
+        /// <summary>输入框尺寸变了眼睛跟右缘走（具名方法，Dispose 可退订）。</summary>
+        private void TxtMachine_Resize(object sender, EventArgs e)
+        {
+            PositionEye(_txtMachine, _eyeIcon);
+        }
+
+        /// <summary>输入框底色变了（换肤）眼睛底同步，否则盖在文本右端露白边。</summary>
+        private void TxtMachine_BackColorChanged(object sender, EventArgs e)
+        {
+            if (_eyeIcon == null || _eyeIcon.IsDisposed) return;
+            _eyeIcon.BackColor = _txtMachine.BackColor;
+            _eyeIcon.Invalidate();
         }
 
         /// <summary>
@@ -170,7 +197,11 @@ namespace AgingTestSystem.Dialogs
                     _lblDetail.Text = "";
                     return;
                 }
-                _lblStatus.Text = "状态：" + _result.Message.Split('\n')[0];
+                // 【V1.86复查】Message 可能为 null（构造/反序列化缺字段），旧代码直接
+                // Split 即 NRE，又被外层 catch 吞掉导致状态行残留旧文案。空即"未知"。
+                string head = (_result.Message ?? "").Split('\n')[0];
+                if (string.IsNullOrWhiteSpace(head)) head = "未知";
+                _lblStatus.Text = "状态：" + head;
                 _lblStatus.ForeColor = _result.Allowed ? Color.Green : Color.Red;
                 var sb = new StringBuilder();
                 if (_result.Info != null)
@@ -196,12 +227,17 @@ namespace AgingTestSystem.Dialogs
         {
             try
             {
-                if (!string.IsNullOrEmpty(_txtMachine.Text))
+                // 【V1.86复查】指纹算不出时 Text 为空：旧代码静默啥都不干，用户以为
+                // 点坏了。空即明示，不碰剪贴板。
+                if (string.IsNullOrEmpty(_txtMachine.Text))
                 {
-                    Clipboard.SetText(_txtMachine.Text);
-                    MessageBox.Show(this, "机器码已复制，请发给商务签发授权。",
-                        "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show(this, "本机机器码为空（指纹采集失败），无法复制，请联系技术支持。",
+                        "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
                 }
+                Clipboard.SetText(_txtMachine.Text);
+                MessageBox.Show(this, "机器码已复制，请发给商务签发授权。",
+                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
@@ -219,6 +255,14 @@ namespace AgingTestSystem.Dialogs
                     dlg.Filter = "文本文件|*.txt";
                     dlg.FileName = "机器码_" + Environment.MachineName + ".txt";
                     if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                    // 【V1.86复查】空机器码不落盘：旧代码会落一个只有表头的空文件，
+                    // 商务拿到空文件还以为导出来了。空即拦。
+                    if (string.IsNullOrEmpty(_txtMachine.Text))
+                    {
+                        MessageBox.Show(this, "本机机器码为空（指纹采集失败），无法导出，请联系技术支持。",
+                            "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        return;
+                    }
                     // 明文导出：机器码本来就是要发给商务的公开信息，不加密；
                     // 包含分组与去分组两行，签发端拷任意一行都能用（Ungroup 归一）。
                     string grouped = _txtMachine.Text;
@@ -308,6 +352,17 @@ namespace AgingTestSystem.Dialogs
         {
             if (disposing)
             {
+                // 输入框事件先退订再释放（R7：活得比订阅久的 handler 要成对收；
+                // 这里同寿也退，保持"订阅/退订同文件"可审计）。
+                try
+                {
+                    if (_txtMachine != null)
+                    {
+                        _txtMachine.Resize -= TxtMachine_Resize;
+                        _txtMachine.BackColorChanged -= TxtMachine_BackColorChanged;
+                    }
+                }
+                catch { }
                 // _eyeIcon 是 _txtMachine 的子控件，随 _txtMachine.Dispose 一并释放，
                 // 这里不再单独 dispose（先在父前释放是父的事）。
                 try { _txtMachine.Dispose(); } catch { }
@@ -316,6 +371,7 @@ namespace AgingTestSystem.Dialogs
                 try { _btnImport.Dispose(); } catch { }
                 try { _btnClose.Dispose(); } catch { }
                 try { _lblStatus.Dispose(); } catch { }
+                try { _lblMachine.Dispose(); } catch { }
                 try { _lblDetail.Dispose(); } catch { }
                 try { if (_tipImport != null) _tipImport.Dispose(); } catch { }
                 try { if (_tipEye != null) _tipEye.Dispose(); } catch { }
