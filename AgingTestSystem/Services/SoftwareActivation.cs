@@ -252,6 +252,21 @@ namespace AgingTestSystem.Services
             }
         }
 
+        /// <summary>
+        /// 付费后是否应恢复用户权限入口（【V1.88.1 新增】纯函数，可单测）。
+        /// <para>做什么：把“当前激活状态”翻译成“要不要把主窗用户权限按钮解灰”。</para>
+        /// <para>为什么这么写：计时器置灰后本轮不再自动恢复（与 HJVision 一致），
+        /// 付费成功必须有人显式解灰；规则收敛到这一处，激活窗与主窗共用，
+        /// 以后改“什么状态算付过费”只改这里，不用两边各写一份 if。</para>
+        /// <para>怎么改：只有永久 / 试用中算付过费（新设备、过期一律不恢复，
+        /// 即使激活窗刚写过 RunHash2 也要以重算出的状态为准，防止新设备靠写 RunHash2 蒙混）。</para>
+        /// </summary>
+        public static bool ShouldRestoreUserPermission(ActivationStatus status)
+        {
+            return status == ActivationStatus.Permanent
+                || status == ActivationStatus.InTrial;
+        }
+
         /// <summary>生产路径的 ini 全路径（程序目录 + MainSetting.ini，绝对路径）。</summary>
         public static string IniFilePath()
         {

@@ -31,6 +31,17 @@ namespace AgingTestSystem.Dialogs
     /// </summary>
     public partial class SoftActivation : Sunny.UI.UIForm
     {
+        /// <summary>
+        /// 本次打开是否激活成功过（【V1.88.1 新增】付费即恢复用）。
+        /// <para>做什么：记住“用户这次有没有输对过一次码”。</para>
+        /// <para>为什么这么写：主窗要在弹窗关闭后决定“要不要重查状态解灰”，
+        /// 不能只看弹窗关没关——用户打开看看就关、输错码关，都不该触发重查；
+        /// 只有真写过一次 RunHash2 才值得重读一次 ini。</para>
+        /// <para>怎么改：只在 <see cref="BtnActivate_Click"/> 写文件成功后置 true，
+        /// 不提供外部 setter，不随 <see cref="RefreshStatus"/> 复位（一次成功整轮有效）。</para>
+        /// </summary>
+        public bool ActivatedSuccessfully { get; private set; }
+
         public SoftActivation()
         {
             InitializeComponent();
@@ -80,12 +91,14 @@ namespace AgingTestSystem.Dialogs
                 {
                     SoftwareActivation.WriteRunHash2(SoftwareActivation.PermanentMark(cpuId));
                     _lblStatus.Text = "激活状态: 永久使用";
+                    ActivatedSuccessfully = true;
                 }
                 else
                 {
                     SoftwareActivation.WriteRunHash2(SoftwareActivation.TrialStartMark(cpuId));
                     _lblStatus.Text = "激活状态: 剩余使用天数 / "
                         + SoftwareActivation.SlotDaysLeft(0).ToString();
+                    ActivatedSuccessfully = true;
                 }
             }
             catch { }
