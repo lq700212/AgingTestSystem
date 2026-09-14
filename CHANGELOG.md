@@ -23,6 +23,13 @@
   新设备/过期只弹框 + 置灰用户权限按钮（= HJVision 置灰口令按钮），不阻断启动与生产。
 - 存储 `MainSetting.ini [RunHash]`（与 HJVision 同名同结构，kernel32 INI API，
   gitignore 绝不入库，出厂厂商按设备ID手写两键）；同一套《获取激活码》工具零改动通用。
+- 缺文件自动建空模板（`EnsureIniTemplate`，只建不覆盖，两键留空+中文注释填法，
+  空值照样走"新设备"提醒；用户要求：编译运行后模板自己出来，厂商只填值）。
+- 修 `get_affected_modules.ps1` 解析失败（`$Map` 最后一个哈希表尾逗号：
+  PS5.1 里 `@(...)` 末元素后跟逗号即整本报 MissingExpression，
+  `-Affected` 从 V1.72.4 起就没跑通过；HEAD 版同样红，改动前即坏）。
+  另 `-Files` 数组经 `powershell -File` 只认首个（CLI 绑定器静默丢弃），
+  多文件点测改传单串分号式（`-Files 'a.cs;b.cs'`），用法已写进脚本头注释。
 - 回归 `LicenseV183` 改写为 `SoftActivation`（42 条：RFC1321 标准向量 pin 算法/
   公式关系式/激活比对/绑定/计数格/综合判定/文案/ini 往返/推进一格/窗构造）。
 
@@ -36,7 +43,7 @@
 ### 验证
 
 - 构建一次过（3 警告全是改动前既有）；冒烟通过；
-  全量 `build_and_test.ps1` **1718 断言全绿**（含新 `SoftActivation` 模块 42 条）。
+  全量 `build_and_test.ps1` **1722 断言全绿**（含新 `SoftActivation` 模块 46 条）。
 
 ## V1.86.6 — 内部文档新增授权码签发教程（2026-09-14，用户要求）
 

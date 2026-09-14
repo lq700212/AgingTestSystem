@@ -22,6 +22,9 @@
 #    .\get_affected_modules.ps1                                # working tree
 #    .\get_affected_modules.ps1 -Ref main                      # branch diff
 #    .\get_affected_modules.ps1 -Files @("AgingTestSystem\Dialogs\CommonParameterForm.cs")
+#       （-Files 数组只在 & 调用/交互式里是真数组；powershell -File 调时数组字面量
+#       会被 CLI 拆成碎片，此时用单串分号式，见下方 -Files 分支的碎片守卫。）
+#    powershell -File get_affected_modules.ps1 -Files 'a.cs;b.cs'   # CLI 手动点测
 # ============================================================================
 
 param(
@@ -91,7 +94,9 @@ $Map = @(
     @{ Pat = @("*PanelLayoutConfig*");              Mods = @("PanelLayoutConfig", "UiPureHelpers") },
     @{ Pat = @("*HomeLayoutConfig*");               Mods = @("HomeLayoutConfig", "DesignerStabilityV172_16") },
     @{ Pat = @("*TestSession*");                    Mods = @("TestSessionStore", "DeviceManagerIntegration", "DeviceManagerPolicy") },
-    @{ Pat = @("*UserAccount*", "*UserRole*");      Mods = @("UserManager", "ModelRoundtrip") },
+    @{ Pat = @("*UserAccount*", "*UserRole*");      Mods = @("UserManager", "ModelRoundtrip") }
+    # 【V1.87.1】本行禁尾逗号：PS5.1 里 @() 最后一个哈希表后跟逗号即整本解析失败
+    #（MissingExpression，v_corner 实测：有尾逗号红、无尾逗号绿），-Affected 全残。
     # --- Entry point: fail-safe FULL (no map entry on purpose) ---
     # 【V1.87】Program 已无授权逻辑（启动闸随 RSA 方案删除），不再映射任何模块：
     # 改 Program.cs 会走"映射表无登记→兜底全量"（安全；入口改动极少，可接受）。
@@ -121,7 +126,22 @@ function Test-AnyLike([string]$Path, [string[]]$Patterns) {
 # ── 2. Collect changed files ──
 [string[]]$changed = @()
 if ($Files.Count -gt 0) {
-    $changed = $Files
+    # 【V1.87.1】-Files 两种传法：& 调用传真数组（元素原样用）；
+    # powershell -File 调用传单串（分号/逗号分隔，这里拆开；正常路径不含这两符）。
+    # 注意 -File 下 -Files @('a','b') 只认首个、其余静默丢弃（CLI 绑定器行为，
+    # showparam 探针实测 Count=1，脚本侧无从察觉）——多文件点测用 & 调用或单串分号式。
+    $flat = @()
+    $sq = "'"
+    $dq = '"'
+    foreach ($x in $Files) {
+        $t = ("$x").Trim()
+        if ($t.StartsWith("@(") -and $t.EndsWith(")")) { $t = $t.Substring(2, $t.Length - 3) }
+        foreach ($part in ($t -split '[;,]')) {
+            $p = $part.Trim().Trim($sq).Trim($dq)
+            if ($p -ne "") { $flat += $p }
+        }
+    }
+    $changed = $flat
 }
 else {
     Push-Location $RepoRoot
