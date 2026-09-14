@@ -347,7 +347,7 @@ namespace AgingTestSystem.Views
             {
                 case "e_start_vacuum": return "开阀";
                 case "e_vacuum_power":
-                    return config.SkipVacuum ? "跳过抽真空" : "压力到位 且 延时到";
+                    return config.SkipVacuum ? "跳过抽真空" : "压力到位 且 延时时间到";
                 case "e_power_done":
                     return string.IsNullOrWhiteSpace(config.CompleteExpression)
                         ? "时长到" : "时长到 或 表达式";

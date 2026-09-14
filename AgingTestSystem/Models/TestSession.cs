@@ -55,12 +55,12 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 本次老化时长（秒）。0 = 不限时长（手动停止）。
-        /// 启动时定格：工位配方的启动时间(StartTime) &gt; 0 用配方值，否则回退全局配置。
+        /// 启动时定格：工位配方的烧屏时间(BurnInTime) &gt; 0 用配方值，否则回退全局配置。
         /// </summary>
         public int DurationSeconds { get; set; }
 
         /// <summary>
-        /// 延时开启（秒）：开阀后至少等这么久才上电。启动时从工位配方的
+        /// 延时时间（秒）：开阀后至少等这么久才上电。启动时从工位配方的
         /// 延时时间(DelayTime) 定格；未配置为 0（真空到位立即上电）。
         /// </summary>
         public int DelaySeconds { get; set; }

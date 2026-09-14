@@ -13,7 +13,7 @@ namespace AgingTestSystem.Dialogs
     /// │  SN:                    [___] │ [下电]        │
     /// │  配方:                  [___] │ [保存]        │
     /// │  延时时间:              [___] │ [加入对列]     │
-    /// │  启动时间:              [___] │ [关闭窗口]     │
+    /// │  烧屏时间:              [___] │ [关闭窗口]     │
     /// │  极限温度:              [___] │               │
     /// └────────────────────────────────┴───────────────┘
     ///
@@ -63,12 +63,12 @@ namespace AgingTestSystem.Dialogs
             this.nudDelayMinutes = new System.Windows.Forms.NumericUpDown();
             this.lblDelayColon2 = new Sunny.UI.UILabel();
             this.nudDelaySeconds = new System.Windows.Forms.NumericUpDown();
-            this.lblStart = new Sunny.UI.UILabel();
-            this.nudStartHours = new System.Windows.Forms.NumericUpDown();
-            this.lblStartColon1 = new Sunny.UI.UILabel();
-            this.nudStartMinutes = new System.Windows.Forms.NumericUpDown();
-            this.lblStartColon2 = new Sunny.UI.UILabel();
-            this.nudStartSeconds = new System.Windows.Forms.NumericUpDown();
+            this.lblBurnIn = new Sunny.UI.UILabel();
+            this.nudBurnInHours = new System.Windows.Forms.NumericUpDown();
+            this.lblBurnInColon1 = new Sunny.UI.UILabel();
+            this.nudBurnInMinutes = new System.Windows.Forms.NumericUpDown();
+            this.lblBurnInColon2 = new Sunny.UI.UILabel();
+            this.nudBurnInSeconds = new System.Windows.Forms.NumericUpDown();
             this.lblTemp = new Sunny.UI.UILabel();
             this.nudTemp = new System.Windows.Forms.NumericUpDown();
             this.lblPressure = new Sunny.UI.UILabel();
@@ -84,9 +84,9 @@ namespace AgingTestSystem.Dialogs
             ((System.ComponentModel.ISupportInitialize)(this.nudDelayHours)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudDelayMinutes)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudDelaySeconds)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.nudStartHours)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.nudStartMinutes)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.nudStartSeconds)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudBurnInHours)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudBurnInMinutes)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudBurnInSeconds)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudTemp)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudPressure)).BeginInit();
             this.SuspendLayout();
@@ -207,71 +207,71 @@ namespace AgingTestSystem.Dialogs
             this.nudDelaySeconds.TabIndex = 9;
             this.nudDelaySeconds.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             //
-            // lblStart - "启动时间"设置项名称（左对齐）
+            // lblBurnIn - "烧屏时间"设置项名称（左对齐）
             //
-            this.lblStart.AutoSize = true;
-            this.lblStart.Location = new System.Drawing.Point(30, 215);
-            this.lblStart.Name = "lblStart";
-            this.lblStart.Size = new System.Drawing.Size(65, 12);
-            this.lblStart.TabIndex = 8;
-            this.lblStart.Text = "启动时间:";
+            this.lblBurnIn.AutoSize = true;
+            this.lblBurnIn.Location = new System.Drawing.Point(30, 215);
+            this.lblBurnIn.Name = "lblBurnIn";
+            this.lblBurnIn.Size = new System.Drawing.Size(65, 12);
+            this.lblBurnIn.TabIndex = 8;
+            this.lblBurnIn.Text = "烧屏时间:";
             //
-            // nudStartHours - 启动时间-时（NumericUpDown，V1.28 由 TextBox 改）
+            // nudBurnInHours - 烧屏时间-时（NumericUpDown，V1.28 由 TextBox 改）
             //
-            this.nudStartHours.Location = new System.Drawing.Point(150, 209);
-            this.nudStartHours.Maximum = new decimal(new int[] {
+            this.nudBurnInHours.Location = new System.Drawing.Point(150, 209);
+            this.nudBurnInHours.Maximum = new decimal(new int[] {
             99,
             0,
             0,
             0});
-            this.nudStartHours.Name = "nudStartHours";
-            this.nudStartHours.Size = new System.Drawing.Size(48, 21);
-            this.nudStartHours.TabIndex = 10;
-            this.nudStartHours.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            this.nudBurnInHours.Name = "nudBurnInHours";
+            this.nudBurnInHours.Size = new System.Drawing.Size(48, 21);
+            this.nudBurnInHours.TabIndex = 10;
+            this.nudBurnInHours.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             //
-            // lblStartColon1 - 启动时间：时与分之间的冒号分隔符
+            // lblBurnInColon1 - 烧屏时间：时与分之间的冒号分隔符
             //
-            this.lblStartColon1.AutoSize = true;
-            this.lblStartColon1.Location = new System.Drawing.Point(200, 213);
-            this.lblStartColon1.Name = "lblStartColon1";
-            this.lblStartColon1.Size = new System.Drawing.Size(6, 12);
-            this.lblStartColon1.TabIndex = 0;
-            this.lblStartColon1.Text = ":";
+            this.lblBurnInColon1.AutoSize = true;
+            this.lblBurnInColon1.Location = new System.Drawing.Point(200, 213);
+            this.lblBurnInColon1.Name = "lblBurnInColon1";
+            this.lblBurnInColon1.Size = new System.Drawing.Size(6, 12);
+            this.lblBurnInColon1.TabIndex = 0;
+            this.lblBurnInColon1.Text = ":";
             //
-            // nudStartMinutes - 启动时间-分（NumericUpDown）
+            // nudBurnInMinutes - 烧屏时间-分（NumericUpDown）
             //
-            this.nudStartMinutes.Location = new System.Drawing.Point(212, 209);
-            this.nudStartMinutes.Maximum = new decimal(new int[] {
+            this.nudBurnInMinutes.Location = new System.Drawing.Point(212, 209);
+            this.nudBurnInMinutes.Maximum = new decimal(new int[] {
             59,
             0,
             0,
             0});
-            this.nudStartMinutes.Name = "nudStartMinutes";
-            this.nudStartMinutes.Size = new System.Drawing.Size(48, 21);
-            this.nudStartMinutes.TabIndex = 11;
-            this.nudStartMinutes.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            this.nudBurnInMinutes.Name = "nudBurnInMinutes";
+            this.nudBurnInMinutes.Size = new System.Drawing.Size(48, 21);
+            this.nudBurnInMinutes.TabIndex = 11;
+            this.nudBurnInMinutes.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             //
-            // lblStartColon2 - 启动时间：分与秒之间的冒号分隔符
+            // lblBurnInColon2 - 烧屏时间：分与秒之间的冒号分隔符
             //
-            this.lblStartColon2.AutoSize = true;
-            this.lblStartColon2.Location = new System.Drawing.Point(262, 213);
-            this.lblStartColon2.Name = "lblStartColon2";
-            this.lblStartColon2.Size = new System.Drawing.Size(6, 12);
-            this.lblStartColon2.TabIndex = 0;
-            this.lblStartColon2.Text = ":";
+            this.lblBurnInColon2.AutoSize = true;
+            this.lblBurnInColon2.Location = new System.Drawing.Point(262, 213);
+            this.lblBurnInColon2.Name = "lblBurnInColon2";
+            this.lblBurnInColon2.Size = new System.Drawing.Size(6, 12);
+            this.lblBurnInColon2.TabIndex = 0;
+            this.lblBurnInColon2.Text = ":";
             //
-            // nudStartSeconds - 启动时间-秒（NumericUpDown）
+            // nudBurnInSeconds - 烧屏时间-秒（NumericUpDown）
             //
-            this.nudStartSeconds.Location = new System.Drawing.Point(274, 209);
-            this.nudStartSeconds.Maximum = new decimal(new int[] {
+            this.nudBurnInSeconds.Location = new System.Drawing.Point(274, 209);
+            this.nudBurnInSeconds.Maximum = new decimal(new int[] {
             59,
             0,
             0,
             0});
-            this.nudStartSeconds.Name = "nudStartSeconds";
-            this.nudStartSeconds.Size = new System.Drawing.Size(48, 21);
-            this.nudStartSeconds.TabIndex = 12;
-            this.nudStartSeconds.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            this.nudBurnInSeconds.Name = "nudBurnInSeconds";
+            this.nudBurnInSeconds.Size = new System.Drawing.Size(48, 21);
+            this.nudBurnInSeconds.TabIndex = 12;
+            this.nudBurnInSeconds.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             //
             // lblTemp - "极限温度"设置项名称（左对齐）
             //
@@ -447,12 +447,12 @@ namespace AgingTestSystem.Dialogs
             this.Controls.Add(this.lblPressure);
             this.Controls.Add(this.nudTemp);
             this.Controls.Add(this.lblTemp);
-            this.Controls.Add(this.nudStartSeconds);
-            this.Controls.Add(this.lblStartColon2);
-            this.Controls.Add(this.nudStartMinutes);
-            this.Controls.Add(this.lblStartColon1);
-            this.Controls.Add(this.nudStartHours);
-            this.Controls.Add(this.lblStart);
+            this.Controls.Add(this.nudBurnInSeconds);
+            this.Controls.Add(this.lblBurnInColon2);
+            this.Controls.Add(this.nudBurnInMinutes);
+            this.Controls.Add(this.lblBurnInColon1);
+            this.Controls.Add(this.nudBurnInHours);
+            this.Controls.Add(this.lblBurnIn);
             this.Controls.Add(this.nudDelaySeconds);
             this.Controls.Add(this.lblDelayColon2);
             this.Controls.Add(this.nudDelayMinutes);
@@ -474,9 +474,9 @@ namespace AgingTestSystem.Dialogs
             ((System.ComponentModel.ISupportInitialize)(this.nudDelayHours)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudDelayMinutes)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudDelaySeconds)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.nudStartHours)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.nudStartMinutes)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.nudStartSeconds)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudBurnInHours)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudBurnInMinutes)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudBurnInSeconds)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudTemp)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudPressure)).EndInit();
             this.ResumeLayout(false);
@@ -510,18 +510,18 @@ namespace AgingTestSystem.Dialogs
         private Sunny.UI.UILabel lblDelayColon2;
         /// <summary>延时时间-秒输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
         private System.Windows.Forms.NumericUpDown nudDelaySeconds;
-        /// <summary>"启动时间"设置项名称标签</summary>
-        private Sunny.UI.UILabel lblStart;
-        /// <summary>启动时间-时输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
-        private System.Windows.Forms.NumericUpDown nudStartHours;
-        /// <summary>启动时间-时/分冒号分隔符</summary>
-        private Sunny.UI.UILabel lblStartColon1;
-        /// <summary>启动时间-分输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
-        private System.Windows.Forms.NumericUpDown nudStartMinutes;
-        /// <summary>启动时间-分/秒冒号分隔符</summary>
-        private Sunny.UI.UILabel lblStartColon2;
-        /// <summary>启动时间-秒输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
-        private System.Windows.Forms.NumericUpDown nudStartSeconds;
+        /// <summary>"烧屏时间"设置项名称标签</summary>
+        private Sunny.UI.UILabel lblBurnIn;
+        /// <summary>烧屏时间-时输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
+        private System.Windows.Forms.NumericUpDown nudBurnInHours;
+        /// <summary>烧屏时间-时/分冒号分隔符</summary>
+        private Sunny.UI.UILabel lblBurnInColon1;
+        /// <summary>烧屏时间-分输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
+        private System.Windows.Forms.NumericUpDown nudBurnInMinutes;
+        /// <summary>烧屏时间-分/秒冒号分隔符</summary>
+        private Sunny.UI.UILabel lblBurnInColon2;
+        /// <summary>烧屏时间-秒输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
+        private System.Windows.Forms.NumericUpDown nudBurnInSeconds;
         /// <summary>"极限温度"设置项名称标签</summary>
         private Sunny.UI.UILabel lblTemp;
         /// <summary>极限温度输入（NumericUpDown，V1.63 由 TextBox 改，与配方管理窗对齐）</summary>

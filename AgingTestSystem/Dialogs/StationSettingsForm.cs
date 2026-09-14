@@ -8,12 +8,12 @@ using AgingTestSystem.Services;
 namespace AgingTestSystem.Dialogs
 {
     /// <summary>
-    /// 工位设置窗口（业务逻辑部分）—— V1.18 新增，V1.26 完善按钮业务，V1.28 延时/启动时间改 NumericUpDown
+    /// 工位设置窗口（业务逻辑部分）—— V1.18 新增，V1.26 完善按钮业务，V1.28 延时/烧屏时间改 NumericUpDown
     ///
     /// 【功能说明】
     /// 点击工位面板上的"设置"按钮（btnSet）后弹出本窗口，
     /// 用于查看 / 设置单个工位的测试相关参数：
-    /// 状态、SN、配方、延时时间、启动时间、极限温度、负压阈值、显示模式。
+    /// 状态、SN、配方、延时时间、烧屏时间、极限温度、负压阈值、显示模式。
     ///
     /// 【界面布局】
     /// ┌────────────────────────────────────────────────┐
@@ -24,7 +24,7 @@ namespace AgingTestSystem.Dialogs
     /// │  SN:                    [___] │ [下电]        │
     /// │  配方:                  [___] │ [保存]        │
     /// │  延时时间:            [__]:[__]:[__] │ [加入对列]     │
-    /// │  启动时间:            [__]:[__]:[__] │ [关闭窗口]     │
+    /// │  烧屏时间:            [__]:[__]:[__] │ [关闭窗口]     │
     /// │  极限温度:              [___] │               │
     /// │  负压阈值:           [___]kPa │               │ ← V1.66
     /// │  显示模式:              [___] │               │ ← V1.66
@@ -40,15 +40,15 @@ namespace AgingTestSystem.Dialogs
     /// - 关闭窗口（btnClose）：直接关闭本窗体。
     ///
     /// 【字段映射】
-    /// - 延时时间 → 延时开启（DelayTime）
-    /// - 启动时间 → 延时到达（StartTime）
+    /// - 延时时间 → 延时时间（DelayTime）
+    /// - 烧屏时间 → 烧屏时间（BurnInTime）
     /// - 极限温度 → 配方配置的 LimitTemperature（缓存 / 配方存储，工位面板无此显示）
     /// - 负压阈值 → 本工位真空工艺要求（V1.66；回填优先级 缓存 > 配方 > 全局，
     ///   下发=框里是什么就是什么，启动定格，存什么用什么）
     /// - 显示模式 → 配方 DisplayMode（V1.66；烧屏画面记录，只追溯不判定）
     ///
     /// 【时间输入（V1.28）】
-    /// 延时时间 / 启动时间各用三个 NumericUpDown（时:分:秒，冒号分隔，样式与 RecipeManagerForm 一致）：
+    /// 延时时间 / 烧屏时间各用三个 NumericUpDown（时:分:秒，冒号分隔，样式与 RecipeManagerForm 一致）：
     /// 时 0-99、分 0-59、秒 0-59，控件自带范围限制无需再校验；
     /// 读取时用 GetTimeSpan 组合三个框，回填时用 SetTimeInputs 拆分并钳制到控件范围。
     ///
@@ -150,7 +150,7 @@ namespace AgingTestSystem.Dialogs
         /// <summary>
         /// 给 8 个设置项 + 破空/下电按钮挂悬停说明（标签+输入框都挂，悬停哪边都看得到）。
         /// 文案规则（小白能看懂）：每条=是什么+举例+填错会怎样；时间轴按真实流程写
-        /// （点启动→只开阀→延时到+真空到位→上电→跑够启动时间→自动完成）。
+        /// （点启动→只开阀→延时时间到+真空到位→上电→跑够烧屏时间→自动完成）。
         /// </summary>
         private void SetupTooltips()
         {
@@ -169,11 +169,11 @@ namespace AgingTestSystem.Dialogs
             SetTip(new Control[] { lblDelay, nudDelayHours, nudDelayMinutes, nudDelaySeconds },
                 "延时时间：上电前等待。点启动后先只开真空阀（不上电），等够这么久才上电，" +
                 "例如00:00:30=开阀30秒后上电，给吸附留稳定时间。填0=真空一到位立刻上电。" +
-                "对应工位面板延时开启。");
-            SetTip(new Control[] { lblStart, nudStartHours, nudStartMinutes, nudStartSeconds },
-                "启动时间：上电后老化时长。上电开始计时，跑够这么久自动完成" +
+                "对应工位面板延时时间。");
+            SetTip(new Control[] { lblBurnIn, nudBurnInHours, nudBurnInMinutes, nudBurnInSeconds },
+                "烧屏时间：上电后老化时长。上电开始计时，跑够这么久自动完成" +
                 "（下电+关阀+PASS待取料），例如08:00:00=跑8小时。填00:00:00=不用配方时长、" +
-                "走全局时长；全局也是0才一直跑、只能手动停。对应工位面板延时到达。");
+                "走全局时长；全局也是0才一直跑、只能手动停。对应工位面板烧屏时间。");
             SetTip(new Control[] { lblTemp, nudTemp },
                 "极限温度：该工位温度上限（0~300℃）。只存档追溯：" +
                 "面板不显示、不参与自动判定，填错不影响运行，但以后查配方看到的就是这个数。");
@@ -204,7 +204,7 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 配方自动检索选中回调（V1.29 新增）
-        /// 用户从自动检索列表中选择一个配方后，自动填写配方名称、延时时间、启动时间、
+        /// 用户从自动检索列表中选择一个配方后，自动填写配方名称、延时时间、烧屏时间、
         /// 极限温度、负压阈值、显示模式（V1.66 补后两项）。
         /// </summary>
         /// <param name="recipe">选中的配方</param>
@@ -222,13 +222,13 @@ namespace AgingTestSystem.Dialogs
             nudDelaySeconds.Value = Math.Max(nudDelaySeconds.Minimum,
                 Math.Min(nudDelaySeconds.Maximum, (decimal)recipe.DelayTime.Seconds));
 
-            // 回填启动时间（时:分:秒）
-            nudStartHours.Value = Math.Max(nudStartHours.Minimum,
-                Math.Min(nudStartHours.Maximum, (decimal)(int)recipe.StartTime.TotalHours));
-            nudStartMinutes.Value = Math.Max(nudStartMinutes.Minimum,
-                Math.Min(nudStartMinutes.Maximum, (decimal)recipe.StartTime.Minutes));
-            nudStartSeconds.Value = Math.Max(nudStartSeconds.Minimum,
-                Math.Min(nudStartSeconds.Maximum, (decimal)recipe.StartTime.Seconds));
+            // 回填烧屏时间（时:分:秒）
+            nudBurnInHours.Value = Math.Max(nudBurnInHours.Minimum,
+                Math.Min(nudBurnInHours.Maximum, (decimal)(int)recipe.BurnInTime.TotalHours));
+            nudBurnInMinutes.Value = Math.Max(nudBurnInMinutes.Minimum,
+                Math.Min(nudBurnInMinutes.Maximum, (decimal)recipe.BurnInTime.Minutes));
+            nudBurnInSeconds.Value = Math.Max(nudBurnInSeconds.Minimum,
+                Math.Min(nudBurnInSeconds.Maximum, (decimal)recipe.BurnInTime.Seconds));
 
             // 回填极限温度（超出 NumericUpDown 范围时钳制到边界，与配方管理窗一致）
             nudTemp.Value = Math.Max(nudTemp.Minimum,
@@ -292,7 +292,7 @@ namespace AgingTestSystem.Dialogs
                 txtSN.Text = cached.SerialNumber;
                 txtRecipe.Text = cached.RecipeName;
                 SetTimeInputs(nudDelayHours, nudDelayMinutes, nudDelaySeconds, cached.DelayTime);
-                SetTimeInputs(nudStartHours, nudStartMinutes, nudStartSeconds, cached.StartTime);
+                SetTimeInputs(nudBurnInHours, nudBurnInMinutes, nudBurnInSeconds, cached.BurnInTime);
                 nudTemp.Value = Math.Max(nudTemp.Minimum,
                     Math.Min(nudTemp.Maximum, cached.LimitTemperature));
                 // 【V1.66】负压/显示模式回填优先级：缓存（非0/非空）> 配方（按缓存配方名命中）> 全局/空
@@ -309,7 +309,7 @@ namespace AgingTestSystem.Dialogs
             txtSN.Text = data.SerialNumber;
             txtRecipe.Text = data.RecipeName;
             SetTimeInputs(nudDelayHours, nudDelayMinutes, nudDelaySeconds, data.DelayTime);
-            SetTimeInputs(nudStartHours, nudStartMinutes, nudStartSeconds, data.StartTime);
+            SetTimeInputs(nudBurnInHours, nudBurnInMinutes, nudBurnInSeconds, data.BurnInTime);
             // 【V1.66】无缓存时负压/显示模式按面板配方名找配方：命中用配方的，
             // 否则全局/空。避免框里留 Designer 默认 0 被下发成阈值 0（负压域里≈关保护）。
             RecipeConfig recipeHit = FindRecipe(data.RecipeName);
@@ -435,7 +435,7 @@ namespace AgingTestSystem.Dialogs
         /// 保存按钮点击事件（V1.26 完善）
         ///
         /// 【功能】
-        /// 1. 把当前录入的 SN / 配方 / 延时开启 / 延时到达 写入设备管理器工位静态信息，
+        /// 1. 把当前录入的 SN / 配方 / 延时时间 / 烧屏时间 写入设备管理器工位静态信息，
         ///    采集线程下次叠加后，工位面板（SN / 配方 / 延时显示）即同步更新；
         /// 2. 把当前配置缓存到 StationSettingsCache（下次点击该工位"设置"按钮自动回填）；
         /// 3. 把当前配方（名称 / 延时 / 极限温度）保存到本地配方列表
@@ -444,9 +444,9 @@ namespace AgingTestSystem.Dialogs
         ///
         /// 【说明】
         /// - SN / 配方：可空，空串视为清空。
-        /// - 延时开启 / 延时到达：各用三个 NumericUpDown（时:分:秒，V1.28），
+        /// - 延时时间 / 烧屏时间：各用三个 NumericUpDown（时:分:秒，V1.28），
         ///   默认 00:00:00（TimeSpan.Zero），控件范围 时0-99/分0-59/秒0-59 无需再校验。
-        /// - 启动时间输入在本窗体对应"延时到达"（与 RecipeManagerForm 语义一致）。
+        /// - 烧屏时间输入在本窗体对应"烧屏时间"（与 RecipeManagerForm 语义一致）。
         /// </summary>
         private void btnSave_Click(object sender, EventArgs e)
         {
@@ -484,7 +484,7 @@ namespace AgingTestSystem.Dialogs
         /// 提交配置到当前工位（"保存"与"加入对列"共用）
         ///
         /// 【流程】
-        /// 1. 校验设备管理器就绪、组合延时开启 / 延时到达；
+        /// 1. 校验设备管理器就绪、组合延时时间 / 烧屏时间；
         /// 2. 写入设备管理器工位静态信息（SN / 配方 / 延时）→ 工位面板同步更新；
         /// 3. 写入工位配置缓存（StationSettingsCache，下次打开自动回填）；
         /// 4. 配方名称非空时，把当前配方保存到本地配方列表（有同名询问是否覆盖更新）。
@@ -513,9 +513,9 @@ namespace AgingTestSystem.Dialogs
             }
             cmbDisplayMode.Text = canonicalMode;
 
-            // ---- 1) 组合延时开启 / 延时到达（各三个 NumericUpDown，V1.28；控件已限范围无需校验） ----
-            TimeSpan delayStart = GetTimeSpan(nudDelayHours, nudDelayMinutes, nudDelaySeconds);
-            TimeSpan delayArrive = GetTimeSpan(nudStartHours, nudStartMinutes, nudStartSeconds);
+            // ---- 1) 组合延时时间 / 烧屏时间（各三个 NumericUpDown，V1.28；控件已限范围无需校验） ----
+            TimeSpan delayTime = GetTimeSpan(nudDelayHours, nudDelayMinutes, nudDelaySeconds);
+            TimeSpan burnInTime = GetTimeSpan(nudBurnInHours, nudBurnInMinutes, nudBurnInSeconds);
 
             // ---- 2) 应用配置到当前工位（写入工位静态信息，采集叠加后工位面板更新） ----
             _deviceManager.SetStationSerialNumber(_deviceId, txtSN.Text);
@@ -525,7 +525,7 @@ namespace AgingTestSystem.Dialogs
             // 启动测试时负压值定格为该工位的真空到位判定/报警阈值（配方优先、全局兜底指"没下发时"，
             // 下发了就以框值为准——框里永远有数，不存在"没下发"）。
             _deviceManager.SetStationRecipe(_deviceId, txtRecipe.Text, nudPressure.Value, cmbDisplayMode.Text);
-            _deviceManager.SetStationDelayTimes(_deviceId, delayStart, delayArrive);
+            _deviceManager.SetStationDelayTimes(_deviceId, delayTime, burnInTime);
 
             // ---- 3) 缓存配置（下次打开该工位设置窗口自动回填） ----
             StationSettingsCache.Save(new StationCacheEntry
@@ -533,8 +533,8 @@ namespace AgingTestSystem.Dialogs
                 DeviceId = _deviceId,
                 SerialNumber = txtSN.Text.Trim(),
                 RecipeName = txtRecipe.Text.Trim(),
-                DelayTime = delayStart,
-                StartTime = delayArrive,
+                DelayTime = delayTime,
+                BurnInTime = burnInTime,
                 LimitTemperature = ParseTemperature(),
                 NegativePressure = nudPressure.Value,
                 DisplayMode = cmbDisplayMode.Text.Trim()
@@ -543,7 +543,7 @@ namespace AgingTestSystem.Dialogs
             // ---- 4) 保存配方到本地配方列表（同名询问覆盖更新；配方名称为空则跳过） ----
             if (!string.IsNullOrWhiteSpace(txtRecipe.Text))
             {
-                SaveCurrentRecipe(delayStart, delayArrive);
+                SaveCurrentRecipe(delayTime, burnInTime);
             }
 
             // ---- 5) 提示 ----
@@ -571,8 +571,8 @@ namespace AgingTestSystem.Dialogs
                 $"工位 {_deviceId} {actionName}成功！\r\n" +
                 $"SN: {(string.IsNullOrWhiteSpace(txtSN.Text) ? "（空）" : txtSN.Text.Trim())}\r\n" +
                 $"配方: {(string.IsNullOrWhiteSpace(txtRecipe.Text) ? "（空）" : txtRecipe.Text.Trim())}\r\n" +
-                $"延时开启: {GetTimeText(delayStart)}\r\n" +
-                $"延时到达: {GetTimeText(delayArrive)}\r\n" +
+                $"延时时间: {GetTimeText(delayTime)}\r\n" +
+                $"烧屏时间: {GetTimeText(burnInTime)}\r\n" +
                 $"极限温度: {nudTemp.Value:0.#}°C\r\n" +
                 $"负压阈值: {nudPressure.Value:0.#}kPa\r\n" +
                 $"显示模式: {(string.IsNullOrWhiteSpace(cmbDisplayMode.Text) ? "（空）" : cmbDisplayMode.Text.Trim())}" +
@@ -586,15 +586,15 @@ namespace AgingTestSystem.Dialogs
         /// 把当前窗口的配方（名称 / 延时 / 极限温度 / 负压阈值 / 显示模式）保存到本地配方列表。
         /// 有同名配方时本窗弹窗问是否覆盖（确认才覆盖，取消则不存）。
         /// </summary>
-        /// <param name="delayStart">延时开启时间</param>
-        /// <param name="delayArrive">延时到达时间</param>
-        private void SaveCurrentRecipe(TimeSpan delayStart, TimeSpan delayArrive)
+        /// <param name="delayTime">延时时间时间</param>
+        /// <param name="burnInTime">烧屏时间时间</param>
+        private void SaveCurrentRecipe(TimeSpan delayTime, TimeSpan burnInTime)
         {
             var recipe = new RecipeConfig
             {
                 Name = txtRecipe.Text.Trim(),
-                DelayTime = delayStart,
-                StartTime = delayArrive,
+                DelayTime = delayTime,
+                BurnInTime = burnInTime,
                 LimitTemperature = ParseTemperature(),
                 NegativePressure = nudPressure.Value,
                 DisplayMode = cmbDisplayMode.Text.Trim(),
@@ -651,7 +651,7 @@ namespace AgingTestSystem.Dialogs
         /// <param name="hours">时输入框</param>
         /// <param name="minutes">分输入框</param>
         /// <param name="seconds">秒输入框</param>
-        /// <param name="time">要回填的时间（如工位静态信息的延时开启 / 延时到达）</param>
+        /// <param name="time">要回填的时间（如工位静态信息的延时时间 / 烧屏时间）</param>
         private static void SetTimeInputs(NumericUpDown hours, NumericUpDown minutes, NumericUpDown seconds, TimeSpan time)
         {
             // 【V1.62】时必须用 TotalHours：time.Hours 是"小时分量"（0~23），

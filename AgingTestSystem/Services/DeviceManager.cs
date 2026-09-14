@@ -13,10 +13,10 @@ namespace AgingTestSystem.Services
     /// 是整个系统的核心服务类。
     ///
     /// 【V1.59 业务串联完善：三阶段状态机 + 结果判定 + 断电恢复】
-    /// 1) 时序安全改造：启动只开真空阀，载台上电由采集循环在「真空到位 + 延时开启到」
+    /// 1) 时序安全改造：启动只开真空阀，载台上电由采集循环在「真空到位 + 延时时间到」
     ///    时补发——落实"未吸附固定不通电"（旧版开阀+上电同时下发，与安全意图矛盾）；
-    /// 2) 配方参数接入编排：老化时长 = 工位配方"启动时间(StartTime)"（回退全局
-    ///    MaxTestDurationSeconds）；上电前置等待 = 配方"延时开启(DelayTime)"；
+    /// 2) 配方参数接入编排：老化时长 = 工位配方"烧屏时间(BurnInTime)"（回退全局
+    ///    MaxTestDurationSeconds）；上电前置等待 = 配方"延时时间(DelayTime)"；
     ///    到位/报警阈值 = 配方负压值（回退全局 AlarmPressureThresholdKPa）。
     ///    参数在启动瞬间定格，中途改配置不影响进行中的测试；
     /// 3) 完成语义：到时自动下电关阀 → Completed·待取料(PASS)；报警按责任分类
@@ -29,13 +29,13 @@ namespace AgingTestSystem.Services
     /// 1) 冷却送风机接入（接口化：真实 / Mock），独立定时器轮询，不阻塞 72 台气压表采集
     /// 2) 送风机生命周期全局化：送风机是 72 台共用的环境设备，
     ///    "首台开始测试时启动送风机，最后一台停止时才停止送风机"
-    /// 3) 测试状态机（V1.59前旧行为：启动同时开阀+上电；现行V1.59启动只开阀，上电由真空到位+延时到补发）：
+    /// 3) 测试状态机（V1.59前旧行为：启动同时开阀+上电；现行V1.59启动只开阀，上电由真空到位+延时时间到补发）：
     ///    启动运行 = 开真空 + 载台上电 + 标测试中；
     ///    真空建立确认（开阀后 N 毫秒内压力必须进入正常区间，否则按真空失败报警）
     /// 4) 通讯故障报警：某台气压表连续读失败 N 次 → 视为失联报警（关阀+断电+标故障），
     ///    避免"断线后停留在旧压力值上假正常"
     /// 5) 老化计时（V1.59前旧行为：只看全局MaxTestDurationSeconds做自动停止；
-    ///    现行V1.59配方StartTime优先、全局兜底，到时自动完成标Completed·待取料PASS，不限时长=0时永不自动完成）：
+    ///    现行V1.59配方BurnInTime优先、全局兜底，到时自动完成标Completed·待取料PASS，不限时长=0时永不自动完成）：
     ///    到达 MaxTestDurationSeconds 自动停止该台（关阀+断电+记日志）
     /// 6) 人工复位：报警/故障台复位回到空闲，可重新启动（V1.59扩展：已完成·待取料同样走复位确认取件）
     /// 7) 事件落盘：启动/停止/报警/复位/急停等写入 CSV 日志，供历史记录与追溯
@@ -260,6 +260,8 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 每台本次测试的开始时间（真空确认完成时刻）
         /// 用于老化计时（到时自动停止）。DateTime.MinValue = 尚未开始计时
+        /// 【别和烧屏时间搞混】这是"时刻"（DateTime，上电那一刻），
+        /// 烧屏时间是"时长"（TimeSpan，RecipeConfig.BurnInTime），两者一个点一个段。
         /// </summary>
         private DateTime[] _testStartTimes;
 
@@ -275,7 +277,7 @@ namespace AgingTestSystem.Services
 
         // =====================================================================
         // 【V1.59 新增】三阶段老化状态机 + 任务定格参数 + 断电恢复持久化
-        // 时序：启动(只开阀) → Vacuuming(等真空到位+延时开启) → 上电 → Aging(配方时长)
+        // 时序：启动(只开阀) → Vacuuming(等真空到位+延时时间) → 上电 → Aging(配方时长)
         //       → 到时自动完成(PASS·待取料)。报警按责任分产品 FAIL / 设备异常。
         // =====================================================================
 
@@ -288,13 +290,13 @@ namespace AgingTestSystem.Services
         private AgingPhase[] _testPhases;
 
         /// <summary>
-        /// 每台本次测试的开阀时刻（延时开启与真空确认超时的计时起点 t0）
+        /// 每台本次测试的开阀时刻（延时时间与真空确认超时的计时起点 t0）
         /// </summary>
         private DateTime[] _valveOpenTimes;
 
         /// <summary>
         /// 每台本次任务的"定格参数"——启动测试瞬间从工位配方/全局配置抄写一份：
-        /// 老化时长（秒，0=不限）、延时开启（秒）、报警阈值（kPa）。
+        /// 老化时长（秒，0=不限）、延时时间（秒）、报警阈值（kPa）。
         /// 【为什么要定格】测试跑几小时的中途操作员可能改配置/换配方，
         /// 进行中的任务必须用启动那一刻的参数跑完，否则同一批产品工艺不一致，
         /// 质量数据没法追溯。
@@ -1259,9 +1261,9 @@ namespace AgingTestSystem.Services
         /// 由工位设置窗口保存按钮调用。写入后采集叠加显示在工位面板延时标签上。
         /// </summary>
         /// <param name="deviceId">工位编号（1 ~ TotalBarometers）</param>
-        /// <param name="delayTime">延时时间（配方窗口"延时时间"，工位面板"延时开启"；可空 = 不修改）</param>
-        /// <param name="startTime">启动时间（配方窗口"启动时间"，工位面板"延时到达"；可空 = 不修改）</param>
-        public void SetStationDelayTimes(int deviceId, TimeSpan? delayTime, TimeSpan? startTime)
+        /// <param name="delayTime">延时时间（配方窗口"延时时间"，工位面板"延时时间"；可空 = 不修改）</param>
+        /// <param name="burnInTime">烧屏时间（配方窗口"烧屏时间"，工位面板"烧屏时间"；可空 = 不修改）</param>
+        public void SetStationDelayTimes(int deviceId, TimeSpan? delayTime, TimeSpan? burnInTime)
         {
             if (deviceId < 1 || deviceId > _config.TotalBarometers) return;
             lock (_stationInfoLock)
@@ -1277,7 +1279,7 @@ namespace AgingTestSystem.Services
                     // elapsed>=负数恒真=免等待直接上电（配错=跳过延时保护）。
                     info.DelayTime = delayTime.Value < TimeSpan.Zero ? TimeSpan.Zero : delayTime.Value;
                 }
-                if (startTime.HasValue) info.StartTime = startTime.Value;
+                if (burnInTime.HasValue) info.BurnInTime = burnInTime.Value;
             }
         }
 
@@ -1336,7 +1338,7 @@ namespace AgingTestSystem.Services
         ///
         /// 【为什么需要叠加】
         /// 真实气压表只上报压力，BarometerData 的 SerialNumber / RecipeName /
-        /// DelayTime / StartTime 在采集层是空的。
+        /// DelayTime / BurnInTime 在采集层是空的。
         /// 工位面板（WorkstationPanelView）显示的 SN / 配方 / 延时正是读取这些字段，
         /// 所以必须在数据流出前把 _stationInfo 里维护的配置覆盖上去，
         /// 保证"有显示 SN/配方/延时 的地方都与绑定/设置关联一致"。
@@ -1375,9 +1377,9 @@ namespace AgingTestSystem.Services
             {
                 data.DelayTime = info.DelayTime.Value;
             }
-            if (info.StartTime.HasValue)
+            if (info.BurnInTime.HasValue)
             {
-                data.StartTime = info.StartTime.Value;
+                data.BurnInTime = info.BurnInTime.Value;
             }
         }
 
@@ -1875,7 +1877,7 @@ namespace AgingTestSystem.Services
         /// 【与旧版的区别】旧版"开阀 + 载台上电"同时下发——真空还没建立产品就带电了，
         /// 与配置注释里"避免产品在未吸附固定的情况下通电老化"的安全意图矛盾。
         /// 新版启动时【只开真空阀】，载台上电由采集循环在
-        /// 「真空压力到位 且 延时开启时间到」时补发（见 ProcessTestingProgress）；
+        /// 「真空压力到位 且 延时时间到」时补发（见 ProcessTestingProgress）；
         /// 真空建立失败（宽限窗口内压力始终不到位）则报警切断，全程不带电。
         ///
         /// 【参数定格】启动瞬间从工位配方抄写本次任务的时长/延时/报警阈值，
@@ -1937,7 +1939,7 @@ namespace AgingTestSystem.Services
 
             // ---- 1) 读取工位配方并定格本次任务参数 ----
             string sn = "", recipeName = "", displayMode = "";
-            TimeSpan delayTime = TimeSpan.Zero, startTime = TimeSpan.Zero;
+            TimeSpan delayTime = TimeSpan.Zero, burnInTime = TimeSpan.Zero;
             decimal? recipePressure = null;
             lock (_stationInfoLock)
             {
@@ -1947,13 +1949,13 @@ namespace AgingTestSystem.Services
                     recipeName = info.RecipeName ?? "";
                     displayMode = info.DisplayMode ?? "";
                     if (info.DelayTime.HasValue) delayTime = info.DelayTime.Value;
-                    if (info.StartTime.HasValue) startTime = info.StartTime.Value;
+                    if (info.BurnInTime.HasValue) burnInTime = info.BurnInTime.Value;
                     recipePressure = info.RecipeNegativePressure;
                 }
             }
 
-            // 老化时长：配方的启动时间(StartTime) > 0 用配方值，否则回退全局 MaxTestDurationSeconds
-            int durationSecs = (int)startTime.TotalSeconds;
+            // 老化时长：配方的烧屏时间(BurnInTime) > 0 用配方值，否则回退全局 MaxTestDurationSeconds
+            int durationSecs = (int)burnInTime.TotalSeconds;
             if (durationSecs <= 0)
             {
                 durationSecs = _config.MaxTestDurationSeconds;
@@ -1974,7 +1976,7 @@ namespace AgingTestSystem.Services
                 delayTime = TimeSpan.FromSeconds(overrideParams.DelaySeconds);
             }
 
-            // ---- 2) 开阀（只开阀！上电由采集循环在真空到位+延时到后补发） ----
+            // ---- 2) 开阀（只开阀！上电由采集循环在真空到位+延时时间到后补发） ----
             // 【大扫荡】写失败直接抛给调用方（批量循环单台隔离；恢复路径同理）：
             // 以前写丢了（耦合器离线静默丢失）状态机照进，真空超时后报假性"真空建立失败"。
             // 调用方必须 try/catch（见 StartTesting），失败的台不进测试态。
@@ -2040,7 +2042,7 @@ namespace AgingTestSystem.Services
             TestEventLogger.Write(_currentLotNumber, deviceId, "启动",
                 (skipVacuum
                     ? "启动老化测试（跳过抽真空，直接上电计时）"
-                    : "启动老化测试（开真空，待真空建立+延时开启到后自动上电）") +
+                    : "启动老化测试（开真空，待真空建立+延时时间到后自动上电）") +
                 (string.IsNullOrEmpty(displayMode) ? "" : $" 显示模式:{displayMode}"),
                 sn: sn, recipe: recipeName, result: "");
 
@@ -3112,6 +3114,33 @@ namespace AgingTestSystem.Services
                     // 使工位面板的 SN / 配方 / 延时显示与绑定/设置保持关联一致。
                     ApplyStationInfo(data);
 
+                    // ===== 3.6) 真空到位标记（工位面板真空块三色显示用） =====
+                    // 【判定口径与 ClassifyAlarm 完全一致】测试中用启动时定格的本次任务阈值
+                    // （配方负压优先、全局兜底），未测试用全局阈值；跳过抽真空恒为到位
+                    // （无真空信号可判，阀开即绿，不谎报红）。
+                    // 【为什么在这里算】阈值源（定格数组/全局配置/跳过开关）全是本类的状态，
+                    // 面板只做显示不碰阈值，显示与报警永远同口径，不会"灯绿了却报警"。
+                    {
+                        int sidx = deviceId - 1;
+                        bool testing;
+                        decimal threshold;
+                        bool skipVacuum;
+                        lock (_stateLock)
+                        {
+                            testing = (sidx >= 0 && sidx < _testingStates.Length) && _testingStates[sidx];
+                            threshold = (sidx >= 0 && sidx < _sessionThresholdKPa.Length)
+                                ? _sessionThresholdKPa[sidx] : _config.AlarmPressureThresholdKPa;
+                            if (!testing)
+                            {
+                                threshold = _config.AlarmPressureThresholdKPa;
+                            }
+                            skipVacuum = testing
+                                ? ((sidx >= 0 && sidx < _sessionSkipVacuum.Length) && _sessionSkipVacuum[sidx])
+                                : _config.SkipVacuum;
+                        }
+                        data.VacuumInRange = skipVacuum || !PressureOutOfRange(data.VacuumPressure, threshold);
+                    }
+
                     // ===== 4) 报警判定（增强版） =====
                     bool isTesting;
                     lock (_stateLock)
@@ -3361,7 +3390,7 @@ namespace AgingTestSystem.Services
         /// 仅在"测试中且未报警"时由采集循环调用。
         ///
         /// 【阶段推进逻辑】（判定函数在 <see cref="AgingSequencer"/>，本方法只负责执行）
-        /// - Vacuuming：等「压力到位」且「距开阀 ≥ 延时开启」（两者自然取较晚）；
+        /// - Vacuuming：等「压力到位」且「距开阀 ≥ 延时时间」（两者自然取较晚）；
         ///   压力首次到位时记"真空建立"事件；到位前超时由 IsAlarm 判真空建立失败报警；
         ///   条件满足 → 载台上电 → Aging，老化计时起点 = 此刻。
         /// - Aging：到配方定格时长 → 自动完成（下电+关阀+PASS·待取料）。
@@ -3401,7 +3430,7 @@ namespace AgingTestSystem.Services
                                 sn: vacSn, recipe: vacRecipe, result: "");
                         }
 
-                        // ---- 到位 且 延时开启已到 → 上电进入老化计时 ----
+                        // ---- 到位 且 延时时间已到 → 上电进入老化计时 ----
                         if (_vacuumConfirmTimes[idx] == DateTime.MinValue &&
                             AgingSequencer.ShouldPowerOn(inRange, DateTime.Now - _valveOpenTimes[idx],
                                 _sessionDelaySecs[idx]))
@@ -3488,7 +3517,7 @@ namespace AgingTestSystem.Services
                 string pwSn, pwRecipe;
                 GetEventIdentity(deviceId, out pwSn, out pwRecipe);
                 TestEventLogger.Write(_currentLotNumber, deviceId, "上电",
-                    $"真空确认+延时开启完成，载台上电开始老化（时长 {durationText}）",
+                    $"真空确认+延时时间到，载台上电开始老化（时长 {durationText}）",
                     currentA: float.IsNaN(data.LoadCurrentA) ? (float?)null : data.LoadCurrentA,
                     sn: pwSn, recipe: pwRecipe, result: "");
                 // 【V1.67】上电=计时起点落定：快照一次（含 Phase=Aging + 上电时刻，

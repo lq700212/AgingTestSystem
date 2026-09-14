@@ -84,8 +84,8 @@ namespace AgingTestSystem.Services
             // 使用 lock 保护 Random 访问（修复 M5）
             // 【V1.09 更新】依据IO分配表: 1输入(真空负压表) + 2输出(真空电磁阀 + 载台上电)
             int pressureInt;
-            int delayStartMin, delayStartSec;
-            int delayArriveMin, delayArriveSec;
+            int delayTimeMin, delayTimeSec;
+            int burnInMin, burnInSec;
             bool vacuumPressureInput;      // 真空负压表输入(NPN, X地址)
             bool vacuumValveOutput;        // 真空电磁阀输出(PNP, Y地址)
             bool carrierPowerOutput;       // 载台上电输出(PNP, Y地址)
@@ -107,10 +107,10 @@ namespace AgingTestSystem.Services
                     pressureInt = -_random.Next(0, 5);        // 真空较差（高于阈值，会报警）
                 }
 
-                delayStartMin = _random.Next(0, 30);
-                delayStartSec = _random.Next(0, 60);
-                delayArriveMin = _random.Next(0, 60);
-                delayArriveSec = _random.Next(0, 60);
+                delayTimeMin = _random.Next(0, 30);
+                delayTimeSec = _random.Next(0, 60);
+                burnInMin = _random.Next(0, 60);
+                burnInSec = _random.Next(0, 60);
                 vacuumPressureInput = _random.Next(0, 2) == 1;
                 vacuumValveOutput = _random.Next(0, 2) == 1;
                 carrierPowerOutput = _random.Next(0, 2) == 1;
@@ -125,8 +125,8 @@ namespace AgingTestSystem.Services
                 // V1.10：状态统一由 DeviceManager 根据测试状态/报警判定来写，
                 // Mock 读取器只负责提供压力数据，避免随机状态误导 Demo
                 Status = DeviceStatus.Idle,
-                DelayTime = new TimeSpan(0, delayStartMin, delayStartSec),
-                StartTime = new TimeSpan(0, delayArriveMin, delayArriveSec),
+                DelayTime = new TimeSpan(0, delayTimeMin, delayTimeSec),
+                BurnInTime = new TimeSpan(0, burnInMin, burnInSec),
                 CollectTime = DateTime.Now,
                 // 1个输入: 真空负压表信号
                 InputStatus = new[] { vacuumPressureInput },

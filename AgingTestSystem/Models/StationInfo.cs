@@ -7,7 +7,7 @@ namespace AgingTestSystem.Models
     /// 工位静态信息模型（V1.19.11 新增）
     ///
     /// 【用途】
-    /// 气压表硬件本身只上报"压力"数值，SN / 配方 / 延时开启 / 延时到达 这类
+    /// 气压表硬件本身只上报"压力"数值，SN / 配方 / 延时时间 / 烧屏时间 这类
     /// "工位配置"信息无法从设备读取，需要由上位机维护并叠加到采集数据上展示。
     /// 本模型就是"工位配置"的载体：
     /// - 通过 ID 绑定（IdBindingForm，扫码枪扫码或手动输入）写入 SN；
@@ -55,16 +55,16 @@ namespace AgingTestSystem.Models
         public string DisplayMode { get; set; }
 
         /// <summary>
-        /// 延时开启时间（时:分:秒，工位设置窗口录入）
+        /// 延时时间（时:分:秒，上电前等待，工位设置窗口录入）
         /// 为空表示尚未配置
         /// </summary>
         public TimeSpan? DelayTime { get; set; }
 
         /// <summary>
-        /// 延时到达时间（时:分:秒，工位设置窗口录入）
+        /// 烧屏时间（时:分:秒，上电后老化时长，工位设置窗口录入）
         /// 为空表示尚未配置
         /// </summary>
-        public TimeSpan? StartTime { get; set; }
+        public TimeSpan? BurnInTime { get; set; }
 
         /// <summary>
         /// 深拷贝（避免外部修改污染 DeviceManager 内部存储）
@@ -80,7 +80,7 @@ namespace AgingTestSystem.Models
                 RecipeNegativePressure = this.RecipeNegativePressure,
                 DisplayMode = this.DisplayMode,
                 DelayTime = this.DelayTime,
-                StartTime = this.StartTime
+                BurnInTime = this.BurnInTime
             };
         }
     }

@@ -6,7 +6,7 @@
 //  构造函数（V1.59 为可测性开放）直接驱动【真实的】三阶段老化状态机，
 //  以 30ms 采集间隔在数秒内跑完现场要几小时的生命周期：
 //
-//    场景1 正常全流程：启动只开阀不上电(安全铁律) → 压力到位+延时开启到自动上电
+//    场景1 正常全流程：启动只开阀不上电(安全铁律) → 压力到位+延时时间到自动上电
 //                     → 配方时长到自动完成 → Completed·待取料 + PASS + 阀电全关
 //    场景2 真空建立失败：宽限窗口内压力始终不到位 → 报警 FAIL，载台全程从未带电
 //    场景3 通讯失联：连续读失败 ≥ 阈值 → 标故障但结果=设备异常(不冤枉产品)
@@ -20,7 +20,7 @@
 //  【怎么跑】由 run_unit_tests.ps1 与 TestRunner.cs 一起编译（partial class
 //  共享 Check/Module/EnterCleanDir），不单独运行。
 //
-//  【时间约定】采集间隔 30ms、确认超时 600ms、延时开启 0.5s、老化 1.5s——
+//  【时间约定】采集间隔 30ms、确认超时 600ms、延时时间 0.5s、老化 1.5s——
 //  全套场景约 10s 跑完；WaitUntil 轮询等待条件成立，超时按 FAIL 记。
 // ============================================================================
 
@@ -777,7 +777,7 @@ namespace AgingTestSystem.Tests
             try
             {
                 // ================= 场景7+1：正常全流程（工位1）=================
-                // 配方：负压值 -3（到位/报警阈值）、延时开启 0.5s、老化 1.5s
+                // 配方：负压值 -3（到位/报警阈值）、延时时间 0.5s、老化 1.5s
                 dm.SetStationRecipe(1, "配方R1", -3m, null);
                 dm.SetStationDelayTimes(1, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1.5));
 
@@ -793,7 +793,7 @@ namespace AgingTestSystem.Tests
                 // 若判定误用全局值，此台会立刻报警断电而不是进入后续阶段（一石二鸟的断言）
                 reader.SetPressure(1, -4m);
 
-                Check("[流程] 真空到位+延时开启到后自动上电",
+                Check("[流程] 真空到位+延时时间到后自动上电",
                     WaitUntil(() => io.ReadOutput(PowerOut(config, 1)), 2500));
                 Check("[流程] 上电时真空阀保持开",
                     io.ReadOutput(ValveOut(config, 1)));
@@ -1512,6 +1512,7 @@ namespace AgingTestSystem.Tests
                 SweepStopAllFanFail();
                 SweepSubscriberIsolation();
                 SweepNegativeDelay();
+                SweepVacuumInRangeFlag();
             }
             finally
             {
@@ -1747,6 +1748,33 @@ namespace AgingTestSystem.Tests
                 var info = dm.GetStationInfo(1);
                 Check("[大扫荡][延时] 负延时钳零",
                     info != null && info.DelayTime == TimeSpan.Zero);
+            }
+            finally { try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
+        }
+
+        // ---------- S13 真空到位标记随采集刷新（面板真空块三色的数据源） ----------
+        // 口径与报警一致：测试中用启动定格阈值，未测试用全局 -5kPa；
+        // 常压 0 → false（面板红），-6 → true（面板绿）。
+        // 【不断言阀开关】600ms 真空宽限后未到位会报警关阀，阀态与标记翻转竞态，
+        // 只锁"标记跟压力走"，阀开/关的三色组合由面板 ApplyData 反射用例覆盖。
+        private static void SweepVacuumInRangeFlag()
+        {
+            FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+            DeviceManager dm = BuildTestManager(out reader, out io, out config);
+            try
+            {
+                dm.StartTesting(new[] { 1 });
+                Check("[真空灯] 开阀",
+                    WaitUntil(() => io.ReadOutput(ValveOut(config, 1)), 2000));
+                Check("[真空灯] 常压未到位标记false",
+                    WaitUntil(() => { var d = dm.GetBarometerData(1); return d != null && !d.VacuumInRange; }, 3000));
+                reader.SetPressure(1, -6m);
+                Check("[真空灯] 到位后标记true",
+                    WaitUntil(() => { var d = dm.GetBarometerData(1); return d != null && d.VacuumInRange; }, 3000));
+                // Clone 必须带标记：面板/广播拿到的都是副本，丢了标记灯永远不绿。
+                var snap = dm.GetBarometerData(1);
+                Check("[真空灯] 副本保留标记",
+                    snap != null && snap.Clone().VacuumInRange == snap.VacuumInRange);
             }
             finally { try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
         }

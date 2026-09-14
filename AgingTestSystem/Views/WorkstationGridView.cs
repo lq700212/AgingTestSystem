@@ -54,7 +54,7 @@ namespace AgingTestSystem.Views
     /// - 配方框：以设置按钮上缘为基准，BottomToTopGap=6（下缘在其上方 6px，Y=118 不变）；
     /// - 【V1.77】SN 框改吊电流行下方（TopToBottomGap=3，关电流=93 不变，开=114）、
     ///   真空关/压力框改吊空闲下方（TopToTopGap=15，Y=67 不变）——位置零变化，见下"V1.77 开态几何"；
-    /// - 延时开启/到达：以设置按钮中心为基准，CenterOffsetY=-12/+13 对称分布（Y=147/172 不变）；
+    /// - 延时时间/烧屏时间：以设置按钮中心为基准，CenterOffsetY=-12/+13 对称分布（Y=147/172 不变）；
     /// - 各标签：以各自框中心为基准，VerticalCenterOffset=-1（Y=70/96/121/150/175 不变）。
     /// 改 PanelInnerHeight 时下链（按钮/配方/延时）按各自间距自动联动，上链不动（【V1.77】）。
     /// 旧版 PanelLayout.json 无这些新字段
@@ -96,7 +96,7 @@ namespace AgingTestSystem.Views
     /// ┌──────────────────────────────────────────────┐
     /// │ NO.1（标题，左上角）            ┌────────────┐│
     /// │ ┌──────────┐  ┌──────────┐     │ 选中指示框  ││ ← 右上角 23×23
-    /// │ │ 上电/下电 │  │ 空闲/选中 │     │ (绿底白✓)  ││    有选中才显示
+    /// │ │ 上电/下电 │  │ 空闲/选中 │     │ (绿底白✓)  ││    选中框常显
     /// │ └──────────┘  │ 繁忙/故障 │     └────────────┘│
     /// │               │ 已完成    │                   │ ← 【V1.59】蓝=待取料
     /// │               └──────────┘                   │
@@ -106,9 +106,9 @@ namespace AgingTestSystem.Views
     /// │ SN:    ┌────────────────────────┐             │
     /// │ 配方:  ┌────────────────────────┐             │
     /// │        └────────────────────────┘             │
-    /// │ 延时开启 ┌────────────┐   ┌─────────────────┐ │
+    /// │ 延时时间 ┌────────────┐   ┌─────────────────┐ │
     /// │          │ 00:00:00   │   │      设置       │ │ ← 绿底白字
-    /// │ 延时到达 ┌────────────┘   └─────────────────┘ │
+    /// │ 烧屏时间 ┌────────────┘   └─────────────────┘ │
     /// │          │ 00:00:00  │                        │
     /// │          └───────────┘                        │
     /// └──────────────────────────────────────────────┘
@@ -123,17 +123,17 @@ namespace AgingTestSystem.Views
     /// - 行3：SN 值框(65,93,148,21；【V1.77】改吊电流行下方 TopToBottomGap=3：
     ///   关电流电流行高按 0，Y=90+0+3=93 不变；开时 Y=90+21+3=114)
     /// - 行4：配方值框(65,118,148,21；下缘贴设置按钮上缘、Gap=6)
-    /// - 行5：延时开启值框(65,147,80,21；以设置按钮中心为基准、CenterOffsetY=-12) +
-    ///   设置按钮(153,145,60,50；下缘距面板底 BottomMargin=10) + 延时到达值框(65,172,80,21；CenterOffsetY=13)
+    /// - 行5：延时时间值框(65,147,80,21；以设置按钮中心为基准、CenterOffsetY=-12) +
+    ///   设置按钮(153,145,60,50；下缘距面板底 BottomMargin=10) + 烧屏时间值框(65,172,80,21；CenterOffsetY=13)
     /// - 编号：NO.1(9,4)（LeftMargin=9 + TopMargin=4）
-    /// - 标签列：真空压力(9,70)/SN:(9,96)/配方:(9,121)/延时开启(9,150)/延时到达(9,175)
+    /// - 标签列：真空压力(9,70)/SN:(9,96)/配方:(9,121)/延时时间(9,150)/烧屏时间(9,175)
     ///   （X=9 为右缘贴合压力框左缘推导 65-56=9；Y 以各自框中心为基准、VerticalCenterOffset=-1）
     /// - 【V1.58.20 内容居中 + 选中框上移】编号/标签列左缘 LeftMargin=9，设置按钮右缘=213
     ///   （RightMargin=9），左留白 9 = 右留白 222-213=9 → 面板内内容整体水平居中；
     ///   选中框 TopMargin 4→2（Y=2，底缘 25 与"空闲"块上缘 29 间距由 2px 加大到 4px）。
     /// - 值框文字左内边距：ValueTextLeftPadding=6px（V1.52，文字不贴值框左边框，值框坐标不变）
     /// - 状态块配色见下方"状态块配色"；颜色值均可由 PanelLayout.json 覆盖
-    /// - 【V1.58.6 对齐】延时开启/延时到达两行中心(157.5+182.5)/2=170 与设置按钮中心
+    /// - 【V1.58.6 对齐】延时时间/烧屏时间两行中心(157.5+182.5)/2=170 与设置按钮中心
     ///   (145+25=170) 垂直居中对齐；V1.58.19 起改为 VerticalCenterAlignTo 锚定自动保持居中。
     /// - 【V1.58.7 右对齐】空闲/真空关/SN框/配方框/设置按钮五者右边缘统一 = 205：
     ///   工作状态块右移 X=153、真空关宽调成与空闲一致(48→52)并右移 X=153、
@@ -159,10 +159,10 @@ namespace AgingTestSystem.Views
     ///   RightToLeftAlignTo="VacuumOpen"（右缘贴合真空关左缘），宽度自动=145-57=88；
     ///   下电 LeftAlignTo="PressureValue"（左边缘与压力框左边缘对齐）。
     /// - 【V1.58.16 标签锚定】"真空压力"标签 Width=56 固定文字宽 + RightToLeftAlignTo="PressureValue"
-    ///   （右缘贴合压力框左缘，X=57-56=1）；SN:/配方:/延时开启/延时到达 四标签 LeftAlignTo="LabelPressure"
+    ///   （右缘贴合压力框左缘，X=57-56=1）；SN:/配方:/延时时间/烧屏时间 四标签 LeftAlignTo="LabelPressure"
     ///   （左缘对齐"真空压力"标签）。
     /// - 【V1.58.17 边缘锚定】编号 TitlePosition 左上角锚定（LeftMargin=3 + TopMargin=4）；
-    ///   选中框右上角锚定（RightMargin=5 + TopMargin=4）；延时开启/到达值框补左缘锚定
+    ///   选中框右上角锚定（RightMargin=5 + TopMargin=4）；延时时间/烧屏时间值框补左缘锚定
     ///   LeftAlignTo="SNValue"（跟随值框列）。至此全部元素均已锚定，改面板宽/高基本布局不变。
     /// - 【V1.58.19 垂直锚定链（【V1.77】压力/真空关/SN 改走自上而下链 TopToBottom，位置零变化；
     ///   SN→配方之间改为两链交接缝，缺省高度下间距仍 4px，详见 PanelLayoutConfig 类头"完整锚定链（V1.77）"）】
@@ -184,7 +184,8 @@ namespace AgingTestSystem.Views
     /// - 工作状态：空闲=绿 / 选中(已上电待测试)=橙 / 繁忙(测试中)=黄 / 故障=红 /
     ///   已完成·待取料=皇家蓝（V1.59：老化到时自动完成后显示，取件复位后回空闲）
     /// - 面板背景：空闲=白 / 繁忙=浅黄 / 故障=浅粉 / 已完成=淡钢蓝（V1.59）
-    /// - 真空开/关：真空开=绿底，真空关=浅灰底
+    /// - 真空块三色：阀开且负压到位=绿底 / 阀开但没吸住=红底（真空开，ColorVacuumAlarm）/
+    ///   阀没开=灰底（真空关，浅色配置灰/深色 DimGray）
     ///
     /// 【数据流】
     /// 主窗体收到设备批量更新后调用 <see cref="UpdateAll"/> / <see cref="UpdateSingle"/>，
@@ -212,6 +213,7 @@ namespace AgingTestSystem.Views
         private readonly Color _colorPowerOn;  // 上电块背景（绿，不跟主题）
         private readonly Color _colorPowerOff; // 下电块背景（浅灰，不跟主题）
         private readonly Color _colorVacuumOn; // 真空开块背景（绿，不跟主题）
+        private readonly Color _colorVacuumAlarm; // 真空异常块背景（红：阀开但负压未到位，不跟主题）
         private readonly Color _colorVacuumOff;// 真空关块背景（浅灰，不跟主题）
         private readonly Color _colorWorkFault;    // 工作状态-故障（红，不跟主题）
         private readonly Color _colorWorkBusy;     // 工作状态-繁忙（黄，不跟主题）
@@ -329,6 +331,7 @@ namespace AgingTestSystem.Views
             _colorPowerOn = Parse(_layout.ColorPowerOn, Color.LimeGreen);
             _colorPowerOff = Parse(_layout.ColorPowerOff, Color.LightGray);
             _colorVacuumOn = Parse(_layout.ColorVacuumOn, Color.LimeGreen);
+            _colorVacuumAlarm = Parse(_layout.ColorVacuumAlarm, Color.Red);
             _colorVacuumOff = Parse(_layout.ColorVacuumOff, Color.LightGray);
             _colorWorkFault = Parse(_layout.ColorWorkFault, Color.Red);
             _colorWorkBusy = Parse(_layout.ColorWorkBusy, Color.Gold);
@@ -541,7 +544,7 @@ namespace AgingTestSystem.Views
         /// <summary>
         /// 按当前主题重算全部面板的下电/真空关块色（切主题时调，免得等下一轮 1s 采集才变；
         /// 平时每轮采集由 ApplyData 逐台刷新）。GridItem 记了 CarrierPower/VacuumOpen，
-        /// 开块（绿）本来两边就不动，这里只重算关块。
+        /// 开块（上电绿/真空到位绿/真空未到位红）本来两边主题都不动，这里只重算灰色的关块。
         /// </summary>
         private void RefreshOffBlockColors()
         {
@@ -702,9 +705,8 @@ namespace AgingTestSystem.Views
         {
             if (_items.TryGetValue(deviceId, out GridItem item) && item.IsSelected != selected)
             {
-                bool anyBefore = IsAnySelected;          // 修改前的全局选中状态
                 item.IsSelected = selected;
-                InvalidateAfterSelectionChange(deviceId, anyBefore);
+                Invalidate(GetPanelBounds(deviceId));
             }
         }        /// <summary>获取当前选中的设备编号数组</summary>
         public int[] GetSelectedDeviceIds()
@@ -731,18 +733,38 @@ namespace AgingTestSystem.Views
             item.CurrentText = float.IsNaN(data.LoadCurrentA) ? "" : $"{data.LoadCurrentA:0.00} A";
             item.SnText = data.SerialNumber ?? "";
             item.RecipeText = data.RecipeName ?? "";
-            item.DelayStartText = data.DelayTime.ToString(@"hh\:mm\:ss");
-            item.DelayArriveText = data.StartTime.ToString(@"hh\:mm\:ss");
+            item.DelayTimeText = data.DelayTime.ToString(@"hh\:mm\:ss");
+            item.BurnInTimeText = data.BurnInTime.ToString(@"hh\:mm\:ss");
 
             // IO 输出状态：OutputStatus[0]=真空电磁阀，OutputStatus[1]=载台上电
             bool vacuumOpen = data.OutputStatus != null && data.OutputStatus.Length >= 1 && data.OutputStatus[0];
             bool carrierPower = data.OutputStatus != null && data.OutputStatus.Length >= 2 && data.OutputStatus[1];
 
-            // 真空开/关（V1.28：真空关由红改浅灰；V1.60.3：深色下走 DimGray 底白字，见 GetOffBlockThemeColors）
+            // 真空块三色（下电逻辑不动，仍只看载台输出；真空灯新增"开了没吸住"的红色）：
+            // - 阀没开 → "真空关"灰底（浅色配置灰 / 深色 DimGray，走 GetOffBlockThemeColors）；
+            // - 阀开了且负压已达到阈值 → "真空开"绿底（正常）；
+            // - 阀开了但负压没达到阈值 → "真空开"红底（管子掉了/漏气/没吸住，开阀即见红，
+            //   不用等到超时报警才知道；到位标记 VacuumInRange 由 DeviceManager 按该工位有效阈值填，
+            //   面板只显示不判定，与报警同口径）。
+            // 【为什么文字保持"真空开"】阀确实开着，红的是"没吸住"这个状态；
+            // 改文字会动悬停/截图/用例多处，颜色已足够让现场一眼定位。
             item.VacuumOpen = vacuumOpen;
             item.VacuumText = vacuumOpen ? "真空开" : "真空关";
-            item.VacuumColor = vacuumOpen ? _colorVacuumOn : GetOffBlockBack(_darkMode, _colorVacuumOff);
-            item.VacuumForeColor = vacuumOpen ? Color.White : GetOffBlockFore(_darkMode);
+            if (!vacuumOpen)
+            {
+                item.VacuumColor = GetOffBlockBack(_darkMode, _colorVacuumOff);
+                item.VacuumForeColor = GetOffBlockFore(_darkMode);
+            }
+            else if (data.VacuumInRange)
+            {
+                item.VacuumColor = _colorVacuumOn;
+                item.VacuumForeColor = Color.White;
+            }
+            else
+            {
+                item.VacuumColor = _colorVacuumAlarm;
+                item.VacuumForeColor = Color.White;
+            }
 
             // 上电/下电（V1.28：下电由红改浅灰；V1.60.3：深色下走 DimGray 底白字，见 GetOffBlockThemeColors）
             item.CarrierPower = carrierPower;
@@ -814,8 +836,6 @@ namespace AgingTestSystem.Views
             int startRow = Math.Max(0, clip.Top / rowH);
             int endRow = Math.Min(_rows - 1, (clip.Bottom + rowH - 1) / rowH);
 
-            bool anySelected = IsAnySelected;
-
             for (int row = startRow; row <= endRow; row++)
             {
                 for (int col = startCol; col <= endCol; col++)
@@ -826,7 +846,7 @@ namespace AgingTestSystem.Views
                     // 面板左上角绝对坐标（面板内容设计尺寸 + 上下左右各 2px 外边距，均按 DPI 放大）
                     int panelLeft = Scaled(col * _layout.PanelColumnWidth + 2);
                     int panelTop = Scaled(row * _layout.GetEffectiveRowHeight() + 2);
-                    DrawPanel(g, item, anySelected, panelLeft, panelTop);
+                    DrawPanel(g, item, panelLeft, panelTop);
                 }
             }
 
@@ -854,7 +874,7 @@ namespace AgingTestSystem.Views
         /// 绘制单个工位面板（以绝对坐标绘制，panelLeft/panelTop 为面板左上角）。
         /// 面板内部所有元素坐标 = 设计坐标偏移 + 面板左上角。
         /// </summary>
-        private void DrawPanel(Graphics g, GridItem item, bool anySelected, int panelLeft, int panelTop)
+        private void DrawPanel(Graphics g, GridItem item, int panelLeft, int panelTop)
         {
             // 面板背景（状态色），尺寸按 DPI 放大
             using (var bg = new SolidBrush(item.BackColor))
@@ -888,8 +908,8 @@ namespace AgingTestSystem.Views
             }
             DrawValueBox(g, Offset(Scaled(_layout.RcSNValue.ToRectangle()), panelLeft, panelTop), item.SnText);
             DrawValueBox(g, Offset(Scaled(_layout.RcRecipeValue.ToRectangle()), panelLeft, panelTop), item.RecipeText);
-            DrawValueBox(g, Offset(Scaled(_layout.RcDelayStartValue.ToRectangle()), panelLeft, panelTop), item.DelayStartText);
-            DrawValueBox(g, Offset(Scaled(_layout.RcDelayArriveValue.ToRectangle()), panelLeft, panelTop), item.DelayArriveText);
+            DrawValueBox(g, Offset(Scaled(_layout.RcDelayTimeValue.ToRectangle()), panelLeft, panelTop), item.DelayTimeText);
+            DrawValueBox(g, Offset(Scaled(_layout.RcBurnInValue.ToRectangle()), panelLeft, panelTop), item.BurnInTimeText);
 
             // 静态标签
             DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelPressurePosition.X), panelTop + Scaled(_layout.LabelPressurePosition.Y)), "真空压力");
@@ -900,8 +920,8 @@ namespace AgingTestSystem.Views
             }
             DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelSnPosition.X), panelTop + Scaled(_layout.LabelSnPosition.Y)), "SN:");
             DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelRecipePosition.X), panelTop + Scaled(_layout.LabelRecipePosition.Y)), "配方:");
-            DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelDelayStartPosition.X), panelTop + Scaled(_layout.LabelDelayStartPosition.Y)), "延时开启");
-            DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelDelayArrivePosition.X), panelTop + Scaled(_layout.LabelDelayArrivePosition.Y)), "延时到达");
+            DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelDelayTimePosition.X), panelTop + Scaled(_layout.LabelDelayTimePosition.Y)), "延时时间");
+            DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelBurnInPosition.X), panelTop + Scaled(_layout.LabelBurnInPosition.Y)), "烧屏时间");
 
             // 设置按钮（绿底白字）
             Rectangle rcSet = Offset(Scaled(_layout.RcSetButton.ToRectangle()), panelLeft, panelTop);
@@ -910,8 +930,7 @@ namespace AgingTestSystem.Views
             TextRenderer.DrawText(g, _layout.SetButtonText, _panelFont, rcSet, Color.White,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
 
-            // 选中指示（有任一选中才显示：选中=绿底白✓，未选中=空心白框）
-            if (anySelected)
+            // 选中指示（常显：选中=绿底白✓，未选中=空心白框；无选中时框也在，操作员一眼知道点哪里选中）
             {
                 Rectangle rcSelect = Offset(Scaled(_layout.RcSelectBox.ToRectangle()), panelLeft, panelTop);
                 if (item.IsSelected)
@@ -1201,40 +1220,21 @@ namespace AgingTestSystem.Views
             }
         }
 
-        /// <summary>切换指定工位的选中状态并重绘</summary>
+        /// <summary>
+        /// 切换指定工位的选中状态并重绘（选中框常显，只需刷新当前面板）。
+        /// 【选中框常显】框的显示不再取决于全局 IsAnySelected：所有面板右上角永远画框
+        /// （选中=绿底白✓，未选中=空心白框）；单台翻转只影响自己，局部重绘即可。
+        /// 只有 ClearAllSelection（长按取消全选/整行切换）一次动多台，才全量 Invalidate()。
+        /// 【为什么常显】以前"无选中时全场无框"，操作员找不到点哪里选中；
+        /// 常显后框永远可见，所见即所得。IsAnySelected 只保留给交互门控
+        /// （无选中时单击空白不翻选、长按才选中首个，见 GridView_MouseUp），不再管显隐。
+        /// </summary>
         private void ToggleSelect(int deviceId)
         {
             if (_items.TryGetValue(deviceId, out GridItem item))
             {
-                bool anyBefore = IsAnySelected;          // 修改前的全局选中状态
                 item.IsSelected = !item.IsSelected;
-                InvalidateAfterSelectionChange(deviceId, anyBefore);
-            }
-        }
-
-        /// <summary>
-        /// 选中状态改变后的重绘调度——**选中框的显示与否取决于全局 IsAnySelected**：
-        /// - 任一选中 → 所有面板都画选中框（选中=绿✓，未选中=空心白框）；
-        /// - 一个没选 → 所有面板都不画选中框。
-        /// 所以"从无选中↔有选中"翻转时，**所有面板**的框都要变，必须全量 Invalidate()；
-        /// 若只是已选集合内部增删（一直有选中），其他面板框不变，仅需局部重绘当前面板。
-        /// 【Bug 修复】此前这里一律只 Invalidate 单面板：长按选中第一个时其他面板
-        /// 残留"无框"旧画面，取消到最后一个时其他面板残留"空心框"旧画面。
-        /// 【V1.57.2 回退】不再重绘画布缓存（画布方案已废弃，见 OnPaint 注释），
-        /// 恢复旧版 Invalidate 调度——屏幕 DC 上直接绘制可见区很快，无性能问题。
-        /// </summary>
-        /// <param name="deviceId">选中状态被修改的工位编号</param>
-        /// <param name="anyBefore">修改前的 IsAnySelected 值</param>
-        private void InvalidateAfterSelectionChange(int deviceId, bool anyBefore)
-        {
-            bool anyAfter = IsAnySelected;               // 修改后的全局选中状态
-            if (anyBefore != anyAfter)
-            {
-                Invalidate();                            // 全局翻转：所有面板的选中框一起显示/隐藏
-            }
-            else
-            {
-                Invalidate(GetPanelBounds(deviceId));    // 全局状态未变，只需刷新当前面板
+                Invalidate(GetPanelBounds(deviceId));
             }
         }
 
@@ -1337,7 +1337,7 @@ namespace AgingTestSystem.Views
             // 【V1.55】local 是物理像素坐标，布局矩形需缩放后比较
             if (Scaled(_layout.RcPower.ToRectangle()).Contains(local)) return "上电状态：绿=上电，浅灰=下电";
             if (Scaled(_layout.RcWorkState.ToRectangle()).Contains(local)) return "工作状态：空闲=绿 / 选中(已上电待测试)=橙 / 繁忙(测试中)=黄 / 故障=红";
-            if (Scaled(_layout.RcVacuumOpen.ToRectangle()).Contains(local)) return "真空开启状态：真空开=绿底，真空关=浅灰底";
+            if (Scaled(_layout.RcVacuumOpen.ToRectangle()).Contains(local)) return "真空状态：阀开且负压到位=绿底 / 阀开但没吸住=红底 / 阀没开=灰底";
             // 【V1.77】压力框悬停回退到原来（无提示）：电流已改直绘（电流行），
             // 悬停不再承担"看得到电流"的需求，压力框回到 V1.73 及以前的无提示行为。
             return null;
@@ -1369,7 +1369,8 @@ namespace AgingTestSystem.Views
             public DeviceStatus Status;
             /// <summary>
             /// 载台是否上电 / 真空阀是否打开（【V1.60.3 新增】：切主题重算下电/真空关块色用；
-            /// 平时由 ApplyData 随采集刷新。只记开关不记颜色，颜色永远由当前主题现算）。
+            /// 平时由 ApplyData 随采集刷新。只记开关不记颜色，颜色永远由当前主题现算；
+            /// 真空开块的绿/红（到位/没吸住）两边主题都不动，同样不用记，只重算灰色的关块）。
             /// </summary>
             public bool CarrierPower;
             public bool VacuumOpen;
@@ -1381,8 +1382,8 @@ namespace AgingTestSystem.Views
             public string CurrentText = "";
             public string SnText = "";
             public string RecipeText = "";
-            public string DelayStartText = "00:00:00";
-            public string DelayArriveText = "00:00:00";
+            public string DelayTimeText = "00:00:00";
+            public string BurnInTimeText = "00:00:00";
             public Color PowerColor = Color.LightGray;
             public Color PowerForeColor = Color.Black;
             public string PowerText = "下电";

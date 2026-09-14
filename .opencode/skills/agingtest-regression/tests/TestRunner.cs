@@ -1092,13 +1092,13 @@ namespace AgingTestSystem.Tests
             var e = new StationCacheEntry
             {
                 DeviceId = 1, SerialNumber = "SN-A001", RecipeName = "配方X",
-                DelayTime = TimeSpan.FromSeconds(30), StartTime = new TimeSpan(2, 0, 0),
+                DelayTime = TimeSpan.FromSeconds(30), BurnInTime = new TimeSpan(2, 0, 0),
                 LimitTemperature = 75.5m
             };
             StationSettingsCache.Save(e);
             var back = StationSettingsCache.Get(1);
             Check("往返全字段", back != null && back.SerialNumber == "SN-A001" && back.RecipeName == "配方X"
-                && back.DelayTime == TimeSpan.FromSeconds(30) && back.StartTime == new TimeSpan(2, 0, 0)
+                && back.DelayTime == TimeSpan.FromSeconds(30) && back.BurnInTime == new TimeSpan(2, 0, 0)
                 && back.LimitTemperature == 75.5m);
             back.SerialNumber = "HACKED";
             Check("返回副本不污染内部", StationSettingsCache.Get(1).SerialNumber == "SN-A001");
@@ -1183,7 +1183,7 @@ namespace AgingTestSystem.Tests
                     Name = "配方A-高温老化",
                     NegativePressure = -85.5m,
                     DelayTime = TimeSpan.FromSeconds(90),
-                    StartTime = new TimeSpan(8, 30, 0),
+                    BurnInTime = new TimeSpan(8, 30, 0),
                     LimitTemperature = 75.5m,
                     DisplayMode = "白场24h",
                     CreateTime = new DateTime(2026, 8, 25, 10, 0, 0),
@@ -1192,7 +1192,7 @@ namespace AgingTestSystem.Tests
                 new RecipeConfig
                 {
                     Id = 2, Name = "B", NegativePressure = -60m, DelayTime = TimeSpan.Zero,
-                    StartTime = TimeSpan.Zero, LimitTemperature = 0m,
+                    BurnInTime = TimeSpan.Zero, LimitTemperature = 0m,
                     CreateTime = DateTime.Today, IsEnabled = false
                 }
             };
@@ -1207,7 +1207,7 @@ namespace AgingTestSystem.Tests
                 Check("中文配方名无乱码", loaded[0].Name.Contains("高温老化"));
                 Check("NegativePressure 往返一致", loaded[0].NegativePressure == -85.5m);
                 Check("DelayTime 往返一致", loaded[0].DelayTime == TimeSpan.FromSeconds(90));
-                Check("StartTime 往返一致", loaded[0].StartTime == new TimeSpan(8, 30, 0));
+                Check("BurnInTime 往返一致", loaded[0].BurnInTime == new TimeSpan(8, 30, 0));
                 Check("LimitTemperature 往返一致", loaded[0].LimitTemperature == 75.5m);
                 Check("DisplayMode 往返一致", loaded[0].DisplayMode == "白场24h");
                 Check("DisplayMode 缺值往返为 null", loaded[1].DisplayMode == null);
@@ -1473,7 +1473,7 @@ namespace AgingTestSystem.Tests
             Check("高度+10: 真空开/压力框 Y=67 不动(吊空闲下方)",
                 tall.RcVacuumOpen.ToRectangle().Y == 67 && tall.RcPressureValue.ToRectangle().Y == 67);
             Check("高度+10: 延时两行 Y 147/172→157/182",
-                tall.RcDelayStartValue.ToRectangle().Y == 157 && tall.RcDelayArriveValue.ToRectangle().Y == 182);
+                tall.RcDelayTimeValue.ToRectangle().Y == 157 && tall.RcBurnInValue.ToRectangle().Y == 182);
             Check("高度+10: 选中框 TopMargin 锚定不动仍 Y=2", tall.RcSelectBox.ToRectangle().Y == 2);
             Check("高度+10: 工作状态块绝对坐标不动仍 Y=29", tall.RcWorkState.ToRectangle().Y == 29);
             Check("高度+10: 下电框跟随工作状态仍 Y=29", tall.RcPower.ToRectangle().Y == 29);
@@ -1543,8 +1543,8 @@ namespace AgingTestSystem.Tests
                 && cur.RcRecipeValue.ToRectangle().Y - (cur.RcSNValue.ToRectangle().Y + 21) == 4);
             Check("开电流按钮166/延时168/193",
                 cur.RcSetButton.ToRectangle().Y == 166
-                && cur.RcDelayStartValue.ToRectangle().Y == 168
-                && cur.RcDelayArriveValue.ToRectangle().Y == 193);
+                && cur.RcDelayTimeValue.ToRectangle().Y == 168
+                && cur.RcBurnInValue.ToRectangle().Y == 193);
             Check("开电流压力/真空关不动67",
                 cur.RcPressureValue.ToRectangle().Y == 67 && cur.RcVacuumOpen.ToRectangle().Y == 67);
             Check("开电流标签93", cur.LabelCurrentPosition.ToPoint().Y == 93);
@@ -1741,7 +1741,7 @@ namespace AgingTestSystem.Tests
                 Name = "往返测试-特殊\"引号\",逗号",
                 NegativePressure = -99.99m,
                 DelayTime = new TimeSpan(1, 2, 3),
-                StartTime = new TimeSpan(23, 59, 58),
+                BurnInTime = new TimeSpan(23, 59, 58),
                 LimitTemperature = 123.45m,
                 CreateTime = new DateTime(2026, 1, 2, 3, 4, 5),
                 IsEnabled = true
@@ -1750,7 +1750,7 @@ namespace AgingTestSystem.Tests
             var r2 = Newtonsoft.Json.JsonConvert.DeserializeObject<RecipeConfig>(json);
             Check("RecipeConfig JSON 往返字段全部一致",
                 r2.Id == r.Id && r2.Name == r.Name && r2.NegativePressure == r.NegativePressure &&
-                r2.DelayTime == r.DelayTime && r2.StartTime == r.StartTime &&
+                r2.DelayTime == r.DelayTime && r2.BurnInTime == r.BurnInTime &&
                 r2.LimitTemperature == r.LimitTemperature && r2.CreateTime == r.CreateTime &&
                 r2.IsEnabled == r.IsEnabled);
             Check("RecipeConfig 特殊字符名称无损坏", r2.Name.Contains("\"") && r2.Name.Contains(","));
@@ -1784,12 +1784,12 @@ namespace AgingTestSystem.Tests
 
         // =====================================================================
         // 12. AgingSequencer —— 老化三阶段状态机纯函数决策（V1.59 新增）
-        //     时序：启动只开阀 → Vacuuming(真空到位+延时开启) → 上电 → Aging(配方时长)
+        //     时序：启动只开阀 → Vacuuming(真空到位+延时时间) → 上电 → Aging(配方时长)
         //           → 到时完成(PASS·待取料)。决策逻辑抽成静态函数保证可测。
         // =====================================================================
         private static void AgingSequencerTests()
         {
-            // ── ShouldPowerOn：上电前置条件 = 压力到位 且 延时开启已到（两者缺一不可）──
+            // ── ShouldPowerOn：上电前置条件 = 压力到位 且 延时时间已到（两者缺一不可）──
             Check("压力未到位永不上电(即使延时已过)",
                 !AgingSequencer.ShouldPowerOn(false, TimeSpan.FromMinutes(10), 0));
             Check("压力到位+零延时立即上电",
@@ -3702,7 +3702,7 @@ namespace AgingTestSystem.Tests
                 RecipeNegativePressure = -60m,
                 DisplayMode = "白场",
                 DelayTime = TimeSpan.FromSeconds(30),
-                StartTime = TimeSpan.FromHours(4)
+                BurnInTime = TimeSpan.FromHours(4)
             };
             var ic = info.Clone();
             ic.RecipeNegativePressure = 0m;
@@ -4389,10 +4389,13 @@ namespace AgingTestSystem.Tests
                     Check("配方名称tooltip双挂（含覆盖更新）",
                         rmTip("lblRecipeName").Contains("覆盖更新") && rmTip("txtRecipeName") == rmTip("lblRecipeName")
                         && rmTip("lblRecipeName").Length > 0);
-                    Check("延时时间tooltip双挂（含延时开启）",
-                        rmTip("lblDelayTime").Contains("延时开启") && rmTip("nudDelayHours") == rmTip("lblDelayTime"));
-                    Check("启动时间tooltip双挂（含延时到达）",
-                        rmTip("lblStartTime").Contains("延时到达") && rmTip("nudStartHours") == rmTip("lblStartTime"));
+                    Check("延时时间tooltip双挂（对应工位面板延时时间）",
+                        rmTip("lblDelayTime").Contains("对应工位面板延时时间") && rmTip("nudDelayHours") == rmTip("lblDelayTime"));
+                    Check("烧屏时间tooltip双挂（对应工位面板烧屏时间）",
+                        rmTip("lblBurnInTime").Contains("对应工位面板烧屏时间") && rmTip("nudBurnInHours") == rmTip("lblBurnInTime"));
+                    Check("配方窗时间标签已统一（延时时间/烧屏时间）",
+                        rmCtl("lblDelayTime") != null && rmCtl("lblDelayTime").Text == "延时时间："
+                        && rmCtl("lblBurnInTime") != null && rmCtl("lblBurnInTime").Text == "烧屏时间：");
                     Check("极限温度tooltip双挂（0~300℃追溯）",
                         rmTip("lblLimitTemp").Contains("0~300") && rmTip("lblLimitTemp").Contains("追溯")
                         && rmTip("nudLimitTemp") == rmTip("lblLimitTemp"));
@@ -4411,8 +4414,8 @@ namespace AgingTestSystem.Tests
                     Func<string, string> rmTipFlat = n => rmTip(n).Replace("\r\n", "");
                     Check("延时说明讲清先开阀后上电",
                         rmTipFlat("lblDelayTime").Contains("只开真空阀") && rmTipFlat("lblDelayTime").Contains("00:00:30"));
-                    Check("启动说明讲清0回退全局",
-                        rmTipFlat("lblStartTime").Contains("全局") && rmTipFlat("lblStartTime").Contains("08:00:00"));
+                    Check("烧屏说明讲清0回退全局",
+                        rmTipFlat("lblBurnInTime").Contains("全局") && rmTipFlat("lblBurnInTime").Contains("08:00:00"));
                     Check("负压说明举例符号方向",
                         rmTipFlat("lblNegativePressure").Contains("-7") && rmTipFlat("lblNegativePressure").Contains("-3"));
                     Check("长说明悬停多停留15秒（默认5秒看不完）",
@@ -4485,7 +4488,7 @@ namespace AgingTestSystem.Tests
                         {
                             new RecipeConfig
                             {
-                                Name = "T", DelayTime = TimeSpan.Zero, StartTime = TimeSpan.Zero,
+                                Name = "T", DelayTime = TimeSpan.Zero, BurnInTime = TimeSpan.Zero,
                                 LimitTemperature = 9999m
                             }
                         });
@@ -4669,6 +4672,65 @@ namespace AgingTestSystem.Tests
                     Check("深色故障色与浅色不同", cFaultDark.ToArgb() != cFault.ToArgb());
                     grid.SetDarkMode(false);
                     Check("切回浅色还原", bc(DeviceStatus.Fault).ToArgb() == cFault.ToArgb());
+
+                    // —— 真空块三色（ApplyData 反射：阀关=灰关 / 阀开到位=绿 / 阀开未到位=红） ——
+                    var applyData = tg.GetMethod("ApplyData", BindingFlags.NonPublic | BindingFlags.Instance);
+                    var itemsFld = tg.GetField("_items", BindingFlags.NonPublic | BindingFlags.Instance);
+                    var gridItemType = tg.GetNestedType("GridItem", BindingFlags.NonPublic);
+                    Check("反射找到ApplyData与GridItem", applyData != null && itemsFld != null && gridItemType != null);
+                    if (applyData != null && itemsFld != null && gridItemType != null)
+                    {
+                        var dict = itemsFld.GetValue(grid) as System.Collections.IDictionary;
+                        object item1 = dict != null ? dict[1] : null;
+                        Func<string, object> gf = n => gridItemType.GetField(n,
+                            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(item1);
+                        Color vacOn = (Color)tg.GetField("_colorVacuumOn",
+                            BindingFlags.NonPublic | BindingFlags.Instance).GetValue(grid);
+                        Color vacAlarm = (Color)tg.GetField("_colorVacuumAlarm",
+                            BindingFlags.NonPublic | BindingFlags.Instance).GetValue(grid);
+                        Color vacOff = (Color)tg.GetField("_colorVacuumOff",
+                            BindingFlags.NonPublic | BindingFlags.Instance).GetValue(grid);
+                        Color offBack;
+                        Color offFore;
+                        WorkstationGridView.GetOffBlockThemeColors(false, vacOff, out offBack, out offFore);
+                        Func<bool, bool, decimal, string> vacColorOf = (valve, inRange, pressure) =>
+                        {
+                            var d = new BarometerData
+                            {
+                                DeviceId = 1,
+                                VacuumPressure = pressure,
+                                OutputStatus = new bool[] { valve, false },
+                                Status = DeviceStatus.Testing,
+                                VacuumInRange = inRange,
+                            };
+                            applyData.Invoke(grid, new object[] { item1, d });
+                            return ((Color)gf("VacuumColor")).ToArgb() + "/" + (string)gf("VacuumText");
+                        };
+                        Check("阀关真空关灰底", vacColorOf(false, false, 0m) == offBack.ToArgb() + "/真空关");
+                        Check("阀开到位真空开绿底", vacColorOf(true, true, -7m) == vacOn.ToArgb() + "/真空开");
+                        Check("阀开未到位真空开红底", vacColorOf(true, false, 0m) == vacAlarm.ToArgb() + "/真空开");
+                        Check("报警红与到位绿不同色", vacAlarm.ToArgb() != vacOn.ToArgb());
+                        // 下电逻辑不动：载台没电仍是下电灰，不受真空三色影响。
+                        var dOff = new BarometerData
+                        {
+                            DeviceId = 1,
+                            VacuumPressure = -7m,
+                            OutputStatus = new bool[] { true, false },
+                            Status = DeviceStatus.Testing,
+                            VacuumInRange = true,
+                        };
+                        applyData.Invoke(grid, new object[] { item1, dOff });
+                        Check("下电逻辑不变（载台无电=下电）", (string)gf("PowerText") == "下电");
+                    }
+
+                    // —— 选中框常显（签名锁：DrawPanel 去 anySelected 参数，旧调度方法已删） ——
+                    var drawPanel = tg.GetMethod("DrawPanel", BindingFlags.NonPublic | BindingFlags.Instance);
+                    Check("DrawPanel签名4参（g/item/left/top，无anySelected）",
+                        drawPanel != null && drawPanel.GetParameters().Length == 4);
+                    Check("旧显隐调度已删（InvalidateAfterSelectionChange）",
+                        tg.GetMethod("InvalidateAfterSelectionChange", BindingFlags.NonPublic | BindingFlags.Instance) == null);
+                    Check("交互门控保留（IsAnySelected属性仍在）",
+                        tg.GetProperty("IsAnySelected", BindingFlags.Public | BindingFlags.Instance) != null);
                 }
             }
             finally
@@ -5564,9 +5626,10 @@ namespace AgingTestSystem.Tests
         private static void LegacyRecipeGuardTests()
         {
             // —— 老文件（V1.59 时代：无 NegativePressure/DisplayMode 字段）能读 ——
+            // （V1.88.12 起 StartTime 改名 BurnInTime：项目未上线无兼容包袱，字面量直接用新键）
             EnterCleanDir();
             string legacyJson = "[{\"Id\":1,\"Name\":\"老配方A\",\"DelayTime\":\"00:01:30\","
-                + "\"StartTime\":\"08:30:00\",\"LimitTemperature\":75.5,"
+                + "\"BurnInTime\":\"08:30:00\",\"LimitTemperature\":75.5,"
                 + "\"CreateTime\":\"2026-08-25T10:00:00\",\"IsEnabled\":true}]";
             File.WriteAllText(ProjectProfile.ResolveDataPath("Recipes.json", true), legacyJson);
             var legacy = RecipeStorage.Load();

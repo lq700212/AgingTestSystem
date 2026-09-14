@@ -80,8 +80,8 @@ namespace AgingTestSystem.Dialogs
             /// <summary>延时时间（默认值，格式：时:分:秒）</summary>
             public string DelayTime { get; set; } = "1:10:20";
 
-            /// <summary>启动时间（默认值，格式：时:分:秒）</summary>
-            public string StartTime { get; set; } = "2:10:30";
+            /// <summary>烧屏时间（默认值，格式：时:分:秒）</summary>
+            public string BurnInTime { get; set; } = "2:10:30";
 
             /// <summary>显示文本（用于列表显示）</summary>
             public string DisplayText => $"工位({StationNo})_SN:{Sn}";
@@ -442,7 +442,7 @@ namespace AgingTestSystem.Dialogs
         /// 
         /// 【文档内容格式】
         /// ┌──────┬──────┬──────────────┬──────────┬──────────┬──────────┐
-        /// │ 批号 │ 工位号│ SN           │ 配方名称 │ 延时时间 │ 启动时间 │
+        /// │ 批号 │ 工位号│ SN           │ 配方名称 │ 延时时间 │ 烧屏时间 │
         /// ├──────┼──────┼──────────────┼──────────┼──────────┼──────────┤
         /// │ KKNV │ 1    │ VFJVIJVVEVVW │ ABCDEFGH │ 1:10:20  │ 2:10:30  │
         /// │ KKNV │ 2    │ DFGTRGEWWW   │ ABCDEFGH │ 1:10:20  │ 2:10:30  │
@@ -505,7 +505,7 @@ namespace AgingTestSystem.Dialogs
                         uint headerStyleIndex = CreateHeaderFormat(document);
 
                         // 创建表头行
-                        string[] headers = { "批号", "工位号", "SN", "配方名称", "延时时间", "启动时间" };
+                        string[] headers = { "批号", "工位号", "SN", "配方名称", "延时时间", "烧屏时间" };
                         Row headerRow = CreateRow(0, headers, headerStyleIndex);
                         sheetData.Append(headerRow);
 
@@ -521,7 +521,7 @@ namespace AgingTestSystem.Dialogs
                                 binding.Sn,
                                 binding.RecipeName,
                                 binding.DelayTime,
-                                binding.StartTime
+                                binding.BurnInTime
                             };
                             Row dataRow = CreateRow(rowIndex, rowData, 0);
                             sheetData.Append(dataRow);

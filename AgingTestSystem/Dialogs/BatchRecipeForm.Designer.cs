@@ -15,7 +15,7 @@ namespace AgingTestSystem.Dialogs
     /// ├─────────────────────────────────────────────┤
     /// │ 配方名称：[____________]                    │  ← 配方名称输入框
     /// │ 延时时间：[__]:[__]:[__]                    │  ← 延时时间（时:分:秒，NumericUpDown）
-    /// │ 启动时间：[__]:[__]:[__]                    │  ← 启动时间（时:分:秒，NumericUpDown）
+    /// │ 烧屏时间：[__]:[__]:[__]                    │  ← 烧屏时间（时:分:秒，NumericUpDown）
     /// │ 极限温度：[____] °C                         │  ← 极限温度输入框
     /// ├─────────────────────────────────────────────┤
     /// │         [加入队列]                          │  ← 加入队列按钮
@@ -73,13 +73,13 @@ namespace AgingTestSystem.Dialogs
             this.nudDelayMinutes = new System.Windows.Forms.NumericUpDown();
             this.lblDelay1Colon2 = new Sunny.UI.UILabel();
             this.nudDelaySeconds = new System.Windows.Forms.NumericUpDown();
-            this.lblStartTimeLabel = new Sunny.UI.UILabel();
-            this.tableLayoutPanelStart = new System.Windows.Forms.TableLayoutPanel();
-            this.nudStartHours = new System.Windows.Forms.NumericUpDown();
-            this.lblStartColon1 = new Sunny.UI.UILabel();
-            this.nudStartMinutes = new System.Windows.Forms.NumericUpDown();
-            this.lblStartColon2 = new Sunny.UI.UILabel();
-            this.nudStartSeconds = new System.Windows.Forms.NumericUpDown();
+            this.lblBurnInTimeLabel = new Sunny.UI.UILabel();
+            this.tableLayoutPanelBurnIn = new System.Windows.Forms.TableLayoutPanel();
+            this.nudBurnInHours = new System.Windows.Forms.NumericUpDown();
+            this.lblBurnInColon1 = new Sunny.UI.UILabel();
+            this.nudBurnInMinutes = new System.Windows.Forms.NumericUpDown();
+            this.lblBurnInColon2 = new Sunny.UI.UILabel();
+            this.nudBurnInSeconds = new System.Windows.Forms.NumericUpDown();
             this.lblLimitTempLabel = new Sunny.UI.UILabel();
             this.tableLayoutPanelTemp = new System.Windows.Forms.TableLayoutPanel();
             this.txtLimitTemp = new Sunny.UI.UITextBox();
@@ -99,10 +99,10 @@ namespace AgingTestSystem.Dialogs
             ((System.ComponentModel.ISupportInitialize)(this.nudDelayHours)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudDelayMinutes)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudDelaySeconds)).BeginInit();
-            this.tableLayoutPanelStart.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.nudStartHours)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.nudStartMinutes)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.nudStartSeconds)).BeginInit();
+            this.tableLayoutPanelBurnIn.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.nudBurnInHours)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudBurnInMinutes)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudBurnInSeconds)).BeginInit();
             this.tableLayoutPanelTemp.SuspendLayout();
             this.tableLayoutPanelPressure.SuspendLayout();
             this.panelButtons.SuspendLayout();
@@ -132,8 +132,8 @@ namespace AgingTestSystem.Dialogs
             this.tableLayoutPanelInput.Controls.Add(this.txtRecipeName, 1, 0);
             this.tableLayoutPanelInput.Controls.Add(this.lblDelayTime1Label, 0, 1);
             this.tableLayoutPanelInput.Controls.Add(this.tableLayoutPanelDelay1, 1, 1);
-            this.tableLayoutPanelInput.Controls.Add(this.lblStartTimeLabel, 0, 2);
-            this.tableLayoutPanelInput.Controls.Add(this.tableLayoutPanelStart, 1, 2);
+            this.tableLayoutPanelInput.Controls.Add(this.lblBurnInTimeLabel, 0, 2);
+            this.tableLayoutPanelInput.Controls.Add(this.tableLayoutPanelBurnIn, 1, 2);
             this.tableLayoutPanelInput.Controls.Add(this.lblLimitTempLabel, 0, 3);
             this.tableLayoutPanelInput.Controls.Add(this.tableLayoutPanelTemp, 1, 3);
             this.tableLayoutPanelInput.Controls.Add(this.lblNegativePressureLabel, 0, 4);
@@ -281,104 +281,104 @@ namespace AgingTestSystem.Dialogs
             this.nudDelaySeconds.TabIndex = 4;
             this.nudDelaySeconds.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             // 
-            // lblStartTimeLabel
+            // lblBurnInTimeLabel
             // 
-            this.lblStartTimeLabel.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblStartTimeLabel.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
-            this.lblStartTimeLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
-            this.lblStartTimeLabel.Location = new System.Drawing.Point(3, 80);
-            this.lblStartTimeLabel.Name = "lblStartTimeLabel";
-            this.lblStartTimeLabel.Size = new System.Drawing.Size(94, 40);
-            this.lblStartTimeLabel.TabIndex = 6;
-            this.lblStartTimeLabel.Text = "启动时间：";
-            this.lblStartTimeLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.lblBurnInTimeLabel.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblBurnInTimeLabel.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblBurnInTimeLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this.lblBurnInTimeLabel.Location = new System.Drawing.Point(3, 80);
+            this.lblBurnInTimeLabel.Name = "lblBurnInTimeLabel";
+            this.lblBurnInTimeLabel.Size = new System.Drawing.Size(94, 40);
+            this.lblBurnInTimeLabel.TabIndex = 6;
+            this.lblBurnInTimeLabel.Text = "烧屏时间：";
+            this.lblBurnInTimeLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
-            // tableLayoutPanelStart
+            // tableLayoutPanelBurnIn
             // 
-            this.tableLayoutPanelStart.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
-            this.tableLayoutPanelStart.ColumnCount = 5;
-            this.tableLayoutPanelStart.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
-            this.tableLayoutPanelStart.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 20F));
-            this.tableLayoutPanelStart.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
-            this.tableLayoutPanelStart.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 20F));
-            this.tableLayoutPanelStart.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
-            this.tableLayoutPanelStart.Controls.Add(this.nudStartHours, 0, 0);
-            this.tableLayoutPanelStart.Controls.Add(this.lblStartColon1, 1, 0);
-            this.tableLayoutPanelStart.Controls.Add(this.nudStartMinutes, 2, 0);
-            this.tableLayoutPanelStart.Controls.Add(this.lblStartColon2, 3, 0);
-            this.tableLayoutPanelStart.Controls.Add(this.nudStartSeconds, 4, 0);
-            this.tableLayoutPanelStart.Location = new System.Drawing.Point(103, 85);
-            this.tableLayoutPanelStart.Name = "tableLayoutPanelStart";
-            this.tableLayoutPanelStart.RowCount = 1;
-            this.tableLayoutPanelStart.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelStart.Size = new System.Drawing.Size(364, 30);
-            this.tableLayoutPanelStart.TabIndex = 7;
+            this.tableLayoutPanelBurnIn.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
+            this.tableLayoutPanelBurnIn.ColumnCount = 5;
+            this.tableLayoutPanelBurnIn.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
+            this.tableLayoutPanelBurnIn.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 20F));
+            this.tableLayoutPanelBurnIn.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
+            this.tableLayoutPanelBurnIn.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 20F));
+            this.tableLayoutPanelBurnIn.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
+            this.tableLayoutPanelBurnIn.Controls.Add(this.nudBurnInHours, 0, 0);
+            this.tableLayoutPanelBurnIn.Controls.Add(this.lblBurnInColon1, 1, 0);
+            this.tableLayoutPanelBurnIn.Controls.Add(this.nudBurnInMinutes, 2, 0);
+            this.tableLayoutPanelBurnIn.Controls.Add(this.lblBurnInColon2, 3, 0);
+            this.tableLayoutPanelBurnIn.Controls.Add(this.nudBurnInSeconds, 4, 0);
+            this.tableLayoutPanelBurnIn.Location = new System.Drawing.Point(103, 85);
+            this.tableLayoutPanelBurnIn.Name = "tableLayoutPanelBurnIn";
+            this.tableLayoutPanelBurnIn.RowCount = 1;
+            this.tableLayoutPanelBurnIn.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            this.tableLayoutPanelBurnIn.Size = new System.Drawing.Size(364, 30);
+            this.tableLayoutPanelBurnIn.TabIndex = 7;
             // 
-            // nudStartHours
+            // nudBurnInHours
             // 
-            this.nudStartHours.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.nudStartHours.Location = new System.Drawing.Point(3, 3);
-            this.nudStartHours.Maximum = new decimal(new int[] {
+            this.nudBurnInHours.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.nudBurnInHours.Location = new System.Drawing.Point(3, 3);
+            this.nudBurnInHours.Maximum = new decimal(new int[] {
             99,
             0,
             0,
             0});
-            this.nudStartHours.Name = "nudStartHours";
-            this.nudStartHours.Size = new System.Drawing.Size(102, 26);
-            this.nudStartHours.TabIndex = 0;
-            this.nudStartHours.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            this.nudBurnInHours.Name = "nudBurnInHours";
+            this.nudBurnInHours.Size = new System.Drawing.Size(102, 26);
+            this.nudBurnInHours.TabIndex = 0;
+            this.nudBurnInHours.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             // 
-            // lblStartColon1
+            // lblBurnInColon1
             // 
-            this.lblStartColon1.Anchor = System.Windows.Forms.AnchorStyles.None;
-            this.lblStartColon1.AutoSize = true;
-            this.lblStartColon1.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
-            this.lblStartColon1.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
-            this.lblStartColon1.Location = new System.Drawing.Point(111, 7);
-            this.lblStartColon1.Name = "lblStartColon1";
-            this.lblStartColon1.Size = new System.Drawing.Size(14, 16);
-            this.lblStartColon1.TabIndex = 1;
-            this.lblStartColon1.Text = ":";
+            this.lblBurnInColon1.Anchor = System.Windows.Forms.AnchorStyles.None;
+            this.lblBurnInColon1.AutoSize = true;
+            this.lblBurnInColon1.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblBurnInColon1.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this.lblBurnInColon1.Location = new System.Drawing.Point(111, 7);
+            this.lblBurnInColon1.Name = "lblBurnInColon1";
+            this.lblBurnInColon1.Size = new System.Drawing.Size(14, 16);
+            this.lblBurnInColon1.TabIndex = 1;
+            this.lblBurnInColon1.Text = ":";
             // 
-            // nudStartMinutes
+            // nudBurnInMinutes
             // 
-            this.nudStartMinutes.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.nudStartMinutes.Location = new System.Drawing.Point(131, 3);
-            this.nudStartMinutes.Maximum = new decimal(new int[] {
+            this.nudBurnInMinutes.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.nudBurnInMinutes.Location = new System.Drawing.Point(131, 3);
+            this.nudBurnInMinutes.Maximum = new decimal(new int[] {
             59,
             0,
             0,
             0});
-            this.nudStartMinutes.Name = "nudStartMinutes";
-            this.nudStartMinutes.Size = new System.Drawing.Size(102, 26);
-            this.nudStartMinutes.TabIndex = 2;
-            this.nudStartMinutes.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            this.nudBurnInMinutes.Name = "nudBurnInMinutes";
+            this.nudBurnInMinutes.Size = new System.Drawing.Size(102, 26);
+            this.nudBurnInMinutes.TabIndex = 2;
+            this.nudBurnInMinutes.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             // 
-            // lblStartColon2
+            // lblBurnInColon2
             // 
-            this.lblStartColon2.Anchor = System.Windows.Forms.AnchorStyles.None;
-            this.lblStartColon2.AutoSize = true;
-            this.lblStartColon2.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
-            this.lblStartColon2.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
-            this.lblStartColon2.Location = new System.Drawing.Point(239, 7);
-            this.lblStartColon2.Name = "lblStartColon2";
-            this.lblStartColon2.Size = new System.Drawing.Size(14, 16);
-            this.lblStartColon2.TabIndex = 3;
-            this.lblStartColon2.Text = ":";
+            this.lblBurnInColon2.Anchor = System.Windows.Forms.AnchorStyles.None;
+            this.lblBurnInColon2.AutoSize = true;
+            this.lblBurnInColon2.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblBurnInColon2.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this.lblBurnInColon2.Location = new System.Drawing.Point(239, 7);
+            this.lblBurnInColon2.Name = "lblBurnInColon2";
+            this.lblBurnInColon2.Size = new System.Drawing.Size(14, 16);
+            this.lblBurnInColon2.TabIndex = 3;
+            this.lblBurnInColon2.Text = ":";
             // 
-            // nudStartSeconds
+            // nudBurnInSeconds
             // 
-            this.nudStartSeconds.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.nudStartSeconds.Location = new System.Drawing.Point(259, 3);
-            this.nudStartSeconds.Maximum = new decimal(new int[] {
+            this.nudBurnInSeconds.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.nudBurnInSeconds.Location = new System.Drawing.Point(259, 3);
+            this.nudBurnInSeconds.Maximum = new decimal(new int[] {
             59,
             0,
             0,
             0});
-            this.nudStartSeconds.Name = "nudStartSeconds";
-            this.nudStartSeconds.Size = new System.Drawing.Size(102, 26);
-            this.nudStartSeconds.TabIndex = 4;
-            this.nudStartSeconds.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
+            this.nudBurnInSeconds.Name = "nudBurnInSeconds";
+            this.nudBurnInSeconds.Size = new System.Drawing.Size(102, 26);
+            this.nudBurnInSeconds.TabIndex = 4;
+            this.nudBurnInSeconds.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             // 
             // lblLimitTempLabel
             // 
@@ -580,11 +580,11 @@ namespace AgingTestSystem.Dialogs
             ((System.ComponentModel.ISupportInitialize)(this.nudDelayHours)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudDelayMinutes)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.nudDelaySeconds)).EndInit();
-            this.tableLayoutPanelStart.ResumeLayout(false);
-            this.tableLayoutPanelStart.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.nudStartHours)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.nudStartMinutes)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.nudStartSeconds)).EndInit();
+            this.tableLayoutPanelBurnIn.ResumeLayout(false);
+            this.tableLayoutPanelBurnIn.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.nudBurnInHours)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudBurnInMinutes)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.nudBurnInSeconds)).EndInit();
             this.tableLayoutPanelTemp.ResumeLayout(false);
             this.tableLayoutPanelTemp.PerformLayout();
             this.tableLayoutPanelPressure.ResumeLayout(false);
@@ -601,7 +601,7 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>主布局容器（2行：输入区域/按钮区域）</summary>
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelMain;
-        /// <summary>输入区域布局容器（6行：配方名称/延时时间/启动时间/极限温度/负压阈值/显示模式）</summary>
+        /// <summary>输入区域布局容器（6行：配方名称/延时时间/烧屏时间/极限温度/负压阈值/显示模式）</summary>
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelInput;
         /// <summary>"配方名称"标签</summary>
         private Sunny.UI.UILabel lblRecipeNameLabel;
@@ -621,20 +621,20 @@ namespace AgingTestSystem.Dialogs
         private Sunny.UI.UILabel lblDelay1Colon2;
         /// <summary>延时时间-秒输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
         private System.Windows.Forms.NumericUpDown nudDelaySeconds;
-        /// <summary>"启动时间"标签</summary>
-        private Sunny.UI.UILabel lblStartTimeLabel;
-        /// <summary>启动时间输入布局（时:分:秒）</summary>
-        private System.Windows.Forms.TableLayoutPanel tableLayoutPanelStart;
-        /// <summary>启动时间-小时输入（NumericUpDown，V1.28 由 TextBox 改，与延时时间/配方管理窗口样式一致）</summary>
-        private System.Windows.Forms.NumericUpDown nudStartHours;
-        /// <summary>启动时间-第一个冒号分隔符</summary>
-        private Sunny.UI.UILabel lblStartColon1;
-        /// <summary>启动时间-分钟输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
-        private System.Windows.Forms.NumericUpDown nudStartMinutes;
-        /// <summary>启动时间-第二个冒号分隔符</summary>
-        private Sunny.UI.UILabel lblStartColon2;
-        /// <summary>启动时间-秒输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
-        private System.Windows.Forms.NumericUpDown nudStartSeconds;
+        /// <summary>"烧屏时间"标签</summary>
+        private Sunny.UI.UILabel lblBurnInTimeLabel;
+        /// <summary>烧屏时间输入布局（时:分:秒）</summary>
+        private System.Windows.Forms.TableLayoutPanel tableLayoutPanelBurnIn;
+        /// <summary>烧屏时间-小时输入（NumericUpDown，V1.28 由 TextBox 改，与延时时间/配方管理窗口样式一致）</summary>
+        private System.Windows.Forms.NumericUpDown nudBurnInHours;
+        /// <summary>烧屏时间-第一个冒号分隔符</summary>
+        private Sunny.UI.UILabel lblBurnInColon1;
+        /// <summary>烧屏时间-分钟输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
+        private System.Windows.Forms.NumericUpDown nudBurnInMinutes;
+        /// <summary>烧屏时间-第二个冒号分隔符</summary>
+        private Sunny.UI.UILabel lblBurnInColon2;
+        /// <summary>烧屏时间-秒输入（NumericUpDown，V1.28 由 TextBox 改）</summary>
+        private System.Windows.Forms.NumericUpDown nudBurnInSeconds;
         /// <summary>"极限温度"标签</summary>
         private Sunny.UI.UILabel lblLimitTempLabel;
         /// <summary>极限温度输入布局（数值 + 单位）</summary>

@@ -15,10 +15,10 @@ namespace AgingTestSystem.Services
     ///
     /// 【三阶段时序总览】（与 DeviceManager.ProcessTestingProgress 配合阅读）
     ///   启动(只开阀，记开阀时刻 t0)
-    ///     └─ Vacuuming：等「真空到位」且「now - t0 ≥ 延时开启」（两者取较晚）
+    ///     └─ Vacuuming：等「真空到位」且「now - t0 ≥ 延时时间」（两者取较晚）
     ///          ├─ 到位前超过 VacuumConfirmTimeoutMs 仍未到位 → 报警(产品责任 FAIL)，永不带电
     ///          └─ 条件满足 → 载台上电 → Aging，老化计时起点 = 上电时刻
-    ///     └─ Aging：now - 计时起点 ≥ 启动时间(配方) → 完成(下电+关阀+PASS·待取料)
+    ///     └─ Aging：now - 计时起点 ≥ 烧屏时间(配方) → 完成(下电+关阀+PASS·待取料)
     /// </summary>
     public static class AgingSequencer
     {
@@ -53,13 +53,13 @@ namespace AgingTestSystem.Services
         /// </summary>
         /// <param name="pressureInRange">真空压力是否已到位（≤ 该台有效阈值）</param>
         /// <param name="elapsedSinceValveOpen">距开阀时刻经过的时间</param>
-        /// <param name="delaySeconds">延时开启（秒）：开阀后至少等这么久才上电；0 = 不额外等待</param>
+        /// <param name="delaySeconds">延时时间（秒）：开阀后至少等这么久才上电；0 = 不额外等待</param>
         /// <returns>true = 应立即给载台上电并进入 Aging 阶段</returns>
         public static bool ShouldPowerOn(bool pressureInRange, TimeSpan elapsedSinceValveOpen, int delaySeconds)
         {
             // 两个前置条件缺一不可：
             // 1) 压力到位——未吸附固定不通电（安全铁律，防止产品没吸住就振动通电）；
-            // 2) 延时开启已到——给吸附留稳定时间（行业通识：抽真空有动态过程，
+            // 2) 延时时间已到——给吸附留稳定时间（行业通识：抽真空有动态过程，
             //    刚到阈值就通电可能仍微漏，延时是工艺裕量）。两者自然取较晚满足者。
             if (!pressureInRange)
             {
@@ -93,7 +93,7 @@ namespace AgingTestSystem.Services
         /// <returns>true = 真空建立失败，应报警断电（产品责任 FAIL）</returns>
         public static bool IsVacuumBuildFailed(bool pressureInRange, TimeSpan elapsedSinceValveOpen, int confirmTimeoutMs)
         {
-            // 已到位就永远不算失败（后续只是等延时开启，那是正常等待不是故障）
+            // 已到位就永远不算失败（后续只是等延时时间，那是正常等待不是故障）
             if (pressureInRange)
             {
                 return false;

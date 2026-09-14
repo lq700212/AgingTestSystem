@@ -34,7 +34,7 @@ namespace AgingTestSystem.Services
         /// 类注释、SettingsForm 说明、回归用例，四处）。
         /// pressure=kPa实时压力 / temp=风机当前温度°C（离线=NaN）/
         /// tempset=温度设定值°C（离线=NaN）/ hum=湿度%RH（离线=NaN）/
-        /// device=工位号 / delaysecs=延时开启定格秒 / vacsecs=距开阀秒 /
+        /// device=工位号 / delaysecs=延时时间定格秒 / vacsecs=距开阀秒 /
         /// agesecs=距上电秒（未上电=0）/ duration=定格时长秒 / threshold=定格阈值kPa /
         /// di0=DI触点0/1 / hour=当前小时0-23 /
         /// current=本工位载台电流A（【V1.74】无表=NaN，不参与判定只追溯）

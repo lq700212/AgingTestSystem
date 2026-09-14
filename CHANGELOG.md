@@ -3,6 +3,41 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md).
 
+## V1.88.12 — 时间名称统一＋真空灯三色＋选中框常显（2026-09-14，用户要求）
+
+### 改动范围
+
+- 时间名称全仓统一为"延时时间/烧屏时间"：延时时间=上电前等待（开阀后等多久才上电），
+  烧屏时间=上电后老化时长（跑够多久自动完成）。配方管理/批量设置/工位设置三窗标签、
+  工位面板两行标签、ID 绑定导出表头、策略窗副文本、启动确认框、事件日志文案同步改；
+  内部命名同步改干净（项目未上线，无老文件包袱）：`StartTime`→`BurnInTime`
+  （RecipeConfig/BarometerData/StationInfo/工位缓存/ID绑定）、三窗控件
+  `nudStart*`→`nudBurnIn*`/`lblStart*`→`lblBurnIn*`、面板缓存与布局锚定
+  `DelayStart/DelayArrive`→`DelayTime/BurnIn`（含 PanelLayout.json 键名）；
+  唯二保留：`_testStartTimes`（上电时刻DateTime，与时长无关，注释已辨析）、
+  规则变量 `delaysecs`/`duration` 与 MES 上报 `duration`（中性英文，语义本来就干净）。
+- 真空灯三色：阀没开=灰"真空关"（逻辑不变）；阀开且负压到位=绿"真空开"；
+  阀开但负压没到阈值=红"真空开"（开了没吸住，开阀即见红，不用等超时报警）。
+  到位标记 `BarometerData.VacuumInRange` 由 DeviceManager 按该工位有效阈值
+  （测试中用启动定格、未测试用全局，跳过抽真空恒 true）每轮填入，面板只显示不判定，
+  与报警同口径；红色可配 `PanelLayoutConfig.ColorVacuumAlarm`（缺省 255,0,0，
+  老 PanelLayout.json 缺字段回退红色）。
+- 选中框常显：以前无选中时全场无框，操作员找不到点哪里；现在所有面板右上角永远画框
+  （选中绿✓/未选中空心），`DrawPanel` 去 `anySelected` 参数、`InvalidateAfterSelectionChange`
+  删除（单台翻转只局部重绘）；`IsAnySelected` 保留给交互门控（无选中时单击不翻选）。
+
+### 为什么这么改
+
+- 三个窗叫"启动时间"、面板叫"延时到达"，操作员对不上号；统一后所见即所得。
+- 以前阀开恒绿，管子掉了/漏气要等宽限超时报警才知道；三色后开阀即见红，现场一眼定位。
+- 判定口径只放 DeviceManager 一份（面板不算阈值），显示与报警永远一致，不会灯绿报警。
+
+### 验证
+
+- 回归 1773 断言全绿：同步配方窗 tooltip/标签断言，新增面板 ApplyData 三态反射用例
+  （阀关灰/到位绿/未到位红＋下电不变）与常显签名锁（DrawPanel 4 参/旧调度已删/门控保留），
+  新增采集端到端 `SweepVacuumInRangeFlag`（常压 false→到位 true＋Clone 携带）。
+
 ## V1.88.11 — 发版脚本加调试包开关（2026-09-15，用户要求）
 
 ### 改动范围
