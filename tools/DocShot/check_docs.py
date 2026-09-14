@@ -74,8 +74,16 @@ else:
     ok("无 html 残留")
 
 # 3. 客户版禁词（按项目改 banned：隐藏账号名、内部工具名、源码关键词）
-banned = ["dev", "发码", "后门"]
-for w in banned:
+# dev 用词边界匹配——本站字段 device 含 dev 子串，老写法会误杀字段表（V1.88 实锤）
+import re as _re
+banned_re = [r"\bdev\b"]
+banned_sub = ["发码", "后门"]
+for w in banned_re:
+    hits = [m for m, t in texts.items()
+            if m.startswith("客户") and _re.search(w, t, _re.IGNORECASE)]
+    if hits:
+        bad("客户版含禁词[%s]" % w)
+for w in banned_sub:
     hits = [m for m, t in texts.items() if m.startswith("客户") and w in t]
     if hits:
         bad("客户版含禁词[%s]" % w)
