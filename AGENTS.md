@@ -84,8 +84,11 @@
   写清"现状是什么/改了会怎样"，别只写名字。
   **换行只调 `SettingsForm.WrapTooltip`（唯一入口，不许手写截断）**；
   新增带说明的控件（录入窗设置项、按钮动作说明、状态解释）一律挂 `ToolTip`，
-  标签+输入框两边都挂；容器管理的 (`new ToolTip(components)`) 随窗体自动释放，
+  标签+输入框两边都挂（下拉框悬停是选中项全文时不动它，说明看标题行即可，
+  V1.88 策略窗先例）；容器管理的 (`new ToolTip(components)`) 随窗体自动释放，
   无容器的手写 `Dispose`（项目切换窗先例）；动态文案（可用/禁用两套话）随状态同步换。
+  跨窗体复用说明只走 `SettingsForm.GetDescription`（与设置表同源，禁各写一份文案，
+  V1.88：`_descriptions` 已转 static 即为此）。
 - **MES 映射类配置约定（V1.68）**：触发器/字段映射/静态字段是自由文本，
   校验走 `MesMapping` 纯函数（vocabulary 改只改它；SettingsForm/上报器/用例三方共用），
   脏输入保存时拦（报出哪一组错）、上报时跳过（不带病全停）。`MesReporter.Transport`

@@ -262,8 +262,12 @@ namespace AgingTestSystem.Dialogs
         /// <summary>
         /// 配置项说明字典（key → 中文说明），显示在表格"说明"列
         /// 覆盖 App.config 全部配置项，key 必须与 _categories 中用到的 key 一致
+        ///
+        /// 【为什么是 static】说明是纯数据、不随窗体实例变：工艺策略窗右栏标题
+        /// tooltip 要复用同一份文案（与设置表同源，不另写一份），无实例也能取。
+        /// 实例方法里直接用名访问即可（C# 允许实例方法读静态字段）。
         /// </summary>
-        private readonly Dictionary<string, string> _descriptions = new Dictionary<string, string>
+        private static readonly Dictionary<string, string> _descriptions = new Dictionary<string, string>
         {
             // ===== 基础配置 =====
             { "TotalBarometers", "气压表总数（当前 72）" },
@@ -1738,6 +1742,24 @@ namespace AgingTestSystem.Dialogs
                 }
             }
             return options[0].Item2;
+        }
+
+        /// <summary>
+        /// 取配置项中文说明（【新增】供工艺策略窗右栏标题 tooltip 复用，与设置表同源）。
+        ///
+        /// 【为什么要经这一口】_descriptions 是说明唯一出处：设置表"说明"列、
+        /// 工艺策略窗标题悬停、保存提示里的中文名全从这里拿。新增配置项只改
+        /// _descriptions 一处，两边自动同步，不会出现"设置表有说明、策略窗没说明"分叉。
+        /// 换行不要在这里做，调用方统一调 <see cref="WrapTooltip"/>（全仓唯一换行口）。
+        /// </summary>
+        /// <param name="key">配置 key（如 VacuumConfirmTimeoutMs）</param>
+        /// <returns>中文说明；key 为空或找不到返回 ""（调用方直接不挂 tooltip，不抛）</returns>
+        internal static string GetDescription(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return "";
+            string desc;
+            if (_descriptions.TryGetValue(key, out desc)) return desc ?? "";
+            return "";
         }
 
         /// <summary>

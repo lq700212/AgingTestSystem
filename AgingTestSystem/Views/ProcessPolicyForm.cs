@@ -361,6 +361,20 @@ namespace AgingTestSystem.Views
                     Text = key.Label
                 };
                 _pnlEditors.Controls.Add(lbl);
+                // 【标题 tooltip】每个配置项标题悬停看中文说明（与系统设置表同源，
+                // 超 40 字走 SettingsForm.WrapTooltip 换行，全仓唯一换行口，不手写截断）。
+                // 说明取不到时回退显示标题本身，保证"每项都有提示"（正常全能取到，
+                // 回退只防以后加 key 忘加说明）。挂在 _editorTip 上（与节点下拉共享实例，
+                // 切节点时 DisposeEditorControls.RemoveAll() 统一清表，不钉住已释放控件；
+                // 窗体 Dispose 统一释放，不新增 ToolTip 字段，终结器安全）。
+                try
+                {
+                    if (_editorTip == null) _editorTip = new ToolTip();
+                    string desc = Dialogs.SettingsForm.GetDescription(key.Key);
+                    if (string.IsNullOrEmpty(desc)) desc = key.Label;
+                    _editorTip.SetToolTip(lbl, Dialogs.SettingsForm.WrapTooltip(desc));
+                }
+                catch { /* 提示写失败不影响主流程（纯展示） */ }
                 y += 22;
 
                 Control editor = CreateEditor(key.Key, key.Kind);
@@ -384,6 +398,20 @@ namespace AgingTestSystem.Views
                     y += 32;
                 }
                 _pnlEditors.Controls.Add(editor);
+                // 【输入框 tooltip】文本/多行框本身也挂同一份说明（悬停框体即见，
+                // 不用先瞄准 20px 高的标题行）。下拉框不动：它的悬停是"当前选中项全文"
+                // （SizeNodeCombo 已设，说明在标题行看，两边各管各的不打架）。
+                if (nodeCmb == null)
+                {
+                    try
+                    {
+                        if (_editorTip == null) _editorTip = new ToolTip();
+                        string edesc = Dialogs.SettingsForm.GetDescription(key.Key);
+                        if (string.IsNullOrEmpty(edesc)) edesc = key.Label;
+                        _editorTip.SetToolTip(editor, Dialogs.SettingsForm.WrapTooltip(edesc));
+                    }
+                    catch { /* 提示写失败不影响主流程（纯展示） */ }
+                }
                 _editorControls[key.Key] = editor;
             }
 

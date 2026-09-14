@@ -1898,16 +1898,20 @@ namespace AgingTestSystem.Views
             if (_mainClosing || this.IsDisposed || this.Disposing) return;
             if (_connectingForm != null) return;
 
-            _connectingForm = new Form
+            _connectingForm = new Sunny.UI.UIForm
             {
-                StartPosition = FormStartPosition.CenterParent,
-                FormBorderStyle = FormBorderStyle.FixedDialog,
+                // 【屏幕居中】以前 CenterParent 跟着主窗走，主窗拖到副屏角落时
+                // 提示框也贴边；现改 CenterScreen，永远在屏幕正中，现场一眼看到。
+                StartPosition = FormStartPosition.CenterScreen,
+                // UIForm 自己管边框，不设 FormBorderStyle（家规，设了白设）。
                 ControlBox = false,           // 不显示关闭按钮（连接期间不可取消）
                 ShowInTaskbar = false,
-                ClientSize = new Size(300, 80),
+                // 【高度含标题】UIForm 自绘蓝标题占顶部约 35px 客户区：
+                // 原生窗 80 高刚好，Sunny 窗要加高到 115，文字才不顶标题。
+                ClientSize = new Size(300, 115),
                 Text = "连接中"
             };
-            _connectingForm.Controls.Add(new Label
+            _connectingForm.Controls.Add(new Sunny.UI.UILabel
             {
                 Text = $"正在连接{deviceName}，请稍候...",
                 Dock = DockStyle.Fill,
@@ -1972,8 +1976,9 @@ namespace AgingTestSystem.Views
 
             if (!ok)
             {
-                MessageBox.Show("耦合器未连接，请先连接（阀/载台上电等操作暂不可用）", "提示",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                // 【SunnyUI 弹窗】操作区提示统一 Sunny 蓝标题风格，警告类用 Orange。
+                Sunny.UI.UIMessageBox.Show("耦合器未连接，请先连接（阀/载台上电等操作暂不可用）", "提示",
+                    Sunny.UI.UIStyle.Orange, Sunny.UI.UIMessageBoxButtons.OK, true, 0);
             }
             return ok;
         }
@@ -2044,9 +2049,23 @@ namespace AgingTestSystem.Views
         /// <summary>
         /// 参数设置按钮点击 → 显示参数设置下拉菜单
         /// 菜单项：公共参数 / 配方管理 / 项目切换（【V1.67 新增】管理员限定，见 MenuParamProject_Click）
+        ///
+        /// 【无权限点后提示】按钮常亮可点（见 UpdateButtonPermissionStates）：
+        /// 操作员点了不直接弹菜单，先拦一道"权限不够"明示去哪提权，
+        /// 现场不再是"点了没反应、以为卡死"。下拉里的敏感项（项目切换仅管理员）
+        /// 各自二次校验，不因入口放行而漏防。
         /// </summary>
         private void btnParameter_Click(object sender, EventArgs e)
         {
+            string denied = GetParameterDeniedMessage(_userManager.HasPermission(UserRole.Technician));
+            if (!string.IsNullOrEmpty(denied))
+            {
+                // 【SunnyUI 弹窗】全软件弹窗统一 Sunny 蓝标题风格（通讯测试窗先例）：
+                // 警告类用 Orange（与"请先点击连接测试"同级），不走系统 MessageBox。
+                Sunny.UI.UIMessageBox.Show(denied, "提示",
+                    Sunny.UI.UIStyle.Orange, Sunny.UI.UIMessageBoxButtons.OK, true, 0);
+                return;
+            }
             ShowDropdownPopup(btnParameter, new (string, EventHandler)[]
             {
                 ("公共参数", MenuParamCommon_Click),
@@ -2054,6 +2073,22 @@ namespace AgingTestSystem.Views
                 ("工艺策略", MenuParamPolicy_Click),
                 ("项目切换", MenuParamProject_Click)
             });
+        }
+
+        /// <summary>
+        /// 参数设置入口权限文案（【新增】纯函数，可单测，不碰任何控件）。
+        ///
+        /// 【为什么抽出来】权限判定本身只有一句话（有技术员及以上放行），
+        /// 但"无权限时说什么"值得锁死：必须含"权限不够"四字（用户原话），
+        /// 并指明去【用户权限】提权，现场才知道下一步干什么。
+        /// 有权限返回 ""（放行），无权限返回提示语（调用方弹框）。
+        /// </summary>
+        /// <param name="hasTechnicianPermission">是否有技术员及以上权限（HasPermission(Technician) 结果）</param>
+        /// <returns>""=放行；否则=弹框文案</returns>
+        public static string GetParameterDeniedMessage(bool hasTechnicianPermission)
+        {
+            if (hasTechnicianPermission) return "";
+            return "权限不够，参数设置需要技术员及以上权限，请先在【用户权限】中切换。";
         }
 
         /// <summary>
@@ -2562,17 +2597,16 @@ namespace AgingTestSystem.Views
         /// - 参数设置（btnParameter）：技术员或管理员可操作（包含配方管理）
         /// - 其他按钮：所有权限均可操作
         ///
-        /// 【视觉效果】
-        /// - 不可用时：按钮变灰（Enabled=false）
-        /// - 可用时：按钮正常显示（Enabled=true）
+        /// 【视觉效果→改为常亮可点】
+        /// 以前操作员下 Enabled=false：禁用的 Sunny 按钮吞掉 Click，点了零反馈，
+        /// 现场以为程序卡死。现改为常亮（Enabled=true），无权限点后弹"权限不够"
+        /// （见 btnParameter_Click 首行拦截），有明确反馈；敏感子项各自二次校验。
         /// </summary>
         private void UpdateButtonPermissionStates()
         {
-            // 检查是否拥有技术员及以上权限
-            bool canAccessSettings = _userManager.HasPermission(UserRole.Technician);
-
-            // 参数设置按钮（包含配方管理）
-            btnParameter.Enabled = canAccessSettings;
+            // 常亮可点，无权限在点击时提示（原来 Enabled=false 点了没反应）。
+            // 注意：不要再按权限置灰——置灰即回到"点了没反应"的老坑。
+            btnParameter.Enabled = true;
 
             // 【预留】其他需要权限控制的按钮可在此处添加
             // TODO: 根据业务需求补充其他按钮的权限控制
@@ -3054,8 +3088,9 @@ namespace AgingTestSystem.Views
                 RefreshScannerStatus();
                 if (!scannerOk)
                 {
-                    MessageBox.Show("扫码枪未连接，请先连接（不影响手动输入批号/SN）", "提示",
-                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    // 【SunnyUI 弹窗】警告类用 Orange（与参数无权限提示同口径），不走系统 MessageBox。
+                    Sunny.UI.UIMessageBox.Show("扫码枪未连接，请先连接（不影响手动输入批号/SN）", "提示",
+                        Sunny.UI.UIStyle.Orange, Sunny.UI.UIMessageBoxButtons.OK, true, 0);
                 }
             }
 
@@ -3080,11 +3115,11 @@ namespace AgingTestSystem.Views
                 {
                     string lotNumber = form.GetLotNumber();
                     WriteLog($"[录入批号] 批号录入成功: {lotNumber}");
-                    MessageBox.Show(
+                    // 【SunnyUI 弹窗】成功类用 Green。
+                    Sunny.UI.UIMessageBox.Show(
                         $"批号录入成功！\n\n录入的批号: {lotNumber}\n\n【预留】批号将用于标识当前生产批次，便于后续追溯和数据分析。",
                         "录入批号",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Information);
+                        Sunny.UI.UIStyle.Green, Sunny.UI.UIMessageBoxButtons.OK, true, 0);
                 }
                 else
                 {
@@ -3128,13 +3163,20 @@ namespace AgingTestSystem.Views
                 _config.ZeroDurationPolicy, _config.EmptySnPolicy);
             if (!string.IsNullOrEmpty(blockText))
             {
-                MessageBox.Show("启动已被工艺策略阻断：\n\n" + blockText +
+                // 【SunnyUI 弹窗】阻断/失败类用 Red。
+                Sunny.UI.UIMessageBox.Show("启动已被工艺策略阻断：\n\n" + blockText +
                     "\n\n（如现场允许放行，到系统设置 → 工艺策略 改回\"只警告\"）",
-                    "启动阻断", MessageBoxButtons.OK, MessageBoxIcon.Stop);
+                    "启动阻断", Sunny.UI.UIStyle.Red, Sunny.UI.UIMessageBoxButtons.OK, true, 0);
                 return;
             }
 
-            DialogResult r = MessageBox.Show(
+            // 【SunnyUI 确认框】是/否确认走 OKCancel（确定=True 继续，取消=False 返回，
+            // 与原来 `r != DialogResult.Yes → return` 同语义）。
+            // 注意不用 YesNoCancel：本仓 SunnyUI 3.9.8 的 YesNoCancel 只画出单个"确定"
+            //（Gitee 官方 issue 同款 bug，截图实证），确认框会丢掉"否"路；
+            // OKCancel 经截图验证是"确定+取消"双键。返回值语义经 IL 实证：
+            // 确定键置 DialogResult.OK（Show 返回 True），取消/X 置 None（返回 False）。
+            if (!Sunny.UI.UIMessageBox.Show(
                 $"确认启动 {ids.Length} 台老化测试？\n\n" +
                 "将执行：\n" +
                 "1. 开启真空电磁阀（建立负压固定产品）\n" +
@@ -3144,9 +3186,7 @@ namespace AgingTestSystem.Views
                 "注：开阀后若真空长时间未建立会自动报警断电（该台全程不会带电）。" +
                 riskWarning,
                 "启动运行",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question);
-            if (r != DialogResult.Yes) return;
+                Sunny.UI.UIStyle.Orange, Sunny.UI.UIMessageBoxButtons.OKCancel, true, 0)) return;
 
             // 【V1.16.2】启动测试需要耦合器（开阀+载台上电）：先异步连接（弹"连接中"），连不上弹窗提示
             if (!await EnsureIoReadyAsync()) return;
@@ -3161,14 +3201,14 @@ namespace AgingTestSystem.Views
                 {
                     if (_config.FanDisconnectPolicy == FanDisconnectPolicy.BlockStart)
                     {
-                        MessageBox.Show("送风机未连接，工艺策略要求阻断启动：\n\n" +
+                        Sunny.UI.UIMessageBox.Show("送风机未连接，工艺策略要求阻断启动：\n\n" +
                             "请先连上送风机（测试需要环境温控），\n" +
                             "或到系统设置 → 工艺策略 改回\"只提示\"。",
-                            "启动阻断", MessageBoxButtons.OK, MessageBoxIcon.Stop);
+                            "启动阻断", Sunny.UI.UIStyle.Red, Sunny.UI.UIMessageBoxButtons.OK, true, 0);
                         return;
                     }
-                    MessageBox.Show("送风机未连接，请先连接（测试仍会启动，但老化过程没有环境温控）", "提示",
-                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    Sunny.UI.UIMessageBox.Show("送风机未连接，请先连接（测试仍会启动，但老化过程没有环境温控）", "提示",
+                        Sunny.UI.UIStyle.Orange, Sunny.UI.UIMessageBoxButtons.OK, true, 0);
                 }
             }
 
@@ -3186,12 +3226,11 @@ namespace AgingTestSystem.Views
             int[] ids = GetSelectedDeviceIds();
             if (ids == null) return;
 
-            DialogResult r = MessageBox.Show(
+            // 【SunnyUI 确认框】同启动确认：OKCancel，确定=True 继续（YesNoCancel 在 3.9.8 只出单键，见上）。
+            if (!Sunny.UI.UIMessageBox.Show(
                 $"确认停止 {ids.Length} 台的运行？\n\n将执行：\n1. 关闭真空电磁阀\n2. 断开载台上电",
                 "停止运行",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question);
-            if (r != DialogResult.Yes) return;
+                Sunny.UI.UIStyle.Orange, Sunny.UI.UIMessageBoxButtons.OKCancel, true, 0)) return;
 
             // 【V1.16.2】停止测试需要耦合器（关阀+断载台电）：先异步连接，连不上弹窗提示
             if (!await EnsureIoReadyAsync()) return;
@@ -3204,9 +3243,9 @@ namespace AgingTestSystem.Views
             catch (Exception ex)
             {
                 WriteLog("[停止] 下发失败：" + ex.Message + "（选中台可能还开着，请检查耦合器后重试）");
-                MessageBox.Show("停止下发失败：\n\n" + ex.Message +
+                Sunny.UI.UIMessageBox.Show("停止下发失败：\n\n" + ex.Message +
                     "\n\n选中工位可能仍在运行！请检查耦合器连接后重试停止。",
-                    "停止失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    "停止失败", Sunny.UI.UIStyle.Red, Sunny.UI.UIMessageBoxButtons.OK, true, 0);
                 return;
             }
             WriteLog($"停止运行（{ids.Length} 台）");
@@ -3224,13 +3263,12 @@ namespace AgingTestSystem.Views
             int[] ids = GetSelectedDeviceIds();
             if (ids == null) return;
 
-            DialogResult r = MessageBox.Show(
+            // 【SunnyUI 确认框】同启动确认：OKCancel，确定=True 继续（YesNoCancel 在 3.9.8 只出单键，见上）。
+            if (!Sunny.UI.UIMessageBox.Show(
                 $"确认复位 {ids.Length} 台？\n\n" +
                 "将清除故障标记或确认取件完毕，设备回到空闲状态，可重新启动老化测试。",
                 "复位",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question);
-            if (r != DialogResult.Yes) return;
+                Sunny.UI.UIStyle.Orange, Sunny.UI.UIMessageBoxButtons.OKCancel, true, 0)) return;
 
             _deviceManager.ResetDevices(ids);
             WriteLog($"复位（{ids.Length} 台：报警/完成态已清除）");
@@ -3245,9 +3283,10 @@ namespace AgingTestSystem.Views
         {
             if (_config.CompletionJudgePolicy != CompletionJudgePolicy.PendingReview)
             {
-                MessageBox.Show("当前完成判定 = 自动PASS，无需下料判定。\n\n" +
+                // 【SunnyUI 弹窗】中性说明类用 Blue。
+                Sunny.UI.UIMessageBox.Show("当前完成判定 = 自动PASS，无需下料判定。\n\n" +
                     "如需人工判定，到系统设置 → 工艺策略 把完成判定切到\"待判定\"。",
-                    "下料判定", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    "下料判定", Sunny.UI.UIStyle.Blue, Sunny.UI.UIMessageBoxButtons.OK, true, 0);
                 return;
             }
 
@@ -3268,7 +3307,8 @@ namespace AgingTestSystem.Views
         /// </summary>
         private async void btnStopAll_Click(object sender, EventArgs e)
         {
-            DialogResult r = MessageBox.Show(
+            // 【SunnyUI 确认框】同启动确认：OKCancel，确定=True 继续（YesNoCancel 在 3.9.8 只出单键，见上）。
+            if (!Sunny.UI.UIMessageBox.Show(
                 "确认【全部停止】？\n\n" +
                 "将执行：\n" +
                 "1. 关闭所有 72 路真空电磁阀\n" +
@@ -3276,9 +3316,7 @@ namespace AgingTestSystem.Views
                 "3. 停止送风机\n\n" +
                 "此操作不可撤销，请确认现场安全！",
                 "全部停止（急停）",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Warning);
-            if (r != DialogResult.Yes) return;
+                Sunny.UI.UIStyle.Orange, Sunny.UI.UIMessageBoxButtons.OKCancel, true, 0)) return;
 
             // 【V1.16.2】急停需要耦合器（关阀+断载台电）：先异步连接；连不上要明确告诉
             // 操作员，否则可能误以为阀门已关闭（安全提示）。
@@ -3293,9 +3331,9 @@ namespace AgingTestSystem.Views
             catch (Exception ex)
             {
                 WriteLog("[急停] 下发失败：" + ex.Message + "（部分阀/电可能还开着，请检查耦合器后重试）");
-                MessageBox.Show("急停下发失败：\n\n" + ex.Message +
+                Sunny.UI.UIMessageBox.Show("急停下发失败：\n\n" + ex.Message +
                     "\n\n部分阀门/载台电可能还开着！请检查耦合器连接后重试急停。",
-                    "急停失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    "急停失败", Sunny.UI.UIStyle.Red, Sunny.UI.UIMessageBoxButtons.OK, true, 0);
                 return;
             }
             WriteLog("已执行全部停止（急停）");
@@ -3315,8 +3353,9 @@ namespace AgingTestSystem.Views
 
             if (ids.Length == 0)
             {
-                MessageBox.Show("请先在气压表区域选中要操作的设备\n（点击面板或用行全选按钮）",
-                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                // 【SunnyUI 弹窗】中性说明类用 Blue（操作区 7 按钮共用的选台提示）。
+                Sunny.UI.UIMessageBox.Show("请先在气压表区域选中要操作的设备\n（点击面板或用行全选按钮）",
+                    "提示", Sunny.UI.UIStyle.Blue, Sunny.UI.UIMessageBoxButtons.OK, true, 0);
                 return null;
             }
 
