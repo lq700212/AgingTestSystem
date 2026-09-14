@@ -1,0 +1,59 @@
+DocShot —— 说明文档截图 harness（带 Mock 生产数据版）
+==================================================
+
+它是干什么的：
+  一键把软件里 16 个关键窗口全部截成 PNG（带仿真生产数据），
+  存到 docs/images/，供《车间操作员使用说明》《内部培训文档》配图。
+  下次改了界面、要给文档换图时，重跑一遍即可，不用手工一个个开窗截图。
+
+怎么跑（先构建主项目，再编译 harness）：
+  1) MSBuild.exe AgingTestSystem/AgingTestSystem.csproj /p:Configuration=Debug /p:Platform=AnyCPU /t:Build
+  2) $bin = "AgingTestSystem\bin\Debug"
+     Roslyn\csc.exe /nologo /t:exe /codepage:65001 "/out:$bin\DocShot.exe" "tools\DocShot\DocShot.cs" `
+       /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.dll /r:System.Management.dll `
+       "/r:$bin\AgingTestSystem.exe" "/r:$bin\SunnyUI.dll" "/r:$bin\SunnyUI.Common.dll" `
+       "/r:$bin\Newtonsoft.Json.dll" "/r:$bin\NModbus.dll" "/r:$bin\NModbus.Serial.dll" `
+       "/r:$bin\DocumentFormat.OpenXml.dll"
+     （源文件含中文无 BOM，必须带 /codepage:65001，否则中文乱码）
+  3) 到 $bin 目录下运行 .\DocShot.exe，全程约 3 分钟，不要动鼠标键盘，
+     跑完看末尾 ALL PASS（有 FAIL 就去看对应 PNG，文件照样存下来人工复核）。
+  4) 跑完删掉 $bin\DocShot.exe（别污染 bin），当天 TestLog CSV 会自动备份还原，
+     不会污染真实日志。
+  5) 收尾跑 python check_docs.py（截断标记/图片双向引用/PDF 配对/
+     客户版禁词/编码/git 范围，全绿才收工；单脚本跨平台，不做 ps1 版）。
+  6) 转 PDF：先 pip install markdown，再 python md_to_pdf.py
+     （md→样式 HTML→Edge 无头打印，同名 .pdf 落 docs/；
+     截一张 HTML 无头 screenshot 人眼看字体/图片/表格，三者正常＝PDF 正常；
+     成功后 .html 自删，--keep-html 仅调试保留，docs 下不许残留 html）。
+
+  本目录是截图 harness 固定沉淀路径（全局 skill"培训文档生成"约定）：
+  源码＋说明＋双脚本只增不搬；换模型/换时间重出图直接重跑，不重写 harness。
+
+通用三规则（以后封装"使用说明文档编写 skill"直接照抄）：
+  R1 数据走生产路径：Mock/定压表 + DeviceManager 公开 API 驱动真实状态机 +
+     TestEventLogger 真实落盘。禁止反射伪造界面文本；
+     唯一例外是"模拟用户打字"（登录密码/批号/配方名），那本就是用户输入。
+     定压表 SteadyReader（恒 -8.0kPa）让状态确定：好阈值走完抽真空→上电→完成，
+     苛刻阈值（-9.5）首轮即报警演故障；Mock 原生 15% 坏读数在 1s 采集下十几秒
+     全员报警，拍不出"老化中/已完成"，不要直接用它演状态。
+  R2 截图方式按窗体类型二选一：
+     PrintWindow ＝ 标准对话框；TOPMOST 置顶 + CopyFromScreen ＝ 自绘画布
+     （主界面网格/工艺策略画布，PrintWindow 在滚动后丢 GDI 文字）。
+  R3 每张拍完非空校验（内容区 distinct 颜色数 + 深色像素数），FAIL 自动重拍一次，
+     再 FAIL 报出来并存盘，人工复核。校准值：distinct>=6 && dark>=8
+     （登录窗 28/16、录入批号 13/12、项目切换 6/12、公共参数 7/12 全是真图；
+     真空白 SunnyUI 截图约 2~4 色/0~5 深色）。
+
+防卡住三层防御（无人值守必须有）：
+  第1层：关窗一律直接 Dispose，不调 Close（跳过 FormClosing 确认框，
+         ID 绑定"有未保存先确认"曾把流程卡死到超时）。
+  第2层：看门狗线程每 300ms 扫本进程意外弹窗（#32770 对话框类，或有 Owner 的
+         WinForms 窗，且不在自己打开的名单里），按"否/取消优先，否则确定/是，
+         都没有则 WM_CLOSE"自动点掉并打印日志。Screenshot 流程里不存在
+         "必须人工点的模态框"，冒出来的任何模态都是事故。
+  第3层：单张失败记数继续拍，不整批陪葬；退出码 0=全绿。
+
+已知坑：
+  - 送风机窗"连接后每 2s 自动读数"，拍前多等两个周期（sleep 5000），否则温湿度全"--"。
+  - 下料判定/策略活台数要在状态新鲜时先拍（老化中的台 300 秒后会完成，故障/完成态稳定）。
+  - 拍之前确认当天 TestLog CSV 备份逻辑正常（hadCsv=True 时还原），别把演示数据留在真实日志里。
