@@ -36,7 +36,7 @@ namespace AgingTestSystem.Views
     /// │ 当前项目:烧屏测试 │ 当前操作权限: 操作员 │ 通讯模块状态: 已连接/未连接 │
     /// │ (前缀常规+名加粗)  │ (前缀常规+角色名加粗) │ (标签常规+状态值加粗，=IO耦合器，V1.16.1) │
     /// ├─────────────────────────────────────────────────────────┤
-        /// │ [用户权限] [参数设置] [日志记录] [关于] │（V1.64：深色按钮从关于右侧收进关于下拉，仅 dev 可见）
+        /// │ 项目/权限/通讯＋[用户权限] [参数设置] [日志记录] [关于] │（V1.64 深色按钮收进关于下拉仅dev可见；V1.88.23 两行并单行36px）
     /// ├──────────────────────────────┬──────────────────────────┤
     /// │                              │ 运行状态                 │
     /// │                              │ ┌────────────────────┐   │
@@ -433,33 +433,22 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 【V1.58】应用主页布局：按 HomeLayoutConfig 设置顶部标题栏高 / 菜单栏高 /
+        /// 【V1.58】应用主页布局：按 HomeLayoutConfig 设置顶栏高 /
         /// 右侧区域宽 / 状态栏高。入口有二：
         /// - 程序启动（构造函数调用，读取 json 或默认值）；
         /// - "主页区域调整"编辑器保存后调用，让新布局立即生效。
+        /// 【V1.88.23】顶栏菜单并单行：第 0 行高 = HeaderHeight（默认 36）；
+        /// 4 按钮 Dock=Fill 自动填满格子，不再需要按行高同步按钮高度
+        /// （旧"MenuHeight-12"整段删除，留着就是死代码）。
         /// </summary>
         private void ApplyHomeLayout()
         {
             var layout = HomeLayoutConfig.LoadOrDefault();
 
-            // 顶部标题栏高度（tableLayoutPanelMain 第 0 行）
-            tableLayoutPanelMain.RowStyles[0].Height = layout.TopBarHeight;
-            // 菜单栏高度（第 1 行）
-            tableLayoutPanelMain.RowStyles[1].Height = layout.MenuHeight;
-            // 底部状态栏高度（第 3 行；第 2 行是 splitContainerMain，用 Percent 自动占剩余）
-            tableLayoutPanelMain.RowStyles[3].Height = layout.StatusBarHeight;
-
-            // 【V1.58】菜单栏加高后，4 个菜单按钮高度同步填满（上下各留 3px 边距），
-            // 否则按钮仍是固定的 28px 高、底部留一条空白，视觉上不协调。
-            // 算法：菜单栏行高 - tableLayoutPanelMenu 上下 Margin(3×2) - 按钮上下 Margin(3×2)。
-            foreach (Control ctl in tableLayoutPanelMenu.Controls)
-            {
-                // 【V1.71】菜单按钮已换 Sunny UIButton（不是原生 Button 子类，is Button 认不出）
-                if (ctl is Sunny.UI.UIButton btn)
-                {
-                    btn.Height = layout.MenuHeight - 12;
-                }
-            }
+            // 顶栏高度（tableLayoutPanelMain 第 0 行；第 1 行是 splitContainerMain，用 Percent 自动占剩余）
+            tableLayoutPanelMain.RowStyles[0].Height = layout.HeaderHeight;
+            // 底部状态栏高度（第 2 行）
+            tableLayoutPanelMain.RowStyles[2].Height = layout.StatusBarHeight;
 
             // 右侧区域宽度（由 AdjustRightPanelWidth 内部读同一配置设置 SplitterDistance）
             AdjustRightPanelWidth();
@@ -1351,9 +1340,9 @@ namespace AgingTestSystem.Views
         /// 【布局说明】
         /// - 整个工位区域（8列×9行面板 + 行全选按钮列）合并为 1 个自绘
         ///   <see cref="WorkstationGridView"/>，尺寸 = 内容总尺寸；
-        /// - 外层用 Panel.AutoScroll 容器托管，AutoFit 开时 72 站按本容器尺寸精确铺满一屏
-        ///   （【V1.88.17】zoomX/zoomY 双向独立，无纵向横向滚动条；
-        ///   关 AutoFit 或 zoom 触底（显示区被挤到极小）时才出滚动条兜底）；
+        /// - 外层用 Panel.AutoScroll 容器托管，默认 FitWidth 按宽顶满（字大，
+        ///   【V1.88.22】zoomX=zoomY=可用宽/内容宽，无横向条、高超出走纵向滚动、
+        ///   只上下滑动；"关于"下拉可切回 FillScreen 双向铺满一屏无滚动）；
         /// - 滚动时系统只需移动 1 个窗口（而非 V1.49 的 72 个），无撕裂。
         /// 【注意】不能放在 FlowLayoutPanel 中，因为 FlowLayoutPanel
         /// 不尊重子控件的 Dock=Fill 属性。
@@ -1372,9 +1361,10 @@ namespace AgingTestSystem.Views
             var scrollContainer = new Panel();
             scrollContainer.Dock = DockStyle.Fill;      // 填满整个左侧区域
             scrollContainer.AutoScroll = true;          // 内容超出时显示滚动条
-            // 【V1.88.17】正常无任何滚动条：网格 AutoFit 双向精确铺满，画布恒等于显示区；
-            // 横向条仍直接禁掉（启动瞬间/取整抖动出来看着怪）；纵向保留给 zoom 触底兜底
-            // （显示区被挤到极小时画布大于显示区、可滑到全部 72 站）。
+            // 【V1.88.22】默认大字版：画布宽恒顶满、高超出走纵向滚动（只上下滑动）；
+            // FillScreen 铺满模式下才无任何滚动条（画布恒等于显示区）。
+            // 横向条仍直接禁掉（启动瞬间/取整抖动出来看着怪）；纵向保留给日常滑动与
+            // zoom 触底兜底（显示区被挤到极小时画布大于显示区、可滑到全部 72 站）。
             // 【V1.88.15】事后压制在网格 UpdateCanvasSize 里（BeginInvoke 布局完成后压，
             // Layout 事件里压不住：布局引擎在事件之后还会覆盖，已实锤）。
             scrollContainer.HorizontalScroll.Enabled = false;
@@ -1385,6 +1375,10 @@ namespace AgingTestSystem.Views
             // 自绘工位网格（1 个 UserControl 画全部面板 + 行全选按钮列）
             _gridView = new WorkstationGridView();
             _gridView.Configure(_config.PanelColumns, _config.PanelRows, _config.TotalBarometers);
+            // 【V1.88.22】默认大字版（按宽顶满、只上下滑动，看得清；与网格字段缺省一致，
+            // 这里显式再设一次、意图落字，防以后有人改网格缺省而主窗行为悄悄跟变）；
+            // 操作员想一屏看全去"关于"下拉切铺满（MenuHelpWorkstationFit_Click，不落盘）。
+            _gridView.FitMode = WorkstationFitMode.FitWidth;
             // 【V1.77】电流行直绘开关：UsePowerMeter 开=每面板压力框下方加"电流："行
             // （【V1.88.17】面板 170→188、行 182→200，下游下移 18 间距不变）；关=原来布局逐像素不动。
             // 结构型开关（改后重启生效），这里 startup 装配一次即可（_config 已 LoadConfig 就绪）。
@@ -2313,6 +2307,7 @@ namespace AgingTestSystem.Views
         /// - 设置：仅管理员可见（V1.17 权限控制，非管理员自动隐藏）
         /// - 版本说明：所有权限可见（V1.19.12 更名：关于 → 版本说明）
         /// - 深浅模式切换：仅 dev 最高权限可见（V1.64 起从顶部独立按钮收进这里）
+        /// - 大字/铺满切换：所有人可见（V1.88.22，工作站显示缩放，不碰业务）
         /// </summary>
         private void btnAbout_Click(object sender, EventArgs e)
         {
@@ -2328,6 +2323,17 @@ namespace AgingTestSystem.Views
             // 【V1.58.3】权限放开：所有登录用户可见可用（布局微调属非关键操作，
             // 现场操作员也可能需要按自己习惯微调右侧宽度/行高，故不再限制管理员）。
             items.Add(("主页区域调整", MenuHelpHomeLayout_Click));
+
+            // 【V1.88.22】"工作站大字/铺满"切换：所有人可见（只改显示缩放，不碰业务，
+            // 与"主页区域调整"同级）。默认大字版（按宽顶满、上下滑动）；
+            // 文字永远表示"下一次去哪"（与深浅模式切换同口径），菜单每次打开现拼，
+            // 天然就是最新状态。_gridView 为 null（尚未装配）时不加这一项。
+            if (_gridView != null && !_gridView.IsDisposed)
+            {
+                bool isFitWidth = _gridView.FitMode == WorkstationFitMode.FitWidth;
+                items.Add((isFitWidth ? "切换为铺满一屏（字小）" : "切换为大字显示（上下滑动）",
+                    MenuHelpWorkstationFit_Click));
+            }
 
             // 【通讯测试】仅技术员及以上权限可见（操作员不可见）
             if (_userManager.HasPermission(UserRole.Technician))
@@ -2355,6 +2361,28 @@ namespace AgingTestSystem.Views
             }
 
             ShowDropdownPopup(btnAbout, items.ToArray());
+        }
+
+        /// <summary>
+        /// 工作站显示"大字版 ⇄ 铺满一屏"切换（【V1.88.22 新增】"关于"下拉入口，见 btnAbout_Click）。
+        ///
+        /// 【流程】翻 _gridView.FitMode（setter 内即 UpdateAutoFit：字体+画布+重绘一条龙）
+        /// → 写 LOG 留痕。只动显示缩放，不碰业务状态、不重建网格；
+        /// 本次切换不落盘（重启回默认大字版；要记忆选项下次再加）。
+        /// </summary>
+        private void MenuHelpWorkstationFit_Click(object sender, EventArgs e)
+        {
+            if (_gridView == null || _gridView.IsDisposed) return;
+            if (_gridView.FitMode == WorkstationFitMode.FitWidth)
+            {
+                _gridView.FitMode = WorkstationFitMode.FillScreen;
+                WriteLog("工作站显示已切换为铺满一屏（72 站一屏无滚动，字较小）");
+            }
+            else
+            {
+                _gridView.FitMode = WorkstationFitMode.FitWidth;
+                WriteLog("工作站显示已切换为大字版（按宽顶满、上下滑动看）");
+            }
         }
 
         /// <summary>

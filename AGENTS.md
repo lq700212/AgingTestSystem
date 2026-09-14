@@ -47,9 +47,12 @@
   `BeginInvoke` 在布局彻底完成后跑校正（再 `PerformLayout`＋压横向条＋钳位置，
   释放检查防重建串扰）。验证走 harness"滚到底→加宽→减窄→再到底"
  （到底值==理论最大＋横向条无＋2 秒稳定；回归无句柄跑不了 AutoScroll，不进回归，harness 即证据）。
-  - **72 站一屏走双向精确铺满，不走单向顶满＋滚动（V1.88.17）**：`zoomX=可用宽/内容宽、
-  zoomY=可用高/内容高` 双向独立（`ComputeFitZoomBoth` 纯函数），画布精确等于显示区、
-  无滚动条；绘制/命中按 `ScaledX`/`ScaledY` 分流（禁单 `Scaled(int)`，宽扁拉伸下点选必错位，
+  - **72 站自适应双模式，默认按宽顶满＋纵向滚动（V1.88.22；FillScreen 才双向铺满）**：`FitMode`
+  （`WorkstationFitMode` 枚举，`ComputeFitZoom` 单轴 / `ComputeFitZoomBoth` 双向两个纯函数，
+  `UpdateAutoFit` 按模式分流）：默认 `FitWidth` 单 zoom 等比（`zoomX=zoomY=可用宽/内容宽`，
+  面板不变形，字大），画布宽顶满、无横向条，高超出走纵向滚动（只上下滑动）；
+  `FillScreen` 回 V1.88.17（`zoomX`/`zoomY` 独立，画布精确等于显示区、无滚动条，但字小、
+  面板宽扁拉伸）。绘制/命中按 `ScaledX`/`ScaledY` 分流（禁单 `Scaled(int)`，宽扁拉伸下点选必错位，
   编译器会把漏改的 int 调用全揪出来）；字体取窄边、下限 4pt（V1.88.21：1280×1024小屏跟随缩小不挤叠，见 WorkstationGridView.MinFontSize）；
   单轴触底（`MinZoom=0.15`，显示区被挤到极小）转滚动条兜底（站一个不少）。
   面板尺寸是缩放比的杠杆：值框/按钮能省则省（148→130、60×50→50×42），省出的每像素都换成字号；

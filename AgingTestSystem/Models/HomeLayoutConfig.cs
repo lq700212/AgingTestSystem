@@ -9,21 +9,24 @@ namespace AgingTestSystem.Models
     /// 主页布局配置（【V1.58】主页区域可视化调整）
     ///
     /// 【目的】
-    /// 主界面（MainForm）的几大区域尺寸——顶部标题栏高、菜单栏高、右侧状态按钮区宽、
-    /// 底部状态栏高——统一收敛到本配置，不再写死。现场微调主界面（比如觉得右侧
+    /// 主界面（MainForm）的几大区域尺寸——顶栏（项目/权限/通讯＋4 按钮单行）高、
+    /// 右侧状态按钮区宽、底部状态栏高——统一收敛到本配置，不再写死。
+    /// 现场微调主界面（比如觉得右侧
     /// "运行状态/监视/操作/日志"区域太宽、想缩窄给工作站列表腾地方）只需在
     /// "关于 → 主页区域调整"可视化编辑器里拖动矩形块边缘，保存即写入
     /// 程序目录下的 HomeLayout.json，无需改代码、无需重新编译。
     ///
-    /// 【默认值说明（V1.58 调大）】
-    /// 默认标题栏/菜单栏/状态栏高度调大（40/50/30），比最初版本的 30/40/25 更高更易点按，
-    /// 适配现场"嫌标题栏和顶部标题栏太小"的反馈。现场若不满意仍可在编辑器里继续调整。
+    /// 【默认值说明（V1.58 调大，V1.88.23 顶栏菜单并单行）】
+    /// 默认顶栏/状态栏高度（36/30）：V1.58 曾把标题栏/菜单栏调大到 40/50 好点按；
+    /// V1.88.23 应"按钮太占位置"把两行并成一行（项目/权限/通讯＋4 按钮同行 36px，
+    /// 省 34px 纵向还给工作站区），旧 TopBarHeight/MenuHeight 双键删除、单 HeaderHeight 替代。
+    /// 老 HomeLayout.json 里没有 HeaderHeight 键 → 反序列化保持类缺省 36，
+    /// 直接生效，不写迁移分支（项目未上线，旧文件删了重导也行）。
     ///
     /// 【布局结构】（与 MainForm.Designer.cs 的 tableLayoutPanelMain 对应）
     /// ┌───────────────────────────────────────┐
-    /// │ 顶部标题栏  TopBarHeight（默认 40）    │
-    /// ├───────────────────────────────────────┤
-    /// │ 菜单栏      MenuHeight（默认 50）       │
+    /// │ 顶栏 HeaderHeight（默认 36：项目/权限/  │
+    /// │ 通讯＋用户权限/参数设置/日志记录/关于） │
     /// ├──────────────────────────┬────────────┤
     /// │                          │ 右侧状态按钮区│
     /// │  工作站列表面板（自动占满   │ RightPanelW │
@@ -47,11 +50,12 @@ namespace AgingTestSystem.Models
     /// </summary>
     public class HomeLayoutConfig
     {
-        /// <summary>顶部标题栏高度（显示标题/权限/通讯状态的一行）</summary>
-        public int TopBarHeight { get; set; } = 40;
-
-        /// <summary>菜单栏高度（用户权限/参数/日志/关于 一排按钮）</summary>
-        public int MenuHeight { get; set; } = 50;
+        /// <summary>
+        /// 顶栏高度（【V1.88.23】单行：项目/权限/通讯＋4 按钮同行；默认 36）。
+        /// 旧 TopBarHeight/MenuHeight 双键已删（两行并一行，省 34px 纵向还给工作站区）；
+        /// 老文件无此键即 36，不迁移。
+        /// </summary>
+        public int HeaderHeight { get; set; } = 36;
 
         /// <summary>右侧状态按钮区宽度（运行状态+监视+操作+日志 四块的总宽）。
         /// 【V1.65】类默认值 240 只作编辑器"恢复默认"的基准；主窗体无 json 时实际按
@@ -66,13 +70,9 @@ namespace AgingTestSystem.Models
         // 防止把某个区域拖成 0 或超出合理范围导致主界面错乱。
         // 与 HomeLayoutEditorForm 中的范围常量保持同步。
 
-        /// <summary>顶部标题栏高度最小/最大值</summary>
+        /// <summary>顶栏高度最小/最大值（【V1.88.23】34=按钮28＋上下各3边距，再小裁按钮）</summary>
         [JsonIgnore]
-        public static readonly (int Min, int Max) TopBarRange = (15, 80);
-
-        /// <summary>菜单栏高度最小/最大值</summary>
-        [JsonIgnore]
-        public static readonly (int Min, int Max) MenuRange = (25, 100);
+        public static readonly (int Min, int Max) HeaderRange = (34, 100);
 
         /// <summary>右侧状态按钮区宽度最小/最大值</summary>
         [JsonIgnore]
@@ -114,13 +114,12 @@ namespace AgingTestSystem.Models
         ///
         /// 【为什么加载也要钳】编辑器输入框有自己的 Minimum/Maximum，但 json 是手改得到的：
         /// RightPanelWidth 写 5000 → SplitterDistance 越界抛异常主窗起不来；
-        /// TopBarHeight 写 5000 → 工作站区高度被挤成负数。钳制后坏文件最多变成"不好看"，
+        /// HeaderHeight 写 5000 → 工作站区高度被挤成负数。钳制后坏文件最多变成"不好看"，
         /// 不会变成"起不来/看不见"，与"损坏回退默认"同属保命逻辑。
         /// </summary>
         public HomeLayoutConfig ClampToRange()
         {
-            TopBarHeight = Clamp(TopBarHeight, TopBarRange);
-            MenuHeight = Clamp(MenuHeight, MenuRange);
+            HeaderHeight = Clamp(HeaderHeight, HeaderRange);
             RightPanelWidth = Clamp(RightPanelWidth, RightPanelRange);
             StatusBarHeight = Clamp(StatusBarHeight, StatusBarRange);
             return this;

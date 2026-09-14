@@ -1137,7 +1137,7 @@ namespace AgingTestSystem.Dialogs
         /// <summary>把布局配置整理成一行摘要文字（设置表格里显示用）</summary>
         private static string BuildHomeLayoutSummary(Models.HomeLayoutConfig layout)
         {
-            return $"右侧区域 {layout.RightPanelWidth}px | 顶部标题栏 {layout.TopBarHeight}px | 菜单栏 {layout.MenuHeight}px | 状态栏 {layout.StatusBarHeight}px";
+            return $"右侧区域 {layout.RightPanelWidth}px | 顶栏 {layout.HeaderHeight}px | 状态栏 {layout.StatusBarHeight}px";
         }
 
         /// <summary>
@@ -1554,7 +1554,7 @@ namespace AgingTestSystem.Dialogs
             if (key == "HomeLayout")
             {
                 var layout = GetEffectiveHomeLayout();
-                return $"点击编辑：右侧区域 {layout.RightPanelWidth}px | 顶部标题栏 {layout.TopBarHeight}px | 菜单栏 {layout.MenuHeight}px | 状态栏 {layout.StatusBarHeight}px";
+                return $"点击编辑：右侧区域 {layout.RightPanelWidth}px | 顶栏 {layout.HeaderHeight}px | 状态栏 {layout.StatusBarHeight}px";
             }
 
             // 【V1.67】策略 key 优先读项目文件（当前项目生效值优先于机器缺省）

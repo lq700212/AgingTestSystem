@@ -5,7 +5,7 @@ namespace AgingTestSystem.Dialogs
 {
     /// <summary>
     /// 主页区域调整可视化编辑器 — 设计器部分（【V1.72.12 新增】纯代码拆分：静态边框进 Designer）。
-    /// 这里只装"静态边框"：窗体属性 + 预览占位 + 数值面板（4 标签 + 4 输入框）
+    /// 这里只装"静态边框"：窗体属性 + 预览占位 + 数值面板（3 标签 + 3 输入框）
     /// + 底部三按钮 + 顶部说明条。以下三样仍在 HomeLayoutEditorForm.cs 里用代码做：
     /// ①_preview 自绘预览控件的创建/Layout 赋值/事件挂接（吃构造传进的 layout 真参数，
     /// Designer 给不了；【V1.72.16】_preview 的本体原先也在 Designer 里 new，
@@ -17,20 +17,18 @@ namespace AgingTestSystem.Dialogs
     /// HomeLayoutConfig.Range 常量设，初值 Value 在代码里设）；
     /// ③自绘预览控件本体 HomeLayoutPreviewControl（GDI 自绘类，留 .cs 不进 Designer）。
     /// 【V1.72.16 设计器稳定性三条军规（两次被 VS 重写后沉淀，违者预览即脏/运行即炸）】
-    /// ①量程必须写字面值（如 15/80），禁止写 HomeLayoutConfig.TopBarRange.Min 这类
+    /// ①量程必须写字面值（如 34/100），禁止写 HomeLayoutConfig.HeaderRange.Min 这类
     /// 元组成员表达式——设计器序列化器认不出，打开预览就标脏，存盘时整行删掉，
     /// 输入框变回 0~100，拖预览边缘给 240/340 直接 ArgumentOutOfRangeException，
-    /// 整个可视调尺寸功能全坏（本次实锤）。改 Range 常量必须同步改这里四个数；
-    /// 例外：菜单栏上限 100 就是 NumericUpDown 的默认值，写了 VS 存盘也会删，
-    /// 所以 _nudMenu 只有 Minimum 没有 Maximum，不是不小心漏了，别"补"回去，
-    /// 补了下次预览又脏；Value=下限四行是 VS 自动补的（活值被 Minimum 顶上去，
+    /// 整个可视调尺寸功能全坏（本次实锤）。改 Range 常量必须同步改这里三个数；
+    /// Value=下限三行是 VS 自动补的（活值被 Minimum 顶上去，
     /// 与默认 0 对不上，不写也脏），留着别删；
     /// ②InitializeComponent 方法体里禁止写任何 // 注释——VS 重写时整段再生，
     /// 注释全删（BatchRecipe 的中文说明就是这么没的），说明一律写文件头/对应 .cs；
     /// ③本窗的 .resx 是 VS 预览自动建的空模板（无真实资源），别手删，
     /// 删了下次预览重建 + csproj 加条目，反而更脏。
     /// 【布局】Dock 布局 + 顶 Pad 38 避开 UIForm 自绘蓝标题（V1.71 姿势）；
-    /// 数值面板 4 行 Percent 等分（高 DPI 行高自适应）；
+    /// 数值面板 3 行 Percent 等分（高 DPI 行高自适应）；
     /// 右下两按钮 Location 按 Panel 默认宽 200 算出（2,10)/(98,10)，Anchor=Right
     /// 运行时自动贴右——与原来构造时公式算出的值完全一致，别"优化"改坐标。
     /// </summary>
@@ -42,13 +40,9 @@ namespace AgingTestSystem.Dialogs
         /// <summary>数值输入面板（2 列 × 4 行 Percent 等分）</summary>
         private TableLayoutPanel _pnlValues;
 
-        /// <summary>顶部标题栏高标签/输入框</summary>
-        private Sunny.UI.UILabel _lblTop;
-        private NumericUpDown _nudTop;
-
-        /// <summary>菜单栏高标签/输入框</summary>
-        private Sunny.UI.UILabel _lblMenu;
-        private NumericUpDown _nudMenu;
+        /// <summary>顶栏高标签/输入框（【V1.88.23】顶栏菜单并单行，双输入框合一）</summary>
+        private Sunny.UI.UILabel _lblHeader;
+        private NumericUpDown _nudHeader;
 
         /// <summary>右侧区域宽标签/输入框</summary>
         private Sunny.UI.UILabel _lblRight;
@@ -77,10 +71,8 @@ namespace AgingTestSystem.Dialogs
         {
             this._pnlPreviewHost = new System.Windows.Forms.Panel();
             this._pnlValues = new System.Windows.Forms.TableLayoutPanel();
-            this._lblTop = new Sunny.UI.UILabel();
-            this._nudTop = new System.Windows.Forms.NumericUpDown();
-            this._lblMenu = new Sunny.UI.UILabel();
-            this._nudMenu = new System.Windows.Forms.NumericUpDown();
+            this._lblHeader = new Sunny.UI.UILabel();
+            this._nudHeader = new System.Windows.Forms.NumericUpDown();
             this._lblRight = new Sunny.UI.UILabel();
             this._nudRight = new System.Windows.Forms.NumericUpDown();
             this._lblStatus = new Sunny.UI.UILabel();
@@ -91,8 +83,7 @@ namespace AgingTestSystem.Dialogs
             this._btnSave = new Sunny.UI.UIButton();
             this._lblTip = new Sunny.UI.UILabel();
             this._pnlValues.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this._nudTop)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this._nudMenu)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this._nudHeader)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this._nudRight)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this._nudStatus)).BeginInit();
             this._pnlBottom.SuspendLayout();
@@ -102,9 +93,9 @@ namespace AgingTestSystem.Dialogs
             //
             this._pnlPreviewHost.BackColor = System.Drawing.Color.White;
             this._pnlPreviewHost.Dock = System.Windows.Forms.DockStyle.Fill;
-            this._pnlPreviewHost.Location = new System.Drawing.Point(2, 212);
+            this._pnlPreviewHost.Location = new System.Drawing.Point(2, 175);
             this._pnlPreviewHost.Name = "_pnlPreviewHost";
-            this._pnlPreviewHost.Size = new System.Drawing.Size(636, 254);
+            this._pnlPreviewHost.Size = new System.Drawing.Size(636, 291);
             this._pnlPreviewHost.TabIndex = 0;
             // 
             // _pnlValues
@@ -112,98 +103,61 @@ namespace AgingTestSystem.Dialogs
             this._pnlValues.ColumnCount = 2;
             this._pnlValues.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 50F));
             this._pnlValues.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 50F));
-            this._pnlValues.Controls.Add(this._lblTop, 0, 0);
-            this._pnlValues.Controls.Add(this._nudTop, 1, 0);
-            this._pnlValues.Controls.Add(this._lblMenu, 0, 1);
-            this._pnlValues.Controls.Add(this._nudMenu, 1, 1);
-            this._pnlValues.Controls.Add(this._lblRight, 0, 2);
-            this._pnlValues.Controls.Add(this._nudRight, 1, 2);
-            this._pnlValues.Controls.Add(this._lblStatus, 0, 3);
-            this._pnlValues.Controls.Add(this._nudStatus, 1, 3);
+            this._pnlValues.Controls.Add(this._lblHeader, 0, 0);
+            this._pnlValues.Controls.Add(this._nudHeader, 1, 0);
+            this._pnlValues.Controls.Add(this._lblRight, 0, 1);
+            this._pnlValues.Controls.Add(this._nudRight, 1, 1);
+            this._pnlValues.Controls.Add(this._lblStatus, 0, 2);
+            this._pnlValues.Controls.Add(this._nudStatus, 1, 2);
             this._pnlValues.Dock = System.Windows.Forms.DockStyle.Top;
             this._pnlValues.Location = new System.Drawing.Point(2, 64);
             this._pnlValues.Name = "_pnlValues";
             this._pnlValues.Padding = new System.Windows.Forms.Padding(12, 6, 12, 6);
-            this._pnlValues.RowCount = 4;
-            this._pnlValues.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 25F));
-            this._pnlValues.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 25F));
-            this._pnlValues.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 25F));
-            this._pnlValues.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 25F));
-            this._pnlValues.Size = new System.Drawing.Size(636, 148);
+            this._pnlValues.RowCount = 3;
+            this._pnlValues.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 33.33333F));
+            this._pnlValues.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 33.33333F));
+            this._pnlValues.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 33.33334F));
+            this._pnlValues.Size = new System.Drawing.Size(636, 111);
             this._pnlValues.TabIndex = 1;
             // 
-            // _lblTop
+            // _lblHeader
             // 
-            this._lblTop.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            this._lblHeader.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Left)));
-            this._lblTop.AutoSize = true;
-            this._lblTop.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
-            this._lblTop.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
-            this._lblTop.Location = new System.Drawing.Point(15, 6);
-            this._lblTop.Name = "_lblTop";
-            this._lblTop.Size = new System.Drawing.Size(143, 34);
-            this._lblTop.TabIndex = 0;
-            this._lblTop.Text = "顶部标题栏高 (px)";
-            this._lblTop.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this._lblHeader.AutoSize = true;
+            this._lblHeader.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this._lblHeader.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this._lblHeader.Location = new System.Drawing.Point(15, 6);
+            this._lblHeader.Name = "_lblHeader";
+            this._lblHeader.Size = new System.Drawing.Size(143, 34);
+            this._lblHeader.TabIndex = 0;
+            this._lblHeader.Text = "顶栏高 (px)";
+            this._lblHeader.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
-            // _nudTop
+            // _nudHeader
             // 
-            this._nudTop.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            this._nudHeader.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Left)));
-            this._nudTop.Location = new System.Drawing.Point(321, 9);
-            this._nudTop.Maximum = new decimal(new int[] {
-            80,
+            this._nudHeader.Location = new System.Drawing.Point(321, 9);
+            this._nudHeader.Maximum = new decimal(new int[] {
+            100,
             0,
             0,
             0});
-            this._nudTop.Minimum = new decimal(new int[] {
-            15,
+            this._nudHeader.Minimum = new decimal(new int[] {
+            34,
             0,
             0,
             0});
-            this._nudTop.Name = "_nudTop";
-            this._nudTop.Size = new System.Drawing.Size(120, 26);
-            this._nudTop.TabIndex = 1;
-            this._nudTop.Value = new decimal(new int[] {
-            15,
+            this._nudHeader.Name = "_nudHeader";
+            this._nudHeader.Size = new System.Drawing.Size(120, 26);
+            this._nudHeader.TabIndex = 1;
+            this._nudHeader.Value = new decimal(new int[] {
+            34,
             0,
             0,
             0});
-            this._nudTop.ValueChanged += new System.EventHandler(this.Nud_ValueChanged);
-            // 
-            // _lblMenu
-            // 
-            this._lblMenu.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left)));
-            this._lblMenu.AutoSize = true;
-            this._lblMenu.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
-            this._lblMenu.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
-            this._lblMenu.Location = new System.Drawing.Point(15, 40);
-            this._lblMenu.Name = "_lblMenu";
-            this._lblMenu.Size = new System.Drawing.Size(111, 34);
-            this._lblMenu.TabIndex = 2;
-            this._lblMenu.Text = "菜单栏高 (px)";
-            this._lblMenu.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            // 
-            // _nudMenu
-            // 
-            this._nudMenu.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left)));
-            this._nudMenu.Location = new System.Drawing.Point(321, 43);
-            this._nudMenu.Minimum = new decimal(new int[] {
-            25,
-            0,
-            0,
-            0});
-            this._nudMenu.Name = "_nudMenu";
-            this._nudMenu.Size = new System.Drawing.Size(120, 26);
-            this._nudMenu.TabIndex = 3;
-            this._nudMenu.Value = new decimal(new int[] {
-            25,
-            0,
-            0,
-            0});
-            this._nudMenu.ValueChanged += new System.EventHandler(this.Nud_ValueChanged);
+            this._nudHeader.ValueChanged += new System.EventHandler(this.Nud_ValueChanged);
             // 
             // _lblRight
             // 
@@ -212,10 +166,10 @@ namespace AgingTestSystem.Dialogs
             this._lblRight.AutoSize = true;
             this._lblRight.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this._lblRight.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
-            this._lblRight.Location = new System.Drawing.Point(15, 74);
+            this._lblRight.Location = new System.Drawing.Point(15, 40);
             this._lblRight.Name = "_lblRight";
             this._lblRight.Size = new System.Drawing.Size(127, 34);
-            this._lblRight.TabIndex = 4;
+            this._lblRight.TabIndex = 2;
             this._lblRight.Text = "右侧区域宽 (px)";
             this._lblRight.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
@@ -223,7 +177,7 @@ namespace AgingTestSystem.Dialogs
             // 
             this._nudRight.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Left)));
-            this._nudRight.Location = new System.Drawing.Point(321, 77);
+            this._nudRight.Location = new System.Drawing.Point(321, 43);
             this._nudRight.Maximum = new decimal(new int[] {
             600,
             0,
@@ -236,7 +190,7 @@ namespace AgingTestSystem.Dialogs
             0});
             this._nudRight.Name = "_nudRight";
             this._nudRight.Size = new System.Drawing.Size(120, 26);
-            this._nudRight.TabIndex = 5;
+            this._nudRight.TabIndex = 3;
             this._nudRight.Value = new decimal(new int[] {
             180,
             0,
@@ -251,10 +205,10 @@ namespace AgingTestSystem.Dialogs
             this._lblStatus.AutoSize = true;
             this._lblStatus.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this._lblStatus.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
-            this._lblStatus.Location = new System.Drawing.Point(15, 108);
+            this._lblStatus.Location = new System.Drawing.Point(15, 74);
             this._lblStatus.Name = "_lblStatus";
             this._lblStatus.Size = new System.Drawing.Size(111, 34);
-            this._lblStatus.TabIndex = 6;
+            this._lblStatus.TabIndex = 4;
             this._lblStatus.Text = "状态栏高 (px)";
             this._lblStatus.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
@@ -262,7 +216,7 @@ namespace AgingTestSystem.Dialogs
             // 
             this._nudStatus.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Left)));
-            this._nudStatus.Location = new System.Drawing.Point(321, 111);
+            this._nudStatus.Location = new System.Drawing.Point(321, 77);
             this._nudStatus.Maximum = new decimal(new int[] {
             60,
             0,
@@ -275,7 +229,7 @@ namespace AgingTestSystem.Dialogs
             0});
             this._nudStatus.Name = "_nudStatus";
             this._nudStatus.Size = new System.Drawing.Size(120, 26);
-            this._nudStatus.TabIndex = 7;
+            this._nudStatus.TabIndex = 5;
             this._nudStatus.Value = new decimal(new int[] {
             15,
             0,
@@ -372,8 +326,7 @@ namespace AgingTestSystem.Dialogs
             this.ZoomScaleRect = new System.Drawing.Rectangle(15, 15, 640, 520);
             this._pnlValues.ResumeLayout(false);
             this._pnlValues.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this._nudTop)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this._nudMenu)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this._nudHeader)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this._nudRight)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this._nudStatus)).EndInit();
             this._pnlBottom.ResumeLayout(false);
