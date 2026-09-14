@@ -91,9 +91,9 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Dialogs/SettingsForm.cs` | 系统设置（管理员，按分类编辑 App.config 全部配置项 + V1.67“工艺策略”分类（策略存项目 Policy.json）；写回 exe.config/Policy.json 保存即生效，连接参数自动重连；仅设备数量/布局/模拟开关等结构型配置重启生效；说明悬停 tooltip 超 40 字换行） |
 | `Dialogs/HomeLayoutEditorForm.cs` | 主页区域调整编辑器（V1.58，管理员）：自绘预览 + 拖动四条边缘实时改标题栏/菜单栏/右侧区/状态栏尺寸，保存写 `HomeLayout.json` 即生效，无需重编译 |
 | `Models/HomeLayoutConfig.cs` | 主页布局配置模型（V1.58）：标题栏/菜单栏/右侧区/状态栏四个尺寸 + Range 约束，`LoadOrDefault` 缺文件或损坏回退内置默认；MainForm 启动与保存后据此应用布局 |
-| `Dialogs/StationSettingsForm.cs` | 工位设置（SN/配方/延时时间/烧屏时间/极限温度/负压阈值/显示模式 写入 StationInfo，V1.66 加后两项；两时间三 NumericUpDown 冒号分隔，V1.28；保存=应用+缓存+存配方、加入对列=应用+存配方、下电=关闭载台上电） |
+| `Dialogs/StationSettingsForm.cs` | 工位设置（SN/配方/延时时间/烧屏时间/极限温度/负压阈值/显示模式 写入 StationInfo，V1.66 加后两项；配方名 V1.88.13 起下拉单选禁手输、库中已无则保存拦停；两时间三 NumericUpDown 冒号分隔，V1.28；保存=应用+缓存+存配方、加入对列=应用+存配方、下电=关闭载台上电） |
 | `Dialogs/RecipeManagerForm.cs` | 配方管理窗口（左侧列表可滚动 + 右侧可编辑输入，延时时间/烧屏时间冒号分隔三 NumericUpDown，V1.28；V1.66 加负压阈值/显示模式；添加/更新/删除操作即自动落盘 Recipes.json，V1.27 起无"保存设置"按钮） |
-| `Dialogs/BatchRecipeForm.cs` | 批量设置配方窗口（配方名称/延时时间/烧屏时间/极限温度/负压阈值/显示模式，V1.66 加后两项；两时间均三 NumericUpDown 冒号分隔，V1.28 删"延时时间2"，两个时间都写入配方；加入队列=保存配方+应用到选中工位，无选中先保存配方并提示选择） |
+| `Dialogs/BatchRecipeForm.cs` | 批量设置配方窗口（配方名称/延时时间/烧屏时间/极限温度/负压阈值/显示模式，V1.66 加后两项；配方名 V1.88.13 起下拉单选禁手输；两时间均三 NumericUpDown 冒号分隔，V1.28 删"延时时间2"，两个时间都写入配方；加入队列=保存配方+应用到选中工位，无选中先保存配方并提示选择） |
 | `Dialogs/IdBindingForm.cs` / `InputLotForm.cs` | 录入批号 + 工位↔SN 绑定（扫码枪自动识别填充，生成 Excel） |
 | `Models/` | BarometerData / FanData(+FanRunState) / IoStatus / DeviceConfig / RecipeConfig / StationInfo / PanelLayoutConfig / HomeLayoutConfig / PolicyEnums（V1.67 工艺策略枚举） / 用户模型 |
 | `Services/ProjectProfile.cs` / `Services/ProjectPolicyStore.cs` | 项目档案（V1.67）：`Projects/<项目>/` 路径解析/迁移/切换（配方/工位设置/主页布局/策略跟项目，用户/快照/日志跟机器）；策略分流读写 Policy.json（PolicyKeys 唯一名单） |
@@ -239,6 +239,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 | 版本 | 要点 |
 | :--- | :--- |
+| V1.88.13 | 与客户工艺核对三项：配方名两窗（批量/工位）由输入框改 UIComboBox 下拉单选禁手输（选项=配方库名，选中回填参数；工位窗库中已无的脏值追加显示+保存拦停；删 RecipeAutoCompleteProvider 整文件）——手输错名静默回退全局配置=串配方的根拔掉；重复启动不断电不关阀只重置计时（现状确认，电/真空保持、产品不掉）；抽真空→上电间隔=真空建立与配方延时取较晚者（延时0约1秒，保持现状）；单工位按 deviceId 下标隔离无串台（1779 断言全绿） |
 | V1.87 | 授权改与 HJVision 同源：删 RSA 全套（无老证包袱），CPU+MD5 三件套激活（30天/永久），同一套《获取激活码》工具通用；`MainSetting.ini [RunHash]` 双键 + 主窗 1 小时 Timer（新设备/过期弹框+置灰用户权限，不阻断生产；1722 断言全绿） |
 | V1.86.1 | 授权窗眼睛显隐复查修复 9 项：初始掩码态代码收敛/Message空加固/空机器码复制导出明示拦截/换肤底色跟随/具名退订+补Dispose/字体移出Designer/眼睛小尺寸守卫；回归收紧右缘精确+最前断言+日志脱敏（1712 断言全绿） |
 | V1.86 | 授权窗 Designer 化 + 机器码眼睛显隐（默认●掩码防偷窥，右缘自绘眼睛图标：掩码态=眼睛+斜线/明文态=实心瞳孔，点击显隐，复制导出不受影响；1711 断言全绿） |

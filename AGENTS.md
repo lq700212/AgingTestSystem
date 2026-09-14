@@ -152,9 +152,15 @@
   （`VentValveEnabled=false` 时，开关本身照常显示）。
 - **配方加字段三窗同步（V1.66）**：`RecipeConfig` 加字段 → 三个录入窗
   （`RecipeManagerForm`/`BatchRecipeForm`/`StationSettingsForm`：输入框 + 保存 + 回填 +
-  自动检索回调 + 头部 ASCII 图）→ `SetStationRecipe` 下发 → `StationInfo`（+`Clone`）→
+  头部 ASCII 图）→ `SetStationRecipe` 下发 → `StationInfo`（+`Clone`）→
   `ApplyStationInfo` 叠加 → `BarometerData`（+`Clone`）。漏一处就是"存了用不上/下了传不到"，
   对照此链逐项打勾；`StationSettingsCache` 只在窗口需要回填时才加。
+  **配方名只许下拉选（V1.88.13）**：`BatchRecipeForm.cmbRecipeName` / `StationSettingsForm.cmbRecipe`
+  是 `UIComboBox + DropDownList`（禁手输），选项=配方库名；选中回填参数走
+  `CmbRecipeName_SelectedIndexChanged`/`CmbRecipe_SelectedIndexChanged`（工位窗带
+  `_fillingRecipeCombo` 守卫，程序回填不触发）。新建/改名走配方管理窗；工位窗脏数据
+  （库中已无）追加显示 + 保存时 `CommitConfig` 拦停。**禁再引回输入框或自动检索 Provider**
+  （手输错名会静默回退全局配置=串配方）。
   **负压 0 值语义（V1.72.2 血泪）**：`SetStationRecipe` 只认 null = 保持/回退全局，
   下发 0 就是定格 0（阈值 0≈永远到位，真空保护形同虚设）；老配方文件缺字段读出 0，
   回填框显示"0"待人工复核，不设"0=全局"魔法回退。上站前逐条复核 `Recipes.json` 的 0 值。
@@ -282,7 +288,6 @@
 | `AgingTestSystem/Views/ProcessPolicyForm.cs` | 工艺策略窗（V1.70 建图；固定拓扑画布+点节点改配置+缩放平移拖拽） |
 | `AgingTestSystem/Views/PolicyGraph.cs` | 工艺策略图静态数据（V1.70；拓扑/文本/布局存取，纯静态可单测） |
 | `AgingTestSystem/Services/TestSessionStore.cs` | 在测任务快照持久化（TestSession.json，断电恢复用，gitignore） |
-| `AgingTestSystem/Services/RecipeAutoCompleteProvider.cs` | 配方名称自动检索 |
 | `AgingTestSystem/Services/ThemeManager.cs` | 深色/浅色主题服务（V1.60；AppTheme 配置 + 双向映射表着色；新窗体打开前 ApplyTo） |
 | `AgingTestSystem/Dialogs/SettingsForm.cs` | 系统设置（配置项编辑、校验、保存） |
 | `AgingTestSystem/Services/SoftwareActivation.cs` + `Dialogs/SoftActivation.cs` | 软件授权（V1.87；与 HJVision 同源同口径，细化约定见下方"软件授权铁律"） |
@@ -377,7 +382,7 @@
   `BuildWatermark.ReleaseLabel`（客户发回堆栈靠"水印版本→这套归档"反解）。
 - **日志正文不怕混淆，怕的是字符串反射**：AppLog/TestLog/Crash 记的是中文文案 +
   `ex.Message`，重命名不影响可读；但 `GetProperty/GetMethod/GetField` 传字面量的地方
-  （DeviceConfig 全属性 / `SetDarkMode` / 两窗 `_recipeAutoComplete` / Json 模型属性）
+  （DeviceConfig 全属性 / `SetDarkMode` / Json 模型属性）
   改名即静默失效。新增模型类或字面量反射必须同步补 `obfuscar.xml` 的 Skip 行
   （grep `GetProperty(|GetMethod(|GetField(` 全仓扫一遍）。
 - **发版改 `BuildWatermark.ReleaseLabel`**（与 CHANGELOG 顶部小节同值）：主窗构造首行水印

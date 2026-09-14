@@ -34,13 +34,6 @@ namespace AgingTestSystem.Dialogs
                 {
                     components.Dispose();
                 }
-                // 释放配方自动检索资源（V1.29 新增）
-                var provider = this.GetType().GetField("_recipeAutoComplete",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                if (provider?.GetValue(this) is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                }
             }
             base.Dispose(disposing);
         }
@@ -56,7 +49,7 @@ namespace AgingTestSystem.Dialogs
             this.lblSN = new Sunny.UI.UILabel();
             this.txtSN = new Sunny.UI.UITextBox();
             this.lblRecipe = new Sunny.UI.UILabel();
-            this.txtRecipe = new Sunny.UI.UITextBox();
+            this.cmbRecipe = new Sunny.UI.UIComboBox();
             this.lblDelay = new Sunny.UI.UILabel();
             this.nudDelayHours = new System.Windows.Forms.NumericUpDown();
             this.lblDelayColon1 = new Sunny.UI.UILabel();
@@ -134,12 +127,14 @@ namespace AgingTestSystem.Dialogs
             this.lblRecipe.TabIndex = 4;
             this.lblRecipe.Text = "配方:";
             //
-            // txtRecipe - 配方输入框
+            // cmbRecipe - 配方下拉（V1.88.13 由输入框改：只能从配方库选，
+            // 手输错名串配方从根上堵死；首项空=不绑配方）
             //
-            this.txtRecipe.Location = new System.Drawing.Point(150, 131);
-            this.txtRecipe.Name = "txtRecipe";
-            this.txtRecipe.Size = new System.Drawing.Size(180, 29);
-            this.txtRecipe.TabIndex = 5;
+            this.cmbRecipe.DropDownStyle = Sunny.UI.UIDropDownStyle.DropDownList;
+            this.cmbRecipe.Location = new System.Drawing.Point(150, 131);
+            this.cmbRecipe.Name = "cmbRecipe";
+            this.cmbRecipe.Size = new System.Drawing.Size(180, 29);
+            this.cmbRecipe.TabIndex = 5;
             //
             // lblDelay - "延时时间"设置项名称（左对齐）
             //
@@ -459,7 +454,7 @@ namespace AgingTestSystem.Dialogs
             this.Controls.Add(this.lblDelayColon1);
             this.Controls.Add(this.nudDelayHours);
             this.Controls.Add(this.lblDelay);
-            this.Controls.Add(this.txtRecipe);
+            this.Controls.Add(this.cmbRecipe);
             this.Controls.Add(this.lblRecipe);
             this.Controls.Add(this.txtSN);
             this.Controls.Add(this.lblSN);
@@ -497,7 +492,7 @@ namespace AgingTestSystem.Dialogs
         /// <summary>"配方"设置项名称标签</summary>
         private Sunny.UI.UILabel lblRecipe;
         /// <summary>配方输入框</summary>
-        private Sunny.UI.UITextBox txtRecipe;
+        private Sunny.UI.UIComboBox cmbRecipe;
         /// <summary>"延时时间"设置项名称标签</summary>
         private Sunny.UI.UILabel lblDelay;
         /// <summary>延时时间-时输入（NumericUpDown，V1.28 由 TextBox 改）</summary>

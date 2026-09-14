@@ -22,7 +22,7 @@ namespace AgingTestSystem.Dialogs
     /// │ 左侧设置列（整体居中）          │ 右侧按钮列      │
     /// │  状态:                  [空闲] │ [破空]        │
     /// │  SN:                    [___] │ [下电]        │
-    /// │  配方:                  [___] │ [保存]        │
+    /// │  配方:                [下拉选择▼] │ [保存]        │ ← V1.88.13：只能选库中配方
     /// │  延时时间:            [__]:[__]:[__] │ [加入对列]     │
     /// │  烧屏时间:            [__]:[__]:[__] │ [关闭窗口]     │
     /// │  极限温度:              [___] │               │
@@ -70,8 +70,11 @@ namespace AgingTestSystem.Dialogs
         /// <summary>当前操作的工位编号（1 ~ TotalBarometers）</summary>
         private readonly int _deviceId;
 
-        /// <summary>配方名称自动检索提供者（V1.29 新增，使用后需释放）</summary>
-        private RecipeAutoCompleteProvider _recipeAutoComplete;
+        /// <summary>
+        /// 配方下拉回填守卫（【V1.88.13 新增】LoadStationData/FillRecipeCombo 设选中时会触发
+        /// SelectedIndexChanged；守卫期内 handler 直接返回，防库参数覆盖刚回填的缓存/下发值）
+        /// </summary>
+        private bool _fillingRecipeCombo;
 
         /// <summary>
         /// 显示模式行是否显示（【V1.75 新增】构造时按开关定死，Fill/回填认它。
@@ -110,6 +113,11 @@ namespace AgingTestSystem.Dialogs
             // 窗口标题带工位编号，如"工位设置窗口 NO 1"
             this.Text = $"工位设置窗口 NO {deviceId}";
 
+            // 【V1.88.13】配方下拉先填项（LoadStationData 里要选中回填值，必须先有选项；
+            // 首项空串=不绑配方；选项=配方库全部名）
+            FillRecipeCombo();
+            cmbRecipe.SelectedIndexChanged += CmbRecipe_SelectedIndexChanged;
+
             // 从缓存 / 采集缓存读取当前工位数据并回显到输入框
             LoadStationData();
 
@@ -127,12 +135,6 @@ namespace AgingTestSystem.Dialogs
                 this.MinimumSize = this.ClientSize;
             }
             else if (cmbDisplayMode.Items.Count == 0) FillDisplayModes(null);
-
-            // 初始化配方名称自动检索（V1.29 新增）
-            _recipeAutoComplete = new RecipeAutoCompleteProvider(
-                txtRecipe,
-                _recipes,
-                OnRecipeSelected);
 
             SetupTooltips();
         }
@@ -163,9 +165,9 @@ namespace AgingTestSystem.Dialogs
             SetTip(new Control[] { lblSN, txtSN },
                 "SN：这台上测的是哪件产品（产品条码），空=没绑定。空SN点启动只警告不拦截；" +
                 "测完按启动时绑的SN记追溯，中途改SN不影响在测归属。0时长能不能启动在工艺策略里配。");
-            SetTip(new Control[] { lblRecipe, txtRecipe },
-                "配方：该工位当前用哪套参数，下发、选用都认这个名字。" +
-                "输入时自动联想已有配方，选中后自动回填延时、温度、负压、显示模式。");
+            SetTip(new Control[] { lblRecipe, cmbRecipe },
+                "配方：从下拉选择该工位用哪套参数（只能选库里有的，输错名串配方从根上堵死），" +
+                "选中后自动回填延时、温度、负压、显示模式；选空=不绑配方。");
             SetTip(new Control[] { lblDelay, nudDelayHours, nudDelayMinutes, nudDelaySeconds },
                 "延时时间：上电前等待。点启动后先只开真空阀（不上电），等够这么久才上电，" +
                 "例如00:00:30=开阀30秒后上电，给吸附留稳定时间。填0=真空一到位立刻上电。" +
@@ -203,16 +205,94 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 配方自动检索选中回调（V1.29 新增）
-        /// 用户从自动检索列表中选择一个配方后，自动填写配方名称、延时时间、烧屏时间、
+        /// 配方下拉填项（【V1.88.13 新增】构造时调一次：首项空串=不绑配方，
+        /// 其后=配方库全部名；默认选中空项，LoadStationData 会按回填值重选）。
+        /// </summary>
+        private void FillRecipeCombo()
+        {
+            _fillingRecipeCombo = true;
+            try
+            {
+                cmbRecipe.Items.Clear();
+                cmbRecipe.Items.Add("");
+                if (_recipes != null)
+                {
+                    foreach (RecipeConfig r in _recipes)
+                    {
+                        if (r != null && !string.IsNullOrWhiteSpace(r.Name))
+                        {
+                            cmbRecipe.Items.Add(r.Name.Trim());
+                        }
+                    }
+                }
+                cmbRecipe.SelectedIndex = 0;
+            }
+            finally
+            {
+                _fillingRecipeCombo = false;
+            }
+        }
+
+        /// <summary>
+        /// 按名选中配方下拉（【V1.88.13 新增】LoadStationData 回填用：
+        /// 空名选首项空；库中有选它；库中无（脏数据，如配方被删）追加显示，
+        /// 看得见但保存时拦停——静默回全局的口子在这里堵死）。
+        /// </summary>
+        /// <param name="recipeName">要选中的配方名（可空）</param>
+        private void SelectRecipe(string recipeName)
+        {
+            _fillingRecipeCombo = true;
+            try
+            {
+                string name = (recipeName ?? "").Trim();
+                if (string.IsNullOrEmpty(name))
+                {
+                    cmbRecipe.SelectedIndex = 0;
+                    return;
+                }
+                for (int i = 0; i < cmbRecipe.Items.Count; i++)
+                {
+                    string item = cmbRecipe.Items[i] as string;
+                    if (string.Equals(item, name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        cmbRecipe.SelectedIndex = i;
+                        return;
+                    }
+                }
+                // 脏数据：追加显示（保存时拦停，见 SaveSettings）
+                cmbRecipe.Items.Add(name);
+                cmbRecipe.SelectedIndex = cmbRecipe.Items.Count - 1;
+            }
+            finally
+            {
+                _fillingRecipeCombo = false;
+            }
+        }
+
+        /// <summary>
+        /// 配方下拉选择变化（【V1.88.13 新增】用户亲手选才回填参数；
+        /// 程序回填期（守卫）直接返回；选中空项=不绑，不动其他框）。
+        /// </summary>
+        private void CmbRecipe_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (_fillingRecipeCombo) return;
+            string name = cmbRecipe.Text.Trim();
+            if (string.IsNullOrEmpty(name)) return;
+            RecipeConfig hit = FindRecipe(name);
+            if (hit == null) return;
+            OnRecipeSelected(hit);
+        }
+
+        /// <summary>
+        /// 配方下拉选中回调（V1.29 自动检索时代新增，V1.88.13 转下拉后只回填参数：
+        /// 名字已是下拉选中的，不用再写一遍）。
+        /// 用户从下拉中选择一个配方后，自动填写延时时间、烧屏时间、
         /// 极限温度、负压阈值、显示模式（V1.66 补后两项）。
         /// </summary>
         /// <param name="recipe">选中的配方</param>
         private void OnRecipeSelected(RecipeConfig recipe)
         {
             if (recipe == null) return;
-
-            txtRecipe.Text = recipe.Name;
 
             // 回填延时时间（时:分:秒）
             nudDelayHours.Value = Math.Max(nudDelayHours.Minimum,
@@ -290,7 +370,7 @@ namespace AgingTestSystem.Dialogs
             if (cached != null)
             {
                 txtSN.Text = cached.SerialNumber;
-                txtRecipe.Text = cached.RecipeName;
+                SelectRecipe(cached.RecipeName);
                 SetTimeInputs(nudDelayHours, nudDelayMinutes, nudDelaySeconds, cached.DelayTime);
                 SetTimeInputs(nudBurnInHours, nudBurnInMinutes, nudBurnInSeconds, cached.BurnInTime);
                 nudTemp.Value = Math.Max(nudTemp.Minimum,
@@ -307,7 +387,7 @@ namespace AgingTestSystem.Dialogs
             if (data == null) return;
 
             txtSN.Text = data.SerialNumber;
-            txtRecipe.Text = data.RecipeName;
+            SelectRecipe(data.RecipeName);
             SetTimeInputs(nudDelayHours, nudDelayMinutes, nudDelaySeconds, data.DelayTime);
             SetTimeInputs(nudBurnInHours, nudBurnInMinutes, nudBurnInSeconds, data.BurnInTime);
             // 【V1.66】无缓存时负压/显示模式按面板配方名找配方：命中用配方的，
@@ -513,6 +593,22 @@ namespace AgingTestSystem.Dialogs
             }
             cmbDisplayMode.Text = canonicalMode;
 
+            // 【V1.88.13】未知配方拦停：下拉正常选的值一定在库中；只有脏数据
+            // （回填名在库中已无，如配方被删）会走到这里——以前静默回全局，
+            // 现在明示拦停，逼用户重选，串配方的口子彻底堵死。空=不绑，允许。
+            string recipeText = cmbRecipe.Text.Trim();
+            if (!string.IsNullOrEmpty(recipeText) && FindRecipe(recipeText) == null)
+            {
+                MessageBox.Show(
+                    $"配方 \"{recipeText}\" 在配方库中不存在（可能已被删除），\r\n" +
+                    "请从下拉重新选择；新建配方走「参数设置 → 配方管理」。\r\n" +
+                    "本次提交已拦截，未写入任何配置。",
+                    "配方不存在",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                cmbRecipe.Focus();
+                return false;
+            }
+
             // ---- 1) 组合延时时间 / 烧屏时间（各三个 NumericUpDown，V1.28；控件已限范围无需校验） ----
             TimeSpan delayTime = GetTimeSpan(nudDelayHours, nudDelayMinutes, nudDelaySeconds);
             TimeSpan burnInTime = GetTimeSpan(nudBurnInHours, nudBurnInMinutes, nudBurnInSeconds);
@@ -524,7 +620,7 @@ namespace AgingTestSystem.Dialogs
             // （优先级 缓存 > 配方 > 全局），不再按配方名二次检索。空配方名=清空（含负压/显示模式）。
             // 启动测试时负压值定格为该工位的真空到位判定/报警阈值（配方优先、全局兜底指"没下发时"，
             // 下发了就以框值为准——框里永远有数，不存在"没下发"）。
-            _deviceManager.SetStationRecipe(_deviceId, txtRecipe.Text, nudPressure.Value, cmbDisplayMode.Text);
+            _deviceManager.SetStationRecipe(_deviceId, cmbRecipe.Text, nudPressure.Value, cmbDisplayMode.Text);
             _deviceManager.SetStationDelayTimes(_deviceId, delayTime, burnInTime);
 
             // ---- 3) 缓存配置（下次打开该工位设置窗口自动回填） ----
@@ -532,7 +628,7 @@ namespace AgingTestSystem.Dialogs
             {
                 DeviceId = _deviceId,
                 SerialNumber = txtSN.Text.Trim(),
-                RecipeName = txtRecipe.Text.Trim(),
+                RecipeName = cmbRecipe.Text.Trim(),
                 DelayTime = delayTime,
                 BurnInTime = burnInTime,
                 LimitTemperature = ParseTemperature(),
@@ -541,7 +637,7 @@ namespace AgingTestSystem.Dialogs
             });
 
             // ---- 4) 保存配方到本地配方列表（同名询问覆盖更新；配方名称为空则跳过） ----
-            if (!string.IsNullOrWhiteSpace(txtRecipe.Text))
+            if (!string.IsNullOrWhiteSpace(cmbRecipe.Text))
             {
                 SaveCurrentRecipe(delayTime, burnInTime);
             }
@@ -570,7 +666,7 @@ namespace AgingTestSystem.Dialogs
             MessageBox.Show(
                 $"工位 {_deviceId} {actionName}成功！\r\n" +
                 $"SN: {(string.IsNullOrWhiteSpace(txtSN.Text) ? "（空）" : txtSN.Text.Trim())}\r\n" +
-                $"配方: {(string.IsNullOrWhiteSpace(txtRecipe.Text) ? "（空）" : txtRecipe.Text.Trim())}\r\n" +
+                $"配方: {(string.IsNullOrWhiteSpace(cmbRecipe.Text) ? "（空）" : cmbRecipe.Text.Trim())}\r\n" +
                 $"延时时间: {GetTimeText(delayTime)}\r\n" +
                 $"烧屏时间: {GetTimeText(burnInTime)}\r\n" +
                 $"极限温度: {nudTemp.Value:0.#}°C\r\n" +
@@ -592,7 +688,7 @@ namespace AgingTestSystem.Dialogs
         {
             var recipe = new RecipeConfig
             {
-                Name = txtRecipe.Text.Trim(),
+                Name = cmbRecipe.Text.Trim(),
                 DelayTime = delayTime,
                 BurnInTime = burnInTime,
                 LimitTemperature = ParseTemperature(),

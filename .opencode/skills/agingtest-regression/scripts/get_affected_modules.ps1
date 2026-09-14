@@ -76,7 +76,7 @@ $Map = @(
     @{ Pat = @("*IoMapBuilder*", "*IoPointDefinition*", "*IoStatus*"); Mods = @("IoMapBuilder", "IoOutputChannelRemap", "MockDevices") },
     @{ Pat = @("*MockBarometerReader*", "*MockFanController*", "*MockIoController*", "*MockPowerMeter*"); Mods = @("MockDevices", "DeviceManagerIntegration", "DeviceManagerExtended", "PowerReportV174") },
     @{ Pat = @("*PowerMeterClient*", "*ReportColumns*", "*DisplayModeOptions*"); Mods = @("PowerReportV174", "SettingsValidate") },
-    @{ Pat = @("*RecipeStorage*", "*RecipeAutoCompleteProvider*"); Mods = @("RecipeStorage", "UiPureHelpers", "UiFinalizerV172_14") },
+    @{ Pat = @("*RecipeStorage*"); Mods = @("RecipeStorage", "UiPureHelpers", "UiFinalizerV172_14") },
     @{ Pat = @("*StationSettingsCache*");           Mods = @("StationCache", "UiPureHelpers") },
     @{ Pat = @("*TestSessionStore*");               Mods = @("TestSessionStore", "DeviceManagerIntegration", "DeviceManagerPolicy") },
     @{ Pat = @("*TestEventLogger*");                Mods = @("TestEventLogger", "HistoryCsv", "DeviceManagerIntegration", "DeviceManagerExtended", "DeviceManagerPolicy", "DeviceManagerMes", "DeviceManagerRules", "PowerReportV174") },

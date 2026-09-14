@@ -77,7 +77,6 @@ $SafeShowKeys = @(
     "ShowRemapNotice|CommunicationTestForm.cs|reuse:_remapNoticeForm" # 字段复用单例
 )
 $SafeRemoveFiles = @(
-    "Services\RecipeAutoCompleteProvider.cs"     # Remove 后同块 Dispose
 )
 
 function Get-RelPath([string]$full) {

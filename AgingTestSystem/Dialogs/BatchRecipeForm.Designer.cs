@@ -43,13 +43,6 @@ namespace AgingTestSystem.Dialogs
                 {
                     components.Dispose();
                 }
-                // 释放配方自动检索资源（V1.29 新增）
-                var provider = this.GetType().GetField("_recipeAutoComplete",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                if (provider?.GetValue(this) is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                }
             }
             base.Dispose(disposing);
         }
@@ -65,7 +58,7 @@ namespace AgingTestSystem.Dialogs
             this.tableLayoutPanelMain = new System.Windows.Forms.TableLayoutPanel();
             this.tableLayoutPanelInput = new System.Windows.Forms.TableLayoutPanel();
             this.lblRecipeNameLabel = new Sunny.UI.UILabel();
-            this.txtRecipeName = new Sunny.UI.UITextBox();
+            this.cmbRecipeName = new Sunny.UI.UIComboBox();
             this.lblDelayTime1Label = new Sunny.UI.UILabel();
             this.tableLayoutPanelDelay1 = new System.Windows.Forms.TableLayoutPanel();
             this.nudDelayHours = new System.Windows.Forms.NumericUpDown();
@@ -129,7 +122,7 @@ namespace AgingTestSystem.Dialogs
             this.tableLayoutPanelInput.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 100F));
             this.tableLayoutPanelInput.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanelInput.Controls.Add(this.lblRecipeNameLabel, 0, 0);
-            this.tableLayoutPanelInput.Controls.Add(this.txtRecipeName, 1, 0);
+            this.tableLayoutPanelInput.Controls.Add(this.cmbRecipeName, 1, 0);
             this.tableLayoutPanelInput.Controls.Add(this.lblDelayTime1Label, 0, 1);
             this.tableLayoutPanelInput.Controls.Add(this.tableLayoutPanelDelay1, 1, 1);
             this.tableLayoutPanelInput.Controls.Add(this.lblBurnInTimeLabel, 0, 2);
@@ -165,22 +158,19 @@ namespace AgingTestSystem.Dialogs
             this.lblRecipeNameLabel.TabIndex = 0;
             this.lblRecipeNameLabel.Text = "配方名称：";
             this.lblRecipeNameLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            // 
-            // txtRecipeName
-            // 
-            this.txtRecipeName.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
-            this.txtRecipeName.Cursor = System.Windows.Forms.Cursors.IBeam;
-            this.txtRecipeName.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
-            this.txtRecipeName.Location = new System.Drawing.Point(104, 5);
-            this.txtRecipeName.Margin = new System.Windows.Forms.Padding(4, 5, 4, 5);
-            this.txtRecipeName.MinimumSize = new System.Drawing.Size(1, 16);
-            this.txtRecipeName.Name = "txtRecipeName";
-            this.txtRecipeName.Padding = new System.Windows.Forms.Padding(5);
-            this.txtRecipeName.ShowText = false;
-            this.txtRecipeName.Size = new System.Drawing.Size(362, 29);
-            this.txtRecipeName.TabIndex = 1;
-            this.txtRecipeName.TextAlignment = System.Drawing.ContentAlignment.MiddleLeft;
-            this.txtRecipeName.Watermark = "";
+            //
+            // cmbRecipeName - 配方下拉（V1.88.13 由输入框改：只能从配方库选，
+            // 手输错名串配方的问题从根上堵死；新建配方走配方管理窗）
+            //
+            this.cmbRecipeName.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right)));
+            this.cmbRecipeName.DropDownStyle = Sunny.UI.UIDropDownStyle.DropDownList;
+            this.cmbRecipeName.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.cmbRecipeName.Location = new System.Drawing.Point(104, 5);
+            this.cmbRecipeName.Margin = new System.Windows.Forms.Padding(4, 5, 4, 5);
+            this.cmbRecipeName.MinimumSize = new System.Drawing.Size(1, 16);
+            this.cmbRecipeName.Name = "cmbRecipeName";
+            this.cmbRecipeName.Size = new System.Drawing.Size(362, 27);
+            this.cmbRecipeName.TabIndex = 1;
             // 
             // lblDelayTime1Label
             // 
@@ -606,7 +596,7 @@ namespace AgingTestSystem.Dialogs
         /// <summary>"配方名称"标签</summary>
         private Sunny.UI.UILabel lblRecipeNameLabel;
         /// <summary>配方名称输入框</summary>
-        private Sunny.UI.UITextBox txtRecipeName;
+        private Sunny.UI.UIComboBox cmbRecipeName;
         /// <summary>"延时时间"标签</summary>
         private Sunny.UI.UILabel lblDelayTime1Label;
         /// <summary>延时时间输入布局（时:分:秒）</summary>

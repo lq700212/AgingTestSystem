@@ -26,8 +26,6 @@
     策略页静默失效（比崩溃更难查）；
   - WorkstationGridView.SetDarkMode 跳过：ThemeManager 用 GetMethod("SetDarkMode")
     字符串找它，改名即深色切换失效；
-  - BatchRecipeForm / StationSettingsForm 的 _recipeAutoComplete 字段跳过：
-    Designer.cs 里用 GetField("_recipeAutoComplete") 反射取它，改名即配方联想崩；
   - UserRole 一并跳过：Users.json 存角色名字串，枚举成员改名会导致老账号文件读坏；
   - 业务日志（AppLog/TestLog/Crash）记的是中文文案 + ex.Message，不依赖类名方法名，
     字符串加密（HideStrings）不影响可读性，可开，但开后必须跑一遍冒烟确认中文无乱码。
@@ -72,13 +70,12 @@
     <!-- ===== 字符串反射点：名字必须原样保留 =====
          注意 Skip 三元素的写法是 type="类型全名" name="成员名"（分开写），
          不要写成 name="类型全名.成员名"——后者会被静默忽略，字段照改不误
-         （V1.88.10 血泪：验收 A12 当场抓到 _recipeAutoComplete 被改名）。
+         （V1.88.10 血泪：验收 A12 当场抓到反射字段被改名）。
          attrib 不写＝不论公私有都跳过（正好覆盖私字段；公有成员本来就被
-         KeepPublicApi 保住，这里是双保险）。 -->
+         KeepPublicApi 保住，这里是双保险）。
+         注：两窗配方名 V1.88.13 已改下拉、_recipeAutoComplete 整文件删除，
+         对应 SkipField 行同步移除。 -->
     <!-- ThemeManager.GetMethod("SetDarkMode") -->
     <SkipMethod type="AgingTestSystem.Views.WorkstationGridView" name="SetDarkMode" />
-    <!-- Designer.cs 里 GetField("_recipeAutoComplete") -->
-    <SkipField type="AgingTestSystem.Dialogs.BatchRecipeForm" name="_recipeAutoComplete" />
-    <SkipField type="AgingTestSystem.Dialogs.StationSettingsForm" name="_recipeAutoComplete" />
   </Module>
 </Obfuscator>
