@@ -112,6 +112,8 @@
     <Compile Include="Services\IoMapBuilder.cs" />
     <Compile Include="Services\SerialPortHelper.cs" />
     <Compile Include="Services\AppLogFileWriter.cs" />
+    <Compile Include="Services\BuildWatermark.cs" />
+    <Compile Include="Services\CrashLogWriter.cs" />
     <Compile Include="Services\TestEventLogger.cs" />
     <Compile Include="Services\TestSessionStore.cs" />
     <Compile Include="Services\AgingSequencer.cs" />

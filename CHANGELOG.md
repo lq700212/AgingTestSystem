@@ -3,6 +3,65 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md).
 
+## V1.88.10 — 一键混淆发版流水线＋首个混淆包 V1.88.9-obf（2026-09-15，用户要求）
+
+### 改动范围
+
+- 新增 `scripts/obfuscated_release.ps1` 一键发版（前置检查→Release 构建→Obfuscar 混淆→
+  组包→三项验收→还原标记；工作区脏默认拒绝，`-AllowDirty` 硬发记 diff 进归档）。
+- 新增 `tests/ObfuscationAcceptance.cs` 验收跑器（behavior 12 项＋dump 模式；对账必须
+  分进程各 dump 再 diff，同名同版本程序集同 AppDomain 只能存在一份）。
+- `tools/obfuscation/obfuscar.xml` 修正 Skip 写法（`type`/`name` 分开写；Models 改整命名空间跳过）＋
+  补 `ExtraFrameworkFolders`（v4.7.2 引用目录，否则报 Unable to resolve System.Windows.Forms）。
+- 打出首个混淆包 `release/V1.88.9-obf/`（包：混淆 exe＋依赖＋config＋部署说明，可直接拷工控机；
+  归档：Mapping.txt＋全包 MD5＋pdb＋配置＋版本，gitignore 永不入库）。
+- 内部培训文档加第十二章"混淆发版操作指南（小白版）"＋自查 14/15 条，同名 PDF 已重转；
+  skill 加"一点六、发版流水线"节；`.gitignore` 加 `release/`。
+
+### 为什么这么改
+
+- 代码就是饭碗：C# 不混淆等于送源码，必须有一条小白也能走通的发版路。
+- 血泪两则：①Skip 写成 `name="类型.成员"` 会被静默忽略，验收 A12 当场抓到两窗联想字段被改名
+  （配方联想崩），改分开写法后 12/12＋Models 342 行对账一字不差；
+  ②新增 ps1 无 BOM 会被 PS5.1 解析劈开报 ParserError（与交互式行为不一致的还有 XML 适配器赋值，
+  一律走显式 DOM）。
+
+### 验证
+
+- `obfuscated_release.ps1 -AllowDirty` 一次跑通：构建→混淆→组包→验收 A/B/C 全过，
+  `IsObfuscatedBuild` 已还原 false（git diff 无残留）。
+- 混淆包实测：真启动 22s 存活，AppLog 首行水印含 V1.88.9＋混淆版，业务日志（设备/IO/风机/扫码枪）
+  与崩溃落盘均正常，零 Crash 文件。
+
+## V1.88.9 — 调试部署诊断三件套：启动水印＋崩溃落盘＋混淆排除表（2026-09-15，用户要求）
+
+### 改动范围
+
+- 新增 `Services/BuildWatermark.cs`（对外版本号 V1.88.9＋程序集/文件版本＋exe 构建时间＋
+  混淆标记＋进程位数＋OS，纯函数可单测，拿不到兜底"未知"绝不抛）；主窗体构造第一行
+  `WriteLog(GetStartupLine())` 写水印，客户拷回 Logs 先看这行定版本。
+- 新增 `Services/CrashLogWriter.cs`（一崩一文件 `Logs\Crash_yyyyMMdd_HHmmssfff_xx.log`，
+  含水印＋线程＋类型＋消息＋全堆栈；null/非 Exception 对象兜底，绝不抛）；
+  `Program.cs` 两个全局异常口改成"先落盘→再补 AppLog 摘要行→弹框带文件路径请客户发回"。
+- 新增 `tools/obfuscation/obfuscar.xml` 混淆配置样例（调试期不用，只归档备用）：
+  Models 全跳过属性/字段重命名（Json 存盘兼容）＋字符串反射点跳过
+  （`DeviceConfig` 全属性/`WorkstationGridView.SetDarkMode`/两窗 `_recipeAutoComplete`），
+  含稳定后打混淆包五步与发版归档清单。
+- 回归加 `DeployDiagV188_9` 模块 22 条（水印纯函数/空兜底/调试期标记锁＋崩溃
+  文件名/正文/真实落盘/连写不互盖）；`get_affected_modules.ps1` 登记新文件映射。
+
+### 为什么这么改
+
+- 调试期一天可能发多个包，无水印的日志对不上版本；以后上混淆版堆栈变天书，
+  必须靠"水印版本号→mapping 归档"反解。以前崩溃只弹窗，客户点掉即无据可查，
+  远程只能靠口述截图。混淆排除表现在定好，免得稳定后现配把字符串反射点炸了
+  （策略页/设置表/主题切换全是字符串反射，比日志更怕重命名）。
+
+### 验证
+
+- `build_and_test.ps1` 全绿（构建→真机冒烟→全量回归 PASS=1758 FAIL=0，含新模块 22 条）。
+- 产品代码改动：`Program.cs`（两异常口）/`MainForm.cs`（构造首行水印）/csproj 登记 2 新文件。
+
 ## V1.88.8 — MES 自助对接成文＋禁词误伤修复（2026-09-14，用户要求）
 
 ### 改动范围

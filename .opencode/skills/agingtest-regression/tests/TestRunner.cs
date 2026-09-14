@@ -23,6 +23,7 @@
 //   12g. SoftActivation           —— 软件激活（HJVision 同源：Encrypt 方程 + 计数格 + 激活比对 + ini 往返 + 激活窗构造）
 //   12h. PolicyPresetV185          —— 预置策略 A/B/C（套用/探测纯函数 + 名单/口径/安全锁 + UI 预置行回显）
 //   12i. PolicyNodeComboV1851      —— 节点选项框按预置下拉口径统一（下拉实测拉宽 + 悬停全文 + 切节点清表）
+//   12j. DeployDiagV188_9           —— 调试部署诊断：启动版本水印纯函数 + 崩溃日志文件名/正文/落盘（含null/非Exception兜底）
 //
 //  【怎么跑】
 //  不直接运行本文件。用本 skill 目录 scripts\run_unit_tests.ps1：
@@ -203,6 +204,7 @@ namespace AgingTestSystem.Tests
                 { "SoftActivation", SoftActivationTests },
                 { "PolicyPresetV185", PolicyPresetTests },
                 { "PolicyNodeComboV1851", PolicyNodeComboTests },
+                { "DeployDiagV188_9", DeployDiagTests },
             };
 
             // 参数约定：无参=全量；"模块A,模块B"=子集（大小写不敏感）；
@@ -6545,6 +6547,155 @@ namespace AgingTestSystem.Tests
                 Check("关窗后两悬停提示皆释放", bothGone);
             }
             finally { try { if (form != null) form.Dispose(); } catch { } }
+        }
+
+        // =====================================================================
+        // 12j. DeployDiagV188_9 —— 调试部署诊断（V1.88.9 新增）
+        //   BuildWatermark：启动水印纯函数（版本/时间/混淆标记/空兜底）+ 运行时入口不抛；
+        //   CrashLogWriter：文件名格式/正文排版/落盘（含 null 与非 Exception 对象兜底）。
+        //   真实 Write 落在 BaseDirectory\Logs（harness 把产物拷到隔离临时目录跑，
+        //   不污染仓库与 bin\Debug，见本文件头"怎么跑"）。
+        // =====================================================================
+        static void DeployDiagTests()
+        {
+            // —— 水印纯函数：固定输入看输出关键字（与分隔符解耦，只锁"含什么"） ——
+            DateTime bt = new DateTime(2026, 9, 15, 10, 30, 0);
+            string line = BuildWatermark.BuildWatermarkLine(
+                "V1.88.9", "1.0.0.0", "1.0.0.0", bt, false, true, "Microsoft Windows NT 10.0");
+            Check("水印含对外版本号", line.Contains("V1.88.9"));
+            Check("水印含程序集版本", line.Contains("1.0.0.0"));
+            Check("水印含构建时间", line.Contains("2026-09-15 10:30:00"));
+            Check("调试版标未混淆", line.Contains("未混淆"));
+            Check("水印含进程位数", line.Contains("64位"));
+
+            string lineObf = BuildWatermark.BuildWatermarkLine(
+                "V1.89.0", "1.0.0.0", "", bt, true, false, "");
+            Check("混淆版提示mapping反解", lineObf.Contains("mapping"));
+            Check("构建时间拿不到显示未知", lineObf.Contains("未知"));
+
+            // 空输入全兜底：null/空串/MinValue 进来不能抛，整行也不能消失（崩溃路径可能啥都拿不到）。
+            string lineEmpty = "";
+            bool emptyOk = false;
+            try
+            {
+                lineEmpty = BuildWatermark.BuildWatermarkLine(null, null, null,
+                    DateTime.MinValue, false, false, null);
+                emptyOk = lineEmpty.Contains("未知") && lineEmpty.Contains("[启动]");
+            }
+            catch { emptyOk = false; }
+            Check("空输入兜底未知不抛", emptyOk);
+
+            // —— 运行时入口：真实环境收集，不抛且带上 ReleaseLabel 常量 ——
+            string startup = "";
+            bool startupOk = false;
+            try
+            {
+                startup = BuildWatermark.GetStartupLine();
+                startupOk = startup.Contains("[启动]")
+                    && startup.Contains(BuildWatermark.ReleaseLabel);
+            }
+            catch { startupOk = false; }
+            Check("GetStartupLine不抛且含版本", startupOk);
+            // 调试期锁：发混淆包时才允许改 true（改时同步改本断言 + CHANGELOG），
+            // 平时谁手滑翻了这里立刻红，防"调试包被标成混淆版"误导排障。
+            Check("调试期混淆标记恒false", BuildWatermark.IsObfuscatedBuild == false);
+            // 构建时间入口同样不抛（取不到回 MinValue，由纯函数渲染成"未知"）。
+            bool btOk = false;
+            try
+            {
+                DateTime t = BuildWatermark.GetBuildTime();
+                btOk = t == DateTime.MinValue || t > new DateTime(2020, 1, 1);
+            }
+            catch { btOk = false; }
+            Check("GetBuildTime不抛", btOk);
+
+            // —— 崩溃文件名：格式 + 固定尾确定性 ——
+            string fn = CrashLogWriter.BuildCrashFileName(new DateTime(2026, 9, 15, 10, 30, 15, 123), "ab12cd34");
+            Check("文件名确定性（固定尾）",
+                fn == "Crash_20260915_103015123_ab12cd34.log", fn);
+            string fnAuto = CrashLogWriter.BuildCrashFileName(DateTime.Now, null);
+            Check("自动尾文件名格式合法",
+                fnAuto.StartsWith("Crash_20") && fnAuto.EndsWith(".log") && fnAuto.Length > 30, fnAuto);
+
+            // —— 崩溃正文：排版顺序水印→线程→类型/消息→堆栈，全关键字锁 ——
+            string content = CrashLogWriter.BuildCrashContent(
+                new DateTime(2026, 9, 15, 10, 30, 15), "[启动] 软件版本 V1.88.9",
+                "UI线程", "System.NullReferenceException", "未将对象引用设置到对象实例",
+                "   在 AgingTestSystem.Views.MainForm.Foo() 位置 1");
+            Check("正文含水印行", content.Contains("V1.88.9"));
+            Check("正文含崩溃线程", content.Contains("UI线程"));
+            Check("正文含异常类型+消息",
+                content.Contains("NullReferenceException") && content.Contains("未将对象引用"));
+            Check("正文含堆栈详情", content.Contains("MainForm.Foo()"));
+
+            // 堆栈为空→占位符，不能出现空行断链。
+            string noStack = CrashLogWriter.BuildCrashContent(
+                DateTime.Now, "", "", "", null, "");
+            Check("空堆栈给占位不抛",
+                noStack.Contains("无堆栈详情") && noStack.Contains("未知"));
+
+            // null 异常对象（非 UI 线程极端情况）：Write 必须吃下并落盘。
+            string nullMark = "NULL兜底_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            string p0 = null;
+            bool nullOk = false;
+            try
+            {
+                p0 = CrashLogWriter.Write("非UI线程" + nullMark, null);
+                nullOk = p0 != null && File.Exists(p0)
+                    && File.ReadAllText(p0, Encoding.UTF8).Contains("空异常对象");
+            }
+            catch { nullOk = false; }
+            Check("null异常对象落盘不抛", nullOk);
+            try { if (p0 != null && File.Exists(p0)) File.Delete(p0); } catch { }
+
+            // 非 Exception 对象（如 throw "字符串"）：ToString 留痕。
+            string p1 = null;
+            bool objOk = false;
+            try
+            {
+                p1 = CrashLogWriter.Write("非UI线程", "字符串异常_" + nullMark);
+                objOk = p1 != null && File.Exists(p1)
+                    && File.ReadAllText(p1, Encoding.UTF8).Contains("字符串异常_" + nullMark);
+            }
+            catch { objOk = false; }
+            Check("非Exception对象留痕不抛", objOk);
+            try { if (p1 != null && File.Exists(p1)) File.Delete(p1); } catch { }
+
+            // —— 真实落盘：正常 Exception 全链路（路径在 Logs 下 + 内容含标记 + 中文无乱码） ——
+            string mark = "部署诊断zne_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+            Exception boom;
+            try { throw new InvalidOperationException("模拟崩溃_" + mark + "中文"); }
+            catch (Exception e2) { boom = e2; }
+            string p2 = null;
+            bool diskOk = false;
+            try
+            {
+                p2 = CrashLogWriter.Write("UI线程", boom);
+                string logDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs");
+                string text = p2 != null && File.Exists(p2)
+                    ? File.ReadAllText(p2, Encoding.UTF8) : "";
+                diskOk = p2 != null && File.Exists(p2)
+                    && p2.StartsWith(logDir)
+                    && text.Contains("模拟崩溃_" + mark)
+                    && text.Contains("InvalidOperationException")
+                    && text.Contains(BuildWatermark.ReleaseLabel);
+            }
+            catch { diskOk = false; }
+            Check("真实崩溃落盘内容全", diskOk);
+
+            // 连写两次互不覆盖（一崩一文件，文件名不同且都存在）。
+            string p3 = null;
+            bool twiceOk = false;
+            try
+            {
+                p3 = CrashLogWriter.Write("UI线程", boom);
+                twiceOk = p3 != null && p2 != null && p3 != p2
+                    && File.Exists(p2) && File.Exists(p3);
+            }
+            catch { twiceOk = false; }
+            Check("连写两次文件名不同且都存在", twiceOk);
+            try { if (p2 != null && File.Exists(p2)) File.Delete(p2); } catch { }
+            try { if (p3 != null && File.Exists(p3)) File.Delete(p3); } catch { }
         }
 
     }

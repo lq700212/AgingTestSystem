@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ================================================================================
+  Obfuscar 混淆配置样例（AgingTestSystem 专用，V1.88.9 起）
+
+  【当前阶段用不用】不用。调试期（现在）只做 Release + 不发 pdb + 软件激活绑机器，
+  保证远程可排错；等现场稳定（一两周无改动）再按本文件打第一个混淆包。
+  本文件不接入 csproj 构建，打包时手动跑一次即可（步骤见下方"用法"）。
+
+  【用法（稳定后打混淆包五步）】
+  1. 把 Services/BuildWatermark.cs 里 IsObfuscatedBuild 改成 true，重新编译 Release；
+  2. 安装 Obfuscar（dotnet tool / NuGet Obfuscar，版本不同元素名可能微调，
+     首次使用前对照所装版本的官方文档核对一遍本文件的元素名）；
+  3. 把下面 InPath 指向 Release 产物目录，OutPath 指向待发目录，跑 Obfuscar；
+  4. 对混淆后产物跑全量回归（build_and_test.ps1 默认全量）+ 工控机冒烟，
+     重点点：策略窗下拉/设置表保存/主题切换/配方存取（全是下面的字符串反射点）；
+  5. 归档（缺一不可）：混淆 mapping 文件 + 混淆后 exe 的 MD5 + 对应 pdb +
+     BuildWatermark.ReleaseLabel。客户发回堆栈时，靠"水印版本号→这套归档"反解。
+
+  【为什么排除表长这样（一行一坑，都是本项目的真实反射/序列化点）】
+  - Models.* 全部跳过属性/字段重命名：RecipeConfig/DeviceConfig 等走 Newtonsoft.Json
+    存盘（Recipes.json / Policy.json / TestSession.json），属性名一改老文件就读不出，
+    等于把现场存量配方全废掉；
+  - DeviceConfig 全属性跳过：ProcessPolicyForm / ProjectPolicyStore / PolicyPresets /
+    SettingsForm 全是 typeof(DeviceConfig).GetProperty(key) 字符串反射，改名即返回 null，
+    策略页静默失效（比崩溃更难查）；
+  - WorkstationGridView.SetDarkMode 跳过：ThemeManager 用 GetMethod("SetDarkMode")
+    字符串找它，改名即深色切换失效；
+  - BatchRecipeForm / StationSettingsForm 的 _recipeAutoComplete 字段跳过：
+    Designer.cs 里用 GetField("_recipeAutoComplete") 反射取它，改名即配方联想崩；
+  - UserRole 一并跳过：Users.json 存角色名字串，枚举成员改名会导致老账号文件读坏；
+  - 业务日志（AppLog/TestLog/Crash）记的是中文文案 + ex.Message，不依赖类名方法名，
+    字符串加密（HideStrings）不影响可读性，可开，但开后必须跑一遍冒烟确认中文无乱码。
+
+  【以后加代码时的维护约定】
+  - Models 命名空间整体已跳过，新建模型类放进 Models 即自动受保护，不用补行；
+  - 新增"字符串反射找名字"（GetProperty/GetMethod/GetField 传字面量）→ 下面补对应 Skip；
+  - 判断标准：grep "GetProperty(|GetMethod(|GetField(" 全仓扫一遍，凡传字面量的都要有去处。
+  ================================================================================
+-->
+<Obfuscator>
+  <!-- 输入：Release 编译产物目录（含 AgingTestSystem.exe + 全部 dll）；输出：待发目录 -->
+  <Var name="InPath" value=".\bin\Release" />
+  <Var name="OutPath" value=".\obfuscated" />
+  <!-- Framework 引用目录：Obfuscar 自己跑在新版 .NET 上，认不出 .NET Framework 4.x 的
+       System.Windows.Forms 等程序集，不加这行会报 Unable to resolve dependency。
+       本项目目标框架 v4.7.2（见 csproj 的 TargetFrameworkVersion），路径照抄即可；
+       若将来升级目标框架，同步改这里的版本号。 -->
+  <Var name="ExtraFrameworkFolders" value="C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2" />
+
+  <!-- 公开 API 保持可读（exe 无外部调用者，此项影响小，保守起见保持 true，
+       真正的隐藏靠下面 HidePrivateApi + 重命名） -->
+  <Var name="KeepPublicApi" value="true" />
+  <!-- 私有成员隐藏 + 重命名全开（字段/属性/事件），方法体优化、反编译器抑制 -->
+  <Var name="HidePrivateApi" value="true" />
+  <Var name="RenameProperties" value="true" />
+  <Var name="RenameFields" value="true" />
+  <Var name="RenameEvents" value="true" />
+  <Var name="OptimizeMethods" value="true" />
+  <Var name="SuppressIldasm" value="true" />
+  <!-- 字符串加密：运行时自动解密，日志中文不受影响；开后必须冒烟确认 -->
+  <Var name="HideStrings" value="true" />
+
+  <Module file="$(InPath)\AgingTestSystem.exe">
+    <!-- ===== Json 序列化模型：整个 Models 命名空间跳过（存盘兼容性红线） =====
+         SkipNamespace 会跳过该命名空间下全部类型/成员的重命名。凡进 Models 的新类
+         自动受保护，不用补行（这一点比逐个 SkipType 省心，V1.88.10 实测有效）。
+         为什么必须保名字：RecipeConfig/DeviceConfig 等走 Newtonsoft.Json 按属性名
+         存盘（Recipes.json / Policy.json / TestSession.json），属性名一改老文件
+         就读不出，等于把现场存量配方全废掉。 -->
+    <SkipNamespace name="AgingTestSystem.Models" />
+    <!-- ===== 字符串反射点：名字必须原样保留 =====
+         注意 Skip 三元素的写法是 type="类型全名" name="成员名"（分开写），
+         不要写成 name="类型全名.成员名"——后者会被静默忽略，字段照改不误
+         （V1.88.10 血泪：验收 A12 当场抓到 _recipeAutoComplete 被改名）。
+         attrib 不写＝不论公私有都跳过（正好覆盖私字段；公有成员本来就被
+         KeepPublicApi 保住，这里是双保险）。 -->
+    <!-- ThemeManager.GetMethod("SetDarkMode") -->
+    <SkipMethod type="AgingTestSystem.Views.WorkstationGridView" name="SetDarkMode" />
+    <!-- Designer.cs 里 GetField("_recipeAutoComplete") -->
+    <SkipField type="AgingTestSystem.Dialogs.BatchRecipeForm" name="_recipeAutoComplete" />
+    <SkipField type="AgingTestSystem.Dialogs.StationSettingsForm" name="_recipeAutoComplete" />
+  </Module>
+</Obfuscator>

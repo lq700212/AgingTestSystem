@@ -45,7 +45,9 @@ DeviceManager（服务层核心编排：采集/测试状态机/报警联动/送�
   ├─ IFanController    (MockFanController   / FanControllerClient)
   ├─ ScannerService（扫码枪，独立）   UserManager（用户/权限，Users.json，密码 PBKDF2 哈希）+ PasswordHasher
   ├─ TestEventLogger（测试事件落盘 Logs\TestLog_yyyyMMdd.csv，供历史记录窗体）
-  └─ AppLogFileWriter（主窗体 UI 操作日志落盘 Logs\AppLog_yyyyMMdd.log，与文本框逐行一致）
+  ├─ AppLogFileWriter（主窗体 UI 操作日志落盘 Logs\AppLog_yyyyMMdd.log，与文本框逐行一致）
+  ├─ BuildWatermark（V1.88.9：启动第一行版本水印，版本/构建时间/混淆标记，远程先看这行定版本）
+  └─ CrashLogWriter（V1.88.9：全局异常一崩一文件 Logs\Crash_*.log，含水印+全堆栈，请客户发回此文件）
         ↓
 Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / StationInfo）
 ```
@@ -68,6 +70,8 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Services/ScannerService.cs` | 扫码枪：WMI 识别串口、串口读码、断线心跳重连 |
 | `Services/TestEventLogger.cs` | 测试事件 CSV 落盘（启动/停止/报警/复位/急停/真空建立；V1.68 加"MES上报(Mock)"联调事件） |
 | `Services/AppLogFileWriter.cs` | 主窗体 UI 操作日志落盘（Logs\AppLog_yyyyMMdd.log，按日期分文件，与文本框逐行一致，写失败静默） |
+| `Services/BuildWatermark.cs`（V1.88.9） | 启动版本水印：主窗体构造第一行写入 AppLog（对外版本＋程序集/文件版本＋exe 构建时间＋混淆标记＋进程位数＋OS）；崩溃日志嵌同一份水印，远程排查先看这行定版本 |
+| `Services/CrashLogWriter.cs`（V1.88.9） | 崩溃落盘：一崩一文件 Logs\Crash_yyyyMMdd_HHmmssfff_xx.log（含水印＋线程＋类型＋消息＋全堆栈；null/非 Exception 兜底，绝不抛）；Program 两全局异常口先落盘→再补 AppLog 摘要→弹框带路径请客户发回 |
 | `Services/UserManager.cs` | 用户/登录/权限，Users.json 持久化（密码哈希，V1.58.22）；V1.64 起含 dev 最高权限账号（可删改管理员，dev 名系统保留） |
 | `Services/PasswordHasher.cs` | 密码哈希（PBKDF2-HMAC-SHA256，随机盐 + 10 万次迭代，`PBKDF2$迭代$盐$哈希` 自描述格式） |
 | `Services/SoftwareActivation.cs`（V1.87）+ `Dialogs/SoftActivation.cs` | 软件激活：与 HJVision 同源同口径（CPU 序列号 + MD5 30 字符码，同一套《获取激活码》工具通用）；设备ID/设备码/激活码三件套，30天（768 运行小时格）/永久两档；`MainSetting.ini [RunHash]` 存双键（gitignore），主窗 1 小时 Timer 提醒，新设备/过期只置灰用户权限入口，不阻断启动与生产；V1.88.1 起激活成功关闭弹窗即重查解灰，不用重启 |
