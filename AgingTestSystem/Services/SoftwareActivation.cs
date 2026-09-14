@@ -259,6 +259,38 @@ namespace AgingTestSystem.Services
             catch { return IniFileName; }
         }
 
+        /// <summary>
+        /// 缺文件建空模板（【V1.87】首次运行/误删后自动补，厂商只填值）。
+        /// 只建不覆盖：文件已存在直接返回，绝不碰已有的激活（覆盖=把有效授权洗掉）。
+        /// 模板里两键留空 + 中文注释写清填法（填法见 docs/内部开发人员说明.md 第十二节）；
+        /// 空值读出来是空串，照样走"新设备"提醒（与文件缺席同语义），不改变任何判定。
+        /// </summary>
+        public static void EnsureIniTemplate()
+        {
+            EnsureIniTemplateTo(IniFilePath());
+        }
+
+        /// <summary>建空模板（显式 path：回归走隔离临时目录，不碰真实 MainSetting.ini）。</summary>
+        public static void EnsureIniTemplateTo(string iniPath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(iniPath) || File.Exists(iniPath)) return;
+                string dir = Path.GetDirectoryName(iniPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                var sb = new StringBuilder();
+                sb.AppendLine("; 老化测试系统激活文件（与 HJVision 同源，V1.87）");
+                sb.AppendLine("; 出厂/换机时由厂商填写两键，填法见 docs/内部开发人员说明.md 第十二节：");
+                sb.AppendLine("; 设备ID/设备码在【关于→软件授权】里看；设备ID码=《获取激活码》工具\"设备ID\"框算出；");
+                sb.AppendLine("; RunHash2 起点：30天=Encrypt(设备ID+\"0\")，永久=Encrypt(设备ID+\"ALL\")（工具\"设备码\"框算出）。");
+                sb.AppendLine("[" + Section + "]");
+                sb.AppendLine(KeyDevice + "=");
+                sb.AppendLine(KeyRuntime + "=");
+                File.WriteAllText(iniPath, sb.ToString(), Encoding.Unicode);
+            }
+            catch { }
+        }
+
         /// <summary>读 RunHash 双键（生产路径；文件缺席/读失败返回空串，调用方按新设备/过期走）。</summary>
         public static void ReadRunHash(out string runHash1, out string runHash2)
         {

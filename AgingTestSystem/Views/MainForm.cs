@@ -1143,6 +1143,8 @@ namespace AgingTestSystem.Views
 
             // 【V1.87】授权计时器（与 HJVision 的 HashTimer 一致：1 小时一格，
             // 新设备/过期弹框 + 置灰用户权限入口，不阻断启动与生产）。
+            // 先补空模板（缺文件才建，已有激活绝不覆盖）：厂商只填值，不用记文件名。
+            Services.SoftwareActivation.EnsureIniTemplate();
             hashTimer.Start();
         }
 

@@ -3448,6 +3448,24 @@ namespace AgingTestSystem.Tests
             Services.SoftwareActivation.ReadRunHashFrom(ini, out h1, out h2);
             Check("推进一格", Services.SoftwareActivation.FindSlot(h2, cpu) == 4);
 
+            // ── 空模板：缺文件自动建（只建不覆盖，空值=新设备语义） ──
+            string tpl = Path.Combine(dir, "Tpl", "MainSetting.ini");
+            Services.SoftwareActivation.EnsureIniTemplateTo(tpl);
+            Check("缺文件建出模板", File.Exists(tpl));
+            string t1;
+            string t2;
+            Services.SoftwareActivation.ReadRunHashFrom(tpl, out t1, out t2);
+            Check("模板两键读空", t1 == "" && t2 == "");
+            Check("空模板=新设备语义",
+                !Services.SoftwareActivation.IsDeviceBound(t1, cpu));
+            Services.SoftwareActivation.WriteValueTo(tpl,
+                Services.SoftwareActivation.KeyDevice,
+                Services.SoftwareActivation.DeviceIdCode(cpu));
+            Services.SoftwareActivation.EnsureIniTemplateTo(tpl);   // 已有文件再调
+            Services.SoftwareActivation.ReadRunHashFrom(tpl, out t1, out t2);
+            Check("已有文件不覆盖",
+                t1 == Services.SoftwareActivation.DeviceIdCode(cpu));
+
             // ── 激活窗构造（只构造不 Show，不断言弹窗） ──
             var fl = typeof(SoftActivation);
             var flInst = BindingFlags.NonPublic | BindingFlags.Instance;
