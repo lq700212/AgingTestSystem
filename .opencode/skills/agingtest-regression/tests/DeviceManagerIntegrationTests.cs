@@ -1074,17 +1074,73 @@ namespace AgingTestSystem.Tests
                 r3.SetPressure(1, -6m);
                 Check("[策略P3] 到位上电进入老化",
                     WaitUntil(() => io3.ReadOutput(PowerOut(c3, 1)), 2500));
-                r3.SetPressure(1, 0m); // 老化中掉真空
-                Thread.Sleep(600);     // 数个采集周期：缺省会报警，这里应保持
+                // 【V1.88.20 加固】相位落定 Aging 才掉压：上电输出只是 IO 结果，
+                // 相位变量是采集侧结算的；掉压若撞上"输出已开、相位仍 Vacuuming"
+                // 的窗口即走真空建立失败 Fault（满负载偶发，单跑因周期快撞不上；
+                // 症状飘忽：有时边沿两条红，有时状态检查红）。快照在上电边沿带
+                // 相位落盘（P4 同款黑盒口径），轮询它即确认，不读私有字段。
+                Check("[策略P3] 相位已结算为老化",
+                    WaitUntil(() =>
+                    {
+                        try
+                        {
+                            var snap3 = TestSessionStore.Load();
+                            var s3 = snap3 != null && snap3.Stations != null
+                                ? snap3.Stations.Find(s => s != null && s.DeviceId == 1) : null;
+                            return s3 != null && s3.Phase == (int)AgingPhase.Aging;
+                        }
+                        catch { return false; }
+                    }, 5000));
+                // 【V1.88.20 加固】掉压值必须用刺激后才出现的值：初始全 0、建压 -6，
+                // 若掉压仍用 0，"缓存==0"在刺激前即成立，等待瞬间通过，又退化成
+                // Sleep 赌博（首轮 600ms 零周期+初始缓存 Idle 即红过一次，血泪）。
+                // -1 同样越限（阈值 -5），且只可能是掉压后的周期写入，非空证明。
+                r3.SetPressure(1, -1m); // 老化中掉真空
+                // 【V1.88.20 加固】等"消费掉压的采集周期"先成立再断言：固定 Sleep
+                // 等于假设 30ms 周期准时跑，满负载定时器饿死时后面 2 秒也不够用。
+                // 轮询缓存压力（与边沿同一轮写入、无平滑滤波），周期跑起来才往下走；
+                // 15 秒上限，真饿死也报得明白。
+                Check("[策略P3] 采集周期已消费掉压读数",
+                    WaitUntil(() =>
+                    {
+                        var dd = dm3.GetBarometerData(1);
+                        return dd != null && dd.VacuumPressure == -1m;
+                    }, 15000));
+                Check("[策略P3] 边沿记一条失压保持运行",
+                    WaitUntil(() => countLines("失压保持运行") >= 1, 15000));
+                // 状态断言放边沿之后：恒定 -1 下机器已收敛（保持运行恒 Testing，
+                // 报警则锁存 Fault），此时读是稳态读，不再是瞬态赌博。
                 var d3 = dm3.GetBarometerData(1);
+                // 【V1.88.20】失败才展开的快照（绿时只多一次缓存读＋一次反射，红时直接
+                // 定罪：满负载偶发飘移，复现靠运气，证据必须留在失败行里，免二次抓瞎）。
+                Func<string> diag3 = () =>
+                {
+                    try
+                    {
+                        var dd = dm3.GetBarometerData(1);
+                        string phase = "?";
+                        try
+                        {
+                            var arr = GetDmField(dm3, "_testPhases") as Array;
+                            phase = arr != null && arr.Length > 0
+                                ? arr.GetValue(0).ToString() : "arr空";
+                        }
+                        catch (Exception ex2) { phase = "读失败:" + ex2.GetType().Name; }
+                        return "status=" + (dd == null ? "null" : dd.Status.ToString())
+                            + " p=" + (dd == null ? "?" : dd.VacuumPressure.ToString())
+                            + " result=" + (dd == null ? "?" : (dd.LastTestResult ?? ""))
+                            + " phase=" + phase;
+                    }
+                    catch (Exception ex) { return "diag失败:" + ex.Message; }
+                };
                 Check("[策略P3] 失压不停机(仍Testing非Fault)",
-                    d3 != null && d3.Status == DeviceStatus.Testing);
+                    d3 != null && d3.Status == DeviceStatus.Testing, diag3());
                 Check("[策略P3] 失压不写判定结果",
                     string.IsNullOrEmpty((dm3.GetBarometerData(1) ?? new BarometerData()).LastTestResult));
                 Check("[策略P3] 边沿记一条失压保持运行",
-                    WaitUntil(() => countLines("失压保持运行") >= 1, 2000));
-                Thread.Sleep(600);
-                Check("[策略P3] 不刷屏(仍只有一条)",
+                    WaitUntil(() => countLines("失压保持运行") >= 1, 15000));
+                Thread.Sleep(1500); // 多给慢机器几轮周期；_lossNoted 边沿锁＋恒定 0 压
+                Check("[策略P3] 不刷屏(仍只有一条)", // 不抖动，条数恒 1，可放心等
                     countLines("失压保持运行") == 1);
             }
             finally { try { dm3.StopAll(); } catch { } try { dm3.Dispose(); } catch { } }
