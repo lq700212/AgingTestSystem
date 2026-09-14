@@ -91,9 +91,9 @@ namespace AgingTestSystem.Models
     ///     │    └─ 电流行 RcCurrentValue(双端同压力框→X=65 宽85；Y 吊压力框下方 Gap=2 → 67+21+2=90)
     ///     │         └─ SN 框 RcSNValue(右缘:SetButton→X=213-148=65；Y 吊电流行下方 Gap=3：
     ///     │              关电流电流行高按 0 → Y=90+0+3=93 与原来一致；开时 Y=90+21+3=114)
-    ///     ├─ 延时开启/到达 值框(左缘:SNValue→X=65 + 垂直居中于设置按钮，CenterOffsetY=-12/+13)
+    ///     ├─ 延时时间/烧屏时间 值框(左缘:SNValue→X=65 + 垂直居中于设置按钮，CenterOffsetY=-12/+13)
     ///     │         → 两行中心 157.5/182.5 关于按钮中心 170 对称，Y=147/172（跟下链走）
-    ///     └─ 各标签(横向锚定 + VerticalCenterAlignTo 各自框，offset=-1)：真空压力/电流/SN/配方/延时开启/延时到达
+    ///     └─ 各标签(横向锚定 + VerticalCenterAlignTo 各自框，offset=-1)：真空压力/电流/SN/配方/延时时间/烧屏时间
     ///   交接缝 SN→配方（【V1.77】两链在此交接）：缺省高度下配方 Y(118) - SN 下缘(93+21) = 4px，
     ///   与原来一致；面板增高时间距拉大（上链不动、下链下移）——顶部信息行位置永不动，
     ///   这是故意的（追溯信息不随面板高度漂移）。
@@ -266,18 +266,18 @@ namespace AgingTestSystem.Models
         /// 面板高改变时设置按钮下移，配方框以间距 6 跟随其上缘联动）</summary>
         public ElementRect RcRecipeValue { get; set; } = new ElementRect { X = 65, Y = 118, Width = 148, Height = 21, RightAlignTo = "SetButton", BottomToTopAlignTo = "SetButton", BottomToTopGap = 6 };
 
-        /// <summary>延时开启值框（V1.58.17 左缘锚定 SN 框：LeftAlignTo="SNValue"；V1.58.19 垂直居中于
+        /// <summary>延时时间值框（V1.58.17 左缘锚定 SN 框：LeftAlignTo="SNValue"；V1.58.19 垂直居中于
         /// 设置按钮 VerticalCenterAlignTo="SetButton"+CenterOffsetY=-12，保持原 Y=147 不变：
-        /// 145+14-12=147，即框中心 157.5 位于按钮中心 170 上方 12.5px，与到达框对称分布。
+        /// 145+14-12=147，即框中心 157.5 位于按钮中心 170 上方 12.5px，与烧屏时间框对称分布。
         /// 【V1.58.20】左缘跟随 SN 框→65，随内容居中）</summary>
-        public ElementRect RcDelayStartValue { get; set; } = new ElementRect { X = 65, Y = 147, Width = 80, Height = 21, LeftAlignTo = "SNValue", VerticalCenterAlignTo = "SetButton", CenterOffsetY = -12 };
+        public ElementRect RcDelayTimeValue { get; set; } = new ElementRect { X = 65, Y = 147, Width = 80, Height = 21, LeftAlignTo = "SNValue", VerticalCenterAlignTo = "SetButton", CenterOffsetY = -12 };
 
-        /// <summary>延时到达值框（V1.58.17 左缘锚定 SN 框；V1.58.19 垂直居中于设置按钮
+        /// <summary>烧屏时间值框（V1.58.17 左缘锚定 SN 框；V1.58.19 垂直居中于设置按钮
         /// VerticalCenterAlignTo="SetButton"+CenterOffsetY=13，保持原 Y=172 不变：145+14+13=172，
-        /// 即框中心 182.5 位于按钮中心 170 下方 12.5px，与开启框对称分布。
+        /// 即框中心 182.5 位于按钮中心 170 下方 12.5px，与延时时间框对称分布。
         /// 说明：因整数除法截断 0.5px，两行偏移取 -12/+13 才能与 V1.58.18 坐标完全一致。
         /// 【V1.58.20】左缘跟随 SN 框→65，随内容居中）</summary>
-        public ElementRect RcDelayArriveValue { get; set; } = new ElementRect { X = 65, Y = 172, Width = 80, Height = 21, LeftAlignTo = "SNValue", VerticalCenterAlignTo = "SetButton", CenterOffsetY = 13 };
+        public ElementRect RcBurnInValue { get; set; } = new ElementRect { X = 65, Y = 172, Width = 80, Height = 21, LeftAlignTo = "SNValue", VerticalCenterAlignTo = "SetButton", CenterOffsetY = 13 };
 
         /// <summary>"设置"按钮区域（V1.58.13 右侧锚定 RightMargin=9，X 自动=153；V1.58.19 下缘锚定
         /// BottomMargin=10，保持原 Y=145 不变：205-10-50=145，即下缘 195 距面板下缘 10px。
@@ -316,11 +316,11 @@ namespace AgingTestSystem.Models
         /// <summary>静态标签"配方:"位置（V1.58.16 左缘锚定真空压力标签→X=9；V1.58.19 垂直居中于配方框，保持原 Y=121 不变：118+4-1=121）</summary>
         public ElementPoint LabelRecipePosition { get; set; } = new ElementPoint { X = 9, Y = 121, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "RecipeValue", VerticalCenterOffset = -1 };
 
-        /// <summary>静态标签"延时开启"位置（V1.58.16 左缘锚定真空压力标签→X=9；V1.58.19 垂直居中于延时开启框，保持原 Y=150 不变：147+4-1=150）</summary>
-        public ElementPoint LabelDelayStartPosition { get; set; } = new ElementPoint { X = 9, Y = 150, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "DelayStartValue", VerticalCenterOffset = -1 };
+        /// <summary>静态标签"延时时间"位置（V1.58.16 左缘锚定真空压力标签→X=9；V1.58.19 垂直居中于延时时间框，保持原 Y=150 不变：147+4-1=150）</summary>
+        public ElementPoint LabelDelayTimePosition { get; set; } = new ElementPoint { X = 9, Y = 150, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "DelayTimeValue", VerticalCenterOffset = -1 };
 
-        /// <summary>静态标签"延时到达"位置（V1.58.16 左缘锚定真空压力标签→X=9；V1.58.19 垂直居中于延时到达框，保持原 Y=175 不变：172+4-1=175）</summary>
-        public ElementPoint LabelDelayArrivePosition { get; set; } = new ElementPoint { X = 9, Y = 175, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "DelayArriveValue", VerticalCenterOffset = -1 };
+        /// <summary>静态标签"烧屏时间"位置（V1.58.16 左缘锚定真空压力标签→X=9；V1.58.19 垂直居中于烧屏时间框，保持原 Y=175 不变：172+4-1=175）</summary>
+        public ElementPoint LabelBurnInPosition { get; set; } = new ElementPoint { X = 9, Y = 175, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "BurnInValue", VerticalCenterOffset = -1 };
 
         // ===================== 文字内容 =====================
 
@@ -358,6 +358,13 @@ namespace AgingTestSystem.Models
 
         /// <summary>真空开状态块背景色（绿）</summary>
         public string ColorVacuumOn { get; set; } = "50,205,50";
+
+        /// <summary>
+        /// 真空异常状态块背景色（红：阀已开但负压未达到阈值，"开了没吸住"）。
+        /// 【为什么单独配】以前阀开恒绿，漏气要等到超时报警才知道；现在开阀即按到位标记显示
+        /// 绿/红，红色必须一眼与绿色区分。缺省与故障红同值（255,0,0），现场可按灯光环境微调。
+        /// </summary>
+        public string ColorVacuumAlarm { get; set; } = "255,0,0";
 
         /// <summary>真空关状态块背景色（浅灰）</summary>
         public string ColorVacuumOff { get; set; } = "211,211,211";
@@ -459,8 +466,8 @@ namespace AgingTestSystem.Models
             RcCurrentValue = ResolveRight(RcCurrentValue);
             RcSNValue = ResolveRight(RcSNValue);
             RcRecipeValue = ResolveRight(RcRecipeValue);
-            RcDelayStartValue = ResolveRight(RcDelayStartValue);
-            RcDelayArriveValue = ResolveRight(RcDelayArriveValue);
+            RcDelayTimeValue = ResolveRight(RcDelayTimeValue);
+            RcBurnInValue = ResolveRight(RcBurnInValue);
             RcSetButton = ResolveRight(RcSetButton);
             RcSelectBox = ResolveRight(RcSelectBox);
 
@@ -524,8 +531,8 @@ namespace AgingTestSystem.Models
             // ⑧ SN 终解 Y（电流已解：手改 TopToBottomGap 也能终值正确；缺省值下与④一致，幂等）
             RcSNValue = AlignSelf(RcSNValue);
             // ⑨ 延时两行：垂直居中于设置按钮（CenterOffsetY 对称分布，跟下链走）
-            RcDelayStartValue = AlignSelf(RcDelayStartValue);
-            RcDelayArriveValue = AlignSelf(RcDelayArriveValue);
+            RcDelayTimeValue = AlignSelf(RcDelayTimeValue);
+            RcBurnInValue = AlignSelf(RcBurnInValue);
             // ⑩ 其余元素无链式锚定，保持第一步结果
             AlignSelf(RcSetButton);
             AlignSelf(RcSelectBox);
@@ -604,8 +611,8 @@ namespace AgingTestSystem.Models
                 case "CurrentValue": return RcCurrentValue;
                 case "SNValue": return RcSNValue;
                 case "RecipeValue": return RcRecipeValue;
-                case "DelayStartValue": return RcDelayStartValue;
-                case "DelayArriveValue": return RcDelayArriveValue;
+                case "DelayTimeValue": return RcDelayTimeValue;
+                case "BurnInValue": return RcBurnInValue;
                 case "SetButton": return RcSetButton;
                 case "SelectBox": return RcSelectBox;
                 default: return null;
@@ -624,8 +631,8 @@ namespace AgingTestSystem.Models
             ResolveLabel(LabelCurrentPosition);    // 【V1.77】垂直居中于电流行（关电流不画，坐标无意义）
             ResolveLabel(LabelSnPosition);         // 左缘对齐真空压力标签
             ResolveLabel(LabelRecipePosition);
-            ResolveLabel(LabelDelayStartPosition);
-            ResolveLabel(LabelDelayArrivePosition);
+            ResolveLabel(LabelDelayTimePosition);
+            ResolveLabel(LabelBurnInPosition);
         }
 
         /// <summary>单个标签的锚定解析（V1.58.17 边缘锚定、V1.58.19 垂直居中）：
@@ -673,8 +680,8 @@ namespace AgingTestSystem.Models
                 case "LabelCurrent": return LabelCurrentPosition;
                 case "LabelSn": return LabelSnPosition;
                 case "LabelRecipe": return LabelRecipePosition;
-                case "LabelDelayStart": return LabelDelayStartPosition;
-                case "LabelDelayArrive": return LabelDelayArrivePosition;
+                case "LabelDelayTime": return LabelDelayTimePosition;
+                case "LabelBurnIn": return LabelBurnInPosition;
                 default: return null;
             }
         }
@@ -920,7 +927,7 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 垂直居中对齐目标（可空）——【V1.58.19 垂直锚定】
-        /// 若设置（如 "DelayStartValue"），加载时 Y = 目标.Y + (目标.Height - LabelTextHeight)/2，
+        /// 若设置（如 "DelayTimeValue"），加载时 Y = 目标.Y + (目标.Height - LabelTextHeight)/2，
         /// 即标签文字垂直中心线与目标矩形垂直中心线重合（文字上下居中于目标框）。
         /// 目标必须是矩形名（见 <see cref="PanelLayoutConfig.GetRectByName"/>）；文字高度用
         /// <see cref="PanelLayoutConfig.LabelTextHeight"/>（默认 12，依赖字体 9pt 微软雅黑）。

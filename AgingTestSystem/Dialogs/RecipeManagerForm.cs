@@ -14,7 +14,7 @@ namespace AgingTestSystem.Dialogs
     /// 管理老化测试配方，包括：
     /// - 查看配方列表（左侧DataGridView表格，只显示序号和配方名称）
     /// - 选中配方后右侧显示该配方的设置内容，并可编辑
-    ///   （配方名称、延时时间、启动时间、极限温度、负压阈值、显示模式）
+    ///   （配方名称、延时时间、烧屏时间、极限温度、负压阈值、显示模式）
     /// - 添加配方：名称与已有配方重名时询问是否更新已有配方
     /// - 更新配方：按当前配方名称找到列表中对应配方并更新其设置
     /// - 删除配方：按当前配方名称找到列表中对应配方并确认删除
@@ -35,7 +35,7 @@ namespace AgingTestSystem.Dialogs
     /// │ │ │ 序号  │ 配方名称     │ │  │ │ 配方设置            │ │   │
     /// │ │ │───────┼─────────────│ │  │ │ 配方名称：[_______]  │ │   │
     /// │ │ │ 1     │ ABCDEFGH    │ │  │ │ 延时时间：[ ][ ][ ] │ │   │
-    /// │ │ │ 2     │ BBVJKNVK    │ │  │ │ 启动时间：[ ][ ][ ] │ │   │
+    /// │ │ │ 2     │ BBVJKNVK    │ │  │ │ 烧屏时间：[ ][ ][ ] │ │   │
     /// │ │ │ 3     │ RFTYHYJWF   │ │  │ │ 极限温度：[____]℃   │ │   │
     /// │ │ │ 4     │ WFRWGYJUK   │ │  │ │ 负压阈值：[____]kPa │ │   │ ← V1.66
     /// │ │ │ 5     │ FGYJKIewF   │ │  │ │ 显示模式：[_______] │ │   │ ← V1.66
@@ -53,8 +53,8 @@ namespace AgingTestSystem.Dialogs
     /// 【配方字段】
     /// - 序号：行号（从1开始）
     /// - 配方名称：配方的名称标识
-    /// - 延时时间：延时开启时间（时:分:秒）
-    /// - 启动时间：延时到达时间（时:分:秒）
+    /// - 延时时间：上电前等待（时:分:秒）
+    /// - 烧屏时间：上电后老化时长（时:分:秒）
     /// - 极限温度：测试极限温度（单位：℃）
     /// - 负压阈值：配方真空工艺要求（单位：kPa，V1.66；新建默认=全局阈值）
     /// - 显示模式：烧屏画面记录（自由文本，V1.66；只追溯不判定）
@@ -180,7 +180,7 @@ namespace AgingTestSystem.Dialogs
         /// <summary>
         /// 给 6 个配方项挂悬停说明（标签+输入框两边都挂，悬停哪边都看得到）。
         /// 文案规则（小白能看懂）：每条=是什么+举例+填错会怎样；时间轴按真实流程写
-        /// （点启动→只开阀→延时到+真空到位→上电→跑够启动时间→自动完成）；
+        /// （点启动→只开阀→延时时间到+真空到位→上电→跑够烧屏时间→自动完成）；
         /// 量程按本窗控件写（极限温度 0~300℃ / 负压 ±9999kPa / 时间时0-99分秒0-59），
         /// 与批量窗（0~999℃文本框）/工位窗（0~300℃数字框）各按各的控件写，不互相抄。
         /// 超 40 字走 SettingsForm.WrapTooltip 换行（全仓唯一入口，不手写截断）。
@@ -200,11 +200,11 @@ namespace AgingTestSystem.Dialogs
             SetTip(new Control[] { lblDelayTime, nudDelayHours, nudDelayMinutes, nudDelaySeconds },
                 "延时时间：上电前等待。点启动后先只开真空阀（不上电），等够这么久才上电，" +
                 "例如00:00:30=开阀30秒后上电，给吸附留稳定时间。填0=真空一到位立刻上电。" +
-                "对应工位面板延时开启。");
-            SetTip(new Control[] { lblStartTime, nudStartHours, nudStartMinutes, nudStartSeconds },
-                "启动时间：上电后老化时长。上电开始计时，跑够这么久自动完成" +
+                "对应工位面板延时时间。");
+            SetTip(new Control[] { lblBurnInTime, nudBurnInHours, nudBurnInMinutes, nudBurnInSeconds },
+                "烧屏时间：上电后老化时长。上电开始计时，跑够这么久自动完成" +
                 "（下电+关阀+PASS待取料），例如08:00:00=跑8小时。填00:00:00=不用配方时长、" +
-                "走全局时长；全局也是0才一直跑、只能手动停。对应工位面板延时到达。");
+                "走全局时长；全局也是0才一直跑、只能手动停。对应工位面板烧屏时间。");
             SetTip(new Control[] { lblLimitTemp, nudLimitTemp },
                 "极限温度：该配方的温度上限（本窗0~300℃，1位小数）。只存档追溯：" +
                 "面板不显示、不参与自动判定，填错不影响运行，但以后查配方看到的就是这个数。");
@@ -257,9 +257,9 @@ namespace AgingTestSystem.Dialogs
                 nudDelayHours.Value = nudDelayHours.Minimum;
                 nudDelayMinutes.Value = nudDelayMinutes.Minimum;
                 nudDelaySeconds.Value = nudDelaySeconds.Minimum;
-                nudStartHours.Value = nudStartHours.Minimum;
-                nudStartMinutes.Value = nudStartMinutes.Minimum;
-                nudStartSeconds.Value = nudStartSeconds.Minimum;
+                nudBurnInHours.Value = nudBurnInHours.Minimum;
+                nudBurnInMinutes.Value = nudBurnInMinutes.Minimum;
+                nudBurnInSeconds.Value = nudBurnInSeconds.Minimum;
                 nudLimitTemp.Value = nudLimitTemp.Minimum;
                 // 【V1.66】清空时负压回到新建默认值（全局阈值），显示模式清空
                 nudNegativePressure.Value = ClampPressure(_defaultNegativePressureKPa);
@@ -275,8 +275,8 @@ namespace AgingTestSystem.Dialogs
             // 延时时间 → 时/分/秒
             SetTimeInputs(nudDelayHours, nudDelayMinutes, nudDelaySeconds, recipe.DelayTime);
 
-            // 启动时间 → 时/分/秒
-            SetTimeInputs(nudStartHours, nudStartMinutes, nudStartSeconds, recipe.StartTime);
+            // 烧屏时间 → 时/分/秒
+            SetTimeInputs(nudBurnInHours, nudBurnInMinutes, nudBurnInSeconds, recipe.BurnInTime);
 
             // 极限温度（超出 NumericUpDown 范围时钳制到边界）
             nudLimitTemp.Value = Math.Max(nudLimitTemp.Minimum,
@@ -332,8 +332,8 @@ namespace AgingTestSystem.Dialogs
             recipe.Name = name;
             recipe.DelayTime = new TimeSpan(
                 (int)nudDelayHours.Value, (int)nudDelayMinutes.Value, (int)nudDelaySeconds.Value);
-            recipe.StartTime = new TimeSpan(
-                (int)nudStartHours.Value, (int)nudStartMinutes.Value, (int)nudStartSeconds.Value);
+            recipe.BurnInTime = new TimeSpan(
+                (int)nudBurnInHours.Value, (int)nudBurnInMinutes.Value, (int)nudBurnInSeconds.Value);
             recipe.LimitTemperature = nudLimitTemp.Value;
             // 【V1.66】负压阈值与显示模式一并写入：以前这里漏写 NegativePressure，
             // 新建配方该值恒 0，下发后真空保护≈关闭。现在存什么定格什么。

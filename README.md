@@ -91,9 +91,9 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Dialogs/SettingsForm.cs` | 系统设置（管理员，按分类编辑 App.config 全部配置项 + V1.67“工艺策略”分类（策略存项目 Policy.json）；写回 exe.config/Policy.json 保存即生效，连接参数自动重连；仅设备数量/布局/模拟开关等结构型配置重启生效；说明悬停 tooltip 超 40 字换行） |
 | `Dialogs/HomeLayoutEditorForm.cs` | 主页区域调整编辑器（V1.58，管理员）：自绘预览 + 拖动四条边缘实时改标题栏/菜单栏/右侧区/状态栏尺寸，保存写 `HomeLayout.json` 即生效，无需重编译 |
 | `Models/HomeLayoutConfig.cs` | 主页布局配置模型（V1.58）：标题栏/菜单栏/右侧区/状态栏四个尺寸 + Range 约束，`LoadOrDefault` 缺文件或损坏回退内置默认；MainForm 启动与保存后据此应用布局 |
-| `Dialogs/StationSettingsForm.cs` | 工位设置（SN/配方/延时/启动时间/极限温度/负压阈值/显示模式 写入 StationInfo，V1.66 加后两项；延时/启动时间三 NumericUpDown 冒号分隔，V1.28；保存=应用+缓存+存配方、加入对列=应用+存配方、下电=关闭载台上电） |
-| `Dialogs/RecipeManagerForm.cs` | 配方管理窗口（左侧列表可滚动 + 右侧可编辑输入，延时/启动时间冒号分隔三 NumericUpDown，V1.28；V1.66 加负压阈值/显示模式；添加/更新/删除操作即自动落盘 Recipes.json，V1.27 起无"保存设置"按钮） |
-| `Dialogs/BatchRecipeForm.cs` | 批量设置配方窗口（配方名称/延时时间/启动时间/极限温度/负压阈值/显示模式，V1.66 加后两项；延时/启动时间均三 NumericUpDown 冒号分隔，V1.28 删"延时时间2"，两个时间都写入配方：延时→延时开启、启动→延时到达；加入队列=保存配方+应用到选中工位，无选中先保存配方并提示选择） |
+| `Dialogs/StationSettingsForm.cs` | 工位设置（SN/配方/延时时间/烧屏时间/极限温度/负压阈值/显示模式 写入 StationInfo，V1.66 加后两项；两时间三 NumericUpDown 冒号分隔，V1.28；保存=应用+缓存+存配方、加入对列=应用+存配方、下电=关闭载台上电） |
+| `Dialogs/RecipeManagerForm.cs` | 配方管理窗口（左侧列表可滚动 + 右侧可编辑输入，延时时间/烧屏时间冒号分隔三 NumericUpDown，V1.28；V1.66 加负压阈值/显示模式；添加/更新/删除操作即自动落盘 Recipes.json，V1.27 起无"保存设置"按钮） |
+| `Dialogs/BatchRecipeForm.cs` | 批量设置配方窗口（配方名称/延时时间/烧屏时间/极限温度/负压阈值/显示模式，V1.66 加后两项；两时间均三 NumericUpDown 冒号分隔，V1.28 删"延时时间2"，两个时间都写入配方；加入队列=保存配方+应用到选中工位，无选中先保存配方并提示选择） |
 | `Dialogs/IdBindingForm.cs` / `InputLotForm.cs` | 录入批号 + 工位↔SN 绑定（扫码枪自动识别填充，生成 Excel） |
 | `Models/` | BarometerData / FanData(+FanRunState) / IoStatus / DeviceConfig / RecipeConfig / StationInfo / PanelLayoutConfig / HomeLayoutConfig / PolicyEnums（V1.67 工艺策略枚举） / 用户模型 |
 | `Services/ProjectProfile.cs` / `Services/ProjectPolicyStore.cs` | 项目档案（V1.67）：`Projects/<项目>/` 路径解析/迁移/切换（配方/工位设置/主页布局/策略跟项目，用户/快照/日志跟机器）；策略分流读写 Policy.json（PolicyKeys 唯一名单） |
@@ -106,12 +106,13 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 ### 4.1 老化测试单台流程（V1.59 三阶段状态机）
 ```
-[准备] 录入批号 → 绑定工位↔SN → 设配方（延时开启/启动时间/负压值/显示模式随配方下发，显示模式仅记录）
+[准备] 录入批号 → 绑定工位↔SN → 设配方（延时时间/烧屏时间/负压值/显示模式随配方下发，显示模式仅记录）
 [启动] 只开真空阀 + 送风机定值启动；任务参数(时长/延时/阈值)此刻定格
-[抽真空] 等「真空到位」且「距开阀≥配方延时开启」两者满足（判定阈值=配方负压值优先，全局-5kPa兜底；
-         VacuumConfirmTimeoutMs 默认15s 内始终不到位→真空建立失败报警：关阀断电标故障，全程不带电）
+[抽真空] 等「真空到位」且「距开阀≥配方延时时间」两者满足（判定阈值=配方负压值优先，全局-5kPa兜底；
+         VacuumConfirmTimeoutMs 默认15s 内始终不到位→真空建立失败报警：关阀断电标故障，全程不带电；
+         面板真空灯：阀没开灰 / 开了到位绿 / 开了没吸住红，下电灯只看载台电）
 [上电] 条件满足自动载台上电 → 进入老化计时
-[老化] 计时时长=配方"启动时间"(>0)，否则回退 MaxTestDurationSeconds(0=不限时长手动停；V1.66 起启动框对 0 时长/空 SN 工位追加警告，可继续；V1.67 起策略可切硬拦截）
+[老化] 计时时长=配方"烧屏时间"(>0)，否则回退 MaxTestDurationSeconds(0=不限时长手动停；V1.66 起启动框对 0 时长/空 SN 工位追加警告，可继续；V1.67 起策略可切硬拦截）
 [完成] 到时自动下电+关阀 → 状态"已完成·待取料"(面板蓝) → 日志记 PASS（V1.67：策略=待判定时记"待判定"，下料时人工录 PASS/FAIL+不良代码+处置，进 CSV 追溯）→ 人工复位/重新扫码/下料判定回空闲
 [监控] 压力越限(产品FAIL；V1.67 真空责任策略可切"装夹异常") / 真空建立失败(同前) / 通讯失联(设备异常) / DI触点(可选,产品FAIL，策略不改) / 送风机超温全线联停(可选，默认关，V1.66) / 老化中失压(V1.67 策略：停机报警现状，或只记事件继续老化）→ 报警联动
 [停止] 手动停止=中止(回空闲,不计判定)；末台时送风机自动停止
@@ -150,8 +151,9 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 > 然后只选中 **1 个工位** → 弹出该工位的工位设置窗口（`StationSettingsForm`）；
 > 选中 **2 个及以上** → 弹出批量设置配方窗口（`BatchRecipeForm`）。
 
-> **面板选中交互（V1.19.5~6 / V1.24）**：空白处"长按约 0.8s"选中该工位（选中框平时全隐藏，有选中才全部显示）；
-> 已有选中时长按空白处 = **取消全部选中并隐藏所有选中框**；选中框显示时单击空白处/选中框 = 切换该工位选中状态。
+> **面板选中交互（V1.19.5~6 / V1.24，V1.88.12 起选中框常显）**：每个面板右上角永远有个选中框
+> （选中=绿底白✓，未选中=空心白框）；无选中时空白处"长按约 0.8s"选中该工位；
+> 已有选中时长按空白处 = **取消全部选中**（框还在，只是全变空心）；有选中时单击空白处/选中框 = 切换该工位选中状态。
 
 ## 5. 配置项速查（App.config + 项目 Policy.json，可在"关于→设置"管理员界面编辑；保存后大部分配置立即生效，连接参数自动重连，仅结构型配置重启生效；策略跟项目走 `Projects/<项目>/Policy.json`，切项目即换策略）
 

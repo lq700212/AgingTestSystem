@@ -36,14 +36,14 @@ namespace AgingTestSystem.Models
         public string DisplayMode { get; set; }
 
         /// <summary>
-        /// 延时时间（时:分:秒，配方窗口"延时时间"，工位面板"延时开启"）
+        /// 延时时间（时:分:秒，上电前等待：点启动后先只开真空阀，等够这么久才上电）
         /// </summary>
         public TimeSpan DelayTime { get; set; }
 
         /// <summary>
-        /// 启动时间（时:分:秒，配方窗口"启动时间"，工位面板"延时到达"）
+        /// 烧屏时间（时:分:秒，上电后老化时长：上电开始计时，跑够这么久自动完成）
         /// </summary>
-        public TimeSpan StartTime { get; set; }
+        public TimeSpan BurnInTime { get; set; }
 
         /// <summary>
         /// 极限温度（单位：摄氏度）
@@ -73,7 +73,7 @@ namespace AgingTestSystem.Models
                 NegativePressure = this.NegativePressure,
                 DisplayMode = this.DisplayMode,
                 DelayTime = this.DelayTime,
-                StartTime = this.StartTime,
+                BurnInTime = this.BurnInTime,
                 LimitTemperature = this.LimitTemperature,
                 CreateTime = this.CreateTime,
                 IsEnabled = this.IsEnabled

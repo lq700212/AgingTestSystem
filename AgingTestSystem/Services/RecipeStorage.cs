@@ -17,7 +17,7 @@ namespace AgingTestSystem.Services
     /// 【存储说明】
     /// - 文件路径：程序运行目录下的 Recipes.json（与 Users.json 同级）
     /// - 序列化整个 List&lt;RecipeConfig&gt;，包含每个配方的全部字段
-    ///   （配方名称、延时时间、启动时间、极限温度、负压值、启用状态等）
+    ///   （配方名称、延时时间、烧屏时间、极限温度、负压值、启用状态等）
     /// - 文件不存在时 Load 返回 null，由调用方使用空列表
     /// - 文件损坏或格式错误时 Load 返回 null（不抛异常）
     /// </summary>

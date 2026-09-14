@@ -3170,8 +3170,8 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 启动运行按钮点击（【V1.10】接真实业务）
-        /// 对选中的面板执行（V1.59 三阶段状态机）：开真空阀 → 真空到位+延时到自动载台上电
-        /// → 按配方启动时间老化计时（到时自动下电关阀标完成）；送风机由生命周期自动定值启动（首台）
+        /// 对选中的面板执行（V1.59 三阶段状态机）：开真空阀 → 真空到位+延时时间到自动载台上电
+        /// → 按配方烧屏时间老化计时（到时自动下电关阀标完成）；送风机由生命周期自动定值启动（首台）
         /// 【V1.16.2】异步：连接耦合器/送风机时弹"连接中"，不卡界面
         /// </summary>
         private async void btnStartRun_Click(object sender, EventArgs e)
@@ -3189,8 +3189,8 @@ namespace AgingTestSystem.Views
                 BarometerData data = _deviceManager.GetBarometerData(id);
                 if (data == null) continue;
                 if (string.IsNullOrWhiteSpace(data.SerialNumber)) emptySnIds.Add(id);
-                double startSecs = data.StartTime.TotalSeconds;
-                int effectiveSecs = startSecs > 0 ? (int)startSecs : _config.MaxTestDurationSeconds;
+                double burnInSecs = data.BurnInTime.TotalSeconds;
+                int effectiveSecs = burnInSecs > 0 ? (int)burnInSecs : _config.MaxTestDurationSeconds;
                 if (effectiveSecs <= 0) zeroDurationIds.Add(id);
             }
             string riskWarning = AgingSequencer.BuildStartWarningText(
@@ -3222,7 +3222,7 @@ namespace AgingTestSystem.Views
             if (!Sunny.UI.UIMessageBox.Show(
                 $"确认启动 {ids.Length} 台老化测试？\n" +
                 "1. 开真空阀建立负压固定产品\n" +
-                "2. 到位+延时到自动载台上电\n" +
+                "2. 到位+延时时间到自动载台上电\n" +
                 "3. 按配方计时，到时下电标完成\n" +
                 "4. 送风机定值启动\n" +
                 "注：真空久未建立自动报警断电。" +

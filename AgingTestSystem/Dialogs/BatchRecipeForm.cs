@@ -11,14 +11,14 @@ namespace AgingTestSystem.Dialogs
     /// 批量设置配方窗口（业务逻辑部分）
     ///
     /// 【功能说明】
-    /// 本窗口用于批量设置配方参数（配方名称、延时时间、启动时间、极限温度、
+    /// 本窗口用于批量设置配方参数（配方名称、延时时间、烧屏时间、极限温度、
     /// 负压阈值、显示模式），
     /// 点击"加入队列"按钮：
     /// 1. 先把当前配置的配方保存到本地配方存储（Recipes.json，有同名则询问是否覆盖更新）；
     /// 2. 判断当前是否至少选中了一个工位面板（WorkstationPanelView）：
     ///    - 没有任何选中 → 提示"请先选择工位"，配方已保存，可在「参数设置 → 配方管理」中选用，
     ///      或关闭窗口、选中工位后再打开本窗口重新点击"加入队列"应用到选中工位；
-    ///    - 有选中 → 把该配方的名称 / 延时开启（延时时间）/ 延时到达（启动时间）/
+    ///    - 有选中 → 把该配方的名称 / 延时时间 / 烧屏时间 /
     ///      负压阈值 / 显示模式应用到所有选中的工位面板。
     /// "关闭窗口"按钮直接关闭本窗体。
     ///
@@ -33,8 +33,8 @@ namespace AgingTestSystem.Dialogs
     /// │ 批量设置设置配方窗口                         │  ← 标题栏
     /// ├─────────────────────────────────────────────┤
     /// │ 配方名称：[____________]                    │  ← 配方名称输入框（支持自动检索）
-    /// │ 延时时间：[__]:[__]:[__]                    │  ← 延时时间（NumericUpDown，对应延时开启）
-    /// │ 启动时间：[__]:[__]:[__]                    │  ← 启动时间（NumericUpDown，对应延时到达）
+    /// │ 延时时间：[__]:[__]:[__]                    │  ← 延时时间（NumericUpDown，对应延时时间）
+    /// │ 烧屏时间：[__]:[__]:[__]                    │  ← 烧屏时间（NumericUpDown，对应烧屏时间）
     /// │ 极限温度：[____] °C                         │  ← 极限温度输入框
     /// │ 负压阈值：[____] kPa                        │  ← V1.66：配方真空工艺要求
     /// │ 显示模式：[____________]                    │  ← V1.66：烧屏画面记录
@@ -44,19 +44,19 @@ namespace AgingTestSystem.Dialogs
     /// └─────────────────────────────────────────────┘
     ///
     /// 【字段映射（V1.28 与配方管理窗口对齐）】
-    /// - 延时时间 → RecipeConfig.DelayTime（工位面板"延时开启"）
-    /// - 启动时间 → RecipeConfig.StartTime（工位面板"延时到达"）
+    /// - 延时时间 → RecipeConfig.DelayTime（工位面板"延时时间"）
+    /// - 烧屏时间 → RecipeConfig.BurnInTime（工位面板"烧屏时间"）
     /// - 极限温度 → RecipeConfig.LimitTemperature
     /// - 负压阈值 → RecipeConfig.NegativePressure（V1.66；必填实数，新建默认=全局阈值）
     /// - 显示模式 → RecipeConfig.DisplayMode（V1.66；自由文本，只追溯不判定）
     ///
     /// 【注意事项】
-    /// 1. 延时时间 / 启动时间均使用三个 NumericUpDown（时:分:秒，V1.28 由 TextBox 改）：
+    /// 1. 延时时间 / 烧屏时间均使用三个 NumericUpDown（时:分:秒，V1.28 由 TextBox 改）：
     ///    时 0-99、分 0-59、秒 0-59，控件自带范围限制，无需再校验；
     /// 2. 温度输入框限制为3位数字，范围 0-999°C；
     /// 3. 配方名称不能为空。
     /// 4. 配方名称输入框支持自动检索：输入时弹出模糊匹配的已存在配方列表供选择，
-    ///    选中后自动填写配方名称、延时时间、启动时间、极限温度、负压阈值、显示模式（V1.29 新增，V1.66 补后两项）。
+    ///    选中后自动填写配方名称、延时时间、烧屏时间、极限温度、负压阈值、显示模式（V1.29 新增，V1.66 补后两项）。
     /// </summary>
     public partial class BatchRecipeForm : Sunny.UI.UIForm
     {
@@ -147,7 +147,7 @@ namespace AgingTestSystem.Dialogs
         /// <summary>
         /// 给 6 个设置项挂悬停说明（标签+输入框都挂，悬停哪边都看得到）。
         /// 文案规则（小白能看懂）：每条=是什么+举例+填错会怎样；时间轴按真实流程写
-        /// （点启动→只开阀→延时到+真空到位→上电→跑够启动时间→自动完成）；
+        /// （点启动→只开阀→延时时间到+真空到位→上电→跑够烧屏时间→自动完成）；
         /// 极限温度量程按本窗文本框写（0~999℃），不抄配方管理窗 0~300 数字框口径。
         /// </summary>
         private void SetupTooltips()
@@ -165,11 +165,11 @@ namespace AgingTestSystem.Dialogs
             SetTip(new Control[] { lblDelayTime1Label, tableLayoutPanelDelay1 },
                 "延时时间：上电前等待。点启动后先只开真空阀（不上电），等够这么久才上电，" +
                 "例如00:00:30=开阀30秒后上电，给吸附留稳定时间。填0=真空一到位立刻上电。" +
-                "对应工位面板延时开启。");
-            SetTip(new Control[] { lblStartTimeLabel, tableLayoutPanelStart },
-                "启动时间：上电后老化时长。上电开始计时，跑够这么久自动完成" +
+                "对应工位面板延时时间。");
+            SetTip(new Control[] { lblBurnInTimeLabel, tableLayoutPanelBurnIn },
+                "烧屏时间：上电后老化时长。上电开始计时，跑够这么久自动完成" +
                 "（下电+关阀+PASS待取料），例如08:00:00=跑8小时。填00:00:00=不用配方时长、" +
-                "走全局时长；全局也是0才一直跑、只能手动停。对应工位面板延时到达。");
+                "走全局时长；全局也是0才一直跑、只能手动停。对应工位面板烧屏时间。");
             SetTip(new Control[] { lblLimitTempLabel, txtLimitTemp },
                 "极限温度：该配方的温度上限（本窗0~999℃）。只存档追溯：" +
                 "面板不显示、不参与自动判定，填错不影响运行，但以后查配方看到的就是这个数。");
@@ -197,7 +197,7 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 配方自动检索选中回调（V1.29 新增）
-        /// 用户从自动检索列表中选择一个配方后，自动填写配方名称、延时时间、启动时间、极限温度。
+        /// 用户从自动检索列表中选择一个配方后，自动填写配方名称、延时时间、烧屏时间、极限温度。
         /// </summary>
         /// <param name="recipe">选中的配方</param>
         private void OnRecipeSelected(RecipeConfig recipe)
@@ -214,13 +214,13 @@ namespace AgingTestSystem.Dialogs
             nudDelaySeconds.Value = Math.Max(nudDelaySeconds.Minimum,
                 Math.Min(nudDelaySeconds.Maximum, (decimal)recipe.DelayTime.Seconds));
 
-            // 回填启动时间（时:分:秒）
-            nudStartHours.Value = Math.Max(nudStartHours.Minimum,
-                Math.Min(nudStartHours.Maximum, (decimal)(int)recipe.StartTime.TotalHours));
-            nudStartMinutes.Value = Math.Max(nudStartMinutes.Minimum,
-                Math.Min(nudStartMinutes.Maximum, (decimal)recipe.StartTime.Minutes));
-            nudStartSeconds.Value = Math.Max(nudStartSeconds.Minimum,
-                Math.Min(nudStartSeconds.Maximum, (decimal)recipe.StartTime.Seconds));
+            // 回填烧屏时间（时:分:秒）
+            nudBurnInHours.Value = Math.Max(nudBurnInHours.Minimum,
+                Math.Min(nudBurnInHours.Maximum, (decimal)(int)recipe.BurnInTime.TotalHours));
+            nudBurnInMinutes.Value = Math.Max(nudBurnInMinutes.Minimum,
+                Math.Min(nudBurnInMinutes.Maximum, (decimal)recipe.BurnInTime.Minutes));
+            nudBurnInSeconds.Value = Math.Max(nudBurnInSeconds.Minimum,
+                Math.Min(nudBurnInSeconds.Maximum, (decimal)recipe.BurnInTime.Seconds));
 
             // 回填极限温度
             txtLimitTemp.Text = recipe.LimitTemperature.ToString("0.#");
@@ -272,16 +272,14 @@ namespace AgingTestSystem.Dialogs
                 return null;
             }
 
-            // 读取延时时间（时:分:秒，NumericUpDown 控件已限制范围，无需额外校验）→ 延时开启
+            // 读取延时时间（时:分:秒，NumericUpDown 控件已限制范围，无需额外校验）→ 延时时间
             TimeSpan delayTime = new TimeSpan(
                 (int)nudDelayHours.Value, (int)nudDelayMinutes.Value, (int)nudDelaySeconds.Value);
 
-            // 读取启动时间（时:分:秒，NumericUpDown 控件已限制范围，无需额外校验）→ 延时到达
-            TimeSpan startTime = new TimeSpan(
-                (int)nudStartHours.Value, (int)nudStartMinutes.Value, (int)nudStartSeconds.Value);
-
-            // 延时到达：由"启动时间"输入框填写（V1.28 与配方管理窗口对齐，两个时间都保存）
-            TimeSpan delayArriveTime = startTime;
+            // 读取烧屏时间（时:分:秒，NumericUpDown 控件已限制范围，无需额外校验）→ 烧屏时间
+            // （V1.28 与配方管理窗口对齐，两个时间都保存）
+            TimeSpan burnInTime = new TimeSpan(
+                (int)nudBurnInHours.Value, (int)nudBurnInMinutes.Value, (int)nudBurnInSeconds.Value);
 
             // 解析极限温度
             decimal limitTemp;
@@ -335,13 +333,13 @@ namespace AgingTestSystem.Dialogs
 
             // 创建配方配置对象
             // Id 由 RecipeStorage.SaveWithDuplicateCheck 在保存时统一分配，这里留 0。
-            // 延时时间 → DelayTime（延时开启），启动时间 → StartTime（延时到达），
+            // 延时时间 → DelayTime（延时时间），烧屏时间 → BurnInTime（烧屏时间），
             // 与配方管理窗口 / 工位设置窗口的字段映射完全一致（V1.28 对齐）。
             return new RecipeConfig
             {
                 Name = recipeName,
                 DelayTime = delayTime,
-                StartTime = delayArriveTime,
+                BurnInTime = burnInTime,
                 LimitTemperature = limitTemp,
                 NegativePressure = negativePressure,
                 DisplayMode = canonicalMode,
@@ -359,7 +357,7 @@ namespace AgingTestSystem.Dialogs
         ///    用户取消覆盖 / 保存失败 → 直接返回，不做任何事；
         /// 3. 判断是否选中了工位：
         ///    - 一个工位都没选中 → 提示"请先选择工位"，配方已保存；
-        ///    - 有选中 → 把配方的名称 / 延时开启（延时时间）/ 延时到达（启动时间）应用到所有选中工位。
+        ///    - 有选中 → 把配方的名称 / 延时时间 / 烧屏时间应用到所有选中工位。
         /// </summary>
         private void btnAddToQueue_Click(object sender, EventArgs e)
         {
@@ -409,11 +407,11 @@ namespace AgingTestSystem.Dialogs
             {
                 if (_deviceManager == null) break;
 
-                // 写入工位静态信息（采集线程叠加后，工位面板同步显示配方名称 / 延时开启 / 延时到达）
+                // 写入工位静态信息（采集线程叠加后，工位面板同步显示配方名称 / 延时时间 / 烧屏时间）
                 // 【V1.59】配方的负压值一并下发：启动测试时作为该工位的真空到位/报警阈值
                 // 【V1.66】显示模式一并下发：烧屏画面追溯（采集叠加到 BarometerData.DisplayMode）
                 _deviceManager.SetStationRecipe(deviceId, recipe.Name, recipe.NegativePressure, recipe.DisplayMode);
-                _deviceManager.SetStationDelayTimes(deviceId, recipe.DelayTime, recipe.StartTime);
+                _deviceManager.SetStationDelayTimes(deviceId, recipe.DelayTime, recipe.BurnInTime);
                 appliedCount++;
             }
 

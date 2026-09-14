@@ -24,11 +24,11 @@ namespace AgingTestSystem.Services
         /// <summary>配方名称（可空）</summary>
         public string RecipeName { get; set; }
 
-        /// <summary>延时时间（时:分:秒，配方窗口"延时时间"，工位面板"延时开启"）</summary>
+        /// <summary>延时时间（时:分:秒，上电前等待）</summary>
         public TimeSpan DelayTime { get; set; }
 
-        /// <summary>启动时间（时:分:秒，配方窗口"启动时间"，工位面板"延时到达"）</summary>
-        public TimeSpan StartTime { get; set; }
+        /// <summary>烧屏时间（时:分:秒，上电后老化时长）</summary>
+        public TimeSpan BurnInTime { get; set; }
 
         /// <summary>极限温度（单位：摄氏度）</summary>
         public decimal LimitTemperature { get; set; }
@@ -210,7 +210,7 @@ namespace AgingTestSystem.Services
                 SerialNumber = entry.SerialNumber,
                 RecipeName = entry.RecipeName,
                 DelayTime = entry.DelayTime,
-                StartTime = entry.StartTime,
+                BurnInTime = entry.BurnInTime,
                 LimitTemperature = entry.LimitTemperature,
                 NegativePressure = entry.NegativePressure,
                 DisplayMode = entry.DisplayMode

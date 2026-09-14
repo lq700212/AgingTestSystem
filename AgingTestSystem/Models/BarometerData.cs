@@ -51,14 +51,26 @@ namespace AgingTestSystem.Models
         public DeviceStatus Status { get; set; }
 
         /// <summary>
-        /// 延时开启时间（时:分:秒）
+        /// 延时时间（时:分:秒，上电前等待：点启动后先只开真空阀，等够这么久才上电）
         /// </summary>
         public TimeSpan DelayTime { get; set; }
 
         /// <summary>
-        /// 延时到达时间（时:分:秒）
+        /// 烧屏时间（时:分:秒，上电后老化时长：上电开始计时，跑够这么久自动完成）
         /// </summary>
-        public TimeSpan StartTime { get; set; }
+        public TimeSpan BurnInTime { get; set; }
+
+        /// <summary>
+        /// 真空是否到位（当前压力是否已达到该工位有效负压阈值，
+        /// 由 DeviceManager 在每次采集时判定后填入：测试中用启动时定格的本次任务阈值，
+        /// 未测试用全局阈值；跳过抽真空恒为 true）。
+        /// - true = 当前压力已达到负压阈值（吸住了），工位面板真空块显示绿色；
+        /// - false = 压力未达到阈值（没吸住），阀开着时面板真空块显示红色告警。
+        /// 【为什么放数据模型】面板只管按"阀开关 + 到位标记"显示三色，不自己算阈值——
+        /// 阈值口径（配方优先/全局兜底/报警方向/跳过豁免）只有 DeviceManager 知道，
+        /// 显示层自己算必然与执行层分叉。缺省 false（未知按未到位处理，不谎报绿色）。
+        /// </summary>
+        public bool VacuumInRange { get; set; } = false;
 
         /// <summary>
         /// 最近一次老化测试的结果（V1.59 新增）
@@ -108,7 +120,8 @@ namespace AgingTestSystem.Models
                 Status = this.Status,
                 LastTestResult = this.LastTestResult,
                 DelayTime = this.DelayTime,
-                StartTime = this.StartTime,
+                BurnInTime = this.BurnInTime,
+                VacuumInRange = this.VacuumInRange,
                 CollectTime = this.CollectTime,
                 // 数组深拷贝，避免外部修改影响原对象
                 // 【大扫荡】null→空数组不回 null：字段缺省非空，下游 Length/[0] 不判空，
@@ -153,10 +166,10 @@ namespace AgingTestSystem.Models
     /// 老化测试子阶段枚举（V1.59 新增，DeviceManager 内部状态机使用）
     ///
     /// 【三阶段时序】（行业通识：未吸附固定不通电，老化讲究连续性）
-    ///   启动(只开阀) ──► Vacuuming 抽真空 ──► 真空到位 且 延时开启到 ──► 上电
+    ///   启动(只开阀) ──► Vacuuming 抽真空 ──► 真空到位 且 延时时间到 ──► 上电
     ///                 （到位前超时 = 真空建立失败报警，永不带电）         │
     ///                                                                  ▼
-    ///                              到时自动下电关阀 ◄── Aging 老化计时（配方启动时间）
+    ///                              到时自动下电关阀 ◄── Aging 老化计时（配方烧屏时间）
     ///                                    │
     ///                                    ▼
     ///                            Completed 已完成·待取料(PASS)
@@ -166,7 +179,7 @@ namespace AgingTestSystem.Models
         /// <summary>未在测试</summary>
         None = 0,
 
-        /// <summary>抽真空阶段：阀已开、载台未上电，等"压力到位 + 延时开启到"</summary>
+        /// <summary>抽真空阶段：阀已开、载台未上电，等"压力到位 + 延时时间到"</summary>
         Vacuuming = 1,
 
         /// <summary>老化计时阶段：已上电，倒计时到时后自动完成</summary>
