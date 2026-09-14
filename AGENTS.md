@@ -369,6 +369,28 @@
 - **文案方向错也是 bug**："多于 64 列"写成"≤64列"、注释称"含容差"实际严格——复查要把
   注释/报错文案当代码读；缺省值两处手抄即分叉，收敛唯一工厂（`DefaultRcCurrentValue`）。
 
+## 部署诊断与混淆约定（V1.88.9，客户工控机调试期沉淀）
+
+- **调试期轻保护、稳定后再混淆**：调试期只做 Release + 不发 pdb + 软件激活绑机器，
+  保证远程可排错；稳定（一两周无改动）后按 `tools/obfuscation/obfuscar.xml` 打混淆包。
+  该 xml 不接入构建（手动跑），发版归档缺一不可：mapping + 混淆后 exe MD5 + 对应 pdb +
+  `BuildWatermark.ReleaseLabel`（客户发回堆栈靠"水印版本→这套归档"反解）。
+- **日志正文不怕混淆，怕的是字符串反射**：AppLog/TestLog/Crash 记的是中文文案 +
+  `ex.Message`，重命名不影响可读；但 `GetProperty/GetMethod/GetField` 传字面量的地方
+  （DeviceConfig 全属性 / `SetDarkMode` / 两窗 `_recipeAutoComplete` / Json 模型属性）
+  改名即静默失效。新增模型类或字面量反射必须同步补 `obfuscar.xml` 的 Skip 行
+  （grep `GetProperty(|GetMethod(|GetField(` 全仓扫一遍）。
+- **发版改 `BuildWatermark.ReleaseLabel`**（与 CHANGELOG 顶部小节同值）：主窗构造首行水印
+  + 崩溃正文嵌同一份；`IsObfuscatedBuild` 只在打混淆包时翻 true（回归里有恒 false 锁，
+  翻时同步改用例）。崩溃处理路径（`Program.cs` 两口 + `CrashLogWriter`）一律绝不抛异常，
+  落盘失败只在弹框里如实写"写入失败请截图"。
+- **发版只走一键脚本**（`.opencode/skills/agingtest-regression/scripts/obfuscated_release.ps1`，
+  构建→混淆→组包→三项验收→还原标记；产物 `release/<版本>-obf/` gitignore 永不入库）：
+  Obfuscar 的 Skip 三元素必须 `type="类型全名" name="成员名"` 分开写，
+  `name="类型.成员"` 会被静默忽略（V1.88.10 验收 A12 实锤）；新增 ps1 必须带 UTF-8 BOM
+  （PS5.1 无 BOM 解析中文直接 ParserError）；脚本里 XML 属性读写走显式 DOM
+  （`$_.value=` 适配器写法 `-File` 下抛错、交互式却正常）。
+
 ## 构建与验证命令
 
 ```powershell

@@ -59,13 +59,40 @@ namespace AgingTestSystem
         /// UI 线程未捕获异常处理程序
         /// 当 WinForms 控件事件处理中抛出未捕获异常时触发
         /// 弹出错误对话框并记录日志，避免程序静默崩溃
+        ///
+        /// 【V1.88.9 调试部署】以前只弹窗，客户点掉就无据可查。现在多做两件事：
+        /// 1. 先把完整异常落盘到 Logs\Crash_*.log（CrashLogWriter.Write，内部全程兜底不抛）；
+        /// 2. 再往 AppLog 追加一行摘要（崩溃时间+文件路径），只拷 AppLog 也能顺藤摸瓜。
+        /// 弹框文本末尾带上 crash 文件路径，请客户把该文件发回排障。
         /// </summary>
         private static void Application_ThreadException(object sender, System.Threading.ThreadExceptionEventArgs e)
         {
+            // 先落盘（顺序不能反：弹框是阻塞的，客户可能直接×掉进程，盘必须先落）。
+            // 两个 try 各自独立：落盘失败不能挡住弹框，弹框失败不能挡住落盘。
+            string crashPath = null;
+            try
+            {
+                crashPath = AgingTestSystem.Services.CrashLogWriter.Write("UI线程", e.Exception);
+            }
+            catch
+            {
+                crashPath = null;
+            }
+            try
+            {
+                string where = crashPath ?? "（崩溃日志写入失败：磁盘满/无权限，请截图本框）";
+                AgingTestSystem.Services.AppLogFileWriter.Write(
+                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [崩溃] UI线程未捕获异常：{e.Exception?.Message}（详情见 {where}）\r\n");
+            }
+            catch
+            {
+                // AppLog 追加失败静默：主角（crash 文件+弹框）不受影响。
+            }
             try
             {
                 MessageBox.Show(
-                    $"程序发生异常（UI 线程）：\n\n{e.Exception.GetType().Name}\n{e.Exception.Message}\n\n{e.Exception.StackTrace}",
+                    $"程序发生异常（UI 线程）：\n\n{e.Exception.GetType().Name}\n{e.Exception.Message}\n\n{e.Exception.StackTrace}"
+                    + (crashPath == null ? "" : $"\n\n崩溃日志已保存到：\n{crashPath}\n请把该文件发给厂家排查。"),
                     "错误",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
@@ -80,14 +107,39 @@ namespace AgingTestSystem
         /// <summary>
         /// 非 UI 线程未捕获异常处理程序
         /// 当后台线程（如 System.Timers.Timer 回调）中抛出未捕获异常时触发
+        ///
+        /// 【V1.88.9 调试部署】与 UI 线程处理同口径：先落盘 Crash_*.log，再补 AppLog 摘要行，
+        /// 弹框带文件路径。注意 ex 可能为 null（ExceptionObject 装着非 Exception 对象甚至 null），
+        /// 解析交给 CrashLogWriter.Write（它三种情况都吃得下），这里只做空安全拼接。
         /// </summary>
         private static void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
         {
+            var ex = e.ExceptionObject as Exception;
+            string crashPath = null;
             try
             {
-                var ex = e.ExceptionObject as Exception;
+                crashPath = AgingTestSystem.Services.CrashLogWriter.Write("非UI线程", e.ExceptionObject);
+            }
+            catch
+            {
+                crashPath = null;
+            }
+            try
+            {
+                string where = crashPath ?? "（崩溃日志写入失败：磁盘满/无权限，请截图本框）";
+                string msg = ex != null ? ex.Message : (e.ExceptionObject?.ToString() ?? "（无异常信息）");
+                AgingTestSystem.Services.AppLogFileWriter.Write(
+                    $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [崩溃] 非UI线程未捕获异常：{msg}（详情见 {where}）\r\n");
+            }
+            catch
+            {
+                // AppLog 追加失败静默：主角（crash 文件+弹框）不受影响。
+            }
+            try
+            {
                 MessageBox.Show(
-                    $"程序发生异常（非 UI 线程）：\n\n{(ex?.GetType().Name ?? "未知")}\n{(ex?.Message ?? e.ExceptionObject?.ToString())}\n\n{ex?.StackTrace}",
+                    $"程序发生异常（非 UI 线程）：\n\n{(ex?.GetType().Name ?? "未知")}\n{(ex?.Message ?? e.ExceptionObject?.ToString())}\n\n{ex?.StackTrace}"
+                    + (crashPath == null ? "" : $"\n\n崩溃日志已保存到：\n{crashPath}\n请把该文件发给厂家排查。"),
                     "错误",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);

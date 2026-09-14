@@ -242,6 +242,11 @@ namespace AgingTestSystem.Views
             // 3. 初始化设备管理器（连接硬件、启动数据采集）
             _deviceManager = new DeviceManager(_config);
 
+            // 【V1.88.9 调试部署】启动水印必须是第一行日志：版本/构建时间/混淆标记/进程位数/OS，
+            // 客户拷回 Logs 时先看这行定版本（调试期一天可能发多个包），崩溃堆栈反解也靠它对 mapping。
+            // WriteLog 同时进 UI 文本框和 AppLog 文件；构造期 txtLog 已建好（InitializeComponent 在前），可安全调用。
+            WriteLog(Services.BuildWatermark.GetStartupLine());
+
             // 【V1.68】MES 状态首屏可见（出差联调第一眼：开没开、往哪发、Mock 还是真发）
             if (_config.MesEnabled)
             {

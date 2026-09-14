@@ -1,6 +1,6 @@
 ﻿---
 name: agingtest-regression
-description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案热更删除/终结器释放/关窗竞态/MES映射上报/规则表达式/工艺策略窗/电流报表画面/软件激活(HJVision同源MD5三件套)等全部核心逻辑类（1730 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
+description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案热更删除/终结器释放/关窗竞态/MES映射上报/规则表达式/工艺策略窗/电流报表画面/软件激活(HJVision同源MD5三件套)等全部核心逻辑类（1758 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
 ---
 
 # AgingTestSystem 回归测试套件（冒烟 + 用例一体）
@@ -44,6 +44,33 @@ powershell -ExecutionPolicy Bypass -Command "& '.opencode\skills\agingtest-regre
 - 判定标准：退出码 0 = 全绿；输出末尾 `PASS = n FAIL = 0 / ALL PASS`。
   失败时会打印每条失败断言的名称与实际值明细。
 
+## 一点六、发版（混淆包）流水线（V1.88.10：调试期也要能发混淆包）
+
+- **一键发版**（版本缺省读 `BuildWatermark.ReleaseLabel`，工作区脏默认拒绝）：
+  `powershell -ExecutionPolicy Bypass -File ".opencode\skills\agingtest-regression\scripts\obfuscated_release.ps1"`
+  六步全自动：前置检查 → Release 构建（临时翻 `IsObfuscatedBuild` 为 true，打完 finally 还原，
+  日常 Debug 包不受影响）→ Obfuscar 混淆 → 组包 → 三项验收 → 还原校验。
+  看到 `发版成功 + 验收全过` 才算成；退出码 1=构建/混淆挂、2=验收挂、3=环境缺、4=工作区脏。
+- **产物**（`release/<版本>-obf/`，gitignore 永不入库）：`包/`（混淆 exe＋依赖 dll＋exe.config＋
+  部署说明.txt，无 pdb/源码/旧数据，整包拷工控机）＋`归档/`（Mapping.txt＋全包 MD5＋pdb＋
+  本次配置＋版本.txt 含 git 号与当时工作区diff，客户堆栈反解全靠它）。
+- **三项验收**（挂任何一项都不许发）：A 行为 12 项（`tests/ObfuscationAcceptance.cs` behavior
+  模式：水印版本＋混淆版标记/日志落盘/策略反射全命中/JSON 往返/规则/激活/两窗联想字段，
+  其中 A12 专抓 Skip 写法错）；B 元数据对账（dump 两边 Models 清单逐行 diff，一字不差）；
+  C 真机冒烟（混淆 exe 活 22s＋AppLog 首行水印正确＋零 Crash 文件）。
+- **验收跑器双进程是强制的**：同名同版本程序集在同一 AppDomain 只能存在一份
+  （执行态和反射态都按 identity 归一），对账必须"各 dump 一份文本再 diff"，
+  合进程必报"已从其他位置加载"（实测）。
+- **前置依赖**：`dotnet tool install -g Obfuscar.GlobalTool`（命令 `obfuscar.console`，
+  发版脚本缺了会自动装）；混淆配置模板 `tools/obfuscation/obfuscar.xml`
+  （`ExtraFrameworkFolders` 指 v4.7.2 引用目录，升级目标框架同步改；InPath/OutPath
+  发版脚本按绝对路径生成，Obfuscar 新版只认绝对路径）。
+- **改了发版链要知道**：`obfuscated_release.ps1` 与 `tests/ObfuscationAcceptance.cs`
+  都在 `$FullPatterns` 覆盖下（scripts/tests 改动兜底全量回归）；新增 ps1 必须带
+  UTF-8 BOM（PS5.1 无 BOM 解析中文直接 ParserError，实测）；XML 属性读写走
+  SelectSingleNode＋SetAttribute（`$_.value=` 适配器写法在 `-File` 下抛
+  XmlNodeSetShouldBeAString，交互式却正常，原因未明，显式 DOM 最稳）。
+
 ## 二、目录结构与职责
 
 ```
@@ -52,12 +79,14 @@ agingtest-regression/
 ├── scripts/
 │   ├── build_and_test.ps1    ← 一键流水线（构建→冒烟→回归），退出码 1/2/3 区分阶段
 │   ├── smoke_test.ps1        ← 冒烟：启动真 exe → 轮询存活 → Stop-Process
-│   └── run_unit_tests.ps1    ← 拷贝产物到 %TEMP% 隔离 run 目录 → csc 编译 harness → 运行
+│   ├── run_unit_tests.ps1    ← 拷贝产物到 %TEMP% 隔离 run 目录 → csc 编译 harness → 运行
+│   └── obfuscated_release.ps1 ← 一键混淆发版（构建→混淆→组包→三项验收→还原标记），见一点六
 └── tests/
-    └── TestRunner.cs         ← 全部测试用例源码（加用例就改这里）
+    ├── TestRunner.cs         ← 全部测试用例源码（加用例就改这里）
+    └── ObfuscationAcceptance.cs ← 混淆验收跑器（behavior/dump 双模式，见一点六）
 ```
 
-## 三、测试覆盖范围（45 个模块，1730 断言）
+## 三、测试覆盖范围（46 个模块，1758 断言）
 
 | 模块 | 覆盖点 |
 | --- | --- |
@@ -106,6 +135,7 @@ agingtest-regression/
 | SoftActivation(V1.87 HJVision同源) | Encrypt标准向量pin算法（RFC1321空串/a前15字节hex）+公式关系式（设备ID码=ID+A/设备码=ID+1/30天码=设备码+30/永久码=设备码+ALL/永久标记=ID+ALL/30天起点=ID+0）+激活比对（先永久后30天，错码/空静默）+设备绑定（对上/错位/空=新设备）+计数格（0/767/839找到，840外/乱串找不到，768分界，0格30天/24格29天）+综合判定（新设备/永久/试用/768过期/找不到过期）+四档文案+ini隔离往返（双键/缺文件读空/推进一格）+激活窗构造（无参三框/设备码方程/状态行/错码静默，构造不Show直接调handler）+空模板（缺文件建出/两键读空/空=新设备/已有不覆盖） |
 | PolicyPresetV185(V1.85) | 预置3个试用顺序A/B/C、管辖12开关全是PolicyKeys成员+中文名齐、每预置完整12项、标题场景换挡文案非空、值全可解析+枚举值全在下拉选项、套用探测往返、缺省=自定义/改一项即自定义、未知与空参四不抛、取值副本隔离、三预置不泄压（无阀）不跳真空、A/B联停关C开+上限0拦60过+A零门槛过、存盘口径三态、UI预置行4件+下拉4项+无参回显自定义禁用/B配置回显选中B/管理员可用/场景说明（反射读Items/SelectedIndex，禁as原生类型见坑41）、下拉列表拉宽+悬停全文+关窗释放 |
 | PolicyNodeComboV1851(V1.85.1) | 节点选项框按预置下拉口径统一：全节点16下拉数=全部Bool/Enum key、下拉不比框窄、逐项独立实测无截断、悬停恒=选中全文、旧口径必截断反向验证（最长需389>270）、切节点旧提示清表、改选同步、关窗两提示皆释放；标题tooltip 5条（V1.88：key全有说明同源/换行每行≤40/缺key回空/UI层报警节点每项标题有换行提示/反射口径）；harness第二证据：最宽项真实点开展示截图无截断 |
+| DeployDiagV188_9(V1.88.9 调试部署诊断) | 启动水印纯函数（版本/程序集/构建时间/调试版文案/位数关键字、混淆版mapping提示、MinValue与空输入兜底未知、GetStartupLine/GetBuildTime不抛、调试期IsObfuscatedBuild恒false锁）＋崩溃日志（文件名确定性/自动尾格式、正文水印线程类型消息堆栈关键字、空堆栈占位、null与非Exception对象兜底落盘、真实Write路径在Logs下内容全、连写两次不互盖） |
 
 **不在覆盖范围**（明确边界）：真串口/真设备通讯（ModbusRtuBarometerReader /
 ScannerService / FanControllerClient / ModbusTcpIoController，靠现场联调）、

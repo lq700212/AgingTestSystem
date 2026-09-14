@@ -81,6 +81,7 @@ $Map = @(
     @{ Pat = @("*TestSessionStore*");               Mods = @("TestSessionStore", "DeviceManagerIntegration", "DeviceManagerPolicy") },
     @{ Pat = @("*TestEventLogger*");                Mods = @("TestEventLogger", "HistoryCsv", "DeviceManagerIntegration", "DeviceManagerExtended", "DeviceManagerPolicy", "DeviceManagerMes", "DeviceManagerRules", "PowerReportV174") },
     @{ Pat = @("*AppLogFileWriter*");               Mods = @("AppLogFileWriter") },
+    @{ Pat = @("*BuildWatermark*", "*CrashLogWriter*"); Mods = @("DeployDiagV188_9") },
     @{ Pat = @("*ThemeManager*");                   Mods = @("ThemeManager", "UiStyleV172_1") },
     @{ Pat = @("*ControlDisposeHelper*");           Mods = @("DesignerStabilityV172_16") },
     @{ Pat = @("*EyeIcon*", "*SoftwareActivation*", "*SoftActivation*"); Mods = @("SoftActivation") },

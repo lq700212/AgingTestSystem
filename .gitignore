@@ -51,3 +51,7 @@ TestSession.json
 # MainSetting.ini：程序目录下的 [RunHash] RunHash1（设备绑定）/ RunHash2（运行计数），
 # 出厂由厂商按设备ID手写两键；含客户机器信息，入库即泄露且新机拷走即乱。
 MainSetting.ini
+
+# ===== 发版产物（V1.88.10 起：obfuscated_release.ps1 产物，含混淆 exe/pdb/Mapping，绝不入库） =====
+# release/<版本>-obf/ 下"包"发客户、"归档"内部留底；二进制 + 客户现场信息，入库又大又泄密。
+release/
