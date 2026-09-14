@@ -561,11 +561,101 @@ namespace AgingTestSystem.Views
         /// UpdateAutoFit 四处共用，改尺寸只改这里一处）。
         /// 外层 Panel.AutoScroll 按此尺寸出滚动条；AutoFit 下宽度恒顶满（无横向滚动条），
         /// 高度超出时出纵向滚动条（上下滑动看）。
+        ///
+        /// 【V1.88.15】Size 变化前后保持滚动比例：WinForms 在内容变小时
+        /// 不自动把 AutoScrollPosition 钳到新范围，旧值超新范围会卡住——
+        /// 滑块拉到底也到不了内容底（harness 实锤：减窄后 posY=1082，新最大才 762）。
+        /// 所以先记旧比例，设完 Size 按比例恢复并钳制到新范围。
+        /// 横向不管（横向条已禁，X 保持原值）。
         /// </summary>
         private void UpdateCanvasSize()
         {
+            float ratio = 0f;
+            int oldPosX = 0;
+            ScrollableControl sp = Parent as ScrollableControl;
+            if (sp != null && _columns > 0 && this.Height > 0)
+            {
+                int oldMax = Math.Max(0, this.Height - sp.ClientSize.Height);
+                oldPosX = -sp.AutoScrollPosition.X;
+                if (oldMax > 0)
+                {
+                    ratio = (float)(-sp.AutoScrollPosition.Y) / oldMax;
+                }
+            }
+
             this.Size = new Size(Scaled(_columns * _layout.PanelColumnWidth + _layout.RowSelectButtonColumnWidth),
                                  Scaled(_rows * _layout.GetEffectiveRowHeight()));
+
+            if (sp != null && _columns > 0)
+            {
+                // 【V1.88.15】显式同步滚动范围：只改 Size 指望布局引擎重算 DisplayRectangle
+                // 在内容剧变（拖 Splitter 改宽）时会卡在旧值（harness 实锤：vMax 纹丝不动、
+                // 横向条误判、Value 超范围，2 秒不收敛是稳定脏态不是时序慢）。
+                // AutoScrollMinSize 是值语义：DisplayRectangle 取 max(MinSize, 子控件范围)，
+                // MinSize 恒等于画布 Size 后，滚动范围只认新 Size，不再看子控件布局时序。
+                // 副作用是没有：MinSize 与 Size 恒一致，内容小时不会多出滚动条；
+                // 横向 MinSize.Width=客户宽-1，布局永不判需横向条（hVis 问题同解）。
+                // （MinSize 留在父容器上：容器随 Panel1 重建释放，无残留；AutoFit 关时
+                // UpdateCanvasSize 照样跑，MinSize 跟回原尺寸。）
+                try { sp.AutoScrollMinSize = this.Size; } catch { /* 忽略 */ }
+                // 【V1.88.15】先同步布局再设位置：Size 刚设完时滚动条 Maximum 还是旧的，
+                // 此时设 AutoScrollPosition 会按旧 Maximum 钳制（harness 实锤：减窄后到底=旧最大 1082）。
+                // PerformLayout 同步跑完布局（Maximum 按新 Size 更新），再设位置才钳得准。
+                try { sp.PerformLayout(); } catch { /* 布局异常不阻断显示 */ }
+                int newMax = Math.Max(0, this.Height - sp.ClientSize.Height);
+                int newPos = (int)Math.Round(ratio * newMax);
+                if (newPos < 0) newPos = 0;
+                if (newPos > newMax) newPos = newMax;
+                if (newPos != -sp.AutoScrollPosition.Y || oldPosX != -sp.AutoScrollPosition.X)
+                {
+                    sp.AutoScrollPosition = new Point(oldPosX, newPos);
+                }
+
+                // 【V1.88.15】再排一次事后校正：布局引擎在 Layout 事件之后还会碰滚动条
+                //（横向 Visible 压不住、Maximum 更新滞后都已实锤），同步态看到的可能是旧值；
+                // BeginInvoke 排到消息队列尾、布局彻底完成后跑，看到最终态再钳一次。
+                // 回调只动网格自家容器，不碰别处。
+                ScrollableControl sp2 = sp;
+                try
+                {
+                    if (sp2.IsHandleCreated && !sp2.IsDisposed && !this.IsDisposed)
+                    {
+                        sp2.BeginInvoke(new Action(() => ClampScrollToContent(sp2)));
+                    }
+                }
+                catch { /* 句柄未就绪不校正，下次 Resize 再算 */ }
+            }
+        }
+
+        /// <summary>
+        /// 布局完成最终态的滚动校正（【V1.88.15】BeginInvoke 回调，见 UpdateCanvasSize）。
+        /// 三件事：①先同步跑一次布局（Resize 事件里调 PerformLayout 会撞上布局挂起被静默忽略，
+        /// harness 实锤自动布局没跑；异步回调里挂起已解除，必跑，DisplayRectangle/Maximum 才更新）；
+        /// ②压住横向条（最终内容不超宽，横向条不需要，布局事后误设的直接压掉）；
+        /// ③把纵向位置钳到最终范围（同步态按旧 Maximum 设的值可能超限，harness 实锤 posY=1082>762）。
+        /// 释放检查：容器/本控件任一已释放直接返回（H5 重建时旧容器回调不碰新界面）。
+        /// </summary>
+        private void ClampScrollToContent(ScrollableControl sp)
+        {
+            try
+            {
+                if (sp == null || sp.IsDisposed || this.IsDisposed || _columns <= 0) return;
+                try { sp.PerformLayout(); } catch { /* 布局异常不阻断校正 */ }
+                if (sp.HorizontalScroll.Visible)
+                {
+                    sp.HorizontalScroll.Visible = false;
+                }
+                int newMax = Math.Max(0, this.Height - sp.ClientSize.Height);
+                int pos = -sp.AutoScrollPosition.Y;
+                int newPos = pos;
+                if (newPos < 0) newPos = 0;
+                if (newPos > newMax) newPos = newMax;
+                if (newPos != pos)
+                {
+                    sp.AutoScrollPosition = new Point(-sp.AutoScrollPosition.X, newPos);
+                }
+            }
+            catch { /* 校正永不抛，静默即可 */ }
         }
 
         #endregion
@@ -1372,6 +1462,9 @@ namespace AgingTestSystem.Views
         /// <summary>
         /// 坐标命中面板：返回设备编号与面板内局部坐标
         /// 【V1.55】p 是物理像素坐标，需与缩放后的列宽/行高比对
+        /// 【V1.88.15】面板间隙不命中：行列整除会把面板之间的缝隙算进上一格，
+        /// 点缝隙翻选上一个面板是 bug；local 落在面板内容矩形外一律返回 false
+        /// （悬停提示同步消失，见 GetTooltipText）。
         /// </summary>
         private bool TryHitPanel(Point p, out int deviceId, out Point local)
         {
@@ -1392,6 +1485,16 @@ namespace AgingTestSystem.Views
 
             // 面板内局部坐标 = 鼠标物理坐标 - 面板左上角物理坐标（含 2px 外边距，已缩放）
             local = new Point(p.X - Scaled(col * _layout.PanelColumnWidth + 2), p.Y - Scaled(row * _layout.GetEffectiveRowHeight() + 2));
+            // 内容 bounds：local 原点在面板内容左上角，落在内容外 = 点在面板间隙上
+            // （左右缝 local.X 越界、上下缝 local.Y 越界），不命中任何面板。
+            if (local.X < 0 || local.Y < 0
+                || local.X >= Scaled(_layout.PanelInnerWidth)
+                || local.Y >= Scaled(_layout.GetEffectiveInnerHeight()))
+            {
+                deviceId = 0;
+                local = Point.Empty;
+                return false;
+            }
             return true;
         }
 
