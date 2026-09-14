@@ -84,7 +84,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Views/ProcessPolicyForm.cs` / `Views/PolicyGraph.cs` | 工艺策略窗（V1.70 建图为"流程驾驶舱"，V1.73 改名：固定拓扑画布，节点显示真实配置+实时台数，点节点改配置走同一条保存路；滚轮缩放/中键平移/节点拖拽；入口=参数设置下拉） |
 | `Services/Mock*.cs` | Mock 实现（免接线演示） |
 | `Views/MainForm.cs` | 主窗体：面板区（9×8）、菜单下拉、状态栏（"在线"全部离线标红，V1.24）、权限控制、扫码事件、操作区按钮；菜单栏 4 按钮（V1.64 起深色切换从"关于"右侧收进关于下拉，仅 dev 可见） |
-| `Views/WorkstationGridView.cs` | 工位网格（自绘大画布，V1.51）：1 个 UserControl 画全部面板 + 行全选列，滚动零撕裂；文字绝对坐标绘制无模糊；布局外部化（程序目录 PanelLayout.json 可改坐标/颜色/字号/文字，无需重编译）；坐标命中实现单击选中/设置按钮/选中框/行全选/悬停提示（V1.88.14 起长按删除，点框或点空白即切换）；V1.88.17 起双向精确铺满一屏（AutoFit：zoomX 按宽/zoomY 按高独立，纵向横向滚动条都不出；面板紧凑 204×170；选中框恒正方形跟面板走；zoom 并进 ScaledX/ScaledY + 字体取窄边下限 6pt）；V1.60 起 SetDarkMode 跟随全局主题（语义状态色不动） |
+| `Views/WorkstationGridView.cs` | 工位网格（自绘大画布，V1.51）：1 个 UserControl 画全部面板 + 行全选列，滚动零撕裂；文字绝对坐标绘制无模糊；布局外部化（程序目录 PanelLayout.json 可改坐标/颜色/字号/文字，无需重编译）；坐标命中实现单击选中/设置按钮/选中框/行全选/悬停提示（V1.88.14 起长按删除，点框或点空白即切换）；V1.88.17 起双向精确铺满一屏（AutoFit：zoomX 按宽/zoomY 按高独立，纵向横向滚动条都不出；面板紧凑 204×170；选中框恒正方形跟面板走；zoom 并进 ScaledX/ScaledY + 字体取窄边下限 4pt（V1.88.21：1280×1024小屏跟随缩小不挤叠）；V1.60 起 SetDarkMode 跟随全局主题（语义状态色不动） |
 | `Models/PanelLayoutConfig.cs` | 工位面板布局配置模型（V1.51）：面板网格尺寸/面板内各元素坐标/字体/颜色（"R,G,B"）/按钮与提示文字；`LoadOrDefault` 文件缺失或损坏回退内置默认；V1.58.13~1.58.19 起全部元素改为"锚定"解析（右缘/上缘/下缘/对齐/垂直居中，改面板宽高自动联动），字段全表见类头注释 |
 | `Dialogs/CommunicationTestForm.cs` | 通讯测试窗体（IO 耦合器 DO 输出测试，负压阀/载台上电两页 9×8 灯按钮 + V1.80 预留点位页（预留 DI 只读灯 + 预留 DO 可点灯，点位来自 IoMapBuilder）+ 一键遍历 + V1.81 通道右键端口映射（可视化连线页，保存走设置表同一条路即时生效）） |
 | `Dialogs/FanTestForm.cs` | 送风机测试窗体（定值启停 + 温湿度显示） |
@@ -157,7 +157,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 >
 > **72 站自适应（V1.88.17 双向精确铺满，列数保持 8×9 不动）**：中间工位区多宽多高、
 > 面板就按宽高独立缩放到刚好铺满一屏（纵向横向滚动条都不出；字取窄边等比缩放、
-> 小到 6pt 不再小；显示区被挤到极小才出滚动条兜底，站一个不少）。
+> 小到 4pt 不再小（V1.88.21：1280×1024小屏跟随缩小不挤叠）；显示区被挤到极小才出滚动条兜底，站一个不少）。
 
 ## 5. 配置项速查（App.config + 项目 Policy.json，可在"关于→设置"管理员界面编辑；保存后大部分配置立即生效，连接参数自动重连，仅结构型配置重启生效；策略跟项目走 `Projects/<项目>/Policy.json`，切项目即换策略）
 

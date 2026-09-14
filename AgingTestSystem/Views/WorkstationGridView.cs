@@ -99,7 +99,8 @@ namespace AgingTestSystem.Views
     /// 网格占满全部 72 台设备。
     /// 【V1.88.17 自适应精确铺满】默认 AutoFit=true：zoomX 按显示区可用宽/内容宽、
     /// zoomY 按显示区可用高/内容高独立算，画布精确等于显示区客户区，
-    /// 纵向横向滚动条都不出（窗口拉大/缩小/最大化跟随缩放；字体取窄边等比缩放、下限 6pt；
+    /// 纵向横向滚动条都不出（窗口拉大/缩小/最大化跟随缩放；字体取窄边等比缩放、
+    /// 下限见 MinFontSize（【V1.88.21】6pt→4pt，1280×1024小屏跟随缩小不挤叠）；
     /// 列数保持 8×9 不动）。单轴触底（MinZoom=0.15，显示区被挤到极小）时才出滚动条兜底。
     /// 关掉 AutoFit 回原尺寸（滚动条按内容出现）。
     /// 实现见 ComputeFitZoomBoth/UpdateAutoFit/RebuildFonts/UpdateCanvasSize
@@ -266,10 +267,12 @@ namespace AgingTestSystem.Views
         /// zoom 并进布局基准（最终比例 sx = _dpiScale × _zoomX、sy = _dpiScale × _zoomY，
         /// 绘制/命中/画布尺寸全走 ScaledX/ScaledY，不碰 Graphics 变换矩阵——
         /// 与 V1.55 DPI 同路、V1.82 画布缩放同口径）；
-        /// 字体按 min(zoomX, zoomY) 等比缩放重建（pt 单位，下限 6pt，见 RebuildFonts，
+        /// 字体按 min(zoomX, zoomY) 等比缩放重建（pt 单位，下限见 MinFontSize，见 RebuildFonts，
         /// 字不变形，窄边决定字号）。
         /// 【V1.88.17】面板同步紧凑到 204×170（见 PanelLayoutConfig），内容高 2025→1638，
         /// 1080p 下 zoomY 由 0.44 升到约 0.55，6pt 字在 18 高值框内放得下。
+        /// 【V1.88.21】1280×1024下zoomY≈0.45，旧6pt下限把字卡大1.5倍致标签挤叠，
+        /// 下限降到4pt跟随缩小（见 MinFontSize）。
         /// </summary>
         private float _zoomX = 1f;
 
@@ -287,6 +290,22 @@ namespace AgingTestSystem.Views
 
         /// <summary>单轴缩放上限（防窗口拉超大后字涨没边，与 V1.88.14 同值）</summary>
         public const float MaxZoom = 4f;
+
+        /// <summary>
+        /// 自适应字号下限（【V1.88.21 1280×1024小屏适配】6pt→4pt）。
+        ///
+        /// 【为什么从6降到4】1280×1024下可用区约972×736，zoomX≈0.56、zoomY≈0.45，
+        /// 窄边0.45×9pt=4.04pt才是"格子与字等比"的理想字号；旧下限6pt把字卡在
+        /// 理想的1.5倍：4字标签"真空压力"实测37px vs 标签槽31px（56×0.56）溢出6px，
+        /// 直接盖到右边值框上（用户报的"标签挤叠"）；值框高18×0.45≈8px也装不下
+        /// 6pt的11px字高，上下也被夹。降到4pt后字体跟随缩小：理想4.04pt≥下限，
+        /// 标签约25px vs 31px（余6px）、"00:00:00"约27px vs 延时框37px、
+        /// 字高约7px vs 框高8px，横竖都放得下。1080p等大屏zoom≈0.55理想4.9pt，
+        /// 同样跟随缩小（原来也被6pt卡住），字略小但保证不溢出（用户已确认：
+        /// 小屏宁可字小也要显示完整）。极小窗（zoom触0.15）时字保4pt可读，
+        /// 再小走滚动条兜底，不再往下压成像素点。
+        /// </summary>
+        public const float MinFontSize = 4f;
 
         /// <summary>
         /// 是否自适应父容器（默认 true = 72 站精确铺满一屏，无滚动条）。
@@ -567,17 +586,18 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 按当前 zoom 重建两套字体（旧字体先释放，防 GDI 句柄泄漏）。
-        /// 字号 = 配置字号 × min(zoomX, zoomY)，下限 6pt（与 V1.82 画布缩放口径一致）：
-        /// 双向拉伸下面板允许宽扁，但字不变形、取窄边；缩得再小字也不再小，
+        /// 字号 = 配置字号 × min(zoomX, zoomY)，下限见 <see cref="MinFontSize"/>（4pt）：
+        /// 双向拉伸下面板允许宽扁，但字不变形、取窄边；【V1.88.21】小屏下字体跟随缩小
+        /// 保证不溢出（旧6pt下限在1280×1024下把字卡大1.5倍致标签挤叠，见 MinFontSize 注释），
         /// 格子里的字走 EndEllipsis/居中截断不断行。
         /// </summary>
         private void RebuildFonts()
         {
             float z = _zoomX < _zoomY ? _zoomX : _zoomY;
             float panelSize = (float)_layout.FontSize * z;
-            if (panelSize < 6f) panelSize = 6f;
+            if (panelSize < MinFontSize) panelSize = MinFontSize;
             float titleSize = (float)_layout.TitleFontSize * z;
-            if (titleSize < 6f) titleSize = 6f;
+            if (titleSize < MinFontSize) titleSize = MinFontSize;
             Font oldPanel = _panelFont;
             Font oldTitle = _titleFont;
             _panelFont = new Font(_layout.FontFamily, panelSize, FontStyle.Regular);
