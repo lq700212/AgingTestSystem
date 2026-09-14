@@ -3420,6 +3420,20 @@ namespace AgingTestSystem.Tests
                 Services.SoftwareActivation.StatusText(
                     Services.SoftwareActivation.ActivationStatus.NewDevice, -1, 0).Contains("未绑定"));
 
+            // ── 付费即恢复判定（V1.88.1：只有永久/试用中才解灰，新设备/过期不恢复） ──
+            Check("永久应恢复",
+                Services.SoftwareActivation.ShouldRestoreUserPermission(
+                    Services.SoftwareActivation.ActivationStatus.Permanent));
+            Check("试用中应恢复",
+                Services.SoftwareActivation.ShouldRestoreUserPermission(
+                    Services.SoftwareActivation.ActivationStatus.InTrial));
+            Check("新设备不应恢复",
+                !Services.SoftwareActivation.ShouldRestoreUserPermission(
+                    Services.SoftwareActivation.ActivationStatus.NewDevice));
+            Check("过期不应恢复",
+                !Services.SoftwareActivation.ShouldRestoreUserPermission(
+                    Services.SoftwareActivation.ActivationStatus.Expired));
+
             // ── ini 往返（隔离目录，不碰真实 MainSetting.ini） ──
             string dir = EnterCleanDir();
             string ini = Path.Combine(dir, "MainSetting.ini");
@@ -3484,6 +3498,8 @@ namespace AgingTestSystem.Tests
                 Check("无参构造三框齐全",
                     frm != null && idBox != null && codeBox != null && actBox != null
                     && statusLbl != null);
+                // V1.88.1：付费即恢复标记——新窗默认 false（打开看看就关不触发主窗重查）
+                Check("新窗未激活成功", frm != null && !frm.ActivatedSuccessfully);
                 if (idBox != null && codeBox != null && statusLbl != null)
                 {
                     // 不 Show 直接刷（读真机 WMI + 真实 ini；关系式与机器无关恒成立）
@@ -3504,6 +3520,8 @@ namespace AgingTestSystem.Tests
                         actBox.Text = "错的激活码";
                         actHandler.Invoke(frm, new object[] { actBox, EventArgs.Empty });
                         Check("错码静默（状态不动）", statusLbl.Text == before, statusLbl.Text);
+                        // V1.88.1：错码不写文件也不置位，主窗不会误解灰（成功路径写真实 ini，不进回归）
+                        Check("错码不置成功位", !frm.ActivatedSuccessfully);
                     }
                 }
             }

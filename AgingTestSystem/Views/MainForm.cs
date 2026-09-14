@@ -2885,14 +2885,49 @@ namespace AgingTestSystem.Views
         /// <summary>
         /// 软件授权 → 弹出激活窗（【V1.87】与 HJVision 一致：设备ID/设备码/激活码，
         /// 同一套《获取激活码》工具通用；激活无需权限，人人可开）。
+        /// 【V1.88.1】付费即恢复：弹窗里输对一次码关闭后，重读一次 ini，
+        /// 状态有效就把用户权限按钮解灰，不用重启（打开看看/输错不触发重查）。
         /// </summary>
         private void MenuHelpLicense_Click(object sender, EventArgs e)
         {
+            bool activated;
             using (var form = new SoftActivation())
             {
                 ThemeManager.ApplyTo(form);
                 form.ShowDialog(this);
+                activated = form.ActivatedSuccessfully;
             }
+            if (!activated) return;
+            RefreshActivationPermissionState();
+        }
+
+        /// <summary>
+        /// 激活成功后重查并解灰（【V1.88.1 新增】付费即恢复的落点）。
+        /// <para>做什么：重读 RunHash 双键 + 重算状态，有效（永久/试用中）就解灰用户权限按钮。</para>
+        /// <para>为什么这么写：计时器置灰后本轮不自动恢复，之前要重启；
+        /// 这里只认重算出的状态（不认弹窗的标记本身），新设备即使写过 RunHash2
+        /// 也依然是新设备、不会被误解灰；过期机用 30 天码回到试用中则正常解灰。</para>
+        /// <para>怎么改：恢复规则只认 <see cref="Services.SoftwareActivation.ShouldRestoreUserPermission"/>，
+        /// 不要在这里另写一套状态判断；失败一律静默（不弹框，计时器下轮还会说话）。</para>
+        /// </summary>
+        private void RefreshActivationPermissionState()
+        {
+            try
+            {
+                if (IsDisposed || Disposing) return;
+                string runHash1;
+                string runHash2;
+                Services.SoftwareActivation.ReadRunHash(out runHash1, out runHash2);
+                string cpuId = Services.SoftwareActivation.GetCpuSerialNumber();
+                int slot;
+                int daysLeft;
+                Services.SoftwareActivation.ActivationStatus status =
+                    Services.SoftwareActivation.ComputeStatus(runHash1, runHash2, cpuId, out slot, out daysLeft);
+                if (!Services.SoftwareActivation.ShouldRestoreUserPermission(status)) return;
+                try { btnUserPermission.Enabled = true; }
+                catch { }
+            }
+            catch { /* 重查永不拖垮主窗 */ }
         }
 
         /// <summary>
@@ -2900,8 +2935,8 @@ namespace AgingTestSystem.Views
         /// 先对 RunHash1（设备不对=新设备），再看 RunHash2（永久跳过，否则在
         /// 0..839 格里找当前格：找到且小于 768 就写下一格；大于等于 768 或
         /// 找不到=过期）。新设备/过期只弹框 + 置灰用户权限入口（= HJVision 置灰
-        /// 它的口令按钮 button4），不阻断启动、不拦生产；置灰本轮不再恢复
-        /// （重启重查，与 HJVision 一致）。
+        /// 它的口令按钮 button4），不阻断启动、不拦生产；计时器内不自动恢复
+        /// （与 HJVision 一致），付费成功由激活窗关闭后的重查即时解灰（V1.88.1）。
         /// </summary>
         private void HashTimer_Tick(object sender, EventArgs e)
         {
