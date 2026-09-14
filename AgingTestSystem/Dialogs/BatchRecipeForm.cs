@@ -159,7 +159,8 @@ namespace AgingTestSystem.Dialogs
                 "选中后自动回填延时、温度、负压、显示模式。新建配方走「参数设置 → 配方管理」。");
             SetTip(new Control[] { lblDelayTime1Label, tableLayoutPanelDelay1 },
                 "延时时间：上电前等待。点启动后先只开真空阀（不上电），等够这么久才上电，" +
-                "例如00:00:30=开阀30秒后上电，给吸附留稳定时间。填0=真空一到位立刻上电。" +
+                "例如00:00:30=开阀30秒后上电，给吸附留稳定时间。填0=不要等待：阀与电同时开、" +
+                "直接计时并保持常开（真空宽限内建立，超时/失压照常报警）。" +
                 "对应工位面板延时时间。");
             SetTip(new Control[] { lblBurnInTimeLabel, tableLayoutPanelBurnIn },
                 "烧屏时间：上电后老化时长。上电开始计时，跑够这么久自动完成" +

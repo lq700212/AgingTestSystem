@@ -14,11 +14,18 @@ namespace AgingTestSystem.Services
     /// DeviceManager 只负责"调用决策 + 执行 IO + 写日志"，逻辑与副作用分离。
     ///
     /// 【三阶段时序总览】（与 DeviceManager.ProcessTestingProgress 配合阅读）
-    ///   启动(只开阀，记开阀时刻 t0)
-    ///     └─ Vacuuming：等「真空到位」且「now - t0 ≥ 延时时间」（两者取较晚）
+    ///   启动(只开阀，记开阀时刻 t0；【V1.88.14】延时=0 的台启动时阀+电同时开，直接进 Aging)
+    ///     └─ Vacuuming：等「真空到位」且「now - t0 ≥ 延时时间」（两者取较晚；
+    ///          延时=0 不等真空，ShouldPowerOn 直接 true，见下）
     ///          ├─ 到位前超过 VacuumConfirmTimeoutMs 仍未到位 → 报警(产品责任 FAIL)，永不带电
     ///          └─ 条件满足 → 载台上电 → Aging，老化计时起点 = 上电时刻
     ///     └─ Aging：now - 计时起点 ≥ 烧屏时间(配方) → 完成(下电+关阀+PASS·待取料)
+    /// 【V1.88.14 延时0语义（与客户确认，不兼容老口径）】
+    ///   延时时间 = "保持载台电源断电、只让真空吸附"的等待段；
+    ///   延时=0 = 不要这段等待：启动瞬间阀+电同时开、直接进 Aging 计时，老化全程阀电保持常开，
+    ///   只在完成/停止/急停/报警时关闭。真空保护不丢：刚开阀压力还在常压，
+    ///   确认宽限（_vacuumConfirmTimes）照常保留，宽限内未到位暂不报警、
+    ///   超时未到位报"真空建立超时"断电；到位后宽限关闭，后续失压按老化阶段正常报警断电。
     /// </summary>
     public static class AgingSequencer
     {
@@ -53,11 +60,20 @@ namespace AgingTestSystem.Services
         /// </summary>
         /// <param name="pressureInRange">真空压力是否已到位（≤ 该台有效阈值）</param>
         /// <param name="elapsedSinceValveOpen">距开阀时刻经过的时间</param>
-        /// <param name="delaySeconds">延时时间（秒）：开阀后至少等这么久才上电；0 = 不额外等待</param>
+        /// <param name="delaySeconds">延时时间（秒）：开阀后至少等这么久才上电；
+        /// 【V1.88.14】≤0 = 不要等待段，直接上电（启动时阀电同开，不等真空到位；
+        /// 真空建立靠确认宽限+过程报警兜底，见类头）</param>
         /// <returns>true = 应立即给载台上电并进入 Aging 阶段</returns>
         public static bool ShouldPowerOn(bool pressureInRange, TimeSpan elapsedSinceValveOpen, int delaySeconds)
         {
-            // 两个前置条件缺一不可：
+            // 【V1.88.14】延时≤0 = 无前置等待：不等真空是否到位，直接上电。
+            // （启动侧已阀电同开直接进 Aging，这里短路 true 主要覆盖"上电写失败回滚到
+            // Vacuuming 后下轮重试"的路径，保证重试也是立即上电、语义与启动一致。）
+            if (delaySeconds <= 0)
+            {
+                return true;
+            }
+            // 延时>0：两个前置条件缺一不可：
             // 1) 压力到位——未吸附固定不通电（安全铁律，防止产品没吸住就振动通电）；
             // 2) 延时时间已到——给吸附留稳定时间（行业通识：抽真空有动态过程，
             //    刚到阈值就通电可能仍微漏，延时是工艺裕量）。两者自然取较晚满足者。

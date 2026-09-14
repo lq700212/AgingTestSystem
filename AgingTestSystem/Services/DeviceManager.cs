@@ -15,6 +15,9 @@ namespace AgingTestSystem.Services
     /// 【V1.59 业务串联完善：三阶段状态机 + 结果判定 + 断电恢复】
     /// 1) 时序安全改造：启动只开真空阀，载台上电由采集循环在「真空到位 + 延时时间到」
     ///    时补发——落实"未吸附固定不通电"（旧版开阀+上电同时下发，与安全意图矛盾）；
+    ///    【V1.88.14】延时=0 的台例外：启动时阀+电同时开、直接进 Aging 计时并保持常开
+    ///    （与客户确认：延时段就是"电源断电只吸附"的等待，不要等待=同时开；
+    ///    真空保护不丢：确认宽限保留+超时/失压照常报警断电）；
     /// 2) 配方参数接入编排：老化时长 = 工位配方"烧屏时间(BurnInTime)"（回退全局
     ///    MaxTestDurationSeconds）；上电前置等待 = 配方"延时时间(DelayTime)"；
     ///    到位/报警阈值 = 配方负压值（回退全局 AlarmPressureThresholdKPa）。
@@ -342,6 +345,12 @@ namespace AgingTestSystem.Services
         /// 免得离线期间每采集轮打一次 TCP；UpdateFanLifecycle 每轮调）。
         /// </summary>
         private DateTime _lastFanStartFailTime = DateTime.MinValue;
+
+        /// <summary>
+        /// 送风机停止失败是否已记过事件（【V1.88.14】边沿标记：末台退出后停风机若下发失败，
+        /// _fanRunning 保持 true 下轮继续补停；事件只记一次，不刷屏，停成功后清标记）。
+        /// </summary>
+        private bool _fanStopNoted = false;
 
         /// <summary>
         /// 当前批号（由 UI 录入批号后设置，用于日志追溯）
@@ -1861,9 +1870,32 @@ namespace AgingTestSystem.Services
             }
             else if (!anyTesting && _fanRunning)
             {
-                // 最后一台退出测试：停止送风机
-                _fanRunning = false;
-                _fanController.Stop();
+                // 最后一台退出测试：停止送风机（完成/停止/报警/急停外，退出即走这里）。
+                // 【V1.88.14】停失败不丢：以前 _fanRunning 先置 false，停命令丢了就再也不补
+                // （风机一直转，费电）。现在失败保持 _fanRunning=true，下轮继续补停；
+                // 事件只记一次（_fanStopNoted 边沿），停成功后清标记。
+                bool stopped = false;
+                try
+                {
+                    stopped = _fanController.Stop();
+                }
+                catch
+                {
+                    stopped = false;
+                }
+                if (stopped)
+                {
+                    _fanRunning = false;
+                    _fanStopNoted = false;
+                }
+                else if (!_fanStopNoted)
+                {
+                    _fanStopNoted = true;
+                    TestEventLogger.Write(_currentLotNumber, 0, "送风机停止失败",
+                        "末台退出后停送风机下发失败，后台每轮继续补停（风机暂时还转着，不省电但安全）",
+                        sn: "", recipe: "", result: "");
+                    Diagnostic("送风机停止失败，正在后台自动补停（风机暂时还转着）");
+                }
             }
         }
 
@@ -1876,7 +1908,8 @@ namespace AgingTestSystem.Services
         ///
         /// 【与旧版的区别】旧版"开阀 + 载台上电"同时下发——真空还没建立产品就带电了，
         /// 与配置注释里"避免产品在未吸附固定的情况下通电老化"的安全意图矛盾。
-        /// 新版启动时【只开真空阀】，载台上电由采集循环在
+        /// 新版启动时【只开真空阀】（【V1.88.14】延时=0 的台例外：阀+电同时开，直接计时），
+        /// 载台上电由采集循环在
         /// 「真空压力到位 且 延时时间到」时补发（见 ProcessTestingProgress）；
         /// 真空建立失败（宽限窗口内压力始终不到位）则报警切断，全程不带电。
         ///
@@ -1976,7 +2009,8 @@ namespace AgingTestSystem.Services
                 delayTime = TimeSpan.FromSeconds(overrideParams.DelaySeconds);
             }
 
-            // ---- 2) 开阀（只开阀！上电由采集循环在真空到位+延时时间到后补发） ----
+            // ---- 2) 开阀（延时>0 只开阀！上电由采集循环在真空到位+延时时间到后补发；
+            // 【V1.88.14】延时=0 在下面第 3) 步直接进 Aging 并阀电同开） ----
             // 【大扫荡】写失败直接抛给调用方（批量循环单台隔离；恢复路径同理）：
             // 以前写丢了（耦合器离线静默丢失）状态机照进，真空超时后报假性"真空建立失败"。
             // 调用方必须 try/catch（见 StartTesting），失败的台不进测试态。
@@ -1987,20 +2021,33 @@ namespace AgingTestSystem.Services
             // 【V1.69】SkipVacuum=true（机械夹具、无真空管路）→ 直接进 Aging 并立即上电，
             // 不等真空到位+延时。开之前必须确认产品已机械固定（配错=真空保护全丢，
             // 压力报警同步豁免，见 ClassifyAlarm）。
+            // 【V1.88.14】延时=0 → 同样直接进 Aging 并阀电同开（与客户确认的新口径，
+            // 不兼容老"延时0=到位即上电"）：延时段的本意就是"电源断电、只让真空吸附"的等待，
+            // 不要这段等待 = 启动瞬间阀+电同时开、直接进老化计时，全程保持常开。
+            // 与 SkipVacuum 的区别：真空保护不豁免——确认宽限照常保留（刚开阀压力还在常压，
+            // 无宽限则首轮采集即报越限断电，"同开保持常开"落空），宽限内到位后由
+            // ProcessTestingProgress 的 Aging 分支关闭宽限，后续失压按老化正常报警断电。
             bool skipVacuum = _config.SkipVacuum;
+            // 【V1.88.14】秒级口径统一 Ceiling：定格 _sessionDelaySecs 同样 Ceiling 存秒，
+            // Round(0.5s)=0 会把 0.5s 误判成延时0（银行家舍入），Ceiling 不足1秒按1秒等，
+            // 现场整数秒不受影响（Ceiling(30)=30），启动与执行两侧口径永远一致。
+            bool zeroDelay = !skipVacuum && (int)Math.Ceiling(delayTime.TotalSeconds) <= 0;
+            bool powerOnAtStart = skipVacuum || zeroDelay;
             lock (_stateLock)
             {
                 DateTime now = DateTime.Now;
                 _testingStates[deviceId - 1] = true;                 // 进入测试中
-                _testPhases[deviceId - 1] = skipVacuum
-                    ? AgingPhase.Aging : AgingPhase.Vacuuming;       // 跳过抽真空：直接老化计时
+                _testPhases[deviceId - 1] = powerOnAtStart
+                    ? AgingPhase.Aging : AgingPhase.Vacuuming;       // 启动即上电：直接老化计时
                 _valveOpenTimes[deviceId - 1] = now;                 // 延时/确认超时的计时起点
                 _vacuumConfirmTimes[deviceId - 1] = skipVacuum
-                    ? DateTime.MinValue : now;                       // 跳过=无确认宽限
-                _testStartTimes[deviceId - 1] = skipVacuum
-                    ? now : DateTime.MinValue;                       // 跳过=计时起点即此刻
+                    ? DateTime.MinValue : now;                       // 跳过=无确认宽限；延时0=保留宽限
+                _testStartTimes[deviceId - 1] = powerOnAtStart
+                    ? now : DateTime.MinValue;                       // 启动即上电=计时起点即此刻
                 _sessionDurationSecs[deviceId - 1] = durationSecs;
-                _sessionDelaySecs[deviceId - 1] = (int)Math.Round(delayTime.TotalSeconds);
+                // 【V1.88.14】Ceiling 存秒（见上 zeroDelay 口径注释）：不足1秒按1秒等，
+                // 与启动侧判定同口径，0.5s 不会误判成延时0直接双开。
+                _sessionDelaySecs[deviceId - 1] = (int)Math.Ceiling(delayTime.TotalSeconds);
                 _sessionThresholdKPa[deviceId - 1] = thresholdKPa;
                 // 【V1.76】SN/配方启动定格：sn/recipeName 已含断电恢复覆盖（overrideParams），
                 // 存谁=这轮任务归属谁；中途重绑只改 StationInfo 不动这里（现值/定格分叉点）。
@@ -2014,10 +2061,12 @@ namespace AgingTestSystem.Services
             }
             _rules.ResetStation(deviceId);   // 【V1.69】清规则持续计时（旧任务不带到新任务）
 
-            if (skipVacuum)
+            if (skipVacuum || zeroDelay)
             {
-                // 跳过抽真空：阀照开（管路阀动作保持一致），载台立即上电。
+                // 启动即上电：阀照开（管路阀动作保持一致），载台立即上电。
                 // 【大扫荡】写失败清状态再抛（调用方隔离记事件；不清理会"阀没开但已进 Aging 计时"）。
+                // 【V1.88.14】延时0回滚到 Vacuuming 后，下轮 ShouldPowerOn 短路 true（delay≤0 不等真空），
+                // 立即重试上电，语义与启动双开一致。
                 try
                 {
                     _ioController.WriteOutput(
@@ -2034,14 +2083,26 @@ namespace AgingTestSystem.Services
                     }
                     throw;
                 }
-                TestEventLogger.Write(_currentLotNumber, deviceId, "跳过抽真空",
-                    "策略 SkipVacuum=true：未验证吸附即上电！已确认产品机械固定，压力报警同步豁免",
-                    sn: sn, recipe: recipeName, result: "");
+                if (skipVacuum)
+                {
+                    TestEventLogger.Write(_currentLotNumber, deviceId, "跳过抽真空",
+                        "策略 SkipVacuum=true：未验证吸附即上电！已确认产品机械固定，压力报警同步豁免",
+                        sn: sn, recipe: recipeName, result: "");
+                }
+                else
+                {
+                    TestEventLogger.Write(_currentLotNumber, deviceId, "启动上电",
+                        "延时=0：真空阀与载台电源同时开启，直接进老化计时并保持常开" +
+                        "（真空宽限内建立，超时/失压照常报警断电）",
+                        sn: sn, recipe: recipeName, result: "");
+                }
             }
 
             TestEventLogger.Write(_currentLotNumber, deviceId, "启动",
-                (skipVacuum
-                    ? "启动老化测试（跳过抽真空，直接上电计时）"
+                (powerOnAtStart
+                    ? (skipVacuum
+                        ? "启动老化测试（跳过抽真空，直接上电计时）"
+                        : "启动老化测试（延时=0，阀电同开直接计时并保持常开）")
                     : "启动老化测试（开真空，待真空建立+延时时间到后自动上电）") +
                 (string.IsNullOrEmpty(displayMode) ? "" : $" 显示模式:{displayMode}"),
                 sn: sn, recipe: recipeName, result: "");
@@ -2831,7 +2892,8 @@ namespace AgingTestSystem.Services
                     }
                     else
                     {
-                        // 用快照参数重新走完整启动流程（开阀→抽真空→延时→上电→满时长老化）
+                        // 用快照参数重新走完整启动流程（开阀→抽真空→延时→上电→满时长老化；
+                        // 【V1.88.14】快照延时=0 的台同样阀电同开直接计时，与正常启动一致）
                         StartSingleTestCore(station.DeviceId, station);
                     }
                     recoveredCount++;
@@ -3390,10 +3452,14 @@ namespace AgingTestSystem.Services
         /// 仅在"测试中且未报警"时由采集循环调用。
         ///
         /// 【阶段推进逻辑】（判定函数在 <see cref="AgingSequencer"/>，本方法只负责执行）
-        /// - Vacuuming：等「压力到位」且「距开阀 ≥ 延时时间」（两者自然取较晚）；
+        /// - Vacuuming：等「压力到位」且「距开阀 ≥ 延时时间」（两者自然取较晚；
+        ///   【V1.88.14】延时≤0 的台 ShouldPowerOn 短路 true，首轮即上电——正常启动走不到这里，
+        ///   只覆盖"启动上电写失败回滚后重试"的路径）；
         ///   压力首次到位时记"真空建立"事件；到位前超时由 IsAlarm 判真空建立失败报警；
         ///   条件满足 → 载台上电 → Aging，老化计时起点 = 此刻。
-        /// - Aging：到配方定格时长 → 自动完成（下电+关阀+PASS·待取料）。
+        /// - Aging：【V1.88.14】延时=0 的台启动即进 Aging 且确认宽限仍开着，
+        ///   压力首次到位时关闭宽限并记"真空建立"事件（之后失压按老化正常报警）；
+        ///   到配方定格时长 → 自动完成（下电+关阀+PASS·待取料）。
         /// </summary>
         private void ProcessTestingProgress(int deviceId, BarometerData data)
         {
@@ -3444,6 +3510,21 @@ namespace AgingTestSystem.Services
 
                     case AgingPhase.Aging:
                     {
+                        // ---- 【V1.88.14】延时=0 启动即进 Aging，确认宽限还开着：
+                        // 压力首次到位 = 真空已建立，关闭宽限并记事件，之后失压按老化正常报警。
+                        // （延时>0 / SkipVacuum 的台到这里时宽限早已是 MinValue，此分支恒跳过。）
+                        if (_vacuumConfirmTimes[idx] != DateTime.MinValue && inRange)
+                        {
+                            _vacuumConfirmTimes[idx] = DateTime.MinValue;
+                            string vacSn, vacRecipe;
+                            GetEventIdentity(deviceId, out vacSn, out vacRecipe);
+                            TestEventLogger.Write(_currentLotNumber, deviceId, "真空建立",
+                                $"真空已到位: {data.VacuumPressure} kPa（阈值 {threshold} kPa），老化计时中",
+                                pressureKPa: data.VacuumPressure,
+                                currentA: float.IsNaN(data.LoadCurrentA) ? (float?)null : data.LoadCurrentA,
+                                sn: vacSn, recipe: vacRecipe, result: "");
+                        }
+
                         // ---- 老化计时到点 → 自动完成 ----
                         if (_testStartTimes[idx] != DateTime.MinValue &&
                             AgingSequencer.ShouldComplete(DateTime.Now - _testStartTimes[idx],
@@ -3517,7 +3598,11 @@ namespace AgingTestSystem.Services
                 string pwSn, pwRecipe;
                 GetEventIdentity(deviceId, out pwSn, out pwRecipe);
                 TestEventLogger.Write(_currentLotNumber, deviceId, "上电",
-                    $"真空确认+延时时间到，载台上电开始老化（时长 {durationText}）",
+                    // 【V1.88.14】延时=0 的台走不到启动双开才到这里——只有"启动上电写失败回滚后重试"
+                    // 这一种（ShouldPowerOn 短路 true），文案区分开，免得日志里"真空确认"对不上。
+                    (_sessionDelaySecs[idx] <= 0
+                        ? $"延时=0 直接上电（重试成功），载台上电开始老化（时长 {durationText}）"
+                        : $"真空确认+延时时间到，载台上电开始老化（时长 {durationText}）"),
                     currentA: float.IsNaN(data.LoadCurrentA) ? (float?)null : data.LoadCurrentA,
                     sn: pwSn, recipe: pwRecipe, result: "");
                 // 【V1.67】上电=计时起点落定：快照一次（含 Phase=Aging + 上电时刻，

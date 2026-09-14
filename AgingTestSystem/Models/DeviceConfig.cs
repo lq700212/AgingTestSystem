@@ -97,14 +97,15 @@ namespace AgingTestSystem.Models
         /// <summary>
         /// 主视图每行显示的气压表数量（列数）
         ///
-        /// 当前要求：8 列 × 9 行 = 72 个气压表面板
+        /// 【V1.88.14】保持 8 列 × 9 行 = 72（用户明确不要动列数；12×6 试过，宽屏虽满但改动列数已回退）。
+        /// 自适应（AutoFit）按宽度顶满：站尽可能大、无右侧空白，高度超出部分上下滑动。
         /// </summary>
         public int PanelColumns { get; set; } = 8;
 
         /// <summary>
         /// 主视图每列显示的气压表数量（行数）
         ///
-        /// 当前要求：8 列 × 9 行 = 72 个气压表面板
+        /// 【V1.88.14】保持 9 行（见 PanelColumns 注释）。
         /// </summary>
         public int PanelRows { get; set; } = 9;
 

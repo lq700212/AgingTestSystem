@@ -1789,9 +1789,12 @@ namespace AgingTestSystem.Tests
         // =====================================================================
         private static void AgingSequencerTests()
         {
-            // ── ShouldPowerOn：上电前置条件 = 压力到位 且 延时时间已到（两者缺一不可）──
-            Check("压力未到位永不上电(即使延时已过)",
-                !AgingSequencer.ShouldPowerOn(false, TimeSpan.FromMinutes(10), 0));
+            // ── ShouldPowerOn：【V1.88.14】延时≤0=不要等待段，直接上电（启动阀电同开）；
+            // 延时>0 才要求"压力到位 且 延时已到"两者缺一不可 ──
+            Check("零延时不等真空直接上电(未到位也上电)",
+                AgingSequencer.ShouldPowerOn(false, TimeSpan.FromMinutes(10), 0));
+            Check("零延时启动时刻直接上电",
+                AgingSequencer.ShouldPowerOn(false, TimeSpan.Zero, 0));
             Check("压力到位+零延时立即上电",
                 AgingSequencer.ShouldPowerOn(true, TimeSpan.Zero, 0));
             Check("压力到位但延时未到不上电",
@@ -1837,10 +1840,10 @@ namespace AgingTestSystem.Tests
             Check("常压0恒越限(默认方向)", AgingSequencer.IsPressureOutOfRange(0m, -5m, true));
 
             // ── 负时间输入语义锁 ──
-            Check("延时为负视为已到(立即上电)",
-                AgingSequencer.ShouldPowerOn(true, TimeSpan.Zero, -5));
-            Check("计时为负不上电",
-                !AgingSequencer.ShouldPowerOn(true, TimeSpan.FromSeconds(-1), 0));
+            Check("延时为负同样直接上电(未到位也上电)",
+                AgingSequencer.ShouldPowerOn(false, TimeSpan.Zero, -5));
+            Check("延时>0时计时为负不上电",
+                !AgingSequencer.ShouldPowerOn(true, TimeSpan.FromSeconds(-1), 30));
             Check("计时为负不完成",
                 !AgingSequencer.ShouldComplete(TimeSpan.FromSeconds(-1), 3600));
 
@@ -4397,6 +4400,8 @@ namespace AgingTestSystem.Tests
                     Func<string, string> rmTipFlat = n => rmTip(n).Replace("\r\n", "");
                     Check("延时说明讲清先开阀后上电",
                         rmTipFlat("lblDelayTime").Contains("只开真空阀") && rmTipFlat("lblDelayTime").Contains("00:00:30"));
+                    Check("延时说明讲清填0阀电同开（V1.88.14）",
+                        rmTipFlat("lblDelayTime").Contains("填0") && rmTipFlat("lblDelayTime").Contains("同时开"));
                     Check("烧屏说明讲清0回退全局",
                         rmTipFlat("lblBurnInTime").Contains("全局") && rmTipFlat("lblBurnInTime").Contains("08:00:00"));
                     Check("负压说明举例符号方向",
@@ -4706,14 +4711,72 @@ namespace AgingTestSystem.Tests
                         Check("下电逻辑不变（载台无电=下电）", (string)gf("PowerText") == "下电");
                     }
 
-                    // —— 选中框常显（签名锁：DrawPanel 去 anySelected 参数，旧调度方法已删） ——
+                    // —— 选中框常显 + 单击点选（【V1.88.14】长按整套删除：无门槛翻转） ——
                     var drawPanel = tg.GetMethod("DrawPanel", BindingFlags.NonPublic | BindingFlags.Instance);
                     Check("DrawPanel签名4参（g/item/left/top，无anySelected）",
                         drawPanel != null && drawPanel.GetParameters().Length == 4);
                     Check("旧显隐调度已删（InvalidateAfterSelectionChange）",
                         tg.GetMethod("InvalidateAfterSelectionChange", BindingFlags.NonPublic | BindingFlags.Instance) == null);
-                    Check("交互门控保留（IsAnySelected属性仍在）",
-                        tg.GetProperty("IsAnySelected", BindingFlags.Public | BindingFlags.Instance) != null);
+                    Check("交互门控已删（IsAnySelected属性不在）",
+                        tg.GetProperty("IsAnySelected", BindingFlags.Public | BindingFlags.Instance) == null);
+                    Check("长按计时器字段已删（_longPressTimer）",
+                        tg.GetField("_longPressTimer", BindingFlags.NonPublic | BindingFlags.Instance) == null);
+                    Check("长按Tick已删（LongPressTimer_Tick）",
+                        tg.GetMethod("LongPressTimer_Tick", BindingFlags.NonPublic | BindingFlags.Instance) == null);
+                    Check("取消全选已删（ClearAllSelection，长按唯一调用者）",
+                        tg.GetMethod("ClearAllSelection", BindingFlags.NonPublic | BindingFlags.Instance) == null);
+                    // 单击翻转行为：反射调私有 ToggleSelect，无选中也能选上，再调翻回。
+                    var toggleSelect = tg.GetMethod("ToggleSelect", BindingFlags.NonPublic | BindingFlags.Instance);
+                    Check("反射找到ToggleSelect", toggleSelect != null);
+                    if (toggleSelect != null)
+                    {
+                        Check("初始无选中", grid.GetSelectedDeviceIds().Length == 0);
+                        toggleSelect.Invoke(grid, new object[] { 5 });
+                        Check("点一下选中5号（无门槛）",
+                            grid.GetSelectedDeviceIds().Length == 1 && grid.GetSelectedDeviceIds()[0] == 5);
+                        toggleSelect.Invoke(grid, new object[] { 5 });
+                        Check("再点一下翻回未选中",
+                            grid.GetSelectedDeviceIds().Length == 0);
+                    }
+
+                    // —— 自适应缩放（【V1.88.14】按宽顶满，纵向滑动看） ——
+                    Check("ComputeFitZoom按宽顶满（1600/1896）",
+                        Math.Abs(WorkstationGridView.ComputeFitZoom(1600, 1896) - 1600.0 / 1896.0) < 1e-9);
+                    Check("ComputeFitZoom等宽为1",
+                        Math.Abs(WorkstationGridView.ComputeFitZoom(1896, 1896) - 1.0) < 1e-9);
+                    Check("ComputeFitZoom非法输入回1（可用0/内容0/负数）",
+                        WorkstationGridView.ComputeFitZoom(0, 1896) == 1.0
+                        && WorkstationGridView.ComputeFitZoom(1600, 0) == 1.0
+                        && WorkstationGridView.ComputeFitZoom(-10, 1896) == 1.0);
+                    Check("AutoFit默认开", grid.AutoFit);
+                    // zoom 并进 Scaled：反射置 _zoom=0.5，逻辑100→物理50（_dpiScale=1，无句柄）。
+                    var zoomFld = tg.GetField("_zoom", BindingFlags.NonPublic | BindingFlags.Instance);
+                    var scaledM = tg.GetMethod("Scaled", BindingFlags.NonPublic | BindingFlags.Instance,
+                        null, new Type[] { typeof(int) }, null);
+                    Check("反射找到_zoom与Scaled(int)", zoomFld != null && scaledM != null);
+                    if (zoomFld != null && scaledM != null)
+                    {
+                        zoomFld.SetValue(grid, 0.5f);
+                        Check("zoom=0.5时Scaled(100)=50",
+                            (int)scaledM.Invoke(grid, new object[] { 100 }) == 50);
+                        zoomFld.SetValue(grid, 1f);
+                    }
+                    // 字体下限：zoom=0.1 时重建仍≥6pt（与V1.82画布口径一致）。
+                    var rebuildFonts = tg.GetMethod("RebuildFonts", BindingFlags.NonPublic | BindingFlags.Instance);
+                    Check("反射找到RebuildFonts", rebuildFonts != null);
+                    if (rebuildFonts != null && zoomFld != null)
+                    {
+                        zoomFld.SetValue(grid, 0.1f);
+                        rebuildFonts.Invoke(grid, null);
+                        var pfFld = tg.GetField("_panelFont", BindingFlags.NonPublic | BindingFlags.Instance);
+                        var tfFld = tg.GetField("_titleFont", BindingFlags.NonPublic | BindingFlags.Instance);
+                        var pf = pfFld != null ? pfFld.GetValue(grid) as System.Drawing.Font : null;
+                        var tf = tfFld != null ? tfFld.GetValue(grid) as System.Drawing.Font : null;
+                        Check("小zoom下正文字号钳6pt", pf != null && pf.Size >= 6f);
+                        Check("小zoom下标题字号钳6pt", tf != null && tf.Size >= 6f);
+                        zoomFld.SetValue(grid, 1f);
+                        rebuildFonts.Invoke(grid, null);
+                    }
                 }
             }
             finally

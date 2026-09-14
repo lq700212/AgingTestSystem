@@ -479,8 +479,10 @@ namespace AgingTestSystem.Tests
                     dm.GetBarometerData(1).LastTestResult == "");
 
                 // ---------- E4 中途改全局不影响在测台（定格隔离） ----------
+                // 【V1.88.14】延时改 0.5s（非零）：延时0的台启动即双开，不再走"只开阀"，
+                // 定格隔离场景必须用延时>0 保持"启动只开阀→定格阈值判定上电"。
                 dm.SetStationRecipe(1, "RX", -3m, null);
-                dm.SetStationDelayTimes(1, TimeSpan.Zero, TimeSpan.FromSeconds(1.5));
+                dm.SetStationDelayTimes(1, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1.5));
                 reader.SetPressure(1, -4m);
                 dm.StartTesting(new[] { 1 });
                 Thread.Sleep(150);
@@ -700,6 +702,45 @@ namespace AgingTestSystem.Tests
                 }
             }
 
+            // ---------- E26b 全部到时完成→风机停（V1.88.14 客户省电需求回归锁） ----------
+            // 完成即退出在测（_testingStates=false），采集循环末的 UpdateFanLifecycle
+            // 见无在测即停风机；与"末台手动停止"同口径（有在测的台没跑完，风机保持）。
+            {
+                FakeBarometerReader reader4; FakeIoController io4; DeviceConfig config4;
+                DeviceManager dm4 = BuildTestManager(out reader4, out io4, out config4);
+                try { dm4.Dispose(); } catch { }
+                var mockFan4 = new MockFanController();
+                var dmf4 = new DeviceManager(config4, reader4, io4, mockFan4);
+                try
+                {
+                    Check("[扩展][风机] 完成场景风机连接", dmf4.Start() && mockFan4.IsConnected);
+                    for (int i = 1; i <= 2; i++) reader4.SetPressure(i, -6m);
+                    dmf4.SetStationRecipe(1, "RF", -5m, null);
+                    dmf4.SetStationRecipe(2, "RF", -5m, null);
+                    dmf4.SetStationDelayTimes(1, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+                    dmf4.SetStationDelayTimes(2, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+                    dmf4.StartTesting(new[] { 1, 2 });
+                    Check("[扩展][风机] 两台都到时完成",
+                        WaitUntil(() =>
+                        {
+                            var d1 = dmf4.GetBarometerData(1);
+                            var d2 = dmf4.GetBarometerData(2);
+                            return d1 != null && d2 != null
+                                && d1.Status == DeviceStatus.Completed
+                                && d2.Status == DeviceStatus.Completed;
+                        }, 6000));
+                    Check("[扩展][风机] 全部完成后风机停止（省电）",
+                        WaitUntil(() => mockFan4.ReadStatus() != null
+                            && mockFan4.ReadStatus().RunState == FanRunState.FixedValueStopped, 3000));
+                }
+                finally
+                {
+                    try { dmf4.StopAll(); } catch { }
+                    try { dmf4.Dispose(); } catch { }
+                    try { TestSessionStore.Clear(); } catch { }
+                }
+            }
+
             // ---------- E28/E29 防火墙（独立 manager，Fake 开挂） ----------
             {
                 FakeBarometerReader reader3; FakeIoController io3; DeviceConfig config3;
@@ -826,6 +867,9 @@ namespace AgingTestSystem.Tests
                     !io.ReadOutput(PowerOut(config, 1)) && !io.ReadOutput(ValveOut(config, 1)));
 
                 // ================= 场景2：真空建立失败（工位2）=================
+                // 【V1.88.14】延时给 2s（>宽限600ms）：延时0的台启动即双开带电，
+                // "全程从未带电"超时路径必须用延时>0 保持"启动只开阀、超时永不带电"。
+                dm.SetStationDelayTimes(2, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(60));
                 dm.StartTesting(new[] { 2 });
                 // 不给压力（常压 0 > -5 恒越限）：600ms 宽限窗口耗尽应判真空建立失败
                 Check("[真空失败] 宽限窗口超时后报警断电标Fault",
@@ -862,8 +906,8 @@ namespace AgingTestSystem.Tests
                 dm.SetStationRecipe(2, "R2", -5m, null);
                 dm.SetStationDelayTimes(2, TimeSpan.Zero, TimeSpan.FromSeconds(60)); // 长老化
                 dm.StartTesting(new[] { 2 });
-                reader.SetPressure(2, -6m); // -6 ≤ -5 到位 → 应自动上电
-                Check("[中止] 到位上电进入老化",
+                reader.SetPressure(2, -6m); // 【V1.88.14】延时0启动即阀电同开进入老化（不等到位）
+                Check("[中止] 延时0启动即双开进入老化",
                     WaitUntil(() => io.ReadOutput(PowerOut(config, 2)), 2500));
                 dm.StopTesting(new[] { 2 });
                 Check("[中止] 手动停止后回空闲且阀电全关",
@@ -903,8 +947,9 @@ namespace AgingTestSystem.Tests
                 {
                     dm2.RecoverSession(pending);
                     Thread.Sleep(150);
-                    Check("[恢复] 整台重测从抽真空开始(阀开/电不开)",
-                        io2.ReadOutput(ValveOut(config2, 4)) && !io2.ReadOutput(PowerOut(config2, 4)));
+                    // 【V1.88.14】4号快照延时=0：整台重测同样阀电同开直接计时（不再是阀开电不开）。
+                    Check("[恢复] 延时0整台重测阀电同开直接计时",
+                        io2.ReadOutput(ValveOut(config2, 4)) && io2.ReadOutput(PowerOut(config2, 4)));
                     Check("[恢复] 恢复后回到在测状态", dm2.GetTestingCount() == 1);
                 }
                 finally
@@ -1099,8 +1144,9 @@ namespace AgingTestSystem.Tests
                     catch { }
                     Check("[策略P4] 续跑时长=剩余(100-40=60)",
                         resumed == 60);
-                    Check("[策略P4] 续跑从重抽真空开始(阀开/电不开)",
-                        io4b.ReadOutput(ValveOut(c4b, 1)) && !io4b.ReadOutput(PowerOut(c4b, 1)));
+                    // 【V1.88.14】续跑快照延时=0：重抽真空后同样阀电同开（不再是阀开电不开）。
+                    Check("[策略P4] 延时0续跑阀电同开",
+                        io4b.ReadOutput(ValveOut(c4b, 1)) && io4b.ReadOutput(PowerOut(c4b, 1)));
                     dm4b.DiscardSession(dm4b.LoadPendingSession());
                 }
                 finally { try { dm4b.StopAll(); } catch { } try { dm4b.Dispose(); } catch { } }
@@ -1330,9 +1376,11 @@ namespace AgingTestSystem.Tests
             try
             {
                 dm4.SetStationDelayTimes(1, TimeSpan.Zero, TimeSpan.FromSeconds(60));
-                dm4.SetStationDelayTimes(2, TimeSpan.Zero, TimeSpan.FromSeconds(60));
+                // 【V1.88.14】2号延时给 60s（非零）：延时0的台启动即双开进老化，
+                // "留抽真空"的对照台必须用延时>0。
+                dm4.SetStationDelayTimes(2, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
                 dm4.StartTesting(new[] { 1, 2 });
-                r4.SetPressure(1, -6m); // 1号到位上电进老化；2号常压0留抽真空
+                r4.SetPressure(1, -6m); // 1号延时0启动即双开进老化；2号延时60s留抽真空
                 Check("[规则R4] 1号上电",
                     WaitUntil(() => io4.ReadOutput(PowerOut(c4, 1)), 2500));
                 Thread.Sleep(200); // 等一轮采集把缓存状态刷齐
@@ -1513,6 +1561,8 @@ namespace AgingTestSystem.Tests
                 SweepSubscriberIsolation();
                 SweepNegativeDelay();
                 SweepVacuumInRangeFlag();
+                SweepZeroDelayPowerOnAtStart();
+                SweepFanStopRetry();
             }
             finally
             {
@@ -1548,6 +1598,10 @@ namespace AgingTestSystem.Tests
             DeviceManager dm = BuildTestManager(out reader, out io, out config);
             try
             {
+                // 【V1.88.14】延时给 1s（非零）：延时0的台启动即双开带电，
+                // "上电写失败回滚重试"场景必须用延时>0 保持"启动只开阀→到位才尝试上电"。
+                // 1s 而非 60s：回滚后重试条件是 elapsed≥延时，60s 会让"恢复后补上电"等到超时。
+                dm.SetStationDelayTimes(1, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(60));
                 dm.StartTesting(new[] { 1 });
                 Check("[大扫荡][上电回滚] 开阀",
                     WaitUntil(() => io.ReadOutput(ValveOut(config, 1)), 2000));
@@ -1752,6 +1806,71 @@ namespace AgingTestSystem.Tests
             finally { try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
         }
 
+        // ---------- S14 延时0启动阀电同开直接计时（V1.88.14 与客户确认的新口径） ----------
+        // 延时段 = "电源断电只吸附"的等待，不要等待 = 启动瞬间阀+电同时开、直接进 Aging
+        // 计时并保持常开；真空保护不丢：确认宽限保留（宽限内未到位暂不报警）、
+        // 到位后宽限关闭、超时未到位/后续失压照常报警断电。
+        private static void SweepZeroDelayPowerOnAtStart()
+        {
+            FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+            DeviceManager dm = BuildTestManager(out reader, out io, out config);
+            try
+            {
+                // 1号：延时0 + 长老化（不自己完成），启动时常压（未到位）——
+                // 老口径会等到位才上电，新口径启动即双开。
+                dm.SetStationRecipe(1, "RZ", -5m, null);
+                dm.SetStationDelayTimes(1, TimeSpan.Zero, TimeSpan.FromSeconds(60));
+                dm.StartTesting(new[] { 1 });
+                Check("[延时0] 启动瞬间阀电同开（不等真空到位）",
+                    WaitUntil(() => io.ReadOutput(ValveOut(config, 1))
+                        && io.ReadOutput(PowerOut(config, 1)), 1500));
+                Check("[延时0] 启动即进Aging（非Vacuuming）",
+                    WaitUntil(() =>
+                    {
+                        var ph = GetDmField(dm, "_testPhases") as Array;
+                        return ph != null && ph.GetValue(0).ToString() == "Aging";
+                    }, 1500));
+                Check("[延时0] 计时起点即启动时刻",
+                    ((DateTime[])GetDmField(dm, "_testStartTimes"))[0] != DateTime.MinValue);
+                Check("[延时0] 确认宽限保留（刚开阀常压不立即报警）",
+                    ((DateTime[])GetDmField(dm, "_vacuumConfirmTimes"))[0] != DateTime.MinValue);
+                Check("[延时0] 宽限内常压不报警（仍在测）",
+                    WaitUntil(() =>
+                    {
+                        var d = dm.GetBarometerData(1);
+                        return d != null && d.Status == DeviceStatus.Testing;
+                    }, 2000));
+                // 到位 → 宽限关闭，转入常规老化。
+                reader.SetPressure(1, -6m);
+                Check("[延时0] 到位后宽限关闭",
+                    WaitUntil(() => ((DateTime[])GetDmField(dm, "_vacuumConfirmTimes"))[0]
+                        == DateTime.MinValue, 2000));
+                Check("[延时0] 到位后仍在老化（阀电保持常开）",
+                    io.ReadOutput(ValveOut(config, 1)) && io.ReadOutput(PowerOut(config, 1))
+                    && dm.GetBarometerData(1).Status == DeviceStatus.Testing);
+                dm.StopTesting(new[] { 1 });
+
+                // 2号：延时0 + 常压永不到位 → 宽限耗尽报"真空建立超时"断电
+                // （与场景2对照：场景2延时>0 全程未带电；这里启动带过电再断电）。
+                dm.SetStationRecipe(2, "RZ", -5m, null);
+                dm.SetStationDelayTimes(2, TimeSpan.Zero, TimeSpan.FromSeconds(60));
+                dm.StartTesting(new[] { 2 });
+                Check("[延时0] 超时后报警断电标Fault",
+                    WaitUntil(() =>
+                    {
+                        var d = dm.GetBarometerData(2);
+                        return d != null && d.Status == DeviceStatus.Fault;
+                    }, 3000));
+                Check("[延时0] 超时结果标FAIL",
+                    dm.GetBarometerData(2).LastTestResult == "FAIL");
+                Check("[延时0] 启动带过电（与延时>0全程未带电对照）",
+                    io.EverPowerOn(PowerOut(config, 2)));
+                Check("[延时0] 超时后阀电全关",
+                    !io.ReadOutput(ValveOut(config, 2)) && !io.ReadOutput(PowerOut(config, 2)));
+            }
+            finally { try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
+        }
+
         // ---------- S13 真空到位标记随采集刷新（面板真空块三色的数据源） ----------
         // 口径与报警一致：测试中用启动定格阈值，未测试用全局 -5kPa；
         // 常压 0 → false（面板红），-6 → true（面板绿）。
@@ -1911,6 +2030,49 @@ namespace AgingTestSystem.Tests
                     CountCsvMarker("送风机停止失败") > stopFailBefore);
             }
             finally { try { if (dm != null) dm.Dispose(); } catch { } }
+        }
+
+        // ---------- S15 末台退出后停风机失败：记边沿一次+保持运行态下轮补停（V1.88.14） ----------
+        // 以前 _fanRunning 先置 false，停命令丢了就再也不补（风机一直转费电）；
+        // 现在失败保持 true 每轮补停，事件只记一次不刷屏。
+        private static void SweepFanStopRetry()
+        {
+            var config = new DeviceConfig();
+            config.TotalBarometers = 4;
+            config.TotalInputs = 80;
+            config.TotalOutputs = 160;
+            config.CollectInterval = 30;
+            config.VacuumConfirmTimeoutMs = 600;
+            config.CommunicationLossAlarmCount = 3;
+            config.AlarmPressureThresholdKPa = -5m;
+            config.FanEnabled = false;
+            var reader = new FakeBarometerReader(config.TotalBarometers);
+            var io = new FakeIoController(config.TotalInputs + config.TotalOutputs);
+            for (int i = 1; i <= config.TotalBarometers; i++) reader.SetPressure(i, 0m);
+            DeviceManager dm = null;
+            try
+            {
+                dm = new DeviceManager(config, reader, io, new ThrowingFan());
+                Check("[大扫荡][停风机] 风机注入版启动成功", dm.Start());
+                dm.SetStationDelayTimes(1, TimeSpan.Zero, TimeSpan.FromSeconds(60));
+                dm.StartTesting(new[] { 1 });
+                Check("[大扫荡][停风机] 首台启动风机在跑",
+                    WaitUntil(() => (bool)GetDmField(dm, "_fanRunning"), 2000));
+                int notedBefore = CountCsvMarker("送风机停止失败");
+                dm.StopTesting(new[] { 1 }); // 退出在测→下轮补停风机→Fake抛异常
+                Thread.Sleep(400); // 数轮采集：第一次记边沿，后续只重试不记
+                Check("[大扫荡][停风机] 失败记边沿一条不刷屏",
+                    CountCsvMarker("送风机停止失败") == notedBefore + 1);
+                Check("[大扫荡][停风机] 失败保持运行态（下轮继续补停）",
+                    (bool)GetDmField(dm, "_fanRunning")
+                    && (bool)GetDmField(dm, "_fanStopNoted"));
+            }
+            finally
+            {
+                // StopAll 遇到 Fake 风机同样抛（急停记账后重抛，S12 已锁），这里吞掉只清资源。
+                try { if (dm != null) dm.StopAll(); } catch { }
+                try { if (dm != null) dm.Dispose(); } catch { }
+            }
         }
 
         // ---------- S11 订阅异常隔离：坏订阅者不影响好订阅者与采集 ----------
