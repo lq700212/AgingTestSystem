@@ -4056,12 +4056,20 @@ namespace AgingTestSystem.Tests
                             BindingFlags.NonPublic | BindingFlags.Instance);
                         Check("反射找到 " + c.Method, mi != null);
                         if (mi == null) continue;
+                        // 【V1.88.20 加固】轮询＋重开找弹窗，不单次枚举：
+                        // 五个编辑弹窗全带 OnDeactivate 失焦自杀守卫（生产正确行为，
+                        // 点击外部即视为取消，动产品等于修对为错）。Show/Activate
+                        // 间隙若被焦点切换抢占，弹窗即自杀，单次 DoEvents 后枚举
+                        // 必误判（满负载全量跑时偶发，单跑必过是其特征）。
+                        // 轮询 1.5 秒仍找不到就重调一次同一生产入口再找——重开测的
+                        // 仍是"调入口能不能弹出"，真坏了（抛异常/静默无窗）两次都
+                        // 找不到，照样红灯，不掩盖真故障。
                         mi.Invoke(sfPop, new object[] { grid, 0, c.Value });
-                        Application.DoEvents();
-                        Form found = null;
-                        foreach (Form f in Application.OpenForms)
+                        Form found = PollOpenFormByType(c.Type);
+                        if (found == null)
                         {
-                            if (f != null && f.GetType() == c.Type) { found = f; break; }
+                            mi.Invoke(sfPop, new object[] { grid, 0, c.Value });
+                            found = PollOpenFormByType(c.Type);
                         }
                         Check(c.Name + "已弹出", found != null);
                         if (found != null)
@@ -4089,6 +4097,27 @@ namespace AgingTestSystem.Tests
                 }
                 try { if (sfPop != null) { sfPop.Close(); sfPop.Dispose(); } } catch { }
             }
+        }
+
+        /// <summary>轮询找已打开的指定类型窗体（【V1.88.20】弹窗失焦自杀防误判）.
+        /// 五个设置表编辑弹窗全带 OnDeactivate 失焦自杀守卫（生产正确行为）：
+        /// Show/Activate 间隙若被焦点切换抢占，弹窗即自杀；单次 DoEvents 后枚举在
+        /// 满负载全量跑时偶发撞上该时间窗（单跑必过是其特征，IO 映射弹窗实锤）。
+        /// 轮询 1.5 秒（50ms 步进），找到即返；找不到返 null，由调用方重开或红灯。
+        /// 只读 Application.OpenForms，无副作用；真坏了（抛异常/静默无窗）照样红灯。</summary>
+        private static Form PollOpenFormByType(Type windowType)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < 1500)
+            {
+                Application.DoEvents();
+                foreach (Form f in Application.OpenForms)
+                {
+                    if (f != null && f.GetType() == windowType) return f;
+                }
+                Thread.Sleep(50);
+            }
+            return null;
         }
 
         // =====================================================================

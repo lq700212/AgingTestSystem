@@ -521,10 +521,111 @@ static class DocShot
             Untrack(common);
 
             // V1.88.13补拍：此前harness缺这三张（01主界面/13授权/18连线页），靠手工存量图。
-            // 01用真MainForm（后台连接失败不影响布局截图）；13/18用无参构造直拍。
+            // 13/18用无参构造直拍。
             Shot(new SoftActivation(), "13-activation.png", false, 600);
             Shot(new IoRemapVisualForm(), "18-ioremap.png", true, 800);
-            Shot(new MainForm(), "01-main.png", true, 3000);
+            // 01主界面（V1.88.19重拍：完整主窗体＋Mock生产数据）。
+            // 血泪：V1.88.18 版只截了 WorkstationGridView 画布，缺右侧操作区/
+            // 顶部菜单/底部状态栏，文档"四个区"对不上图。必须截完整 MainForm。
+            // 做法：new MainForm() 全走生产构造 → 反射置 _config.UseMockCommunication
+            // =true（后台 Start 秒连免等待）→ 删残留 TestSession.json（防启动恢复弹窗）→
+            // Show → 在主窗自带 dm 上用公开 API 跑演示任务（与现场操作同一条路）：
+            // 1/2/5/6 号阈值 0（恒到位、绝不误报）长烧屏演"老化中"，3/4 号阈值 0
+            // 短烧屏 12 秒演"已完成"，7 号阈值 -11（恒越限）演"故障"。阈值 0/-11 下
+            // 原生 Mock 的 15% 坏读数翻不出花样，全程确定性。→ 勾选两台演示
+            // 正方形选中框 → 真屏截图。网格＋状态栏＋运行状态全是 dm 真实状态，
+            // 天然一致，无需任何反射灌数。
+            var mainWin = new MainForm();
+            try
+            {
+                var cfgField = typeof(MainForm).GetField("_config",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                var mainCfg = cfgField != null
+                    ? cfgField.GetValue(mainWin) as DeviceConfig : null;
+                if (mainCfg != null) mainCfg.UseMockCommunication = true;
+            }
+            catch (Exception ex) { Console.WriteLine("  main mock flag fail: " + ex.Message); }
+            try
+            {
+                string staleSnap = Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory, "TestSession.json");
+                if (File.Exists(staleSnap))
+                {
+                    File.Delete(staleSnap);
+                    Console.WriteLine("  deleted stale TestSession.json");
+                }
+            }
+            catch (Exception ex) { Console.WriteLine("  snap delete fail: " + ex.Message); }
+            mainWin.StartPosition = FormStartPosition.CenterScreen;
+            mainWin.Show();
+            Application.DoEvents();
+            Track(mainWin); // 看门狗名单：自己打开的不算意外弹窗
+            Thread.Sleep(2500); // 等 Load 建画布＋后台 mock Start 完成
+            Application.DoEvents();
+            Track(mainWin); // 睡后重登记一次（句柄可能重建，见 Shot 注释 07 号坑）
+            try
+            {
+                var dmField = typeof(MainForm).GetField("_deviceManager",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                var mainDm = dmField != null
+                    ? dmField.GetValue(mainWin) as DeviceManager : null;
+                if (mainDm == null) throw new Exception("反射拿不到主窗 _deviceManager");
+                // 72 台全开满载（V1.88.19 血泪：只开 7 台时其余 65 台空闲格显示
+                // Mock 自造的 SN0009~/配方A1~A5＋每秒乱跳的假延时，文档没法看；
+                // 全开后每格 SN/配方/时间全是本次真实下发的演示值，无 Mock 噪声）：
+                // 阈值 0＝恒到位绝不误报，7 号阈值 -11 恒越限演故障。
+                int[] allIds = new int[72];
+                for (int i = 1; i <= 72; i++)
+                {
+                    allIds[i - 1] = i;
+                    mainDm.SetStationSerialNumber(i, "SN250914" + i.ToString("D4"));
+                    mainDm.SetStationRecipe(i, "演示烧屏", i == 7 ? -11m : 0m, null);
+                    if (i == 3 || i == 4)
+                        mainDm.SetStationDelayTimes(i,
+                            TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(12));
+                    else
+                        mainDm.SetStationDelayTimes(i,
+                            TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(300));
+                }
+                mainDm.StartTesting(allIds); // 69 台老化中＋3/4 待完成＋7 待故障
+                DateTime mainDeadline = DateTime.Now.AddSeconds(90);
+                int mVac = 0, mAg = 0, mComp = 0, mFlt = 0, mIdle = 0;
+                do
+                {
+                    Thread.Sleep(1000);
+                    Application.DoEvents();
+                    mainDm.GetPhaseCounts(out mVac, out mAg, out mComp, out mFlt, out mIdle);
+                    Console.WriteLine("main vac=" + mVac + " aging=" + mAg
+                        + " comp=" + mComp + " fault=" + mFlt);
+                } while ((mComp < 2 || mFlt < 1) && DateTime.Now < mainDeadline);
+                var gridField = typeof(MainForm).GetField("_gridView",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                var mainGrid = gridField != null
+                    ? gridField.GetValue(mainWin)
+                        as AgingTestSystem.Views.WorkstationGridView : null;
+                if (mainGrid != null)
+                {
+                    mainGrid.SetSelected(1, true);
+                    mainGrid.SetSelected(3, true);
+                }
+                Application.DoEvents();
+                Thread.Sleep(800);
+                Application.DoEvents();
+                using (var bmp = CaptureScreen(mainWin))
+                {
+                    bmp.Save(Path.Combine(outDir, "01-main.png"), ImageFormat.Png);
+                    Console.WriteLine((HasContent(bmp) ? "OK " : "BLANK ")
+                        + "01-main.png " + bmp.Width + "x" + bmp.Height);
+                    if (!HasContent(bmp)) failCount++;
+                }
+            }
+            catch (Exception ex)
+            {
+                failCount++;
+                Console.WriteLine("FAIL 01-main.png : "
+                    + ex.GetType().Name + " " + ex.Message);
+            }
+            finally { Untrack(mainWin); } // 直接 Dispose，不 Close
 
             try { dm.Stop(); } catch { } try { dm.Dispose(); } catch { }
             StopWatchdog();
