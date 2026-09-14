@@ -1393,7 +1393,8 @@ namespace AgingTestSystem.Views
             // 上电绿/故障红等语义状态色两边都不动，见 WorkstationGridView.SetDarkMode 注释）
             _gridView.SetDarkMode(ThemeManager.IsDark);
 
-            // 订阅"设置"按钮点击事件（V1.18：打开工位设置窗口；V1.24：按选中数量分流）
+            // 订阅"设置"按钮点击事件（V1.18：打开工位设置窗口；本次需求：点哪台开哪台，不看选中集；
+            // 批量入口只走右侧"批量设置配方"按钮 ShowBatchRecipeForm）
             _gridView.OnSetClicked += Panel_OnSetClicked;
 
             // 订阅网格内部动作日志（如行全选/取消全选），写入主窗体 LOG
@@ -1913,31 +1914,19 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 面板"设置"按钮点击事件处理（【V1.18】由单台手动控制改为工位设置窗口）
-        /// 【V1.24 优化】点击"设置"按钮时：
-        /// 1. 若被点击按钮所在的工位未被选中，先将其加入选中集合（确保点击的工位必被选中）；
-        /// 2. 再按当前选中数量决定弹出窗口：
-        ///    - 选中 2 个及以上工位：弹出批量设置配方窗口（BatchRecipeForm）；
-        ///    - 只选中 1 个工位：弹出该选中工位的工位设置窗口（StationSettingsForm）。
-        /// 【V1.50】选中状态统一由 <see cref="WorkstationGridView"/> 内部维护。
+        /// 【本次需求】点哪个工位的"设置"按钮，就弹该工位的工位设置窗口（StationSettingsForm），
+        /// 不看页面上勾选了几个工位、也不改任何选中状态：
+        /// 以前按选中数量分流（≥2 个弹批量窗）容易误触——只想看 1 号参数，
+        /// 却因之前勾了别的工位而弹成批量窗。批量入口只走右侧"批量设置配方"按钮
+        /// （见 ShowBatchRecipeForm，按当前选中集批量下发）。
+        /// 【V1.50】选中状态统一由 <see cref="WorkstationGridView"/> 内部维护，本方法不碰选中集。
         /// </summary>
         private void Panel_OnSetClicked(object sender, int deviceId)
         {
-            // 确保被点击"设置"按钮所在的工位被选中
-            _gridView.SetSelected(deviceId, true);
-
-            int[] selectedIds = _gridView.GetSelectedDeviceIds();
-
-            // 选中 2 个及以上工位 → 批量设置配方窗口
-            if (selectedIds.Length >= 2)
-            {
-                ShowBatchRecipeForm();
-                return;
-            }
-
-            // 只选中 1 个工位（此时必为被点击的工位）→ 打开该工位的设置窗口
+            // 直接按被点工位号开窗（deviceId 由 WorkstationGridView 命中面板传来，必为有效工位号）；
+            // 不读选中集、不调 SetSelected：看单台参数不该顺手改勾选，勾选只留给批量按钮用。
             // 传入共享配方列表 _recipes，供"保存/加入对列"把当前配方写入本地配方存储
-            int selectedDeviceId = selectedIds.Length == 1 ? selectedIds[0] : deviceId;
-            using (var form = new StationSettingsForm(_deviceManager, _config, _recipes, selectedDeviceId))
+            using (var form = new StationSettingsForm(_deviceManager, _config, _recipes, deviceId))
             {
                 // 【V1.60】子窗体打开前按当前主题着色（以下各 ShowDialog/Show 处同，不再重复解释）
                 ThemeManager.ApplyTo(form);
@@ -3150,8 +3139,9 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 弹出批量设置配方窗口（【V1.24】抽取为公共方法，供"批量设置配方"按钮与
-        /// 面板"设置"按钮多选时共用；【V1.26】加入队列=保存配方+应用到选中工位）
+        /// 弹出批量设置配方窗口（【V1.24】抽取为公共方法；本次需求后唯一入口是右侧
+        /// "批量设置配方"按钮，不再被面板"设置"按钮多选分流调用；
+        /// 【V1.26】加入队列=保存配方+应用到选中工位）
         ///
         /// 【V1.26 说明】
         /// - 传入当前选中的工位编号（允许为 0 个）：若一个工位都没选中，

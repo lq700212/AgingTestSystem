@@ -339,7 +339,7 @@ namespace AgingTestSystem.Views
         /// <summary>拖拽期间最新一次计算出的目标滚动位置（由 _dragScrollTimer 统一应用）</summary>
         private Point _dragTargetScroll;
 
-        /// <summary>工位"设置"按钮点击事件（参数为设备编号，主窗体按选中数量分流窗口）</summary>
+        /// <summary>工位"设置"按钮点击事件（参数为设备编号，主窗体按被点编号直开该工位设置窗口，不看选中集）</summary>
         public event EventHandler<int> OnSetClicked;
         /// <summary>需要写日志的消息（如行全选动作），由主窗体订阅写入 LOG</summary>
         public event EventHandler<string> OnLog;
