@@ -1426,7 +1426,7 @@ namespace AgingTestSystem.Tests
 
         // =====================================================================
         // 9. PanelLayoutConfig —— 默认布局 / 锚定幂等 / 宽高联动（自绘面板布局核心）
-        //    断言基准 = V1.58.20 默认值（PanelInnerWidth=222, Height=205）
+        //    断言基准 = V1.88.17 紧凑默认值（PanelInnerWidth=204, Height=170）
         // =====================================================================
         private static void PanelLayoutTests()
         {
@@ -1435,22 +1435,23 @@ namespace AgingTestSystem.Tests
             if (File.Exists(cfgPath)) File.Delete(cfgPath);
 
             var c = PanelLayoutConfig.LoadOrDefault();
-            Check("无配置文件时 LoadOrDefault 返回默认布局", c != null && c.PanelInnerWidth == 222 && c.PanelInnerHeight == 205);
+            Check("无配置文件时 LoadOrDefault 返回默认布局", c != null && c.PanelInnerWidth == 204 && c.PanelInnerHeight == 170);
             c.ResolveAnchors();
 
             // 关键元素按锚定规则解析出的基准坐标
             var setBtn = c.RcSetButton.ToRectangle();
-            Check("设置按钮右锚定 X=222-9-60=153", setBtn.X == 153 && setBtn.Width == 60,
+            Check("设置按钮右锚定 X=204-9-50=145", setBtn.X == 145 && setBtn.Width == 50,
                 "实际 " + setBtn.ToString());
-            Check("设置按钮下锚定 Y=205-10-50=145", setBtn.Y == 145 && setBtn.Height == 50,
+            Check("设置按钮下锚定 Y=170-8-42=120", setBtn.Y == 120 && setBtn.Height == 42,
                 "实际 " + setBtn.ToString());
             var selBox = c.RcSelectBox.ToRectangle();
-            Check("选中框右上角锚定 (194,2)", selBox.X == 194 && selBox.Y == 2, "实际 " + selBox.ToString());
+            Check("选中框右上角锚定 (181,2) 18x18", selBox.X == 181 && selBox.Y == 2
+                && selBox.Width == 18 && selBox.Height == 18, "实际 " + selBox.ToString());
             var sn = c.RcSNValue.ToRectangle();
-            Check("SN 框右对齐设置按钮 X=65 宽148", sn.X == 65 && sn.Width == 148, "实际 " + sn.ToString());
+            Check("SN 框右对齐设置按钮 X=65 宽130", sn.X == 65 && sn.Width == 130, "实际 " + sn.ToString());
             var pressure = c.RcPressureValue.ToRectangle();
-            Check("压力框右缘对齐设置按钮宽148(与SN/配方同界)",
-                pressure.Width == 148 && pressure.X == 65,
+            Check("压力框右缘对齐设置按钮宽130(与SN/配方同界)",
+                pressure.Width == 130 && pressure.X == 65,
                 "实际 " + pressure.ToString());
             Check("压力框右缘=设置按钮右缘",
                 pressure.X + pressure.Width
@@ -1464,45 +1465,45 @@ namespace AgingTestSystem.Tests
 
             // ── 高度联动：面板高 +10 → 下链下移、上链锁定、差值由交接缝吸收（V1.77）──
             var tall = PanelLayoutConfig.LoadOrDefault();
-            tall.PanelInnerHeight = 215;
+            tall.PanelInnerHeight = 180;
             tall.ResolveAnchors();
-            Check("高度+10: 设置按钮 Y 145→155", tall.RcSetButton.ToRectangle().Y == 155);
-            Check("高度+10: SN 框 Y=93 不动(上链锁定，V1.77 改走自上而下链)",
-                tall.RcSNValue.ToRectangle().Y == 93);
-            Check("高度+10: 配方框 Y 118→128", tall.RcRecipeValue.ToRectangle().Y == 128);
+            Check("高度+10: 设置按钮 Y 120→130", tall.RcSetButton.ToRectangle().Y == 130);
+            Check("高度+10: SN 框 Y=76 不动(上链锁定，V1.77 改走自上而下链)",
+                tall.RcSNValue.ToRectangle().Y == 76);
+            Check("高度+10: 配方框 Y 98→108", tall.RcRecipeValue.ToRectangle().Y == 108);
             Check("高度+10: 交接缝吸收差值(SN→配方间距4→14)",
-                tall.RcRecipeValue.ToRectangle().Y - (tall.RcSNValue.ToRectangle().Y + 21) == 14);
-            Check("高度+10: 真空块搬去第一行 Y=29(TopMargin固定)", tall.RcVacuumOpen.ToRectangle().Y == 29);
-            Check("高度+10: 压力框 Y=67 不动(吊真空块下方)",
-                tall.RcPressureValue.ToRectangle().Y == 67);
-            Check("高度+10: 延时两行 Y 147/172→157/182",
-                tall.RcDelayTimeValue.ToRectangle().Y == 157 && tall.RcBurnInValue.ToRectangle().Y == 182);
+                tall.RcRecipeValue.ToRectangle().Y - (tall.RcSNValue.ToRectangle().Y + 18) == 14);
+            Check("高度+10: 真空块第一行 Y=26(TopMargin固定)", tall.RcVacuumOpen.ToRectangle().Y == 26);
+            Check("高度+10: 压力框 Y=54 不动(吊真空块下方)",
+                tall.RcPressureValue.ToRectangle().Y == 54);
+            Check("高度+10: 延时两行 Y 121/143→131/153",
+                tall.RcDelayTimeValue.ToRectangle().Y == 131 && tall.RcBurnInValue.ToRectangle().Y == 153);
             Check("高度+10: 选中框 TopMargin 锚定不动仍 Y=2", tall.RcSelectBox.ToRectangle().Y == 2);
-            Check("高度+10: 真空块 Y=29 不动(上链基准)", tall.RcVacuumOpen.ToRectangle().Y == 29);
-            Check("高度+10: 下电框跟随真空块仍 Y=29", tall.RcPower.ToRectangle().Y == 29);
+            Check("高度+10: 真空块 Y=26 不动(上链基准)", tall.RcVacuumOpen.ToRectangle().Y == 26);
+            Check("高度+10: 下电框跟随真空块仍 Y=26", tall.RcPower.ToRectangle().Y == 26);
             Check("高度+10: 压力框右缘=设置按钮右缘(与SN/配方同界)",
                 tall.RcPressureValue.ToRectangle().X + tall.RcPressureValue.ToRectangle().Width
                 == tall.RcSetButton.ToRectangle().X + tall.RcSetButton.ToRectangle().Width);
 
             // ── 宽度联动：面板宽 +10 → 右锚定组整体右移、双端锚定宽度随动 ──
-            // 右对齐公式 X = 目标右缘 - 自身宽：SetButton.X=232-9-60=163，
-            // 其右缘=223 → SN.X = 223-148 = 75（基准 65 +10，整组右移）
+            // 右对齐公式 X = 目标右缘 - 自身宽：SetButton.X=214-9-50=155，
+            // 其右缘=205 → SN.X = 205-130 = 75（基准 65 +10，整组右移）
             var wide = PanelLayoutConfig.LoadOrDefault();
-            wide.PanelInnerWidth = 232;
+            wide.PanelInnerWidth = 214;
             wide.ResolveAnchors();
-            Check("宽度+10: 设置按钮 X 153→163", wide.RcSetButton.ToRectangle().X == 163);
+            Check("宽度+10: 设置按钮 X 145→155", wide.RcSetButton.ToRectangle().X == 155);
             Check("宽度+10: SN 框 X 65→75(右缘跟随设置按钮)", wide.RcSNValue.ToRectangle().X == 75,
                 "实际 " + wide.RcSNValue.ToRectangle().ToString());
-            // 压力框右缘改对齐设置按钮（左贴 SN）：宽度 148 与 SN/配方同界，不再是 85 窄框
+            // 压力框右缘对齐设置按钮（左贴 SN）：宽度 130 与 SN/配方同界
             var wPressure = wide.RcPressureValue.ToRectangle();
-            Check("宽度+10: 压力框 X=75 宽148(右缘跟设置按钮)",
-                wPressure.X == 75 && wPressure.Width == 148,
+            Check("宽度+10: 压力框 X=75 宽130(右缘跟设置按钮)",
+                wPressure.X == 75 && wPressure.Width == 130,
                 "实际 " + wPressure.ToString());
-            Check("宽度+10: 选中框 X 194→204(RightMargin=5 跟随)", wide.RcSelectBox.ToRectangle().X == 204);
+            Check("宽度+10: 选中框 X 181→191(RightMargin=5 跟随)", wide.RcSelectBox.ToRectangle().X == 191);
 
             // ── 标签垂直居中：随目标框移动（V1.77：压力框定高位，标签不动）──
-            Check("压力标签定高位不动(Y=70)",
-                c.LabelPressurePosition.ToPoint().Y == 70 && tall.LabelPressurePosition.ToPoint().Y == 70,
+            Check("压力标签定高位不动(Y=56)",
+                c.LabelPressurePosition.ToPoint().Y == 56 && tall.LabelPressurePosition.ToPoint().Y == 56,
                 "基准 " + c.LabelPressurePosition.ToPoint().ToString() + " 加高后 " + tall.LabelPressurePosition.ToPoint().ToString());
 
             // ── 颜色解析工具 ──
@@ -1528,32 +1529,32 @@ namespace AgingTestSystem.Tests
             Check("SaveDefault→重载→解析结果与默认零差异", diffs.Count == 0,
                 "差异: " + string.Join("; ", diffs.Take(5)));
 
-            // ── V1.77 电流行：关=原来逐像素一致，开=下游下移21间距不变 ──
+            // ── V1.77 电流行：关=原来逐像素一致，开=下游下移18间距不变（V1.88.17 紧凑值）──
             // 纯代码默认（不读文件，零文件依赖）：new 出来就是 ShowCurrent=false 的原布局
             var cur = new PanelLayoutConfig();
             Check("电流行缺省关闭", cur.ShowCurrent == false);
-            Check("关电流有效高=205/行高=225",
-                cur.GetEffectiveInnerHeight() == 205 && cur.GetEffectiveRowHeight() == 225);
+            Check("关电流有效高=170/行高=182",
+                cur.GetEffectiveInnerHeight() == 170 && cur.GetEffectiveRowHeight() == 182);
             cur.ShowCurrent = true;
             cur.ResolveAnchors();
-            Check("开电流有效高226/行高246",
-                cur.GetEffectiveInnerHeight() == 226 && cur.GetEffectiveRowHeight() == 246);
+            Check("开电流有效高188/行高200",
+                cur.GetEffectiveInnerHeight() == 188 && cur.GetEffectiveRowHeight() == 200);
             var rcCur = cur.RcCurrentValue.ToRectangle();
-            Check("开电流电流行 (65,90,85,21)",
-                rcCur.X == 65 && rcCur.Y == 90 && rcCur.Width == 85 && rcCur.Height == 21,
+            Check("开电流电流行 (65,74,71,18)",
+                rcCur.X == 65 && rcCur.Y == 74 && rcCur.Width == 71 && rcCur.Height == 18,
                 "实际 " + rcCur.ToString());
-            Check("开电流SN下移114", cur.RcSNValue.ToRectangle().Y == 114);
-            Check("开电流配方139且交接缝仍4",
-                cur.RcRecipeValue.ToRectangle().Y == 139
-                && cur.RcRecipeValue.ToRectangle().Y - (cur.RcSNValue.ToRectangle().Y + 21) == 4);
-            Check("开电流按钮166/延时168/193",
-                cur.RcSetButton.ToRectangle().Y == 166
-                && cur.RcDelayTimeValue.ToRectangle().Y == 168
-                && cur.RcBurnInValue.ToRectangle().Y == 193);
-            Check("开电流压力框不动67/真空块29",
-                cur.RcPressureValue.ToRectangle().Y == 67 && cur.RcVacuumOpen.ToRectangle().Y == 29);
-            Check("开电流标签93", cur.LabelCurrentPosition.ToPoint().Y == 93);
-            Check("开电流SN标签跟随117", cur.LabelSnPosition.ToPoint().Y == 117);
+            Check("开电流SN下移94", cur.RcSNValue.ToRectangle().Y == 94);
+            Check("开电流配方116且交接缝仍4",
+                cur.RcRecipeValue.ToRectangle().Y == 116
+                && cur.RcRecipeValue.ToRectangle().Y - (cur.RcSNValue.ToRectangle().Y + 18) == 4);
+            Check("开电流按钮138/延时139/161",
+                cur.RcSetButton.ToRectangle().Y == 138
+                && cur.RcDelayTimeValue.ToRectangle().Y == 139
+                && cur.RcBurnInValue.ToRectangle().Y == 161);
+            Check("开电流压力框不动54/真空块26",
+                cur.RcPressureValue.ToRectangle().Y == 54 && cur.RcVacuumOpen.ToRectangle().Y == 26);
+            Check("开电流标签76", cur.LabelCurrentPosition.ToPoint().Y == 76);
+            Check("开电流SN标签跟随96", cur.LabelSnPosition.ToPoint().Y == 96);
             // 关回去：与默认快照零差异（开关往返不漂移）
             cur.ShowCurrent = false;
             cur.ResolveAnchors();
@@ -1650,6 +1651,21 @@ namespace AgingTestSystem.Tests
                 Check("损坏文件回退默认40/50/240/30",
                     fallback.TopBarHeight == 40 && fallback.MenuHeight == 50
                     && fallback.RightPanelWidth == 240 && fallback.StatusBarHeight == 30);
+            }
+            finally
+            {
+                if (File.Exists(cfgPath)) File.Delete(cfgPath);
+            }
+
+            // 越界钳制（V1.88.17：手改 json 写 5000 高/负宽，进不了主窗，只变"不好看"）
+            try
+            {
+                File.WriteAllText(cfgPath,
+                    "{\"TopBarHeight\":5000,\"MenuHeight\":200,\"RightPanelWidth\":-50,\"StatusBarHeight\":0}");
+                var clamped = HomeLayoutConfig.LoadOrDefault();
+                Check("越界文件按Range钳(80/100/180/15)",
+                    clamped.TopBarHeight == 80 && clamped.MenuHeight == 100
+                    && clamped.RightPanelWidth == 180 && clamped.StatusBarHeight == 15);
             }
             finally
             {
@@ -4667,11 +4683,12 @@ namespace AgingTestSystem.Tests
                     Check("负坐标不命中", !hit(new Point(-5, -5)).Item1);
                     var center = hit(new Point(b1.Width / 2, b1.Height / 2));
                     Check("1号中心命中1", center.Item1 && center.Item2 == 1);
-                    // 【V1.88.15】面板间隙不命中（zoom=1/dpi=1：内容222x205，格227x225，
-                    // 行缝 y∈[207,225)、列缝 x∈[224,227)；点缝隙以前误翻上一个面板）。
-                    Check("行间隙不命中", !hit(new Point(b1.Width / 2, 220)).Item1);
-                    Check("列间隙不命中", !hit(new Point(226, 100)).Item1);
-                    Check("内容底边内仍命中", hit(new Point(100, 206)).Item1);
+                    // 【V1.88.15】面板间隙不命中（zoom=1/dpi=1：内容204x170，格209x182；
+                    // 面板内容左上偏移+2：行缝 y∈[172,182)、列缝 x∈[206,209)；
+                    // 点缝隙以前误翻上一个面板。【V1.88.17】数字随紧凑布局更新。
+                    Check("行间隙不命中", !hit(new Point(b1.Width / 2, 176)).Item1);
+                    Check("列间隙不命中", !hit(new Point(207, 50)).Item1);
+                    Check("内容底边内仍命中", hit(new Point(100, 171)).Item1);
                     Func<DeviceStatus, Color> bc = st => (Color)backOf.Invoke(grid, new object[] { st });
                     var cFault = bc(DeviceStatus.Fault); var cTest = bc(DeviceStatus.Testing);
                     var cDone = bc(DeviceStatus.Completed); var cIdle = bc(DeviceStatus.Idle);
@@ -4763,56 +4780,118 @@ namespace AgingTestSystem.Tests
                             grid.GetSelectedDeviceIds().Length == 0);
                     }
 
-                    // —— 自适应缩放（【V1.88.14】按宽顶满，纵向滑动看） ——
-                    Check("ComputeFitZoom按宽顶满（1600/1896）",
-                        Math.Abs(WorkstationGridView.ComputeFitZoom(1600, 1896) - 1600.0 / 1896.0) < 1e-9);
-                    Check("ComputeFitZoom等宽为1",
-                        Math.Abs(WorkstationGridView.ComputeFitZoom(1896, 1896) - 1.0) < 1e-9);
-                    Check("ComputeFitZoom非法输入回1（可用0/内容0/负数）",
-                        WorkstationGridView.ComputeFitZoom(0, 1896) == 1.0
-                        && WorkstationGridView.ComputeFitZoom(1600, 0) == 1.0
-                        && WorkstationGridView.ComputeFitZoom(-10, 1896) == 1.0);
+                    // —— 自适应缩放（【V1.88.17】双向精确铺满一屏，无滚动条） ——
+                    // 内容 8×209+64=1736 宽、9×182=1638 高（紧凑布局关电流）。
+                    double bzx, bzy;
+                    WorkstationGridView.ComputeFitZoomBoth(1600, 800, 1736, 1638, out bzx, out bzy);
+                    Check("ComputeFitZoomBoth双向独立（1600/1736，800/1638）",
+                        Math.Abs(bzx - 1600.0 / 1736.0) < 1e-9 && Math.Abs(bzy - 800.0 / 1638.0) < 1e-9);
+                    WorkstationGridView.ComputeFitZoomBoth(1736, 1638, 1736, 1638, out bzx, out bzy);
+                    Check("ComputeFitZoomBoth等尺寸为1,1",
+                        Math.Abs(bzx - 1.0) < 1e-9 && Math.Abs(bzy - 1.0) < 1e-9);
+                    WorkstationGridView.ComputeFitZoomBoth(0, 600, 1736, 1638, out bzx, out bzy);
+                    bool bothBad1 = bzx == 1.0 && bzy == 1.0;
+                    WorkstationGridView.ComputeFitZoomBoth(800, 0, 1736, 1638, out bzx, out bzy);
+                    bool bothBad2 = bzx == 1.0 && bzy == 1.0;
+                    WorkstationGridView.ComputeFitZoomBoth(800, 600, 0, 1638, out bzx, out bzy);
+                    bool bothBad3 = bzx == 1.0 && bzy == 1.0;
+                    WorkstationGridView.ComputeFitZoomBoth(-10, 600, 1736, 1638, out bzx, out bzy);
+                    bool bothBad4 = bzx == 1.0 && bzy == 1.0;
+                    Check("ComputeFitZoomBoth任一边非法回1,1", bothBad1 && bothBad2 && bothBad3 && bothBad4);
                     Check("AutoFit默认开", grid.AutoFit);
-                    // zoom 并进 Scaled：反射置 _zoom=0.5，逻辑100→物理50（_dpiScale=1，无句柄）。
-                    var zoomFld = tg.GetField("_zoom", BindingFlags.NonPublic | BindingFlags.Instance);
-                    var scaledM = tg.GetMethod("Scaled", BindingFlags.NonPublic | BindingFlags.Instance,
+                    Check("缩放上下限0.15/4",
+                        WorkstationGridView.MinZoom == 0.15f && WorkstationGridView.MaxZoom == 4f);
+                    // zoom 并进 ScaledX/ScaledY：反射置 _zoomX=0.5/_zoomY=0.25，
+                    // 逻辑100→物理50/25（_dpiScale=1，无句柄）。
+                    var zoomXFld = tg.GetField("_zoomX", BindingFlags.NonPublic | BindingFlags.Instance);
+                    var zoomYFld = tg.GetField("_zoomY", BindingFlags.NonPublic | BindingFlags.Instance);
+                    var scaledXM = tg.GetMethod("ScaledX", BindingFlags.NonPublic | BindingFlags.Instance,
                         null, new Type[] { typeof(int) }, null);
-                    Check("反射找到_zoom与Scaled(int)", zoomFld != null && scaledM != null);
-                    if (zoomFld != null && scaledM != null)
+                    var scaledYM = tg.GetMethod("ScaledY", BindingFlags.NonPublic | BindingFlags.Instance,
+                        null, new Type[] { typeof(int) }, null);
+                    Check("反射找到_zoomX/_zoomY与ScaledX/ScaledY",
+                        zoomXFld != null && zoomYFld != null && scaledXM != null && scaledYM != null);
+                    if (zoomXFld != null && zoomYFld != null && scaledXM != null && scaledYM != null)
                     {
-                        zoomFld.SetValue(grid, 0.5f);
-                        Check("zoom=0.5时Scaled(100)=50",
-                            (int)scaledM.Invoke(grid, new object[] { 100 }) == 50);
-                        zoomFld.SetValue(grid, 1f);
+                        zoomXFld.SetValue(grid, 0.5f);
+                        zoomYFld.SetValue(grid, 0.25f);
+                        Check("zoomX=0.5时ScaledX(100)=50",
+                            (int)scaledXM.Invoke(grid, new object[] { 100 }) == 50);
+                        Check("zoomY=0.25时ScaledY(100)=25",
+                            (int)scaledYM.Invoke(grid, new object[] { 100 }) == 25);
+                        // 矩形双向：(10,20,30,40)→(5,5,15,10)，宽扁拉伸下绘制与命中同口径。
+                        var scaledR = tg.GetMethod("Scaled", BindingFlags.NonPublic | BindingFlags.Instance,
+                            null, new Type[] { typeof(Rectangle) }, null);
+                        Check("反射找到Scaled(Rectangle)", scaledR != null);
+                        if (scaledR != null)
+                        {
+                            Rectangle sr = (Rectangle)scaledR.Invoke(grid,
+                                new object[] { new Rectangle(10, 20, 30, 40) });
+                            Check("矩形双向缩放(10,20,30,40)→(5,5,15,10)",
+                                sr.X == 5 && sr.Y == 5 && sr.Width == 15 && sr.Height == 10);
+                        }
+                        zoomXFld.SetValue(grid, 1f);
+                        zoomYFld.SetValue(grid, 1f);
                     }
-                    // 字体下限：zoom=0.1 时重建仍≥6pt（与V1.82画布口径一致）。
+                    // 选中框恒正方形（V1.88.17：边长取缩放后较小边，跟面板走；
+                    // 绘制与命中同源，扁拉伸下不压成扁条）。
+                    var selRectM = tg.GetMethod("GetSelectBoxRect", BindingFlags.NonPublic | BindingFlags.Instance);
+                    var selLocalM = tg.GetMethod("GetSelectBoxLocalRect", BindingFlags.NonPublic | BindingFlags.Instance);
+                    Check("反射找到GetSelectBoxRect/LocalRect", selRectM != null && selLocalM != null);
+                    if (selRectM != null && selLocalM != null && zoomXFld != null && zoomYFld != null)
+                    {
+                        zoomXFld.SetValue(grid, 0.5f);
+                        zoomYFld.SetValue(grid, 0.25f);
+                        // 边长=min(ScaledX(18),ScaledY(18))=min(9,4)=4；
+                        // x=100+102-4-2=196，y=200+0=200（银行家舍入确定值）。
+                        Rectangle sq = (Rectangle)selRectM.Invoke(grid, new object[] { 100, 200 });
+                        Check("扁拉伸下选中框仍正方形且边长取小边",
+                            sq.Width == sq.Height && sq.Width == 4, "实际 " + sq.ToString());
+                        Check("选中框右上位置(196,200)",
+                            sq.X == 196 && sq.Y == 200, "实际 " + sq.ToString());
+                        Rectangle sql = (Rectangle)selLocalM.Invoke(grid, null);
+                        Check("局部矩形与绘制同源((96,0,4,4))",
+                            sql.X == 96 && sql.Y == 0 && sql.Width == 4 && sql.Height == 4,
+                            "实际 " + sql.ToString());
+                        zoomXFld.SetValue(grid, 1f);
+                        zoomYFld.SetValue(grid, 1f);
+                    }
+                    // 字体下限：zoom=0.1 时重建仍≥6pt（与V1.82画布口径一致；取窄边）。
                     var rebuildFonts = tg.GetMethod("RebuildFonts", BindingFlags.NonPublic | BindingFlags.Instance);
                     Check("反射找到RebuildFonts", rebuildFonts != null);
-                    if (rebuildFonts != null && zoomFld != null)
+                    if (rebuildFonts != null && zoomXFld != null && zoomYFld != null)
                     {
-                        zoomFld.SetValue(grid, 0.1f);
+                        zoomXFld.SetValue(grid, 0.1f);
+                        zoomYFld.SetValue(grid, 2.0f);
                         rebuildFonts.Invoke(grid, null);
                         var pfFld = tg.GetField("_panelFont", BindingFlags.NonPublic | BindingFlags.Instance);
                         var tfFld = tg.GetField("_titleFont", BindingFlags.NonPublic | BindingFlags.Instance);
                         var pf = pfFld != null ? pfFld.GetValue(grid) as System.Drawing.Font : null;
                         var tf = tfFld != null ? tfFld.GetValue(grid) as System.Drawing.Font : null;
-                        Check("小zoom下正文字号钳6pt", pf != null && pf.Size >= 6f);
-                        Check("小zoom下标题字号钳6pt", tf != null && tf.Size >= 6f);
-                        zoomFld.SetValue(grid, 1f);
+                        Check("窄边小zoom下正文字号钳6pt", pf != null && pf.Size >= 6f);
+                        Check("窄边小zoom下标题字号钳6pt", tf != null && tf.Size >= 6f);
+                        zoomXFld.SetValue(grid, 1f);
+                        zoomYFld.SetValue(grid, 1f);
                         rebuildFonts.Invoke(grid, null);
                     }
-                    // 无句柄挂载：MinSize 与画布 Size 恒一致（V1.88.15：值语义锁滚动范围，
-                    // 纵滑块拉不到底的病根；AutoScroll 位置无句柄测不了，只锁 MinSize+zoom）。
+                    // 无句柄挂载：MinSize 与画布 Size 恒一致（V1.88.15：值语义锁滚动范围；
+                    // AutoScroll 位置无句柄测不了，只锁 MinSize+双向zoom）。
+                    // 800×600 宿主：可用799×599，内容1736×1638 → zx≈0.4603，zy≈0.3657。
                     var hostPanel = new System.Windows.Forms.Panel();
                     try
                     {
                         hostPanel.ClientSize = new System.Drawing.Size(800, 600);
                         hostPanel.Controls.Add(grid);
-                        float zh = zoomFld != null ? (float)zoomFld.GetValue(grid) : 0f;
-                        Check("挂载后zoom按宽算(799/1896)",
-                            zoomFld != null && Math.Abs(zh - 799.0 / 1896.0) < 0.002);
+                        float zhx = zoomXFld != null ? (float)zoomXFld.GetValue(grid) : 0f;
+                        float zhy = zoomYFld != null ? (float)zoomYFld.GetValue(grid) : 0f;
+                        Check("挂载后zoomX按宽算(799/1736)",
+                            zoomXFld != null && Math.Abs(zhx - 799.0 / 1736.0) < 0.002);
+                        Check("挂载后zoomY按高算(599/1638)",
+                            zoomYFld != null && Math.Abs(zhy - 599.0 / 1638.0) < 0.002);
                         Check("MinSize与画布Size恒一致",
                             hostPanel.AutoScrollMinSize == grid.Size);
+                        Check("画布精确铺满宿主(±1px取整)",
+                            Math.Abs(grid.Size.Width - 799) <= 1 && Math.Abs(grid.Size.Height - 599) <= 1);
                     }
                     finally
                     {
@@ -4927,6 +5006,21 @@ namespace AgingTestSystem.Tests
             Check("有json自定义值原样优先",
                 MainForm.ComputeRightPanelWidth(1394, true, 260) == 260
                 && MainForm.ComputeRightPanelWidth(1394, true, 500) == 500);
+
+            // —— 工作站区最小宽度保护（V1.88.17：右侧再宽也不能吃掉 Panel1） ——
+            Check("左侧最小宽常量640", MainForm.MinWorkstationPanelWidth == 640);
+            Check("正常298不钳(1274窗)",
+                MainForm.ClampRightPanelWidthForWorkstation(298, 1274, 4, 640) == 298);
+            Check("600在1274窗下放得下(maxRight=630)",
+                MainForm.ClampRightPanelWidthForWorkstation(600, 1274, 4, 640) == 600);
+            Check("600在1150小窗下压到506",
+                MainForm.ClampRightPanelWidthForWorkstation(600, 1150, 4, 640) == 506);
+            Check("过窄100提下限180",
+                MainForm.ClampRightPanelWidthForWorkstation(100, 1274, 4, 640) == 180);
+            Check("容器宽不可读(≤0)不钳",
+                MainForm.ClampRightPanelWidthForWorkstation(298, 0, 4, 640) == 298);
+            Check("容器本身太窄保右侧(700窗maxRight=56<180)",
+                MainForm.ClampRightPanelWidthForWorkstation(500, 700, 4, 640) == 500);
 
             // —— 参数设置入口无权限提示（新增：按钮常亮可点，无权限点后弹"权限不够"） ——
             // 以前操作员下按钮 Enabled=false，点了零反馈像卡死；现常亮+点击时拦截。
@@ -5989,6 +6083,17 @@ namespace AgingTestSystem.Tests
                     catch { clampOk = false; }
                     Check("越界旧值100同步钳到下限180不抛",
                         clampOk && nudRight.Value == nudRight.Minimum);
+
+                    // 输入框写入钳制（V1.88.17：手输超限到不了 json；反射直调私有 ClampToRange）。
+                    var clampM = t.GetMethod("ClampToRange", Flags);
+                    Check("反射找到ClampToRange", clampM != null);
+                    if (clampM != null)
+                    {
+                        Check("输入钳上(5000→菜单上限100)",
+                            (int)clampM.Invoke(null, new object[] { 5000, HomeLayoutConfig.MenuRange }) == 100);
+                        Check("输入钳下(-5→菜单下限25)",
+                            (int)clampM.Invoke(null, new object[] { -5, HomeLayoutConfig.MenuRange }) == 25);
+                    }
                 }
                 Check("布局窗AutoScale=None（Sunny canonical，预览不脏）",
                     homeForm.AutoScaleMode == AutoScaleMode.None);

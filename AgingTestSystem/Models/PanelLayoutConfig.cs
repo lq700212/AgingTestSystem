@@ -21,7 +21,9 @@ namespace AgingTestSystem.Models
     /// 颜色统一用 "R,G,B" 字符串表示（如 "255,255,255"）。
     ///
     /// 【配置项说明】
-    /// 面板内容按"设计尺寸 222×205"布局（V1.58.11 由 240×205 缩小），
+    /// 面板内容按"设计尺寸 204×170"布局（V1.58.11 为 240×205→222×205；
+    /// 【V1.88.17】紧凑到 204×170：值框高 21→18、状态块 23→20、纵向间隙收紧，
+    /// 为"72 站精确铺满一屏"减内容高，见 WorkstationGridView 双向自适应注释）。
     /// 72 个工位共用同一套面板模板，所以只需编辑一份配置即可同时调整所有面板。
     ///
     /// 【锚定机制总览（V1.58.13~1.58.19，改坐标前务必先读本节）】
@@ -68,43 +70,47 @@ namespace AgingTestSystem.Models
     /// 【依赖顺序铁律】被依赖元素必须先解析（<see cref="ResolveElementAlign"/> 注释为准，
     ///   此处是摘要）：
     ///   ① 面板 → ② 设置按钮(BottomMargin，有效高) → 配方(BottomToTop:SetButton)；
-    ///   【V1.88.16】工作状态块已删，真空块搬去第一行(153,29)当上链基准：
-    ///   ③ 真空关(右缘跟随+Y=29 顶区不动) → 下电(Y/H 对齐真空块，X 跟 SN) → 压力框
-    ///   (左缘 SN/右缘设置按钮宽 148，Y 吊真空块) → SN(X 右缘跟随，Y 按电流缺省先解)
+    ///   【V1.88.16】工作状态块已删，真空块搬去第一行当上链基准；
+    ///   【V1.88.17】紧凑数字见下"完整锚定链"，结构不变：
+    ///   ③ 真空关(右缘跟随+Y=26 顶区不动) → 下电(Y/H 对齐真空块，X 跟 SN) → 压力框
+    ///   (左缘 SN/右缘设置按钮宽 130，Y 吊真空块) → SN(X 右缘跟随，Y 按电流缺省先解)
     ///   → 电流行(TopToBottom:压力框) → SN 终解 Y；延时两行(VerticalCenter:SetButton) → 标签。
     ///   顺序错会取到目标旧值，表现为"改了不生效 / 元素错位"。
     ///   【V1.77 变更】压力/真空关/SN 由"自下而上链"改为"自上而下链"（电流行插入所迫，
     ///   位置零变化）；SN→配方之间改为"交接缝"（缺省高度下间距恰好 4px 与原来一致，
     ///   见下"完整锚定链"）。
     ///
-    /// 【当前完整锚定链（V1.58.19 横纵双向 + V1.58.20 内容居中 + V1.77 电流行，解析结果如下）】
-    ///   下链（面板底→上，面板增高时整体下移）：纵链头 = View 面板下缘(内容高 205)：
-    ///     └─ 设置按钮 RcSetButton(RightMargin=9 + BottomMargin=10 → X=222-9-60=153、Y=205-10-50=145，
-    ///        右缘 213 距面板右缘 9px，下缘距面板底 10px)
-    ///          └─ 配方框 RcRecipeValue(右缘:SetButton→X=65 + 下缘贴设置上缘、Gap=6 → Y=145-21-6=118)
-    ///   上链（顶部→下，面板增高时不动；【V1.77】电流行插入后压力/真空关/SN 改走本链，位置零变化；
-    ///   【V1.88.16】工作状态块已删，真空块搬去第一行当基准，位置零变化）：
-    ///     ├─ 真空关 RcVacuumOpen(右缘:SetButton→X=153；Y=29 固定顶区)
+    /// 【当前完整锚定链（V1.58.19 横纵双向 + V1.58.20 内容居中 + V1.77 电流行
+    /// + V1.88.16 状态块删除 + 【V1.88.17 紧凑 204×170】，解析结果如下）】
+    ///   下链（面板底→上，面板增高时整体下移）：纵链头 = View 面板下缘(内容高 170)：
+    ///     └─ 设置按钮 RcSetButton(RightMargin=9 + BottomMargin=8 → X=204-9-50=145、Y=170-8-42=120，
+    ///        右缘 195 距面板右缘 9px，下缘距面板底 8px)
+    ///          └─ 配方框 RcRecipeValue(右缘:SetButton→X=65 + 下缘贴设置上缘、Gap=4 → Y=120-18-4=98)
+    ///   上链（顶部→下，面板增高时不动；【V1.77】电流行插入后压力/真空关/SN 改走本链；
+    ///   【V1.88.16】工作状态块已删，真空块搬去第一行当基准）：
+    ///     ├─ 真空关 RcVacuumOpen(右缘:SetButton→X=195-56=139；Y=26 固定顶区)
     ///     │    ├─ 下电 RcPower(Y/H=VerticalAlignTo:VacuumOpen, X=LeftAlignTo:PressureValue→X=65)
-    ///     │    ├─ 压力框 RcPressureValue(左缘:SN(65)/右缘:SetButton(213)→宽148；
-    ///     │    │    Y 吊真空块下方 TopToBottomGap=15 → 29+23+15=67，与原来一致)
-    ///     │    └─ 电流行 RcCurrentValue(双端 X 同原来→X=65 宽85；Y 吊压力框下方 Gap=2 → 67+21+2=90)
-    ///     │         └─ SN 框 RcSNValue(右缘:SetButton→X=213-148=65；Y 吊电流行下方 Gap=3：
-    ///     │              关电流电流行高按 0 → Y=90+0+3=93 与原来一致；开时 Y=90+21+3=114)
-    ///     ├─ 延时时间/烧屏时间 值框(左缘:SNValue→X=65 + 垂直居中于设置按钮，CenterOffsetY=-12/+13)
-    ///     │         → 两行中心 157.5/182.5 关于按钮中心 170 对称，Y=147/172（跟下链走）
+    ///     │    ├─ 压力框 RcPressureValue(左缘:SN(65)/右缘:SetButton(195)→宽130；
+    ///     │    │    Y 吊真空块下方 TopToBottomGap=8 → 26+20+8=54)
+    ///     │    └─ 电流行 RcCurrentValue(双端：左缘 SN(65)/右缘贴真空关左缘-3→宽71；
+    ///     │         Y 吊压力框下方 Gap=2 → 54+18+2=74)
+    ///     │         └─ SN 框 RcSNValue(右缘:SetButton→X=195-130=65；Y 吊电流行下方 Gap=2：
+    ///     │              关电流电流行高按 0 → Y=74+0+2=76；开时 Y=74+18+2=94)
+    ///     ├─ 延时时间/烧屏时间 值框(左缘:SNValue→X=65 + 垂直居中于设置按钮，CenterOffsetY=-11/+11)
+    ///     │         → 两行中心 130/152 关于按钮中心 141 对称，Y=121/143（跟下链走；
+    ///     │         按钮高 42 与值框高 18 差为偶数，偏移取 ±11 即精确对称，无 0.5 截断）
     ///     └─ 各标签(横向锚定 + VerticalCenterAlignTo 各自框，offset=-1)：真空压力/电流/SN/配方/延时时间/烧屏时间
-    ///   交接缝 SN→配方（【V1.77】两链在此交接）：缺省高度下配方 Y(118) - SN 下缘(93+21) = 4px，
-    ///   与原来一致；面板增高时间距拉大（上链不动、下链下移）——顶部信息行位置永不动，
+    ///   交接缝 SN→配方（【V1.77】两链在此交接）：缺省高度下配方 Y(98) - SN 下缘(76+18) = 4px；
+    ///   面板增高时间距拉大（上链不动、下链下移）——顶部信息行位置永不动，
     ///   这是故意的（追溯信息不随面板高度漂移）。
-    ///   开电流行（ShowCurrent=true，有效高 205+21=226）：上链压力/真空关/电流行不动，
-    ///   SN 93→114、配方 118→139、延时 147/172→168/193、设置按钮 145→166，
-    ///   间距全都不变（交接缝 139-(114+21)=4 ✓、配方→按钮 166-(139+21)=6 ✓、底边距 226-(166+50)=10 ✓）。
-    ///   横链头 = View 面板右缘(内容宽 222)：选中框(RightMargin=5,TopMargin=2→X=194,Y=2)；
+    ///   开电流行（ShowCurrent=true，有效高 170+18=188）：上链压力/真空关/电流行不动，
+    ///   SN 76→94、配方 98→116、延时 121/143→139/161、设置按钮 120→138，
+    ///   间距全都不变（交接缝 116-(94+18)=4 ✓、配方→按钮 138-(116+18)=4 ✓、底边距 188-(138+42)=8 ✓）。
+    ///   横链头 = View 面板右缘(内容宽 204)：选中框(RightMargin=5,TopMargin=2→X=181,Y=2)；
     ///   面板左缘：编号(LeftMargin=9,TopMargin=4→X=9)、标签列(X=9)
     ///   【V1.58.20 内容居中】左边界元素（编号/标签列 LeftMargin=9，X=9）与右边界元素
-    ///   （设置按钮 RightMargin=9，右缘=213）关于面板中线（222/2=111）对称：
-    ///   左留白 9 = 右留白 222-213=9，面板内内容整体水平居中。改 PanelInnerWidth 时
+    ///   （设置按钮 RightMargin=9，右缘=195）关于面板中线（204/2=102）对称：
+    ///   左留白 9 = 右留白 204-195=9，面板内内容整体水平居中。改 PanelInnerWidth 时
     ///   左右各留 9px 边距、中间元素按锚定自动联动，始终居中。
     ///
     /// 【调整指南】
@@ -115,7 +121,7 @@ namespace AgingTestSystem.Models
     /// - 【V1.77 电流行开关】ShowCurrent 是运行时内存开关（JsonIgnore，不进 PanelLayout.json）：
     ///   WorkstationGridView.ShowCurrentRow 置 true → ResolveAnchors 重解 → 面板有效高 +21、
     ///   SN 及以下整体下移 21、间距不变；置 false 回到原来逐像素布局。行高/画布/命中一律走
-    ///   GetEffectiveInnerHeight()/GetEffectiveRowHeight()，禁止手写 205/225 常量。
+    ///   GetEffectiveInnerHeight()/GetEffectiveRowHeight()，禁止手写 170/182 常量。
     ///   电流行高改 RcCurrentValue.Height（缺省 21）：有效高、SN 位移、交接缝自动一致，
     ///   因为位移量 = 本行高（TopToBottom 目标有效高机制），三处同源（回归锁"开电流行几何"）。
     /// - 【V1.58.20 居中调节】想让面板内容保持"左右对称居中"，只需保证 编号/标签列 LeftMargin
@@ -140,21 +146,26 @@ namespace AgingTestSystem.Models
     {
         // ===================== 网格尺寸 =====================
 
-        /// <summary>单个面板单元格列宽（面板内容 222 + 左右边距各 2 + 边框余量；V1.58.11 由 245 缩小到 227）</summary>
-        public int PanelColumnWidth { get; set; } = 227;
+        /// <summary>单个面板单元格列宽（面板内容 204 + 左右边距各 2 + 边框余量；
+        /// V1.58.11 由 245 缩小到 227；【V1.88.17】紧凑到 209，值框 148→130 省出的宽度）</summary>
+        public int PanelColumnWidth { get; set; } = 209;
 
-        /// <summary>单个面板单元格行高（面板内容 205 + 上下边距各 2）</summary>
-        public int PanelRowHeight { get; set; } = 225;
+        /// <summary>单个面板单元格行高（面板内容 170 + 上下边距；【V1.88.17】225→182，
+        /// 面板间纵向缝由 20 收到 12，为一屏铺满减内容高）</summary>
+        public int PanelRowHeight { get; set; } = 182;
 
-        /// <summary>最右侧"行全选"按钮列宽</summary>
-        public int RowSelectButtonColumnWidth { get; set; } = 80;
+        /// <summary>最右侧"行全选"按钮列宽（【V1.88.17】80→64，"全选/取消"两字用不满 80）</summary>
+        public int RowSelectButtonColumnWidth { get; set; } = 64;
 
-        /// <summary>面板内容设计宽（每个面板实际绘制区域宽度；V1.58.11 由 240 缩小到 222，右空隙 35→17px）</summary>
-        public int PanelInnerWidth { get; set; } = 222;
+        /// <summary>面板内容设计宽（每个面板实际绘制区域宽度；
+        /// V1.58.11 由 240 缩小到 222；【V1.88.17】222→204：SN/配方/压力框 148→130，
+        /// 长文本本就走省略号，省 18px 给网格腾宽）</summary>
+        public int PanelInnerWidth { get; set; } = 204;
 
         /// <summary>面板内容设计高（每个面板实际绘制区域高度；
-        /// 【V1.77】开电流行时有效高度 = 本值 + 电流行高，见 <see cref="GetEffectiveInnerHeight"/>）</summary>
-        public int PanelInnerHeight { get; set; } = 205;
+        /// 【V1.77】开电流行时有效高度 = 本值 + 电流行高，见 <see cref="GetEffectiveInnerHeight"/>；
+        /// 【V1.88.17】205→170：状态块 23→20、值框 21→18、纵向间隙收紧，见类头锚定链）</summary>
+        public int PanelInnerHeight { get; set; } = 170;
 
         /// <summary>
         /// 是否显示电流行（【V1.77 新增】运行时开关，不序列化——PanelLayout.json 里不存它）。
@@ -215,77 +226,83 @@ namespace AgingTestSystem.Models
 
         /// <summary>上电/下电状态块（【V1.88.16】工作状态块已删，改以上电/下电对齐真空块：
         /// VerticalAlignTo="VacuumOpen"，Y/Height 取真空块（同行等高）；
-        /// X 仍 LeftAlignTo="PressureValue" 左边缘与真空压力显示框左边缘对齐，X 自动=65）</summary>
-        public ElementRect RcPower { get; set; } = new ElementRect { X = 65, Y = 29, Width = 60, Height = 23, LeftAlignTo = "PressureValue", VerticalAlignTo = "VacuumOpen" };
+        /// X 仍 LeftAlignTo="PressureValue" 左边缘与真空压力显示框左边缘对齐，X 自动=65；
+        /// 【V1.88.17】"上电/下电/真空开"三字在 56 宽内放得下，60→56）</summary>
+        public ElementRect RcPower { get; set; } = new ElementRect { X = 65, Y = 26, Width = 56, Height = 20, LeftAlignTo = "PressureValue", VerticalAlignTo = "VacuumOpen" };
 
-        /// <summary>真空开/关状态块（【V1.88.16】工作状态块已删，真空块搬到它原来的位置
-        /// (153,29,60,23)，并接替它当上链锚定基准：右缘仍对齐设置按钮
-        /// RightAlignTo="SetButton"（X=153），Y 改 TopMargin=29 固定顶区；
-        /// 下电块 Y/H 对齐它、压力框 Y 吊它下方（29+23+15=67 不变）。）</summary>
-        public ElementRect RcVacuumOpen { get; set; } = new ElementRect { X = 153, Y = 29, Width = 60, Height = 23, RightAlignTo = "SetButton", TopMargin = 29 };
+        /// <summary>真空开/关状态块（【V1.88.16】工作状态块已删，真空块搬去第一行当上链锚定基准：
+        /// 右缘对齐设置按钮 RightAlignTo="SetButton"（右缘 195→X=139），Y 改 TopMargin=26 固定顶区；
+        /// 下电块 Y/H 对齐它、压力框 Y 吊它下方（26+20+8=54）。
+        /// 【V1.88.17】宽 60→56、高 23→20，Y 29→26。）</summary>
+        public ElementRect RcVacuumOpen { get; set; } = new ElementRect { X = 139, Y = 26, Width = 56, Height = 20, RightAlignTo = "SetButton", TopMargin = 26 };
 
-        /// <summary>真空压力值框（V1.58.15 双端锚定改右缘对齐：【V1.88.16】工作状态块已删、
-        /// 真空块已搬去第一行，第二行只剩本框，右缘改对齐设置按钮 RightAlignTo="SetButton"、
-        /// 左缘仍对齐 SN 框 LeftAlignTo="SNValue"，宽=213-65=148（与 SN/配方框左右同界）；
-        /// Y 改吊真空块下方 TopToBottomAlignTo="VacuumOpen"+TopToBottomGap=15，
-        /// 保持 Y=67 不变：29+23+15=67。）</summary>
-        public ElementRect RcPressureValue { get; set; } = new ElementRect { X = 65, Y = 67, Width = 148, Height = 21, LeftAlignTo = "SNValue", RightAlignTo = "SetButton", TopToBottomAlignTo = "VacuumOpen", TopToBottomGap = 15 };
+        /// <summary>真空压力值框（V1.58.15 双端锚定改右缘对齐：【V1.88.16】右缘对齐设置按钮
+        /// RightAlignTo="SetButton"、左缘对齐 SN 框 LeftAlignTo="SNValue"（与 SN/配方框左右同界）；
+        /// Y 吊真空块下方 TopToBottomAlignTo="VacuumOpen"。
+        /// 【V1.88.17】宽 148→130（右缘 195：195-65）、高 21→18、Gap 15→8 → Y=26+20+8=54；
+        /// "78 kPa"类短文本不受影响，长文本走省略号。）</summary>
+        public ElementRect RcPressureValue { get; set; } = new ElementRect { X = 65, Y = 54, Width = 130, Height = 18, LeftAlignTo = "SNValue", RightAlignTo = "SetButton", TopToBottomAlignTo = "VacuumOpen", TopToBottomGap = 8 };
 
         /// <summary>载台电流值框（【V1.77 新增】UsePowerMeter 开才显示的行，紧贴压力框下方）。
-        /// X 双端锚定同压力框（左缘 SN 框→65、右缘贴真空关左缘-3px→宽 85）；
-        /// Y 自上而下吊在压力框下方 TopToBottomAlignTo="PressureValue"+TopToBottomGap=2：
-        /// Y=67+21+2=90。Height=21 与其它值框一致。
-        /// 关电流时本行高按 0 解析（见 TopToBottomAlignTo 注释），SN 回到 93，布局与原来一致；
-        /// 开时面板有效高度 +21（205→226），下游 SN/配方/延时/按钮整体下移 21，间距全都不变。
-        /// 面板高改变的联动语义见类头"完整锚定链（V1.77）"。</summary>
+        /// X 双端锚定（左缘 SN 框→65、右缘贴真空关左缘-3px）；
+        /// Y 自上而下吊在压力框下方 TopToBottomAlignTo="PressureValue"+TopToBottomGap=2。
+        /// 【V1.88.17】高 21→18 → Y=54+18+2=74、宽=139-65-3=71；
+        /// 关电流时本行高按 0 解析，SN 回到 76；开时面板有效高度 +18（170→188），
+        /// 下游 SN/配方/延时/按钮整体下移 18，间距全都不变。
+        /// 面板高改变的联动语义见类头"完整锚定链"。</summary>
         public ElementRect RcCurrentValue { get; set; } = DefaultRcCurrentValue();
 
         /// <summary>
-        /// 电流行缺省矩形唯一出处（属性初始值与旧 json 自愈共用，改坐标只改这里）。
+        /// 电流行缺省矩形唯一出处（属性初始值用它，改坐标只改这里）。
         /// 每次返回新实例（调用方会就地改坐标，禁给共享引用）。
         /// </summary>
         public static ElementRect DefaultRcCurrentValue()
         {
-            return new ElementRect { X = 65, Y = 90, Width = 85, Height = 21, LeftAlignTo = "SNValue", RightToLeftAlignTo = "VacuumOpen", RightToLeftGap = 3, TopToBottomAlignTo = "PressureValue", TopToBottomGap = 2 };
+            return new ElementRect { X = 65, Y = 74, Width = 71, Height = 18, LeftAlignTo = "SNValue", RightToLeftAlignTo = "VacuumOpen", RightToLeftGap = 3, TopToBottomAlignTo = "PressureValue", TopToBottomGap = 2 };
         }
 
-        /// <summary>SN 值框（V1.58.7 加宽 148；V1.58.14 右缘对齐锚定设置按钮；
-        /// 【V1.77】Y 改由 TopToBottomAlignTo="CurrentValue"+TopToBottomGap=3 自上而下定位：
-        /// 关电流（电流行高按 0）时 Y=90+0+3=93 不变；开时 Y=90+21+3=114，整体下移 21。
-        /// 【V1.58.20】右缘跟随设置按钮(213)→X=213-148=65，随内容居中）</summary>
-        public ElementRect RcSNValue { get; set; } = new ElementRect { X = 65, Y = 93, Width = 148, Height = 21, RightAlignTo = "SetButton", TopToBottomAlignTo = "CurrentValue", TopToBottomGap = 3 };
+        /// <summary>SN 值框（V1.58.14 右缘对齐锚定设置按钮；
+        /// 【V1.77】Y 改由 TopToBottomAlignTo="CurrentValue" 自上而下定位。
+        /// 【V1.88.17】宽 148→130（右缘 195→X=65）、高 21→18、Gap 3→2：
+        /// 关电流（电流行高按 0）时 Y=74+0+2=76；开时 Y=74+18+2=94。
+        /// 右缘跟随设置按钮，随内容居中）</summary>
+        public ElementRect RcSNValue { get; set; } = new ElementRect { X = 65, Y = 76, Width = 130, Height = 18, RightAlignTo = "SetButton", TopToBottomAlignTo = "CurrentValue", TopToBottomGap = 2 };
 
-        /// <summary>配方值框（V1.58.7 加宽 148；V1.58.14 右缘对齐锚定设置按钮；V1.58.19 下缘锚定
-        /// BottomToTopAlignTo="SetButton"+BottomToTopGap=6，保持原 Y=118 不变：145-21-6=118。
-        /// 【V1.58.20】右缘跟随设置按钮(213)→X=213-148=65，随内容居中。
-        /// 面板高改变时设置按钮下移，配方框以间距 6 跟随其上缘联动）</summary>
-        public ElementRect RcRecipeValue { get; set; } = new ElementRect { X = 65, Y = 118, Width = 148, Height = 21, RightAlignTo = "SetButton", BottomToTopAlignTo = "SetButton", BottomToTopGap = 6 };
+        /// <summary>配方值框（V1.58.14 右缘对齐锚定设置按钮；V1.58.19 下缘锚定
+        /// BottomToTopAlignTo="SetButton"。
+        /// 【V1.88.17】宽 148→130、高 21→18、Gap 6→4 → Y=120-18-4=98。
+        /// 右缘跟随设置按钮，随内容居中；面板高改变时设置按钮下移，配方框跟随其上缘联动）</summary>
+        public ElementRect RcRecipeValue { get; set; } = new ElementRect { X = 65, Y = 98, Width = 130, Height = 18, RightAlignTo = "SetButton", BottomToTopAlignTo = "SetButton", BottomToTopGap = 4 };
 
         /// <summary>延时时间值框（V1.58.17 左缘锚定 SN 框：LeftAlignTo="SNValue"；V1.58.19 垂直居中于
-        /// 设置按钮 VerticalCenterAlignTo="SetButton"+CenterOffsetY=-12，保持原 Y=147 不变：
-        /// 145+14-12=147，即框中心 157.5 位于按钮中心 170 上方 12.5px，与烧屏时间框对称分布。
-        /// 【V1.58.20】左缘跟随 SN 框→65，随内容居中）</summary>
-        public ElementRect RcDelayTimeValue { get; set; } = new ElementRect { X = 65, Y = 147, Width = 80, Height = 21, LeftAlignTo = "SNValue", VerticalCenterAlignTo = "SetButton", CenterOffsetY = -12 };
+        /// 设置按钮 VerticalCenterAlignTo="SetButton"。
+        /// 【V1.88.17】宽 80→66（"00:00:00"在 66 内放得下，省 14px）、高 21→18、
+        /// CenterOffsetY -12→-11：Y=120+(42-18)/2-11=121，即框中心 130 位于按钮中心 141
+        /// 上方 11px，与烧屏时间框精确对称（高差为偶数，无截断误差）。左缘跟随 SN 框→65）</summary>
+        public ElementRect RcDelayTimeValue { get; set; } = new ElementRect { X = 65, Y = 121, Width = 66, Height = 18, LeftAlignTo = "SNValue", VerticalCenterAlignTo = "SetButton", CenterOffsetY = -11 };
 
-        /// <summary>烧屏时间值框（V1.58.17 左缘锚定 SN 框；V1.58.19 垂直居中于设置按钮
-        /// VerticalCenterAlignTo="SetButton"+CenterOffsetY=13，保持原 Y=172 不变：145+14+13=172，
-        /// 即框中心 182.5 位于按钮中心 170 下方 12.5px，与延时时间框对称分布。
-        /// 说明：因整数除法截断 0.5px，两行偏移取 -12/+13 才能与 V1.58.18 坐标完全一致。
-        /// 【V1.58.20】左缘跟随 SN 框→65，随内容居中）</summary>
-        public ElementRect RcBurnInValue { get; set; } = new ElementRect { X = 65, Y = 172, Width = 80, Height = 21, LeftAlignTo = "SNValue", VerticalCenterAlignTo = "SetButton", CenterOffsetY = 13 };
+        /// <summary>烧屏时间值框（V1.58.17 左缘锚定 SN 框；V1.58.19 垂直居中于设置按钮。
+        /// 【V1.88.17】宽 80→66、高 21→18、CenterOffsetY +13→+11：
+        /// Y=120+12+11=143，即框中心 152 位于按钮中心 141 下方 11px，与延时时间框对称。
+        /// 左缘跟随 SN 框→65）</summary>
+        public ElementRect RcBurnInValue { get; set; } = new ElementRect { X = 65, Y = 143, Width = 66, Height = 18, LeftAlignTo = "SNValue", VerticalCenterAlignTo = "SetButton", CenterOffsetY = 11 };
 
-        /// <summary>"设置"按钮区域（V1.58.13 右侧锚定 RightMargin=9，X 自动=153；V1.58.19 下缘锚定
-        /// BottomMargin=10，保持原 Y=145 不变：205-10-50=145，即下缘 195 距面板下缘 10px。
-        /// 【V1.58.20 内容居中】RightMargin 由 17→9：按钮右缘=213，与左侧标签左缘(9)关于面板中线
-        /// (222/2=111) 对称 → 面板内容整体水平居中（左留白 9 = 右留白 9）。
-        /// 是"垂直链"的链头：面板高改变时按钮自动贴底跟随；改面板宽时按钮按右留白 9 自动联动）</summary>
-        public ElementRect RcSetButton { get; set; } = new ElementRect { X = 153, Y = 145, Width = 60, Height = 50, RightMargin = 9, BottomMargin = 10 };
+        /// <summary>"设置"按钮区域（V1.58.13 右侧锚定 RightMargin=9；V1.58.19 下缘锚定 BottomMargin。
+        /// 【V1.58.20 内容居中】按钮右缘与左侧标签左缘关于面板中线对称 → 内容整体水平居中。
+        /// 【V1.88.17】宽 60→50（"设置"两字用不满 60）、高 50→42、BottomMargin 10→8：
+        /// X=204-9-50=145、Y=170-8-42=120（右缘 195、下缘 162）。
+        /// 是"垂直链"的链头：面板高改变时按钮自动贴底跟随；改面板宽时按右留白 9 自动联动）</summary>
+        public ElementRect RcSetButton { get; set; } = new ElementRect { X = 145, Y = 120, Width = 50, Height = 42, RightMargin = 9, BottomMargin = 8 };
 
         /// <summary>右上角选中指示框（V1.58.17 右上角锚定：RightMargin=5 右缘贴 View 右缘 + TopMargin=2 上缘贴顶。
-        /// 【V1.58.20】TopMargin 由 4→2：选中框上移 2px，底缘 25 与下方真空块（上缘 29）
-        /// 的垂直间隔由 2px 加大到 4px，避免"选中框贴着真空块上边缘"的拥挤感。
-        /// 注意：选中框属"右上角元素"，不参与内容居中平移，保持右缘距面板右缘 5px）</summary>
-        public ElementRect RcSelectBox { get; set; } = new ElementRect { X = 194, Y = 2, Width = 23, Height = 23, RightMargin = 5, TopMargin = 2 };
+        /// 【V1.58.20】选中框底缘与下方真空块上缘留 4px 间隔。
+        /// 【V1.88.17】23×23→18×18（勾选符号在 18 内清晰可辨）：X=204-5-18=181，Y=2，
+        /// 底缘 20 与真空块上缘 26 间距 6px。
+        /// 注意：选中框属"右上角元素"，不参与内容居中平移，保持右缘距面板右缘 5px。
+        /// 【V1.88.17】绘制恒正方形：边长取本矩形缩放后的较小边（跟面板尺寸走，见
+        /// WorkstationGridView.SelectBoxSide），位置仍走 RightMargin/TopMargin；
+        /// 命中与绘制同源（GetSelectBoxLocalRect），改锚定不漂移。</summary>
+        public ElementRect RcSelectBox { get; set; } = new ElementRect { X = 181, Y = 2, Width = 18, Height = 18, RightMargin = 5, TopMargin = 2 };
 
         /// <summary>设备编号文字位置（V1.58.17 左上角锚定：LeftMargin=9 左缘距面板左缘 9px + TopMargin=4 上缘贴顶。
         /// 【V1.58.20 内容居中】LeftMargin 由 3→9：编号左缘与标签列统一为 X=9，作为面板内容最左元素，
@@ -293,29 +310,32 @@ namespace AgingTestSystem.Models
         public ElementPoint TitlePosition { get; set; } = new ElementPoint { X = 9, Y = 4, LeftMargin = 9, TopMargin = 4 };
 
         /// <summary>静态标签"真空压力"位置（V1.58.16 右缘锚定压力框左缘：Width=56 固定文字宽，
-        /// RightToLeftAlignTo="PressureValue"，X 自动=65-56=9（V1.58.20 压力框左缘居中后随之居中）；
-        /// V1.58.19 垂直居中于压力框
-        /// VerticalCenterAlignTo="PressureValue"+VerticalCenterOffset=-1，保持原 Y=70 不变：67+4-1=70）</summary>
-        public ElementPoint LabelPressurePosition { get; set; } = new ElementPoint { X = 9, Y = 70, Width = 56, RightToLeftAlignTo = "PressureValue", VerticalCenterAlignTo = "PressureValue", VerticalCenterOffset = -1 };
+        /// RightToLeftAlignTo="PressureValue"，X 自动=65-56=9；
+        /// V1.58.19 垂直居中于压力框 VerticalCenterAlignTo="PressureValue"+VerticalCenterOffset=-1。
+        /// 【V1.88.17】Y=54+(18-12)/2-1=56）</summary>
+        public ElementPoint LabelPressurePosition { get; set; } = new ElementPoint { X = 9, Y = 56, Width = 56, RightToLeftAlignTo = "PressureValue", VerticalCenterAlignTo = "PressureValue", VerticalCenterOffset = -1 };
 
-        /// <summary>静态标签"SN:"位置（V1.58.16 左缘锚定真空压力标签→X=9；V1.58.19 垂直居中于 SN 框，保持原 Y=96 不变：93+4-1=96；
-        /// 【V1.77】SN 框开电流行时下移，标签自动跟随（114+4-1=117））</summary>
-        public ElementPoint LabelSnPosition { get; set; } = new ElementPoint { X = 9, Y = 96, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "SNValue", VerticalCenterOffset = -1 };
+        /// <summary>静态标签"SN:"位置（V1.58.16 左缘锚定真空压力标签→X=9；V1.58.19 垂直居中于 SN 框。
+        /// 【V1.88.17】关电流 Y=76+3-1=78；【V1.77】SN 框开电流行时下移，标签自动跟随（开时 94+3-1=96））</summary>
+        public ElementPoint LabelSnPosition { get; set; } = new ElementPoint { X = 9, Y = 78, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "SNValue", VerticalCenterOffset = -1 };
 
         /// <summary>静态标签"电流："位置（【V1.77 新增】左缘锚定真空压力标签→X=9；
-        /// 垂直居中于电流行：开时 Y=90+4-1=93；关时电流行高按 0，Y=90-6-1=83——
-        /// 关电流整行不画，这个坐标用不上，只为解析不空悬）。
+        /// 垂直居中于电流行：【V1.88.17】开时 Y=74+3-1=76；关时电流行高按 0，
+        /// Y=74-6-1=67——关电流整行不画，这个坐标用不上，只为解析不空悬）。
         /// RcCurrentValue 为 null 的老 json 里本标签解析保持默认（X=9），绘制时跳过（见 WorkstationGridView）。</summary>
-        public ElementPoint LabelCurrentPosition { get; set; } = new ElementPoint { X = 9, Y = 93, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "CurrentValue", VerticalCenterOffset = -1 };
+        public ElementPoint LabelCurrentPosition { get; set; } = new ElementPoint { X = 9, Y = 76, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "CurrentValue", VerticalCenterOffset = -1 };
 
-        /// <summary>静态标签"配方:"位置（V1.58.16 左缘锚定真空压力标签→X=9；V1.58.19 垂直居中于配方框，保持原 Y=121 不变：118+4-1=121）</summary>
-        public ElementPoint LabelRecipePosition { get; set; } = new ElementPoint { X = 9, Y = 121, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "RecipeValue", VerticalCenterOffset = -1 };
+        /// <summary>静态标签"配方:"位置（V1.58.16 左缘锚定真空压力标签→X=9；V1.58.19 垂直居中于配方框。
+        /// 【V1.88.17】Y=98+3-1=100）</summary>
+        public ElementPoint LabelRecipePosition { get; set; } = new ElementPoint { X = 9, Y = 100, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "RecipeValue", VerticalCenterOffset = -1 };
 
-        /// <summary>静态标签"延时时间"位置（V1.58.16 左缘锚定真空压力标签→X=9；V1.58.19 垂直居中于延时时间框，保持原 Y=150 不变：147+4-1=150）</summary>
-        public ElementPoint LabelDelayTimePosition { get; set; } = new ElementPoint { X = 9, Y = 150, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "DelayTimeValue", VerticalCenterOffset = -1 };
+        /// <summary>静态标签"延时时间"位置（V1.58.16 左缘锚定真空压力标签→X=9；V1.58.19 垂直居中于延时时间框。
+        /// 【V1.88.17】Y=121+3-1=123）</summary>
+        public ElementPoint LabelDelayTimePosition { get; set; } = new ElementPoint { X = 9, Y = 123, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "DelayTimeValue", VerticalCenterOffset = -1 };
 
-        /// <summary>静态标签"烧屏时间"位置（V1.58.16 左缘锚定真空压力标签→X=9；V1.58.19 垂直居中于烧屏时间框，保持原 Y=175 不变：172+4-1=175）</summary>
-        public ElementPoint LabelBurnInPosition { get; set; } = new ElementPoint { X = 9, Y = 175, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "BurnInValue", VerticalCenterOffset = -1 };
+        /// <summary>静态标签"烧屏时间"位置（V1.58.16 左缘锚定真空压力标签→X=9；V1.58.19 垂直居中于烧屏时间框。
+        /// 【V1.88.17】Y=143+3-1=145）</summary>
+        public ElementPoint LabelBurnInPosition { get; set; } = new ElementPoint { X = 9, Y = 145, LeftAlignTo = "LabelPressure", VerticalCenterAlignTo = "BurnInValue", VerticalCenterOffset = -1 };
 
         // ===================== 文字内容 =====================
 
@@ -386,8 +406,9 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 从程序目录加载 PanelLayout.json；文件不存在或解析失败时返回内置默认配置。
-        /// 默认配置与历史版本的坐标/颜色/字号完全一致，保证升级后界面不变。
         /// 加载后统一调用 <see cref="ResolveAnchors"/> 解析面板边缘/元素间锚定（V1.58.13~1.58.19）。
+        /// 【V1.88.17】项目未上线，不做任何旧文件兼容（旧指纹删除/字段自愈分支已清掉）：
+        /// 现场旧尺寸文件（222×205 口径）直接删掉，让程序重导一份新缺省即可。
         /// </summary>
         public static PanelLayoutConfig LoadOrDefault()
         {
@@ -397,30 +418,11 @@ namespace AgingTestSystem.Models
                 if (File.Exists(path))
                 {
                     string json = File.ReadAllText(path, System.Text.Encoding.UTF8);
-                    // 【V1.88.16】旧布局文件直接作废：工作状态块删除＋真空块上移＋压力框加长，
-                    // 旧文件三处坐标全系旧口径（指纹：含 RcWorkState 段），留着必错位。
-                    // 项目未上线、无兼容包袱，删文件回新缺省（Configure 会自动重导一份新的），
-                    // 不做字段级迁移（迁了也是半吊子：用户自定义的颜色值得保留，但坐标系已换代）。
-                    if (json.Contains("\"RcWorkState\""))
+                    var cfg = JsonConvert.DeserializeObject<PanelLayoutConfig>(json);
+                    if (cfg != null)
                     {
-                        try { File.Delete(path); } catch { /* 删不掉就当无文件，回缺省 */ }
-                    }
-                    else
-                    {
-                        var cfg = JsonConvert.DeserializeObject<PanelLayoutConfig>(json);
-                        if (cfg != null)
-                        {
-                            // 【大扫荡】旧 json 自愈：V1.77 前的文件无 RcCurrentValue（null），
-                            // 以前开电流行静默丢整行且零提示；现在补缺省，旧文件开电流即显示。
-                            // 【复查补齐】缺省值唯一出处 DefaultRcCurrentValue（与属性初始值同源，
-                            // 以前这里手抄一份，改一边忘另一边即分叉）。
-                            if (cfg.RcCurrentValue == null)
-                            {
-                                cfg.RcCurrentValue = DefaultRcCurrentValue();
-                            }
-                            cfg.ResolveAnchors();   // 解析面板锚定 + 元素间锚定（V1.58.13/1.58.14）
-                            return cfg;
-                        }
+                        cfg.ResolveAnchors();   // 解析面板锚定 + 元素间锚定（V1.58.13/1.58.14）
+                        return cfg;
                     }
                 }
             }
@@ -503,7 +505,7 @@ namespace AgingTestSystem.Models
             // ① 下链头：设置按钮（BottomMargin 已在第一步按有效高解析出 Y）
             //    配方：下边缘贴设置按钮上边缘
             RcRecipeValue = AlignSelf(RcRecipeValue);
-            // ② 上链头：真空块右缘跟随设置按钮（Y=29 第一步 TopMargin 已定；【V1.88.16】接替已删的工作状态块当上链基准）
+            // ② 上链头：真空块右缘跟随设置按钮（Y=26 第一步 TopMargin 已定；【V1.88.16】接替已删的工作状态块当上链基准）
             RcVacuumOpen = AlignSelf(RcVacuumOpen);
             // ③ SN：X 右缘跟随设置按钮（必须在压力框/下电之前——两者 X 都读 SN.X）；
             //    Y 按电流缺省值先解（缺省 Y=90/H=21 与解完一致，宽/高变化不影响 Y 链），终解在⑦。
@@ -511,9 +513,9 @@ namespace AgingTestSystem.Models
             // ④ 下电：X 左缘对齐 SN（LeftAlignTo）+ Y/H 对齐真空块（VerticalAlignTo，同行等高）；
             //    SN.X 与真空块 Y/H 上面已定。
             RcPower = AlignSelf(RcPower);
-            // ⑤ 依赖 SN/真空块：压力框左缘对齐 SN + 右缘对齐设置按钮 + Y 吊真空块下方（Y=67 与原来一致）
+            // ⑤ 依赖 SN/真空块：压力框左缘对齐 SN + 右缘对齐设置按钮 + Y 吊真空块下方（Y=54，见类头锚定链）
             RcPressureValue = AlignSelf(RcPressureValue);
-            // ⑦ 依赖压力框：电流行吊在压力框下方（Y=67+21+2=90）
+            // ⑦ 依赖压力框：电流行吊在压力框下方（Y=54+18+2=74）
             RcCurrentValue = AlignSelf(RcCurrentValue);
             // ⑧ SN 终解 Y（电流已解：手改 TopToBottomGap 也能终值正确；缺省值下与④一致，幂等）
             RcSNValue = AlignSelf(RcSNValue);
@@ -798,7 +800,7 @@ namespace AgingTestSystem.Models
         /// 即该元素**下边缘距面板下缘**该距离（"自下而上"锚定）。以后调整
         /// PanelInnerHeight 时自动跟随，无需手改 Y。
         /// 【注意：保持布局不变】BottomMargin 取"当前下边缘到面板下缘的实际距离"即可
-        /// 让位置完全不变（如设置按钮当前 Y=145、H=50、面板高 205 → BottomMargin=10）。
+        /// 让位置完全不变（如设置按钮当前 Y=120、H=42、面板高 170 → BottomMargin=8）。
         /// 与 <see cref="TopMargin"/>、<see cref="VerticalAlignTo"/>、<see cref="BottomToTopAlignTo"/>、
         /// <see cref="TopToBottomAlignTo"/>、<see cref="VerticalCenterAlignTo"/> 互斥，同一元素只配其一（Y 会被后配的覆盖）。
         /// 未设置（null）时使用绝对 Y，兼容旧配置。
@@ -811,7 +813,7 @@ namespace AgingTestSystem.Models
         /// 即本元素**下边缘紧贴目标元素上边缘上方**（"叠加在目标上方"，可留间距）。
         /// 用于构建"自下而上的垂直链"：如 配方下边缘贴设置按钮上边缘 → SN 下边缘贴配方上边缘。
         /// 【注意：保持布局不变】配 <see cref="BottomToTopGap"/> 为"当前下边缘到目标上边缘的实际距离"
-        /// 即可让位置完全不变（如配方框当前 Y=118、H=21、设置按钮 Y=145 → Gap=145-118-21=6）。
+        /// 即可让位置完全不变（如配方框当前 Y=98、H=18、设置按钮 Y=120 → Gap=120-98-18=4）。
         /// 与 <see cref="TopMargin"/>、<see cref="BottomMargin"/>、<see cref="VerticalAlignTo"/>、
         /// <see cref="TopToBottomAlignTo"/>、<see cref="VerticalCenterAlignTo"/> 互斥。目标名见 <see cref="PanelLayoutConfig.GetRectByName"/>。
         /// </summary>

@@ -47,6 +47,18 @@
   `BeginInvoke` 在布局彻底完成后跑校正（再 `PerformLayout`＋压横向条＋钳位置，
   释放检查防重建串扰）。验证走 harness"滚到底→加宽→减窄→再到底"
  （到底值==理论最大＋横向条无＋2 秒稳定；回归无句柄跑不了 AutoScroll，不进回归，harness 即证据）。
+  - **72 站一屏走双向精确铺满，不走单向顶满＋滚动（V1.88.17）**：`zoomX=可用宽/内容宽、
+  zoomY=可用高/内容高` 双向独立（`ComputeFitZoomBoth` 纯函数），画布精确等于显示区、
+  无滚动条；绘制/命中按 `ScaledX`/`ScaledY` 分流（禁单 `Scaled(int)`，宽扁拉伸下点选必错位，
+  编译器会把漏改的 int 调用全揪出来）；字体取窄边、下限 6pt（字不变形）；
+  单轴触底（`MinZoom=0.15`，显示区被挤到极小）转滚动条兜底（站一个不少）。
+  面板尺寸是缩放比的杠杆：值框/按钮能省则省（148→130、60×50→50×42），省出的每像素都换成字号；
+  选中框边长取缩放后较小边（恒正方形，`GetSelectBoxRect`/`GetSelectBoxLocalRect` 绘制命中同源）。
+  显示区最小保护三处：`HomeLayoutConfig.LoadOrDefault` 按 Range 钳（防手改 json 越界）、
+  编辑器输入写入前再钳、`MainForm.ClampRightPanelWidthForWorkstation` 保 Panel1≥640
+  （右侧 600 在小屏上压回来）＋`SplitterDistance` try/catch。
+  项目未上线：旧尺寸 `PanelLayout.json` 直接删文件重导，不写迁移分支
+  （`LoadOrDefault` 保持读-解-回缺省三段，禁加指纹删除/字段自愈分支，改干净）。
   - **自绘命中按内容 bounds 判交，禁止"整除即命中"（V1.88.15 血泪）**：行列整除会把面板
   之间的缝隙算进上一格，点缝隙误翻选上一个面板（触摸屏 fat-finger 更易中招）。
   `TryHitPanel` 类命中函数返回前必须验 local 落在内容矩形内，缝隙一律不命中（悬停同步消失）；

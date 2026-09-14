@@ -97,15 +97,16 @@ namespace AgingTestSystem.Models
         /// <summary>
         /// 主视图每行显示的气压表数量（列数）
         ///
-        /// 【V1.88.14】保持 8 列 × 9 行 = 72（用户明确不要动列数；12×6 试过，宽屏虽满但改动列数已回退）。
-        /// 自适应（AutoFit）按宽度顶满：站尽可能大、无右侧空白，高度超出部分上下滑动。
+        /// 保持 8 列 × 9 行 = 72（不动列数）。
+        /// 【V1.88.17】自适应（AutoFit）双向精确铺满：zoomX 按宽、zoomY 按高独立算，
+        /// 72 站刚好一屏、无需拖滑块，不同工控机屏即换即铺满（见 WorkstationGridView）。
         /// </summary>
         public int PanelColumns { get; set; } = 8;
 
         /// <summary>
         /// 主视图每列显示的气压表数量（行数）
         ///
-        /// 【V1.88.14】保持 9 行（见 PanelColumns 注释）。
+        /// 保持 9 行（见 PanelColumns 注释）。
         /// </summary>
         public int PanelRows { get; set; } = 9;
 
