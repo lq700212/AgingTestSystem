@@ -1299,7 +1299,8 @@ namespace AgingTestSystem.Views
         /// 【布局说明】
         /// - 整个工位区域（8列×9行面板 + 行全选按钮列）合并为 1 个自绘
         ///   <see cref="WorkstationGridView"/>，尺寸 = 内容总尺寸；
-        /// - 外层用 Panel.AutoScroll 容器托管，内容超出时出现滚动条；
+        /// - 外层用 Panel.AutoScroll 容器托管，AutoFit 开时 72 站按本容器尺寸一屏显示全
+        ///   （关 AutoFit 或内容超出时出现滚动条）；
         /// - 滚动时系统只需移动 1 个窗口（而非 V1.49 的 72 个），无撕裂。
         /// 【注意】不能放在 FlowLayoutPanel 中，因为 FlowLayoutPanel
         /// 不尊重子控件的 Dock=Fill 属性。
@@ -1318,6 +1319,10 @@ namespace AgingTestSystem.Views
             var scrollContainer = new Panel();
             scrollContainer.Dock = DockStyle.Fill;      // 填满整个左侧区域
             scrollContainer.AutoScroll = true;          // 内容超出时显示滚动条
+            // 【V1.88.14】只要纵向滚动条：网格 AutoFit 按宽顶满，横向永远不超宽，
+            // 横向条出来（启动瞬间/取整抖动）看着很怪，直接禁掉；上下滑动看。
+            scrollContainer.HorizontalScroll.Enabled = false;
+            scrollContainer.HorizontalScroll.Visible = false;
             // 【V1.50】滚动容器开启双缓冲，配合自绘网格消除滚动撕裂/闪烁
             EnableDoubleBuffering(scrollContainer);
 
@@ -3171,6 +3176,7 @@ namespace AgingTestSystem.Views
         /// <summary>
         /// 启动运行按钮点击（【V1.10】接真实业务）
         /// 对选中的面板执行（V1.59 三阶段状态机）：开真空阀 → 真空到位+延时时间到自动载台上电
+        /// （【V1.88.14】延时=0 的台启动时阀电同开、直接计时并保持常开）
         /// → 按配方烧屏时间老化计时（到时自动下电关阀标完成）；送风机由生命周期自动定值启动（首台）
         /// 【V1.16.2】异步：连接耦合器/送风机时弹"连接中"，不卡界面
         /// </summary>
@@ -3223,6 +3229,7 @@ namespace AgingTestSystem.Views
                 $"确认启动 {ids.Length} 台老化测试？\n" +
                 "1. 开真空阀建立负压固定产品\n" +
                 "2. 到位+延时时间到自动载台上电\n" +
+                "   （延时=0 的台阀电同开直接计时）\n" +
                 "3. 按配方计时，到时下电标完成\n" +
                 "4. 送风机定值启动\n" +
                 "注：真空久未建立自动报警断电。" +

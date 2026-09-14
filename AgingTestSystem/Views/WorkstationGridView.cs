@@ -17,7 +17,10 @@ namespace AgingTestSystem.Views
     ///   尺寸 = 内容总尺寸，放入外层 Panel.AutoScroll 容器中；
     /// - 滚动时系统只需移动 1 个窗口（内存 BitBlt 移动位图），不再逐帧移动 72 个窗口 → 无撕裂；
     /// - 72 个面板全部由本控件 OnPaint 按坐标绘制，且只重绘可见区域（配合滚动性能）；
-    /// - 交互（长按选中 / 设置按钮 / 选中框 / 行全选 / 悬停提示）全部用坐标命中实现。
+    /// - 交互（单击选中 / 设置按钮 / 选中框 / 行全选 / 悬停提示）全部用坐标命中实现。
+    ///   【V1.88.14】选中框常显后长按选中整套删除：点选中框或面板空白即切换选中
+    ///   （鼠标与触摸屏同走 MouseDown/Up，无需区分）；拖动（移动超阈值）仍走拖拽滚动，
+    ///   抬起不触发选中，滑动浏览不误选。
     ///
     /// 【V1.57.2 性能优化（含回退）】
     /// 先尝试"离屏画布缓存：整幅 RenderToCanvas + OnPaint DrawImage 拷贝"，实测离屏大图
@@ -86,9 +89,16 @@ namespace AgingTestSystem.Views
     /// │ 8列（列宽227，每格内容222+左右边距各2）      │ 行内全部   │
     /// │ × 9行（行高225，每格内容205+上下边距各2）   │ 选中→[取消]│
     /// └───────────────────────────────────────────┴──────────┘
+    /// （【V1.88.14】保持 8×9=72：用户不要动列数；12×6 试过已回退，见 AutoFit 注释）
     /// 【V1.58.8】行全选按钮高 = 面板内容高-1(=204)，含边框后上下边缘与工作站显示框(205)完全对齐；
     /// 按钮矩形 = (列右缘+2, 行顶+2, 列宽-4, PanelInnerHeight-1)；-1 修正边框底凸出1px
-    /// 网格占满全部 72 台设备；下方留白由 AutoScroll 容器滚动。
+    /// 网格占满全部 72 台设备。
+    /// 【V1.88.14 自适应】默认 AutoFit=true：zoom 按父容器（中间显示区）可用宽度自动算，
+    /// 站尽可能大、无右侧空白；高度超出部分走外层纵向滚动条、上下滑动看
+    /// （窗口拉大/缩小/最大化跟随缩放，字体等比缩放、下限 6pt；列数保持 8×9 不动，
+    /// 等比一屏显示全试过：缩得太小、右边空一半，已否决）。
+    /// 关掉 AutoFit 回原尺寸（滚动条按内容出现）。
+    /// 实现见 ComputeFitZoom/UpdateAutoFit/RebuildFonts/UpdateCanvasSize（zoom 并进 Scaled）。
     ///
     /// 二、单个面板内容（222×205，坐标均为"相对面板左上角"；V1.58.19 只加锚定、位置与 V1.58.18
     /// 完全一致；【V1.58.20 内容居中】编号/标签左缘 X=9、设置按钮右缘=213，左留白 9 = 右留白 9，
@@ -198,10 +208,12 @@ namespace AgingTestSystem.Views
         private readonly PanelLayoutConfig _layout;
 
         // ===== 字体 =====
+        // 【V1.88.14】去掉 readonly：自适应缩放（AutoFit）按 _zoom 重建字号，
+        // 释放旧字体防 GDI 泄漏（Dispose 已释放两者，见 Designer）。
         /// <summary>面板正文文字字体（显式创建，不继承主窗体缩放字体，保证与小矩形匹配）</summary>
-        private readonly Font _panelFont;
+        private Font _panelFont;
         /// <summary>设备编号标题字体（微软雅黑 9 Bold）</summary>
-        private readonly Font _titleFont;
+        private Font _titleFont;
 
         // ===== 配置解析出的颜色（浅色值来自 PanelLayoutConfig，可被 PanelLayout.json 覆盖） =====
         // 【V1.60 深色模式】以下"跟随主题切换"的颜色去掉 readonly，SetDarkMode 里整体换肤；
@@ -247,19 +259,28 @@ namespace AgingTestSystem.Views
         /// </summary>
         private float _dpiScale = 1f;
 
+        /// <summary>
+        /// 自适应缩放因子（【V1.88.14 新增】站大、无右侧空白、纵向滑动）。
+        /// 现场反馈"拖动滑来滑去不方便"，又明确不要动列数、且嫌等比一屏太小右边空：
+        /// 做法改为按宽顶满——zoom = 父容器（中间显示区）可用宽 / 内容宽，
+        /// 高度超出部分走外层 AutoScroll 纵向滚动条（上下滑动看）。
+        /// zoom 并进布局基准（最终比例 s = _dpiScale × _zoom，绘制/命中/画布尺寸
+        /// 全走 Scaled，不碰 Graphics 变换矩阵——与 V1.55 DPI 同路、V1.82 画布缩放同口径）；
+        /// 字体按 zoom 等比缩放重建（pt 单位，下限 6pt，见 RebuildFonts）。
+        /// </summary>
+        private float _zoom = 1f;
+
+        /// <summary>
+        /// 是否自适应父容器宽度（默认 true = 站尽可能大、无右侧空白，纵向滑动看）。
+        /// 关掉回 zoom=1 原尺寸（滚动条按内容出现）。结构型开关，运行时可随时翻。
+        /// </summary>
+        private bool _autoFit = true;
+
         /// <summary>所有工位的显示状态（key = 设备编号，从1开始）</summary>
         private readonly Dictionary<int, GridItem> _items = new Dictionary<int, GridItem>();
 
         /// <summary>状态块悬停提示</summary>
         private readonly ToolTip _toolTip;
-        /// <summary>长按选中计时器</summary>
-        private readonly System.Windows.Forms.Timer _longPressTimer;
-        /// <summary>本次按下是否已触发长按选中</summary>
-        private bool _longPressFired;
-        /// <summary>按下时的鼠标屏幕坐标（判断长按期间是否移动）</summary>
-        private Point _pressStartPoint;
-        /// <summary>按下时命中的设备编号（仅面板空白区域会启动长按）</summary>
-        private int _pressDeviceId;
         /// <summary>上次悬停提示文本（避免 MouseMove 频繁重复 Show）</summary>
         private string _lastTooltipText;
 
@@ -305,14 +326,11 @@ namespace AgingTestSystem.Views
         /// <summary>需要写日志的消息（如行全选动作），由主窗体订阅写入 LOG</summary>
         public event EventHandler<string> OnLog;
 
-        private const int LongPressMilliseconds = 800;
-        private const int LongPressMoveThreshold = 8;
         /// <summary>
-        /// 【V1.57】判定进入"拖拽滚动"的移动阈值（像素）。
-        /// 必须 ≥ <see cref="LongPressMoveThreshold"/>（8）：长按选中的判定阈值是 8px，
-        /// 若拖拽阈值更小，用户长按时轻微移动（如 6px，本应继续等待长按）就会被拖拽抢先
-        /// 停掉计时器，长按选中就失效了。设为 10 保证"移动 ≤8px 仍按长按处理"，只有明显
-        /// 拖动（&gt;10px）才进入拖拽滚动，两者互不干扰。
+        /// 进入"拖拽滚动"的移动阈值（像素）。
+        /// 【V1.88.14】长按选中已删除，阈值保留给"点击 vs 拖动"防抖：
+        /// 触摸屏手指/鼠标按下难免轻微抖动，移动 ≤10px 仍算点击（抬起切换选中），
+        /// 只有明显拖动（&gt;10px）才进入滚动，滑动浏览不误选。
         /// </summary>
         private const int DragScrollThreshold = 10;
 
@@ -354,9 +372,6 @@ namespace AgingTestSystem.Views
             RebuildThemeBrushes();
 
             _toolTip = new ToolTip(components);
-            _longPressTimer = new System.Windows.Forms.Timer(components);
-            _longPressTimer.Interval = LongPressMilliseconds;
-            _longPressTimer.Tick += LongPressTimer_Tick;
 
             // 【V1.57.2】拖拽滚动合并定时器：16ms ≈ 60FPS，把高频 MouseMove 的滚动更新合并到刷新率。
             // 应用一次后立即 Stop，等下一次 MouseMove 再启动，避免无谓空转。
@@ -407,8 +422,9 @@ namespace AgingTestSystem.Views
             _dpiScale = dpi / 96f;
             if (_columns > 0)
             {
-                this.Size = new Size(Scaled(_columns * _layout.PanelColumnWidth + _layout.RowSelectButtonColumnWidth),
-                                     Scaled(_rows * _layout.GetEffectiveRowHeight()));
+                UpdateCanvasSize();
+                // 【V1.88.14】DPI 变了 = 内容物理尺寸变了，按新尺寸重算自适应 zoom。
+                UpdateAutoFit();
                 Invalidate();
             }
         }
@@ -418,6 +434,141 @@ namespace AgingTestSystem.Views
         {
             return PanelLayoutConfig.ParseColor(rgb, fallback);
         }
+
+        #region 自适应缩放（V1.88.14 新增：72 站一屏显示全）
+
+        /// <summary>
+        /// 按可用宽度与内容宽度算自适应缩放比（纯函数，回归可直接断言）。
+        ///
+        /// 【语义】【V1.88.14】按宽顶满：zoom = 可用宽/内容宽，站尽可能大、无右侧空白；
+        /// 高度超出部分由外层 AutoScroll 容器出纵向滚动条、上下滑动看
+        /// （用户明确不要动列数：8×9 等比一屏显示全会缩得很小，右边还空一半，目检实锤；
+        /// 按宽顶满后 1080p 下约 0.83，字清晰，只纵向滑一段）。
+        /// 调用方传可用宽度时已预扣 1px 余量（Size 取整后与 ClientSize 相等仍可能挤出滚动条）。
+        /// </summary>
+        /// <param name="availWidth">可用宽（物理像素，>0）</param>
+        /// <param name="contentWidth">内容宽（物理像素，>0）</param>
+        /// <returns>缩放比；任一边非法（≤0）回 1（原尺寸）</returns>
+        public static double ComputeFitZoom(double availWidth, double contentWidth)
+        {
+            if (availWidth <= 0 || contentWidth <= 0)
+            {
+                return 1.0;
+            }
+            return availWidth / contentWidth;
+        }
+
+        /// <summary>
+        /// 是否自适应父容器（默认 true = 72 站一屏显示全，无滚动条）。
+        /// 关掉回 zoom=1 原尺寸（滚动条按内容出现）；打开立即按当前父尺寸重算。
+        /// </summary>
+        public bool AutoFit
+        {
+            get { return _autoFit; }
+            set
+            {
+                if (_autoFit == value) return;
+                _autoFit = value;
+                if (!value && _zoom != 1f)
+                {
+                    _zoom = 1f;
+                    RebuildFonts();
+                    UpdateCanvasSize();
+                    Invalidate();
+                }
+                else if (value)
+                {
+                    UpdateAutoFit();
+                }
+            }
+        }
+
+        /// <summary>
+        /// 父容器换了（MainForm 装配时挂上 scrollContainer）：
+        /// 摘旧容器的 Resize、挂新容器的，并按新容器尺寸重算 zoom。
+        /// Configure 先于 Add 进容器调用（此时 Parent==null 算不出），
+        /// 挂上容器这一跳才是自适应真正生效的时机。
+        /// </summary>
+        protected override void OnParentChanged(EventArgs e)
+        {
+            Control oldParent = null;
+            // 取旧容器：base.OnParentChanged 之后 Parent 已是新的，
+            // 这里用字段缓存上次挂过的容器做摘除（首挂时为 null，直接挂新的）。
+            oldParent = _fitParent;
+            base.OnParentChanged(e);
+            if (oldParent != null) oldParent.Resize -= FitParent_Resize;
+            _fitParent = Parent;
+            if (_fitParent != null) _fitParent.Resize += FitParent_Resize;
+            UpdateAutoFit();
+        }
+
+        /// <summary>上次挂过 Resize 的父容器（OnParentChanged 换挂时摘除用）</summary>
+        private Control _fitParent;
+
+        /// <summary>父容器尺寸变了（主窗最大化/拉宽/Splitter 拖动）→ 重算 zoom</summary>
+        private void FitParent_Resize(object sender, EventArgs e)
+        {
+            UpdateAutoFit();
+        }
+
+        /// <summary>
+        /// 按父容器当前可用宽度重算 _zoom 并应用（字体+画布+重绘）。
+        /// 不满足任一条件直接返回（保持当前 zoom）：AutoFit 关/未 Configure/无父容器/
+        /// 父容器尚未布局（ClientSize 宽为 0）/算出的 zoom 与当前差 &lt;0.001（防抖，
+        /// Splitter 拖动连续 Resize 不反复重建字体）。
+        /// zoom 钳制 [0.1, 4]：下限防除零抖动，上限防窗口拉超大后字涨没边。
+        /// 高度不管：超出部分走外层 AutoScroll 纵向滚动条（上下滑动）。
+        /// </summary>
+        private void UpdateAutoFit()
+        {
+            if (!_autoFit || _columns <= 0 || Parent == null) return;
+            int availW = Parent.ClientSize.Width - 1;    // 预扣 1px：Size 取整后顶满仍可能挤出横向滚动条
+            if (availW <= 0) return;
+            double contentW = (double)(_columns * _layout.PanelColumnWidth
+                + _layout.RowSelectButtonColumnWidth) * _dpiScale;
+            double z = ComputeFitZoom(availW, contentW);
+            if (z < 0.1) z = 0.1;
+            if (z > 4) z = 4;
+            if (Math.Abs(z - _zoom) < 0.001) return;
+            _zoom = (float)z;
+            RebuildFonts();
+            UpdateCanvasSize();
+            Invalidate();
+        }
+
+        /// <summary>
+        /// 按当前 _zoom 重建两套字体（旧字体先释放，防 GDI 句柄泄漏）。
+        /// 字号 = 配置字号 × _zoom，下限 6pt（与 V1.82 画布缩放口径一致）：
+        /// 缩得再小字也不再小，格子里的字走 EndEllipsis/居中截断不断行。
+        /// </summary>
+        private void RebuildFonts()
+        {
+            float panelSize = (float)_layout.FontSize * _zoom;
+            if (panelSize < 6f) panelSize = 6f;
+            float titleSize = (float)_layout.TitleFontSize * _zoom;
+            if (titleSize < 6f) titleSize = 6f;
+            Font oldPanel = _panelFont;
+            Font oldTitle = _titleFont;
+            _panelFont = new Font(_layout.FontFamily, panelSize, FontStyle.Regular);
+            _titleFont = new Font(_layout.FontFamily, titleSize,
+                _layout.TitleFontBold ? FontStyle.Bold : FontStyle.Regular);
+            if (oldPanel != null) oldPanel.Dispose();
+            if (oldTitle != null) oldTitle.Dispose();
+        }
+
+        /// <summary>
+        /// 按当前列/行/布局重算画布总尺寸（Configure/UpdateDpiScale/ShowCurrentRow/
+        /// UpdateAutoFit 四处共用，改尺寸只改这里一处）。
+        /// 外层 Panel.AutoScroll 按此尺寸出滚动条；AutoFit 下宽度恒顶满（无横向滚动条），
+        /// 高度超出时出纵向滚动条（上下滑动看）。
+        /// </summary>
+        private void UpdateCanvasSize()
+        {
+            this.Size = new Size(Scaled(_columns * _layout.PanelColumnWidth + _layout.RowSelectButtonColumnWidth),
+                                 Scaled(_rows * _layout.GetEffectiveRowHeight()));
+        }
+
+        #endregion
 
         #region 深色模式（V1.60 新增）
 
@@ -601,8 +752,10 @@ namespace AgingTestSystem.Views
             RefreshOffBlockColors();
             // 【V1.55 高DPI适配】画布总尺寸 = 逻辑像素尺寸 × DPI缩放因子。
             // 若不放大，150% 缩放下格子保持 96DPI 大小、文字却自动变大 → 溢出重叠。
-            this.Size = new Size(Scaled(_columns * _layout.PanelColumnWidth + _layout.RowSelectButtonColumnWidth),
-                                 Scaled(_rows * _layout.GetEffectiveRowHeight()));
+            // 【V1.88.14】尺寸计算收进 UpdateCanvasSize；此时多半还没挂进父容器
+            // （MainForm 先 Configure 后 Add），自适应在 OnParentChanged 里补算一次。
+            UpdateCanvasSize();
+            UpdateAutoFit();
             Invalidate();
         }
 
@@ -623,8 +776,9 @@ namespace AgingTestSystem.Views
                 _layout.ResolveAnchors();
                 if (_columns > 0)
                 {
-                    this.Size = new Size(Scaled(_columns * _layout.PanelColumnWidth + _layout.RowSelectButtonColumnWidth),
-                                         Scaled(_rows * _layout.GetEffectiveRowHeight()));
+                    UpdateCanvasSize();
+                    // 【V1.88.14】内容高变了（面板 205→226），自适应 zoom 跟着重算。
+                    UpdateAutoFit();
                 }
                 Invalidate();
             }
@@ -632,10 +786,10 @@ namespace AgingTestSystem.Views
 
         #region DPI 缩放辅助
 
-        /// <summary>逻辑像素 → 物理像素（× _dpiScale，四舍五入）</summary>
+        /// <summary>逻辑像素 → 物理像素（× _dpiScale × _zoom，四舍五入）</summary>
         private int Scaled(int v)
         {
-            return (int)Math.Round(v * _dpiScale);
+            return (int)Math.Round(v * _dpiScale * _zoom);
         }
 
         /// <summary>逻辑像素 Point → 物理像素 Point</summary>
@@ -683,19 +837,6 @@ namespace AgingTestSystem.Views
             if (data == null || !_items.TryGetValue(data.DeviceId, out GridItem item)) return;
             ApplyData(item, data);
             Invalidate(GetPanelBounds(data.DeviceId));
-        }
-
-        /// <summary>当前是否有任意工位被选中</summary>
-        public bool IsAnySelected
-        {
-            get
-            {
-                foreach (var item in _items.Values)
-                {
-                    if (item.IsSelected) return true;
-                }
-                return false;
-            }
         }
 
         /// <summary>
@@ -1013,19 +1154,17 @@ namespace AgingTestSystem.Views
         #region 坐标命中与交互
 
         /// <summary>
-        /// 鼠标按下（左键）：记录起点；命中面板空白区域（非设置/选中框）时启动长按计时
+        /// 鼠标按下（左键）：记录拖拽起点并捕获鼠标。
+        /// 【V1.88.14】长按选中已删除：按下只记拖拽起点，不启动任何计时；
+        /// 选中切换统一在 MouseUp 做（单击/触摸点选），拖动超阈值则转滚动、抬起不选中。
         /// </summary>
         private void GridView_MouseDown(object sender, MouseEventArgs e)
         {
             if (e.Button != MouseButtons.Left) return;
 
-            _pressStartPoint = Control.MousePosition;
-            _longPressFired = false;
-
             // 【V1.57 拖拽滚动】按下时记录拖拽起点与外层滚动容器的当前滚动位置。
             // 仅当父容器可滚动（Panel.AutoScroll）时才开启拖拽滚动并捕获鼠标；
             // 这样按住左键移动即可拖动整个列表（见 GridView_MouseMove），且不会因鼠标移出控件而中断。
-            // 注意：捕获鼠标不影响长按选中——长按靠的是计时器，捕获只是保证拖动中持续收到 MouseMove。
             _dragStartPoint = Control.MousePosition;
             _isDragging = false;
             _captured = false;
@@ -1035,26 +1174,16 @@ namespace AgingTestSystem.Views
                 _captured = true;
                 this.Capture = true;   // 鼠标捕获：拖动期间即使指针移出本控件也能持续收到 MouseMove
             }
-
-            if (TryHitPanel(e.Location, out int deviceId, out Point local))
-            {
-                // 【V1.55】local 是物理像素坐标，布局矩形需缩放后比较
-                Rectangle rcSet = Scaled(_layout.RcSetButton.ToRectangle());
-                Rectangle rcSelect = Scaled(_layout.RcSelectBox.ToRectangle());
-                if (!rcSet.Contains(local) && !rcSelect.Contains(local))
-                {
-                    _pressDeviceId = deviceId;
-                    _longPressTimer.Start();
-                }
-            }
         }
 
         /// <summary>
         /// 鼠标抬起（左键）：
         /// - 行全选按钮 → 整行选中/取消；
         /// - 面板内"设置"区域 → 触发 OnSetClicked；
-        /// - 面板内"选中指示"区域（有选中时）→ 切换选中；
-        /// - 面板空白（有选中时）→ 单击切换选中。
+        /// - 面板内"选中框"或"空白区域" → 直接切换该工位选中（单击/触摸点选）。
+        /// 【V1.88.14】选中框常显后不再设门槛：无选中时点框/点空白同样选中，
+        /// 长按（选中首个/取消全选）整套删除；取消选中逐台点框/整行"取消"，
+        /// 拖动结束后抬起不触发选中（滑动浏览不误选）。
         /// </summary>
         private void GridView_MouseUp(object sender, MouseEventArgs e)
         {
@@ -1069,7 +1198,6 @@ namespace AgingTestSystem.Views
             if (_isDragging)
             {
                 _isDragging = false;
-                _longPressTimer.Stop();
                 // 【V1.57.2】停止合并定时器，并立即把最新目标滚动位置应用一次，
                 // 否则最后一次 MouseMove 若还没到 16ms 定时点，松手时滚动会停在旧位置。
                 _dragScrollTimer.Stop();
@@ -1080,9 +1208,6 @@ namespace AgingTestSystem.Views
                 Cursor = Cursors.Default;    // 恢复默认光标（拖动中为 SizeAll）
                 return;
             }
-
-            _longPressTimer.Stop();
-            if (_longPressFired) return;
 
             if (TryHitRowButton(e.Location, out int row))
             {
@@ -1102,40 +1227,41 @@ namespace AgingTestSystem.Views
                 }
                 if (rcSelect.Contains(local))
                 {
-                    if (IsAnySelected) ToggleSelect(deviceId);
+                    ToggleSelect(deviceId);
                     return;
                 }
-                // 单击空白区域：有选中时切换选中状态
-                if (IsAnySelected) ToggleSelect(deviceId);
+                // 单击空白区域：直接切换选中状态
+                ToggleSelect(deviceId);
             }
         }
 
         /// <summary>
-        /// 鼠标移动：长按期间移动超过阈值视为拖动取消计时；刷新状态块悬停提示
+        /// 鼠标移动：拖拽滚动换算 + 状态块悬停提示
         /// </summary>
         private void GridView_MouseMove(object sender, MouseEventArgs e)
         {
-            // 【V1.57 拖拽滚动】按住左键且已捕获鼠标时，把移动距离换算成外层滚动容器的滚动偏移
+            // 【V1.57 拖拽滚动】按住左键且已捕获鼠标时，把纵向移动距离换算成外层滚动容器的滚动偏移
+            // 【V1.88.14】只支持上下滑动：横向滚动条已在主窗禁用（看着怪），dx 直接按 0 算，
+            // 左右拖内容不动，只有上下拖才滚动。
             if (_captured && e.Button == MouseButtons.Left && Parent is ScrollableControl scrollable)
             {
                 Point cur = Control.MousePosition;
-                int dx = cur.X - _dragStartPoint.X;
+                int dx = 0;
                 int dy = cur.Y - _dragStartPoint.Y;
-                // 移动超过阈值（≥10px）才认定为拖动。
-                // 阈值特意比长按取消阈值(8px)大：按住不动的长按选中不会被拖拽抢先取消，
-                // 只有明显拖动才进入滚动模式。进入后停掉长按计时器，避免长按选中在拖动中误触发。
+                // 移动超过阈值（≥10px）才认定为拖动：按下难免抖动，
+                // 小位移仍算点击（抬起切换选中），只有明显拖动才进入滚动模式。
                 if (!_isDragging && (Math.Abs(dx) > DragScrollThreshold || Math.Abs(dy) > DragScrollThreshold))
                 {
                     _isDragging = true;
-                    _longPressTimer.Stop();      // 进入拖动则取消长按计时
                     Cursor = Cursors.SizeAll;    // 拖动中给出"可移动"光标反馈
                 }
                 if (_isDragging)
                 {
                     // AutoScrollPosition 语义（WinForms）：getter 返回负值（-100 表示已向右/下滚 100），
                     // setter 接收正值（100 表示滚动量 100）。
-                    // 想让内容"跟随鼠标移动"：鼠标右/下拖 dx/dy → 内容右/下移 → 滚动量减小 dx/dy。
-                    // 故新滚动量 = 起点滚动量 - 位移，起点滚动量 = -_dragStartScroll.X（取正）。
+                    // 想让内容"跟随鼠标移动"：鼠标下拖 dy → 内容下移 → 纵向滚动量减小 dy。
+                    // 故新滚动量 = 起点滚动量 - 位移，起点滚动量 = -_dragStartScroll.Y（取正）；
+                    // 横向 dx 恒 0（只支持上下滑动），横向滚动量保持起点不动。
                     // 【V1.57.2 性能】不再直接 set，而是记录目标位置后由 _dragScrollTimer 每 16ms
                     // 统一应用一次（合并高频 MouseMove，见字段注释）。dx/dy 是基于按下起点的绝对值，
                     // 所以"只记录最新目标"不会丢位置、手感与逐帧 set 一致。
@@ -1144,19 +1270,6 @@ namespace AgingTestSystem.Views
                     {
                         _dragScrollTimer.Start();
                     }
-                }
-            }
-
-            // 【长按兼容】只在"未进入拖拽滚动"时保留原有的长按取消逻辑。
-            // 长按判定阈值 8px 小于拖拽阈值 10px，所以长按时轻微抖动（≤8px）不会触发拖拽，
-            // 计时器能正常走到 800ms 触发长按选中；超过 10px 才进拖拽并停计时器。
-            if (!_isDragging && !_longPressFired && _longPressTimer.Enabled)
-            {
-                Point current = Control.MousePosition;
-                if (Math.Abs(current.X - _pressStartPoint.X) > LongPressMoveThreshold ||
-                    Math.Abs(current.Y - _pressStartPoint.Y) > LongPressMoveThreshold)
-                {
-                    _longPressTimer.Stop();
                 }
             }
 
@@ -1179,31 +1292,12 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 鼠标离开控件：取消未触发的长按；隐藏悬停提示
+        /// 鼠标离开控件：隐藏悬停提示
         /// </summary>
         private void GridView_MouseLeave(object sender, EventArgs e)
         {
-            if (!_longPressFired) _longPressTimer.Stop();
             _lastTooltipText = "";
             _toolTip.Hide(this);
-        }
-
-        /// <summary>
-        /// 长按计时到点：已有选中 → 取消全部选中；否则选中当前工位
-        /// </summary>
-        private void LongPressTimer_Tick(object sender, EventArgs e)
-        {
-            _longPressTimer.Stop();
-            _longPressFired = true;
-
-            if (IsAnySelected)
-            {
-                ClearAllSelection();
-            }
-            else
-            {
-                SetSelected(_pressDeviceId, true);
-            }
         }
 
         /// <summary>
@@ -1222,12 +1316,14 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 切换指定工位的选中状态并重绘（选中框常显，只需刷新当前面板）。
-        /// 【选中框常显】框的显示不再取决于全局 IsAnySelected：所有面板右上角永远画框
-        /// （选中=绿底白✓，未选中=空心白框）；单台翻转只影响自己，局部重绘即可。
-        /// 只有 ClearAllSelection（长按取消全选/整行切换）一次动多台，才全量 Invalidate()。
-        /// 【为什么常显】以前"无选中时全场无框"，操作员找不到点哪里选中；
-        /// 常显后框永远可见，所见即所得。IsAnySelected 只保留给交互门控
-        /// （无选中时单击空白不翻选、长按才选中首个，见 GridView_MouseUp），不再管显隐。
+        /// 【选中框常显】框的显示不取决于任何全局状态：所有面板右上角永远画框
+        /// （选中=绿底白✓，未选中=空心框）；【V1.88.14】单击/触摸点框或点空白
+        /// 直接翻转，无门槛（旧"无选中时单击不翻选、长按才选中"门控已删，
+        /// IsAnySelected/ClearAllSelection/长按计时器同步删除）。
+        /// 单台翻转只影响自己，局部重绘即可；整行切换一次动多台，才全量 Invalidate()。
+        /// 【为什么常显+点选】以前"无选中时全场无框"，操作员找不到点哪里选中；
+        /// 常显后框永远可见，所见即所得，现场触摸屏点一下即打勾。
+        /// 取消选中：逐台点框/空白翻回，或整行"取消"按钮。
         /// </summary>
         private void ToggleSelect(int deviceId)
         {
@@ -1236,21 +1332,6 @@ namespace AgingTestSystem.Views
                 item.IsSelected = !item.IsSelected;
                 Invalidate(GetPanelBounds(deviceId));
             }
-        }
-
-        /// <summary>取消全部选中并重绘</summary>
-        private void ClearAllSelection()
-        {
-            bool any = false;
-            foreach (var item in _items.Values)
-            {
-                if (item.IsSelected)
-                {
-                    item.IsSelected = false;
-                    any = true;
-                }
-            }
-            if (any) Invalidate();
         }
 
         /// <summary>切换整行选中状态（全选 ↔ 取消全选）</summary>
