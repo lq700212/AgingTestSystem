@@ -112,7 +112,8 @@ namespace AgingTestSystem.Views
         /// 小屏上 600 右侧会把 Panel1 挤到 500 不到，72 站被压成小方块、字全叠在一起
         /// （无崩溃，但没法看）。本常量是最后一道闸：右侧再宽也不能吃掉 Panel1 这 640px。
         /// 取值依据：紧凑后面板列宽 209，640 / 8 列 ≈ 每列 80px，zoomX ≈ 0.37，
-        /// 6pt 字刚好可辨认；再小就真没法用了，此时宁可让右侧不听话（被钳住），也不能丢显示。
+        /// 【V1.88.21】4pt 字可辨认（字号下限 6→4跟随缩小，小屏不挤叠；见 WorkstationGridView.MinFontSize）；
+        /// 再小就真没法用了，此时宁可让右侧不听话（被钳住），也不能丢显示。
         /// 生效点见 <see cref="ClampRightPanelWidthForWorkstation"/>（纯函数，可单测）。
         /// </summary>
         public const int MinWorkstationPanelWidth = 640;

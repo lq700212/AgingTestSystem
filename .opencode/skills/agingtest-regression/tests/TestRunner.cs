@@ -4885,9 +4885,11 @@ namespace AgingTestSystem.Tests
                         zoomXFld.SetValue(grid, 1f);
                         zoomYFld.SetValue(grid, 1f);
                     }
-                    // 字体下限：zoom=0.1 时重建仍≥6pt（与V1.82画布口径一致；取窄边）。
+                    // 字体下限：【V1.88.21】1280×1024小屏适配，6pt→4pt跟随缩小不挤叠。
+                    // 旧6pt在972×736可用区下把字卡大1.5倍（理想4.04pt→6pt），4字标签37px vs 槽31px溢出盖框。
                     var rebuildFonts = tg.GetMethod("RebuildFonts", BindingFlags.NonPublic | BindingFlags.Instance);
                     Check("反射找到RebuildFonts", rebuildFonts != null);
+                    Check("字号下限MinFontSize=4", WorkstationGridView.MinFontSize == 4f);
                     if (rebuildFonts != null && zoomXFld != null && zoomYFld != null)
                     {
                         zoomXFld.SetValue(grid, 0.1f);
@@ -4897,8 +4899,31 @@ namespace AgingTestSystem.Tests
                         var tfFld = tg.GetField("_titleFont", BindingFlags.NonPublic | BindingFlags.Instance);
                         var pf = pfFld != null ? pfFld.GetValue(grid) as System.Drawing.Font : null;
                         var tf = tfFld != null ? tfFld.GetValue(grid) as System.Drawing.Font : null;
-                        Check("窄边小zoom下正文字号钳6pt", pf != null && pf.Size >= 6f);
-                        Check("窄边小zoom下标题字号钳6pt", tf != null && tf.Size >= 6f);
+                        Check("窄边小zoom下正文字号钳4pt", pf != null && pf.Size >= 4f);
+                        Check("窄边小zoom下标题字号钳4pt", tf != null && tf.Size >= 4f);
+                        // 【V1.88.21 红→绿】1280×1024真实zoom（972×736可用区：zx≈0.56、zy≈0.45），
+                        // 理想4.04pt必须跟随缩小、不再被卡到6pt（卡住即标签挤叠复现）。
+                        zoomXFld.SetValue(grid, 0.5593f);
+                        zoomYFld.SetValue(grid, 0.4487f);
+                        rebuildFonts.Invoke(grid, null);
+                        var pf1280 = pfFld != null ? pfFld.GetValue(grid) as System.Drawing.Font : null;
+                        Check("1280×1024下字号跟随窄边≈4.04pt（不卡6pt）",
+                            pf1280 != null && Math.Abs(pf1280.Size - 9f * 0.4487f) < 0.15f,
+                            pf1280 != null ? "实际 " + pf1280.Size.ToString("F2") + "pt" : "字体为null");
+                        Check("1280×1024下字号<6pt（旧下限即复现挤叠）",
+                            pf1280 != null && pf1280.Size < 6f);
+                        // 跟随缩小后4字标签必须装进56逻辑槽（31px物理）：实测防叠锁。
+                        if (pf1280 != null)
+                        {
+                            int slotW = (int)Math.Round(56 * 0.5593);
+                            int labelW = System.Windows.Forms.TextRenderer.MeasureText("真空压力", pf1280).Width;
+                            Check("1280×1024下4字标签装进标签槽（不挤叠）", labelW <= slotW,
+                                "标签" + labelW + "px vs 槽" + slotW + "px");
+                            int delaySlot = (int)Math.Round(66 * 0.5593);
+                            int timeW = System.Windows.Forms.TextRenderer.MeasureText("00:00:00", pf1280).Width;
+                            Check("1280×1024下时间串装进延时框（不截断）", timeW <= delaySlot,
+                                "时间" + timeW + "px vs 框" + delaySlot + "px");
+                        }
                         zoomXFld.SetValue(grid, 1f);
                         zoomYFld.SetValue(grid, 1f);
                         rebuildFonts.Invoke(grid, null);
