@@ -113,17 +113,10 @@ namespace AgingTestSystem.Dialogs
             // 窗口标题带工位编号，如"工位设置窗口 NO 1"
             this.Text = $"工位设置窗口 NO {deviceId}";
 
-            // 【V1.88.13】配方下拉先填项（LoadStationData 里要选中回填值，必须先有选项；
-            // 首项空串=不绑配方；选项=配方库全部名）
-            FillRecipeCombo();
-            cmbRecipe.SelectedIndexChanged += CmbRecipe_SelectedIndexChanged;
-
-            // 从缓存 / 采集缓存读取当前工位数据并回显到输入框
-            LoadStationData();
-
-            // 【V1.74】显示模式下拉先填字典（LoadStationData 的回填分支会按需重填+选中；
-            // 无缓存无数据直接返回时靠这一行保证下拉不空）。
-            // 【V1.75】开关关时整行隐藏 + 布局收缩（显示行是左列末行 Y=326，
+            // 【V1.75】显示模式行开关先定死（必须在 LoadStationData 之前：
+            // Load 里的 FillDisplayModes 回填认 _displayModeShown；以前先 Load 后赋值，
+            // 开态下开窗回填的显示模式会被守卫吞掉、点保存还会连带清空，V1.88.13 复查补救）。
+            // 开关关时整行隐藏 + 布局收缩（显示行是左列末行 Y=326，
             // 右侧按钮止于 Y=254，窗高缩 40（370→330）边距原样保留）。
             _displayModeShown = DisplayModeOptions.ShouldShowDisplayMode(_config);
             lblDisplayMode.Visible = _displayModeShown;
@@ -134,7 +127,18 @@ namespace AgingTestSystem.Dialogs
                 this.ClientSize = new Size(this.ClientSize.Width, this.ClientSize.Height - 40);
                 this.MinimumSize = this.ClientSize;
             }
-            else if (cmbDisplayMode.Items.Count == 0) FillDisplayModes(null);
+
+            // 【V1.88.13】配方下拉先填项（LoadStationData 里要选中回填值，必须先有选项；
+            // 首项空串=不绑配方；选项=配方库全部名）
+            FillRecipeCombo();
+            cmbRecipe.SelectedIndexChanged += CmbRecipe_SelectedIndexChanged;
+
+            // 从缓存 / 采集缓存读取当前工位数据并回显到输入框
+            LoadStationData();
+
+            // 【V1.74】显示模式下拉补字典（LoadStationData 的回填分支会按需重填+选中；
+            // 无缓存无数据直接返回时靠这一行保证下拉不空；开关关时上面已置空，这里不再碰）。
+            if (_displayModeShown && cmbDisplayMode.Items.Count == 0) FillDisplayModes(null);
 
             SetupTooltips();
         }
@@ -236,7 +240,9 @@ namespace AgingTestSystem.Dialogs
         /// <summary>
         /// 按名选中配方下拉（【V1.88.13 新增】LoadStationData 回填用：
         /// 空名选首项空；库中有选它；库中无（脏数据，如配方被删）追加显示，
-        /// 看得见但保存时拦停——静默回全局的口子在这里堵死）。
+        /// 看得见但保存时拦停——静默回全局的口子在这里堵死。
+        /// 【V1.88.13 复查补救】每次先清掉之前追加的脏项：脏项只为让脏值看得见，
+        /// 切回正常值还留着它，用户一点就保存拦停，纯添堵）。
         /// </summary>
         /// <param name="recipeName">要选中的配方名（可空）</param>
         private void SelectRecipe(string recipeName)
@@ -244,6 +250,7 @@ namespace AgingTestSystem.Dialogs
             _fillingRecipeCombo = true;
             try
             {
+                RemoveDirtyRecipeItems();
                 string name = (recipeName ?? "").Trim();
                 if (string.IsNullOrEmpty(name))
                 {
@@ -266,6 +273,22 @@ namespace AgingTestSystem.Dialogs
             finally
             {
                 _fillingRecipeCombo = false;
+            }
+        }
+
+        /// <summary>
+        /// 清掉配方下拉里不在配方库中的脏项（【V1.88.13 复查补救】SelectRecipe 每次程序选中前调：
+        /// 首项空串（不绑配方）保留；库为 null 时无法判定，全留不动。
+        /// 调用方已置 _fillingRecipeCombo 守卫，删选中项触发的 SelectedIndexChanged 会被 handler 忽略）。
+        /// </summary>
+        private void RemoveDirtyRecipeItems()
+        {
+            if (_recipes == null) return;
+            for (int i = cmbRecipe.Items.Count - 1; i >= 1; i--)
+            {
+                string item = cmbRecipe.Items[i] as string;
+                if (string.IsNullOrEmpty(item)) continue;
+                if (FindRecipe(item) == null) cmbRecipe.Items.RemoveAt(i);
             }
         }
 
@@ -425,14 +448,17 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 按配方名检索本地配方列表（忽略大小写，空名/未命中返回 null）
+        /// 按配方名检索本地配方列表（忽略大小写 + 两边 Trim，空名/未命中返回 null。
+        /// 两边都 Trim：老配方文件手改可能留前后空格，Fill 显示的是 Trim 后，
+        /// 单边 Trim 会"看得见选不中"，V1.88.13 复查补救，与批量窗/FindDuplicateIndex 同口径）
         /// </summary>
         private RecipeConfig FindRecipe(string recipeName)
         {
             if (string.IsNullOrWhiteSpace(recipeName) || _recipes == null) return null;
+            string key = recipeName.Trim();
             foreach (RecipeConfig r in _recipes)
             {
-                if (string.Equals(r.Name, recipeName.Trim(), StringComparison.OrdinalIgnoreCase))
+                if (r != null && string.Equals((r.Name ?? "").Trim(), key, StringComparison.OrdinalIgnoreCase))
                 {
                     return r;
                 }

@@ -5501,8 +5501,11 @@ namespace AgingTestSystem.Tests
             }
 
             // ── 配方下拉单选（V1.88.13：两窗配方名输入框→UIComboBox DropDownList，
-            // 手输错名串配方从根上堵死；只构造不 Show，设选中即同步触发回填） ──
+            // 手输错名串配方从根上堵死；只构造不 Show，设选中即同步触发回填。
+            // V1.88.13 复查补救：块内先 ResetStationCache + 冷僻工位号（991/992），
+            // 与静态缓存/他模块写入彻底去耦——deviceId=1 会撞 StationCacheTests 热更残留=顺序耦合假绿） ──
             {
+                ResetStationCache();
                 var recs = new List<RecipeConfig>
                 {
                     new RecipeConfig { Name = "A", DelayTime = TimeSpan.FromSeconds(30),
@@ -5511,6 +5514,12 @@ namespace AgingTestSystem.Tests
                     new RecipeConfig { Name = "B", DelayTime = TimeSpan.Zero,
                         BurnInTime = TimeSpan.FromHours(4), LimitTemperature = 50,
                         NegativePressure = -6, IsEnabled = true },
+                    // 库名含前后空格（老文件手改可能留）：下拉显示 Trim 后，回填必须命中
+                    //（与 FindRecipe/FindDuplicateIndex 同口径 Trim+忽略大小写，Ordinal 精确比会漏）。
+                    // 45 秒：秒分量直读（90 秒会进位成 1 分 30 秒，断言还得拆分，45 更干净）。
+                    new RecipeConfig { Name = "  C  ", DelayTime = TimeSpan.FromSeconds(45),
+                        BurnInTime = TimeSpan.FromHours(2), LimitTemperature = 55,
+                        NegativePressure = -7, IsEnabled = true },
                 };
                 BatchRecipeForm bf = null;
                 try { bf = new BatchRecipeForm(null, recs, new List<int>()); }
@@ -5524,9 +5533,10 @@ namespace AgingTestSystem.Tests
                             ?.GetValue(bf) as Sunny.UI.UIComboBox;
                         Check("批量窗配方是下拉且禁手输",
                             cmb != null && cmb.DropDownStyle == Sunny.UI.UIDropDownStyle.DropDownList);
-                        Check("批量窗下拉选项=库名",
-                            cmb != null && cmb.Items.Count == 2
-                            && (string)cmb.Items[0] == "A" && (string)cmb.Items[1] == "B");
+                        Check("批量窗下拉选项=库名（空格名存Trim显示）",
+                            cmb != null && cmb.Items.Count == 3
+                            && (string)cmb.Items[0] == "A" && (string)cmb.Items[1] == "B"
+                            && (string)cmb.Items[2] == "C");
                         Check("批量窗下拉默认不选中",
                             cmb != null && cmb.SelectedIndex == -1);
                         if (cmb != null)
@@ -5538,12 +5548,15 @@ namespace AgingTestSystem.Tests
                                 ?.GetValue(bf) as Control;
                             Check("批量窗选A回填延时30秒/负压-5",
                                 nudS != null && nudS.Value == 30 && txtP != null && txtP.Text == "-5");
+                            cmb.SelectedIndex = 2;
+                            Check("批量窗空格库名选中回填45秒/负压-7",
+                                nudS != null && nudS.Value == 45 && txtP != null && txtP.Text == "-7");
                         }
                     }
                     finally { try { bf.Dispose(); } catch { } }
                 }
                 StationSettingsForm sf = null;
-                try { sf = new StationSettingsForm(null, new DeviceConfig(), recs, 1); }
+                try { sf = new StationSettingsForm(null, new DeviceConfig(), recs, 991); }
                 catch { }
                 Check("下拉改造工位窗可构造", sf != null);
                 if (sf != null)
@@ -5555,7 +5568,7 @@ namespace AgingTestSystem.Tests
                         Check("工位窗配方是下拉且禁手输",
                             cmb != null && cmb.DropDownStyle == Sunny.UI.UIDropDownStyle.DropDownList);
                         Check("工位窗下拉首项空=不绑",
-                            cmb != null && cmb.Items.Count == 3 && (string)cmb.Items[0] == "");
+                            cmb != null && cmb.Items.Count == 4 && (string)cmb.Items[0] == "");
                         Check("工位窗下拉默认选空项",
                             cmb != null && cmb.SelectedIndex == 0);
                         var selMi = typeof(StationSettingsForm).GetMethod("SelectRecipe", Flags);
@@ -5564,11 +5577,11 @@ namespace AgingTestSystem.Tests
                         {
                             selMi.Invoke(sf, new object[] { "已删配方" });
                             Check("脏数据追加显示（保存拦停见CommitConfig）",
-                                cmb.Items.Count == 4 && cmb.SelectedIndex == 3
+                                cmb.Items.Count == 5 && cmb.SelectedIndex == 4
                                 && cmb.Text == "已删配方");
                             selMi.Invoke(sf, new object[] { "B" });
-                            Check("回填选中库中配方",
-                                cmb.SelectedIndex == 2 && cmb.Text == "B");
+                            Check("回填选中库中配方且脏项被清掉",
+                                cmb.SelectedIndex == 2 && cmb.Text == "B" && cmb.Items.Count == 4);
                         }
                         if (cmb != null)
                         {
@@ -5585,6 +5598,37 @@ namespace AgingTestSystem.Tests
                         }
                     }
                     finally { try { sf.Dispose(); } catch { } }
+                }
+
+                // ── 开态开窗显示模式回填（V1.88.13 复查补救锁 Bug1：
+                // 构造期 Load 在 _displayModeShown 赋值前，FillDisplayModes 守卫吞回填，
+                // 开窗显示模式丢、点保存还会被清空；缺省关态恒空所以一直没红过） ──
+                StationSettingsCache.Save(new StationCacheEntry { DeviceId = 992,
+                    SerialNumber = "SN-开态", RecipeName = "A", DisplayMode = "红场" });
+                StationSettingsForm sfOpen = null;
+                try { sfOpen = new StationSettingsForm(null,
+                    new DeviceConfig { DisplayModeEnabled = true }, recs, 992); }
+                catch { }
+                Check("开态工位窗可构造", sfOpen != null);
+                if (sfOpen != null)
+                {
+                    try
+                    {
+                        var cmbR = typeof(StationSettingsForm).GetField("cmbRecipe", Flags)
+                            ?.GetValue(sfOpen) as Sunny.UI.UIComboBox;
+                        var cmbD = typeof(StationSettingsForm).GetField("cmbDisplayMode", Flags)
+                            ?.GetValue(sfOpen) as Sunny.UI.UIComboBox;
+                        Check("开态开窗配方按缓存选中A",
+                            cmbR != null && cmbR.Text == "A");
+                        Check("开态开窗显示模式按缓存回填红场",
+                            cmbD != null && cmbD.Text == "红场");
+                    }
+                    finally
+                    {
+                        try { sfOpen.Dispose(); } catch { }
+                        try { StationSettingsCache.Save(new StationCacheEntry { DeviceId = 992 }); }
+                        catch { }
+                    }
                 }
             }
 

@@ -159,8 +159,15 @@
   是 `UIComboBox + DropDownList`（禁手输），选项=配方库名；选中回填参数走
   `CmbRecipeName_SelectedIndexChanged`/`CmbRecipe_SelectedIndexChanged`（工位窗带
   `_fillingRecipeCombo` 守卫，程序回填不触发）。新建/改名走配方管理窗；工位窗脏数据
-  （库中已无）追加显示 + 保存时 `CommitConfig` 拦停。**禁再引回输入框或自动检索 Provider**
+  （库中已无）追加显示 + 保存时 `CommitConfig` 拦停，选回正常值时 `RemoveDirtyRecipeItems`
+  顺手清脏（脏项只为让脏值看得见）。**禁再引回输入框或自动检索 Provider**
   （手输错名会静默回退全局配置=串配方）。
+  配方名比较口径（V1.88.13 复查补救血泪）：`Trim + 忽略大小写`，**两边都要 Trim**
+  （批量窗 handler/工位窗 `FindRecipe` 与 `FindDuplicateIndex` 三处对齐；老配方文件
+  手改可能留前后空格，单边 Trim 会"看得见选不中"，还会被当脏项清掉）。
+  工位窗构造顺序（V1.75 血泪，V1.88.13 复查捞出）：`_displayModeShown` 先定死
+  （含隐藏收缩）再 `LoadStationData`，否则开态下开窗显示模式回填被守卫吞掉、
+  点保存还会连带清空（缺省关态恒空，回归不红，靠开态用例锁）。
   **负压 0 值语义（V1.72.2 血泪）**：`SetStationRecipe` 只认 null = 保持/回退全局，
   下发 0 就是定格 0（阈值 0≈永远到位，真空保护形同虚设）；老配方文件缺字段读出 0，
   回填框显示"0"待人工复核，不设"0=全局"魔法回退。上站前逐条复核 `Recipes.json` 的 0 值。
