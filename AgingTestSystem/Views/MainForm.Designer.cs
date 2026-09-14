@@ -47,7 +47,7 @@
             this.components = new System.ComponentModel.Container();
             this.rootScrollPanel = new System.Windows.Forms.Panel();
             this.tableLayoutPanelMain = new System.Windows.Forms.TableLayoutPanel();
-            this.tableLayoutPanelTop = new System.Windows.Forms.TableLayoutPanel();
+            this.tableLayoutPanelHeader = new System.Windows.Forms.TableLayoutPanel();
             this.pnlProject = new System.Windows.Forms.Panel();
             this.lblProjectPrefix = new Sunny.UI.UILabel();
             this.lblProject = new Sunny.UI.UILabel();
@@ -56,7 +56,6 @@
             this.lblPermissionRole = new Sunny.UI.UILabel();
             this.lblCommStatusLabel = new Sunny.UI.UILabel();
             this.lblCommStatus = new Sunny.UI.UILabel();
-            this.tableLayoutPanelMenu = new System.Windows.Forms.TableLayoutPanel();
             this.btnUserPermission = new Sunny.UI.UIButton();
             this.btnParameter = new Sunny.UI.UIButton();
             this.btnLog = new Sunny.UI.UIButton();
@@ -93,9 +92,8 @@
             this.hashTimer = new System.Windows.Forms.Timer(this.components);
             this.rootScrollPanel.SuspendLayout();
             this.tableLayoutPanelMain.SuspendLayout();
-            this.tableLayoutPanelTop.SuspendLayout();
+            this.tableLayoutPanelHeader.SuspendLayout();
             this.pnlProject.SuspendLayout();
-            this.tableLayoutPanelMenu.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainerMain)).BeginInit();
             this.splitContainerMain.Panel2.SuspendLayout();
             this.splitContainerMain.SuspendLayout();
@@ -128,42 +126,49 @@
             | System.Windows.Forms.AnchorStyles.Right)));
             this.tableLayoutPanelMain.ColumnCount = 1;
             this.tableLayoutPanelMain.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelMain.Controls.Add(this.tableLayoutPanelTop, 0, 0);
-            this.tableLayoutPanelMain.Controls.Add(this.tableLayoutPanelMenu, 0, 1);
-            this.tableLayoutPanelMain.Controls.Add(this.splitContainerMain, 0, 2);
-            this.tableLayoutPanelMain.Controls.Add(this.statusStripMain, 0, 3);
+            this.tableLayoutPanelMain.Controls.Add(this.tableLayoutPanelHeader, 0, 0);
+            this.tableLayoutPanelMain.Controls.Add(this.splitContainerMain, 0, 1);
+            this.tableLayoutPanelMain.Controls.Add(this.statusStripMain, 0, 2);
             this.tableLayoutPanelMain.Location = new System.Drawing.Point(0, 0);
             this.tableLayoutPanelMain.MinimumSize = new System.Drawing.Size(1150, 800);
             this.tableLayoutPanelMain.Name = "tableLayoutPanelMain";
-            this.tableLayoutPanelMain.RowCount = 4;
-            this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 30F));
-            this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 40F));
+            this.tableLayoutPanelMain.RowCount = 3;
+            this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 36F));
             this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 25F));
             this.tableLayoutPanelMain.Size = new System.Drawing.Size(1280, 900);
             this.tableLayoutPanelMain.TabIndex = 0;
             // 
-            // tableLayoutPanelTop
-            // 【V1.72.7】顶栏显示当前项目（切错项目=跑错工艺，首屏可见防呆）；
-            // 【V1.72.8】删 lblTitle（软件名窗口标题栏已有，顶栏重复多余），当前项目
-            // 直接占第 1 列（列宽回到 40/25/20/15，权限/通讯状态两组保留不动）。
+            // tableLayoutPanelHeader
+            // 【V1.88.23】顶栏菜单并单行（用户嫌 4 按钮太占位置）：项目/权限/通讯＋
+            // 用户权限/参数设置/日志记录/关于 同行 36px，省 34px 纵向还给工作站区。
+            // 列：项目 Percent34 / 权限 Percent16 / 通讯标签 Absolute100 /
+            // 通讯值 Absolute70 / 4 按钮各 Absolute120（小屏按钮定宽不挤，项目名省略号吸收）。
             //
-            this.tableLayoutPanelTop.ColumnCount = 4;
-            this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 40F));
-            this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
-            this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 20F));
-            this.tableLayoutPanelTop.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 15F));
-            this.tableLayoutPanelTop.Controls.Add(this.pnlProject, 0, 0);
-            this.tableLayoutPanelTop.Controls.Add(this.panelPermission, 1, 0);
-            this.tableLayoutPanelTop.Controls.Add(this.lblCommStatusLabel, 2, 0);
-            this.tableLayoutPanelTop.Controls.Add(this.lblCommStatus, 3, 0);
-            this.tableLayoutPanelTop.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.tableLayoutPanelTop.Location = new System.Drawing.Point(3, 3);
-            this.tableLayoutPanelTop.Name = "tableLayoutPanelTop";
-            this.tableLayoutPanelTop.RowCount = 1;
-            this.tableLayoutPanelTop.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelTop.Size = new System.Drawing.Size(1274, 24);
-            this.tableLayoutPanelTop.TabIndex = 0;
+            this.tableLayoutPanelHeader.ColumnCount = 8;
+            this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 34F));
+            this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 16F));
+            this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 100F));
+            this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 70F));
+            this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 120F));
+            this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 120F));
+            this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 120F));
+            this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 120F));
+            this.tableLayoutPanelHeader.Controls.Add(this.pnlProject, 0, 0);
+            this.tableLayoutPanelHeader.Controls.Add(this.panelPermission, 1, 0);
+            this.tableLayoutPanelHeader.Controls.Add(this.lblCommStatusLabel, 2, 0);
+            this.tableLayoutPanelHeader.Controls.Add(this.lblCommStatus, 3, 0);
+            this.tableLayoutPanelHeader.Controls.Add(this.btnUserPermission, 4, 0);
+            this.tableLayoutPanelHeader.Controls.Add(this.btnParameter, 5, 0);
+            this.tableLayoutPanelHeader.Controls.Add(this.btnLog, 6, 0);
+            this.tableLayoutPanelHeader.Controls.Add(this.btnAbout, 7, 0);
+            this.tableLayoutPanelHeader.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.tableLayoutPanelHeader.Location = new System.Drawing.Point(3, 3);
+            this.tableLayoutPanelHeader.Name = "tableLayoutPanelHeader";
+            this.tableLayoutPanelHeader.RowCount = 1;
+            this.tableLayoutPanelHeader.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            this.tableLayoutPanelHeader.Size = new System.Drawing.Size(1274, 30);
+            this.tableLayoutPanelHeader.TabIndex = 0;
             //
             //
             // pnlProject - 当前项目显示容器（【V1.79】原单个 lblProject 拆为"前缀 + 项目名"两个标签：
@@ -234,7 +239,7 @@
             // 
             this.lblPermissionPrefix.AutoSize = true;
             this.lblPermissionPrefix.Location = new System.Drawing.Point(3, 3);
-            this.lblPermissionPrefix.Margin = new System.Windows.Forms.Padding(0, 6, 0, 0);
+            this.lblPermissionPrefix.Margin = new System.Windows.Forms.Padding(0, 9, 0, 0);
             this.lblPermissionPrefix.Name = "lblPermissionPrefix";
             this.lblPermissionPrefix.Size = new System.Drawing.Size(110, 17);
             this.lblPermissionPrefix.TabIndex = 0;
@@ -244,7 +249,7 @@
             // 
             this.lblPermissionRole.AutoSize = true;
             this.lblPermissionRole.Location = new System.Drawing.Point(110, 3);
-            this.lblPermissionRole.Margin = new System.Windows.Forms.Padding(0, 6, 0, 0);
+            this.lblPermissionRole.Margin = new System.Windows.Forms.Padding(0, 9, 0, 0);
             this.lblPermissionRole.Name = "lblPermissionRole";
             this.lblPermissionRole.Size = new System.Drawing.Size(40, 17);
             this.lblPermissionRole.TabIndex = 1;
@@ -273,48 +278,32 @@
             this.lblCommStatus.Text = "未连接";
             this.lblCommStatus.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
-            // tableLayoutPanelMenu
-            // 
-            this.tableLayoutPanelMenu.ColumnCount = 4;
-            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
-            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
-            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
-            this.tableLayoutPanelMenu.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 25F));
-            this.tableLayoutPanelMenu.Controls.Add(this.btnUserPermission, 0, 0);
-            this.tableLayoutPanelMenu.Controls.Add(this.btnParameter, 1, 0);
-            this.tableLayoutPanelMenu.Controls.Add(this.btnLog, 2, 0);
-            this.tableLayoutPanelMenu.Controls.Add(this.btnAbout, 3, 0);
-            this.tableLayoutPanelMenu.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.tableLayoutPanelMenu.Location = new System.Drawing.Point(3, 33);
-            this.tableLayoutPanelMenu.Name = "tableLayoutPanelMenu";
-            this.tableLayoutPanelMenu.RowCount = 1;
-            this.tableLayoutPanelMenu.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelMenu.Size = new System.Drawing.Size(1274, 34);
-            this.tableLayoutPanelMenu.TabIndex = 1;
-            // 
             // btnUserPermission
             // 
+            this.btnUserPermission.Dock = System.Windows.Forms.DockStyle.Fill;
             this.btnUserPermission.Location = new System.Drawing.Point(3, 3);
             this.btnUserPermission.Name = "btnUserPermission";
-            this.btnUserPermission.Size = new System.Drawing.Size(226, 28);
+            this.btnUserPermission.Size = new System.Drawing.Size(114, 30);
             this.btnUserPermission.TabIndex = 0;
             this.btnUserPermission.Text = "用户权限";
             this.btnUserPermission.Click += new System.EventHandler(this.btnUserPermission_Click);
             // 
             // btnParameter
             // 
+            this.btnParameter.Dock = System.Windows.Forms.DockStyle.Fill;
             this.btnParameter.Location = new System.Drawing.Point(282, 3);
             this.btnParameter.Name = "btnParameter";
-            this.btnParameter.Size = new System.Drawing.Size(226, 28);
+            this.btnParameter.Size = new System.Drawing.Size(114, 30);
             this.btnParameter.TabIndex = 1;
             this.btnParameter.Text = "参数设置";
             this.btnParameter.Click += new System.EventHandler(this.btnParameter_Click);
             // 
             // btnLog
             // 
+            this.btnLog.Dock = System.Windows.Forms.DockStyle.Fill;
             this.btnLog.Location = new System.Drawing.Point(561, 3);
             this.btnLog.Name = "btnLog";
-            this.btnLog.Size = new System.Drawing.Size(226, 28);
+            this.btnLog.Size = new System.Drawing.Size(114, 30);
             this.btnLog.TabIndex = 2;
             this.btnLog.Text = "日志记录";
             this.btnLog.Click += new System.EventHandler(this.btnLog_Click);
@@ -322,9 +311,10 @@
             // btnAbout - "关于"按钮（V1.19.12 更名：btnHelp → btnAbout，文字 帮助 → 关于）
             // 点击弹出下拉菜单：设置（仅管理员） / 版本说明
             //
+            this.btnAbout.Dock = System.Windows.Forms.DockStyle.Fill;
             this.btnAbout.Location = new System.Drawing.Point(840, 3);
             this.btnAbout.Name = "btnAbout";
-            this.btnAbout.Size = new System.Drawing.Size(228, 28);
+            this.btnAbout.Size = new System.Drawing.Size(114, 30);
             this.btnAbout.TabIndex = 4;
             this.btnAbout.Text = "关于";
             this.btnAbout.Click += new System.EventHandler(this.btnAbout_Click);
@@ -333,13 +323,13 @@
             // 
             this.splitContainerMain.Dock = System.Windows.Forms.DockStyle.Fill;
             this.splitContainerMain.FixedPanel = System.Windows.Forms.FixedPanel.Panel2;
-            this.splitContainerMain.Location = new System.Drawing.Point(3, 73);
+            this.splitContainerMain.Location = new System.Drawing.Point(3, 39);
             this.splitContainerMain.Name = "splitContainerMain";
             // 
             // splitContainerMain.Panel2
             // 
             this.splitContainerMain.Panel2.Controls.Add(this.tableLayoutPanelRight);
-            this.splitContainerMain.Size = new System.Drawing.Size(1274, 799);
+            this.splitContainerMain.Size = new System.Drawing.Size(1274, 833);
             // 【V1.65】设计值按比例换算：1274 × 0.234 ≈ 298 右侧 → 1274-298-4(分隔条)=972。
             // 运行时会被 AdjustRightPanelWidth 按窗口实际宽度重算覆盖，这里只保证设计视图不错位。
             this.splitContainerMain.SplitterDistance = 972;
@@ -361,7 +351,7 @@
             this.tableLayoutPanelRight.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 120F));
             this.tableLayoutPanelRight.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 300F));
             this.tableLayoutPanelRight.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelRight.Size = new System.Drawing.Size(298, 799);
+            this.tableLayoutPanelRight.Size = new System.Drawing.Size(298, 833);
             this.tableLayoutPanelRight.TabIndex = 0;
             // 
             // groupBoxStatus
@@ -659,11 +649,10 @@
             this.rootScrollPanel.ResumeLayout(false);
             this.tableLayoutPanelMain.ResumeLayout(false);
             this.tableLayoutPanelMain.PerformLayout();
-            this.tableLayoutPanelTop.ResumeLayout(false);
-            this.tableLayoutPanelTop.PerformLayout();
+            this.tableLayoutPanelHeader.ResumeLayout(false);
+            this.tableLayoutPanelHeader.PerformLayout();
             this.pnlProject.ResumeLayout(false);
             this.pnlProject.PerformLayout();
-            this.tableLayoutPanelMenu.ResumeLayout(false);
             this.splitContainerMain.Panel2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.splitContainerMain)).EndInit();
             this.splitContainerMain.ResumeLayout(false);
@@ -688,10 +677,10 @@
 
         /// <summary>【新增】根滚动容器，包裹主布局，支持窗体缩小时显示滚动条</summary>
         private System.Windows.Forms.Panel rootScrollPanel;
-        /// <summary>主布局容器（4行：顶栏/菜单/内容/状态栏）</summary>
+        /// <summary>主布局容器（3行：顶栏/内容/状态栏；【V1.88.23】顶栏菜单并单行）</summary>
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelMain;
-        /// <summary>顶部信息栏容器</summary>
-        private System.Windows.Forms.TableLayoutPanel tableLayoutPanelTop;
+        /// <summary>顶栏容器（【V1.88.23】单行：项目/权限/通讯＋4 按钮；列：项目P34/权限P16/通讯100+70/按钮4×120）</summary>
+        private System.Windows.Forms.TableLayoutPanel tableLayoutPanelHeader;
         /// <summary>当前项目显示容器（【V1.79】顶栏第 1 列：前缀 + 项目名两个标签，背景与顶栏一致）</summary>
         private System.Windows.Forms.Panel pnlProject;
         /// <summary>固定前缀"当前项目："（常规体不加粗，V1.79 用户点名）</summary>
@@ -712,8 +701,6 @@
         private Sunny.UI.UILabel lblFanStateLabel;
         /// <summary>送风机运行状态值标签（V1.16.1：未连接=红/定值启动·已连接=绿/定值停止=灰）</summary>
         private Sunny.UI.UILabel lblFanState;
-        /// <summary>菜单按钮栏容器</summary>
-        private System.Windows.Forms.TableLayoutPanel tableLayoutPanelMenu;
         /// <summary>用户权限按钮</summary>
         private Sunny.UI.UIButton btnUserPermission;
         /// <summary>参数设置按钮</summary>

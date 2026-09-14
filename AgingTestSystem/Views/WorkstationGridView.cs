@@ -7,6 +7,22 @@ using AgingTestSystem.Models;
 namespace AgingTestSystem.Views
 {
     /// <summary>
+    /// 工作站网格自适应模式（【V1.88.22 新增】V1.88.14"按宽顶满"与 V1.88.17"双向铺满"的二选一开关）。
+    /// FitWidth = 按宽顶满（默认）：zoomX=zoomY=可用宽/内容宽，字大（1080p 下约 7.3pt），
+    /// 高度超出部分走外层纵向滚动条、只上下滑动（左右不出条）；
+    /// FillScreen = 双向精确铺满：zoomX/zoomY 独立，72 站一屏无滚动条，但字小（约 4~5pt）。
+    /// 判定逻辑只走本枚举配套的纯函数（ComputeFitZoom / ComputeFitZoomBoth，可单测），
+    /// 执行侧 <see cref="WorkstationGridView.UpdateAutoFit"/> 按模式分流（DeviceManager 不碰显示）。
+    /// </summary>
+    public enum WorkstationFitMode
+    {
+        /// <summary>按宽顶满：单 zoom 等比，纵向滚动（默认，看得清；长宽比不变，布局最和谐）</summary>
+        FitWidth = 0,
+        /// <summary>双向精确铺满：一屏无滚动（字小，面板会被宽扁拉伸）</summary>
+        FillScreen = 1
+    }
+
+    /// <summary>
     /// 工位网格（自绘大画布）——【V1.51 布局外部化 + 文字糊修复】
     ///
     /// 【方案说明】
@@ -97,13 +113,16 @@ namespace AgingTestSystem.Views
     /// 【V1.58.8】行全选按钮高 = 面板内容高-1(=169)，含边框后上下边缘与工作站显示框(170)完全对齐；
     /// 按钮矩形 = (列右缘+2, 行顶+2, 列宽-4, PanelInnerHeight-1)；-1 修正边框底凸出1px
     /// 网格占满全部 72 台设备。
-    /// 【V1.88.17 自适应精确铺满】默认 AutoFit=true：zoomX 按显示区可用宽/内容宽、
-    /// zoomY 按显示区可用高/内容高独立算，画布精确等于显示区客户区，
-    /// 纵向横向滚动条都不出（窗口拉大/缩小/最大化跟随缩放；字体取窄边等比缩放、
-    /// 下限见 MinFontSize（【V1.88.21】6pt→4pt，1280×1024小屏跟随缩小不挤叠）；
-    /// 列数保持 8×9 不动）。单轴触底（MinZoom=0.15，显示区被挤到极小）时才出滚动条兜底。
+    /// 【V1.88.22 自适应双模式】默认 AutoFit=true + FitMode=FitWidth（按宽顶满）：
+    /// zoomX=zoomY=显示区可用宽/内容宽（等比，面板不变形），画布宽恒顶满、无横向条，
+    /// 高超出部分走纵向滚动条（只上下滑动；1080p 下字约 7.3pt，看得清）。
+    /// 切到 FillScreen 回 V1.88.17 双向精确铺满：zoomX/zoomY 独立，画布精确等于显示区客户区，
+    /// 纵向横向滚动条都不出（但字约 4~5pt）。窗口拉大/缩小/最大化跟随缩放；
+    /// 字体取窄边等比缩放、下限见 MinFontSize（【V1.88.21】6pt→4pt，
+    /// 1280×1024小屏跟随缩小不挤叠）；列数保持 8×9 不动。
+    /// 单轴触底（MinZoom=0.15，显示区被挤到极小）时才出滚动条兜底。
     /// 关掉 AutoFit 回原尺寸（滚动条按内容出现）。
-    /// 实现见 ComputeFitZoomBoth/UpdateAutoFit/RebuildFonts/UpdateCanvasSize
+    /// 实现见 ComputeFitZoom/ComputeFitZoomBoth/UpdateAutoFit/RebuildFonts/UpdateCanvasSize
     /// （zoomX/zoomY 并进 ScaledX/ScaledY）。
     ///
     /// 二、单个面板内容（【V1.88.17】204×170，坐标均为"相对面板左上角"；
@@ -260,10 +279,12 @@ namespace AgingTestSystem.Views
         private float _dpiScale = 1f;
 
         /// <summary>
-        /// 自适应缩放因子（【V1.88.14 新增按宽顶满，【V1.88.17】改为双向精确铺满）。
-        /// 用户要求"72 站刚好铺满一屏、不同工控机屏自适应、不用上下左右拖滑块"：
-        /// zoomX = 显示区可用宽 / 内容宽，zoomY = 显示区可用高 / 内容高，
-        /// 画布尺寸精确等于显示区客户区（±1px 取整），纵向横向滚动条都不出。
+        /// 自适应缩放因子（【V1.88.14 新增按宽顶满，【V1.88.17】改为双向精确铺满，
+        /// 【V1.88.22】改回默认按宽顶满、FillScreen 才双向：见 FitMode）。
+        /// FitWidth（默认）："字看得清、左右不出条"：zoomX=zoomY=显示区可用宽/内容宽，
+        /// 画布宽精确等于显示区客户区（±1px 取整），无横向条、高超出走纵向滚动；
+        /// FillScreen：zoomX=可用宽/内容宽、zoomY=可用高/内容高独立，画布精确等于显示区，
+        /// 纵向横向滚动条都不出。
         /// zoom 并进布局基准（最终比例 sx = _dpiScale × _zoomX、sy = _dpiScale × _zoomY，
         /// 绘制/命中/画布尺寸全走 ScaledX/ScaledY，不碰 Graphics 变换矩阵——
         /// 与 V1.55 DPI 同路、V1.82 画布缩放同口径）；
@@ -276,7 +297,7 @@ namespace AgingTestSystem.Views
         /// </summary>
         private float _zoomX = 1f;
 
-        /// <summary>纵向自适应缩放因子（见 _zoomX 注释；两者独立，面板允许宽扁拉伸）</summary>
+        /// <summary>纵向自适应缩放因子（FitWidth 下恒等于 _zoomX；FillScreen 下独立，面板允许宽扁拉伸）</summary>
         private float _zoomY = 1f;
 
         /// <summary>
@@ -308,7 +329,7 @@ namespace AgingTestSystem.Views
         public const float MinFontSize = 4f;
 
         /// <summary>
-        /// 是否自适应父容器（默认 true = 72 站精确铺满一屏，无滚动条）。
+        /// 是否自适应父容器（默认 true = 按 FitMode 自动缩放：默认按宽顶满、纵向滚动）。
         /// 关掉回 zoom=1 原尺寸（滚动条按内容出现）。结构型开关，运行时可随时翻。
         /// </summary>
         private bool _autoFit = true;
@@ -498,7 +519,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 是否自适应父容器（默认 true = 72 站精确铺满一屏，无滚动条）。
+        /// 是否自适应父容器（默认 true = 按 <see cref="FitMode"/> 自动缩放）。
         /// 关掉回 zoom=1 原尺寸（滚动条按内容出现）；打开立即按当前父尺寸重算。
         /// </summary>
         public bool AutoFit
@@ -521,6 +542,47 @@ namespace AgingTestSystem.Views
                     UpdateAutoFit();
                 }
             }
+        }
+
+        /// <summary>
+        /// 自适应模式（【V1.88.22 新增】默认 FitWidth = 按宽顶满、只上下滑动，看得清）。
+        /// FitWidth 下 zoomX 与 zoomY 恒相等（等比，面板不变形）；
+        /// FillScreen 下两轴独立（V1.88.17 原行为，面板允许宽扁拉伸）。
+        /// 切换后立即按当前父尺寸重算（字体+画布+重绘），运行时可随时翻。
+        /// </summary>
+        public WorkstationFitMode FitMode
+        {
+            get { return _fitMode; }
+            set
+            {
+                if (_fitMode == value) return;
+                _fitMode = value;
+                UpdateAutoFit();
+            }
+        }
+
+        /// <summary>当前自适应模式（默认按宽顶满；主窗体装配时显式再设一次，意图落字）</summary>
+        private WorkstationFitMode _fitMode = WorkstationFitMode.FitWidth;
+
+        /// <summary>
+        /// 按可用宽与内容宽算单轴自适应缩放比（【V1.88.22 从 V1.88.14 原样捞回】纯函数，回归可直接断言）。
+        ///
+        /// 【语义】按宽顶满：zoom = 可用宽/内容宽，站尽可能大、无右侧空白；
+        /// 高度超出部分由外层 AutoScroll 容器出纵向滚动条、上下滑动看（左右不出条）。
+        /// 任一边非法（≤0）回 1（原尺寸，不摆烂）。
+        /// 钳制由调用方 <see cref="UpdateAutoFit"/> 按 <see cref="MinZoom"/>/
+        /// <see cref="MaxZoom"/> 做（触底转滚动条兜底），本函数只做除法、不断言范围。
+        /// </summary>
+        /// <param name="availWidth">可用宽（物理像素）</param>
+        /// <param name="contentWidth">内容宽（物理像素）</param>
+        /// <returns>缩放比；任一边非法（≤0）回 1（原尺寸）</returns>
+        public static double ComputeFitZoom(double availWidth, double contentWidth)
+        {
+            if (availWidth <= 0 || contentWidth <= 0)
+            {
+                return 1.0;
+            }
+            return availWidth / contentWidth;
         }
 
         /// <summary>
@@ -554,28 +616,45 @@ namespace AgingTestSystem.Views
         /// <summary>
         /// 按父容器当前可用区重算 _zoomX/_zoomY 并应用（字体+画布+重绘）。
         /// 不满足任一条件直接返回（保持当前 zoom）：AutoFit 关/未 Configure/无父容器/
-        /// 父容器尚未布局（ClientSize 宽或高为 0）/两轴与当前差都 &lt;0.001（防抖，
+        /// 父容器尚未布局（FitWidth 只看宽、FillScreen 宽或高为 0）/新值与当前差都 &lt;0.001（防抖，
         /// Splitter 拖动连续 Resize 不反复重建字体）。
+        /// 【V1.88.22】按 <see cref="FitMode"/> 分流：
+        /// FitWidth（默认）只按宽算单 zoom（_zoomX=_zoomY），画布宽恒顶满（无横向条），
+        /// 高超出部分走纵向滚动条（只上下滑动）；FillScreen 走 V1.88.17 双向独立。
         /// 两轴各钳制 [MinZoom, MaxZoom]：触底（显示区被挤到极小）时画布大于显示区，
         /// 外层 AutoScroll 出滚动条兜底（72 站一个不少，只滑不丢），而不是压成像素点；
-        /// 上限防窗口拉超大后字涨没边。正常窗口下不触界，精确铺满、无滚动条。
+        /// 上限防窗口拉超大后字涨没边。FillScreen 正常窗口下不触界，精确铺满、无滚动条。
         /// </summary>
         private void UpdateAutoFit()
         {
             if (!_autoFit || _columns <= 0 || Parent == null) return;
             // 预扣 1px：Size 取整后与 ClientSize 相等仍可能挤出滚动条（宽高各扣）。
             int availW = Parent.ClientSize.Width - 1;
-            int availH = Parent.ClientSize.Height - 1;
-            if (availW <= 0 || availH <= 0) return;
+            if (availW <= 0) return;
             double contentW = (double)(_columns * _layout.PanelColumnWidth
                 + _layout.RowSelectButtonColumnWidth) * _dpiScale;
-            double contentH = (double)(_rows * _layout.GetEffectiveRowHeight()) * _dpiScale;
             double zx, zy;
-            ComputeFitZoomBoth(availW, availH, contentW, contentH, out zx, out zy);
-            if (zx < MinZoom) zx = MinZoom;
-            if (zx > MaxZoom) zx = MaxZoom;
-            if (zy < MinZoom) zy = MinZoom;
-            if (zy > MaxZoom) zy = MaxZoom;
+            if (_fitMode == WorkstationFitMode.FitWidth)
+            {
+                // 【V1.88.22】按宽顶满（V1.88.14 原路）：单 zoom 等比，纵横同值、面板不变形；
+                // 高不管，超出部分走外层纵向滚动条（只上下滑动）。
+                double z = ComputeFitZoom(availW, contentW);
+                if (z < MinZoom) z = MinZoom;
+                if (z > MaxZoom) z = MaxZoom;
+                zx = z;
+                zy = z;
+            }
+            else
+            {
+                int availH = Parent.ClientSize.Height - 1;
+                if (availH <= 0) return;
+                double contentH = (double)(_rows * _layout.GetEffectiveRowHeight()) * _dpiScale;
+                ComputeFitZoomBoth(availW, availH, contentW, contentH, out zx, out zy);
+                if (zx < MinZoom) zx = MinZoom;
+                if (zx > MaxZoom) zx = MaxZoom;
+                if (zy < MinZoom) zy = MinZoom;
+                if (zy > MaxZoom) zy = MaxZoom;
+            }
             if (Math.Abs(zx - _zoomX) < 0.001 && Math.Abs(zy - _zoomY) < 0.001) return;
             _zoomX = (float)zx;
             _zoomY = (float)zy;
@@ -610,8 +689,11 @@ namespace AgingTestSystem.Views
         /// <summary>
         /// 按当前列/行/布局重算画布总尺寸（Configure/UpdateDpiScale/ShowCurrentRow/
         /// UpdateAutoFit 四处共用，改尺寸只改这里一处）。
-        /// 外层 Panel.AutoScroll 按此尺寸出滚动条；【V1.88.17】AutoFit 下画布精确等于
-        /// 显示区（zoomX/zoomY 即按可用区算出，取整 ±1px），纵向横向滚动条都不出；
+        /// 外层 Panel.AutoScroll 按此尺寸出滚动条；
+        /// 【V1.88.17】FillScreen 下画布精确等于显示区（zoomX/zoomY 即按可用区算出，
+        /// 取整 ±1px），纵向横向滚动条都不出；
+        /// 【V1.88.22】默认 FitWidth 下画布宽恒顶满（无横向条）、高按单 zoom 等比超出，
+        /// 纵向滚动条看下半屏（只上下滑动）；
         /// 只有 zoom 触底（显示区被挤到极小）时画布才大于显示区、滚动条兜底。
         ///
         /// 【V1.88.15】Size 变化前后保持滚动比例：WinForms 在内容变小时

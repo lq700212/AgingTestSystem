@@ -1625,21 +1625,20 @@ namespace AgingTestSystem.Tests
             var c = HomeLayoutConfig.LoadOrDefault();
             Check("HomeLayout 默认配置非 null", c != null);
             if (c == null) return;
-            Check("TopBarHeight 默认 40", c.TopBarHeight == 40);
-            Check("MenuHeight 默认 50", c.MenuHeight == 50);
+            Check("HeaderHeight 默认 36（V1.88.23 并单行）", c.HeaderHeight == 36);
             Check("RightPanelWidth 默认 240(V1.65比例时代的编辑器基准)", c.RightPanelWidth == 240);
             Check("StatusBarHeight 默认 30", c.StatusBarHeight == 30);
 
             // 往返：改值保存 → 重新加载应读到新值
-            c.TopBarHeight = 44;
+            c.HeaderHeight = 44;
             c.Save();
             var reloaded = HomeLayoutConfig.LoadOrDefault();
-            Check("Save→Load 往返读到修改值 44", reloaded.TopBarHeight == 44);
+            Check("Save→Load 往返读到修改值 44", reloaded.HeaderHeight == 44);
             if (File.Exists(cfgPath)) File.Delete(cfgPath); // 还原，避免影响后续用例
 
             // 调整范围约束（编辑器钳制依据，与 HomeLayoutEditorForm 常量同步）
-            Check("标题栏范围15~80", HomeLayoutConfig.TopBarRange.Min == 15 && HomeLayoutConfig.TopBarRange.Max == 80);
-            Check("菜单栏范围25~100", HomeLayoutConfig.MenuRange.Min == 25 && HomeLayoutConfig.MenuRange.Max == 100);
+            Check("顶栏范围34~100（V1.88.23 并单行：34=按钮28+上下边距）",
+                HomeLayoutConfig.HeaderRange.Min == 34 && HomeLayoutConfig.HeaderRange.Max == 100);
             Check("右侧区范围180~600", HomeLayoutConfig.RightPanelRange.Min == 180 && HomeLayoutConfig.RightPanelRange.Max == 600);
             Check("状态栏范围15~60", HomeLayoutConfig.StatusBarRange.Min == 15 && HomeLayoutConfig.StatusBarRange.Max == 60);
 
@@ -1648,8 +1647,8 @@ namespace AgingTestSystem.Tests
             {
                 File.WriteAllText(cfgPath, "{broken json");
                 var fallback = HomeLayoutConfig.LoadOrDefault();
-                Check("损坏文件回退默认40/50/240/30",
-                    fallback.TopBarHeight == 40 && fallback.MenuHeight == 50
+                Check("损坏文件回退默认36/240/30",
+                    fallback.HeaderHeight == 36
                     && fallback.RightPanelWidth == 240 && fallback.StatusBarHeight == 30);
             }
             finally
@@ -1661,16 +1660,42 @@ namespace AgingTestSystem.Tests
             try
             {
                 File.WriteAllText(cfgPath,
-                    "{\"TopBarHeight\":5000,\"MenuHeight\":200,\"RightPanelWidth\":-50,\"StatusBarHeight\":0}");
+                    "{\"HeaderHeight\":5000,\"RightPanelWidth\":-50,\"StatusBarHeight\":0}");
                 var clamped = HomeLayoutConfig.LoadOrDefault();
-                Check("越界文件按Range钳(80/100/180/15)",
-                    clamped.TopBarHeight == 80 && clamped.MenuHeight == 100
+                Check("越界文件按Range钳(100/180/15)",
+                    clamped.HeaderHeight == 100
                     && clamped.RightPanelWidth == 180 && clamped.StatusBarHeight == 15);
             }
             finally
             {
                 if (File.Exists(cfgPath)) File.Delete(cfgPath);
             }
+
+            // 老文件兼容（V1.88.23：只有 TopBar/Menu 双键、无 HeaderHeight → 缺省 36，不迁移）
+            try
+            {
+                File.WriteAllText(cfgPath,
+                    "{\"TopBarHeight\":40,\"MenuHeight\":50,\"RightPanelWidth\":240,\"StatusBarHeight\":30}");
+                var legacy = HomeLayoutConfig.LoadOrDefault();
+                Check("老双键文件读出HeaderHeight缺省36",
+                    legacy.HeaderHeight == 36
+                    && legacy.RightPanelWidth == 240 && legacy.StatusBarHeight == 30);
+            }
+            finally
+            {
+                if (File.Exists(cfgPath)) File.Delete(cfgPath);
+            }
+
+            // 顶栏单行结构锁（V1.88.23：Top/Menu 双面板合一；只锁字段存在性，
+            // 行高行为由真窗 harness 目检锁——MainForm 构造太重不进回归）
+            var mfType = typeof(MainForm);
+            const System.Reflection.BindingFlags MFF = System.Reflection.BindingFlags.NonPublic
+                | System.Reflection.BindingFlags.Instance;
+            Check("单行顶栏字段存在（tableLayoutPanelHeader）",
+                mfType.GetField("tableLayoutPanelHeader", MFF) != null);
+            Check("旧双行字段已删（tableLayoutPanelTop/Menu）",
+                mfType.GetField("tableLayoutPanelTop", MFF) == null
+                && mfType.GetField("tableLayoutPanelMenu", MFF) == null);
         }
 
         // =====================================================================
@@ -4827,6 +4852,17 @@ namespace AgingTestSystem.Tests
                     WorkstationGridView.ComputeFitZoomBoth(-10, 600, 1736, 1638, out bzx, out bzy);
                     bool bothBad4 = bzx == 1.0 && bzy == 1.0;
                     Check("ComputeFitZoomBoth任一边非法回1,1", bothBad1 && bothBad2 && bothBad3 && bothBad4);
+                    // —— 单轴按宽顶满（【V1.88.22】V1.88.14 捞回，FitWidth 默认模式用它） ——
+                    Check("ComputeFitZoom按宽算（1600/1736）",
+                        Math.Abs(WorkstationGridView.ComputeFitZoom(1600, 1736) - 1600.0 / 1736.0) < 1e-9);
+                    Check("ComputeFitZoom等宽为1",
+                        Math.Abs(WorkstationGridView.ComputeFitZoom(1736, 1736) - 1.0) < 1e-9);
+                    bool fitBad1 = WorkstationGridView.ComputeFitZoom(0, 1736) == 1.0;
+                    bool fitBad2 = WorkstationGridView.ComputeFitZoom(800, 0) == 1.0;
+                    bool fitBad3 = WorkstationGridView.ComputeFitZoom(-10, 1736) == 1.0;
+                    Check("ComputeFitZoom任一边非法回1", fitBad1 && fitBad2 && fitBad3);
+                    Check("FitMode默认按宽顶满（大字）",
+                        grid.FitMode == WorkstationFitMode.FitWidth);
                     Check("AutoFit默认开", grid.AutoFit);
                     Check("缩放上下限0.15/4",
                         WorkstationGridView.MinZoom == 0.15f && WorkstationGridView.MaxZoom == 4f);
@@ -4929,12 +4965,14 @@ namespace AgingTestSystem.Tests
                         rebuildFonts.Invoke(grid, null);
                     }
                     // 无句柄挂载：MinSize 与画布 Size 恒一致（V1.88.15：值语义锁滚动范围；
-                    // AutoScroll 位置无句柄测不了，只锁 MinSize+双向zoom）。
-                    // 800×600 宿主：可用799×599，内容1736×1638 → zx≈0.4603，zy≈0.3657。
+                    // AutoScroll 位置无句柄测不了，只锁 MinSize+zoom）。
+                    // 800×600 宿主：可用799×599，内容1736×1638（紧凑布局关电流）。
                     var hostPanel = new System.Windows.Forms.Panel();
                     try
                     {
                         hostPanel.ClientSize = new System.Drawing.Size(800, 600);
+                        // FillScreen 回归锁（V1.88.17 原行为）："关于"下拉可切回，双向独立、画布精确铺满。
+                        grid.FitMode = WorkstationFitMode.FillScreen;
                         hostPanel.Controls.Add(grid);
                         float zhx = zoomXFld != null ? (float)zoomXFld.GetValue(grid) : 0f;
                         float zhy = zoomYFld != null ? (float)zoomYFld.GetValue(grid) : 0f;
@@ -4946,6 +4984,27 @@ namespace AgingTestSystem.Tests
                             hostPanel.AutoScrollMinSize == grid.Size);
                         Check("画布精确铺满宿主(±1px取整)",
                             Math.Abs(grid.Size.Width - 799) <= 1 && Math.Abs(grid.Size.Height - 599) <= 1);
+                        // FitWidth 回归锁（V1.88.22 默认）：单 zoom 等比、宽顶满、纵向滚动看下半。
+                        grid.FitMode = WorkstationFitMode.FitWidth;
+                        float fwx = zoomXFld != null ? (float)zoomXFld.GetValue(grid) : 0f;
+                        float fwy = zoomYFld != null ? (float)zoomYFld.GetValue(grid) : 0f;
+                        Check("FitWidth下zoomX=zoomY=799/1736等比不变形",
+                            zoomXFld != null && zoomYFld != null
+                            && Math.Abs(fwx - 799.0 / 1736.0) < 0.002
+                            && Math.Abs(fwy - 799.0 / 1736.0) < 0.002);
+                        Check("FitWidth下画布宽顶满宿主(±1px取整)",
+                            Math.Abs(grid.Size.Width - 799) <= 1);
+                        Check("FitWidth下画布高超出宿主（纵向滚动看下半）",
+                            grid.Size.Height > 599);
+                        Check("FitWidth下MinSize与画布Size恒一致",
+                            hostPanel.AutoScrollMinSize == grid.Size);
+                        // 字号等比（和谐锁：9×0.4603≈4.14pt；GDI 非线性 1~2px 擦边肉眼不可见，
+                        // 由 harness 真屏截图目检锁，不进用例防环境字体抖动假红）。
+                        var pfFitFld = tg.GetField("_panelFont", BindingFlags.NonPublic | BindingFlags.Instance);
+                        var pfFit = pfFitFld != null ? pfFitFld.GetValue(grid) as System.Drawing.Font : null;
+                        Check("FitWidth下字号=配置×单zoom（等比不变形）",
+                            pfFit != null && Math.Abs(pfFit.Size - 9f * 799f / 1736f) < 0.15f,
+                            pfFit != null ? "实际 " + pfFit.Size.ToString("F2") + "pt" : "字体为null");
                     }
                     finally
                     {
@@ -6093,20 +6152,16 @@ namespace AgingTestSystem.Tests
             try
             {
                 var t = typeof(HomeLayoutEditorForm);
-                var nudTop = t.GetField("_nudTop", Flags)?.GetValue(homeForm) as NumericUpDown;
-                var nudMenu = t.GetField("_nudMenu", Flags)?.GetValue(homeForm) as NumericUpDown;
+                var nudHeader = t.GetField("_nudHeader", Flags)?.GetValue(homeForm) as NumericUpDown;
                 var nudRight = t.GetField("_nudRight", Flags)?.GetValue(homeForm) as NumericUpDown;
                 var nudStatus = t.GetField("_nudStatus", Flags)?.GetValue(homeForm) as NumericUpDown;
-                Check("布局窗四个输入框全建好",
-                    nudTop != null && nudMenu != null && nudRight != null && nudStatus != null);
-                if (nudTop != null && nudMenu != null && nudRight != null && nudStatus != null)
+                Check("布局窗三个输入框全建好（V1.88.23 并单行）",
+                    nudHeader != null && nudRight != null && nudStatus != null);
+                if (nudHeader != null && nudRight != null && nudStatus != null)
                 {
-                    Check("顶部量程=Range字面值(15~80)",
-                        nudTop.Minimum == HomeLayoutConfig.TopBarRange.Min
-                        && nudTop.Maximum == HomeLayoutConfig.TopBarRange.Max);
-                    Check("菜单量程=Range字面值(25~100)",
-                        nudMenu.Minimum == HomeLayoutConfig.MenuRange.Min
-                        && nudMenu.Maximum == HomeLayoutConfig.MenuRange.Max);
+                    Check("顶栏量程=Range字面值(34~100)",
+                        nudHeader.Minimum == HomeLayoutConfig.HeaderRange.Min
+                        && nudHeader.Maximum == HomeLayoutConfig.HeaderRange.Max);
                     Check("右侧量程=Range字面值(180~600)",
                         nudRight.Minimum == HomeLayoutConfig.RightPanelRange.Min
                         && nudRight.Maximum == HomeLayoutConfig.RightPanelRange.Max);
@@ -6143,10 +6198,10 @@ namespace AgingTestSystem.Tests
                     Check("反射找到ClampToRange", clampM != null);
                     if (clampM != null)
                     {
-                        Check("输入钳上(5000→菜单上限100)",
-                            (int)clampM.Invoke(null, new object[] { 5000, HomeLayoutConfig.MenuRange }) == 100);
-                        Check("输入钳下(-5→菜单下限25)",
-                            (int)clampM.Invoke(null, new object[] { -5, HomeLayoutConfig.MenuRange }) == 25);
+                        Check("输入钳上(5000→顶栏上限100)",
+                            (int)clampM.Invoke(null, new object[] { 5000, HomeLayoutConfig.HeaderRange }) == 100);
+                        Check("输入钳下(-5→顶栏下限34)",
+                            (int)clampM.Invoke(null, new object[] { -5, HomeLayoutConfig.HeaderRange }) == 34);
                     }
                 }
                 Check("布局窗AutoScale=None（Sunny canonical，预览不脏）",

@@ -3,6 +3,88 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md).
 
+## V1.88.23 — 顶栏菜单并单行：省 34px 纵向还给工作站（2026-09-15，用户要求"按钮太占位置"）
+
+### 改动范围
+
+- **主窗顶栏/菜单两行并一行**（`Views/MainForm.Designer.cs`，不动业务逻辑）：
+  新 `tableLayoutPanelHeader` 单行 36px，8 列（项目 Percent34 / 权限 Percent16 /
+  通讯标签 Absolute100 / 通讯值 Absolute70 / 4 按钮各 Absolute120 Dock=Fill），
+  旧 `tableLayoutPanelTop/Menu` 双容器删除；主表 4 行→3 行（顶栏 36/内容/状态 25）。
+  按钮 226 宽→120（4 字文本实测 71px，富余）；权限两标签上边距 6→9（36 行内垂直居中）。
+- **布局配置双键合一**（`Models/HomeLayoutConfig.cs`）：`TopBarHeight/MenuHeight`
+  删除，单 `HeaderHeight`（默认 36，`HeaderRange` 34~100，34=按钮 28＋上下边距），
+  `ClampToRange` 同步；老 json 无此键即 36，不写迁移分支。
+- **编辑器跟随**（`Dialogs/HomeLayoutEditorForm.*`）：数值框 4→3
+  （`_nudTop/_nudMenu` 合成 `_nudHeader`，量程字面值 34/100），预览 4 边缘→3 条
+  （标题/菜单两条边合成 `HeaderBottom`，`GetValue/SetValue/HitTest/DrawEdges` 同步）。
+- **装配侧**（`Views/MainForm.cs`）：`ApplyHomeLayout` 只设第 0/2 行，
+  旧"MenuHeight-12 同步按钮高"整段删除（Dock=Fill 自动填）；`SettingsForm`
+  主页布局摘要行同步改"顶栏"口径。
+- **回归**（`tests/TestRunner.cs`）：HomeLayout 默认 36/往返 44/范围 34~100/
+  越界钳 100/老双键文件读出 36（无迁移锁）/主窗单行字段存在＋旧字段已删；
+  编辑器三输入框＋顶栏量程＋输入钳 34。
+- **水印对齐**：`BuildWatermark.ReleaseLabel` V1.88.22→V1.88.23。
+
+### 为什么这么改
+
+- 顶栏两行共 70px 纵向（顶栏 30＋菜单 40），4 按钮又是通栏行：横向再宽也不影响
+  Panel1 宽度（FitWidth 字号只看宽），纯烧纵向。并单行省 34px：
+  FitWidth 下纵向少滚约半行，FillScreen 下 zoomY 大约 4~5%。
+  按钮 226→120 不影响点按（4 字 71px）；项目名列 1280 下约 428px、
+  1150 最小宽下约 340px，超长省略号吸收（本来就有 AutoEllipsis）。
+  小屏拥挤是已知代价：通讯两标签定宽 170，按钮定宽 480，挤只挤项目名。
+
+### 验证
+
+- 真窗 harness（new MainForm＋置顶实截）：`RowCount=3、行高 36/880/30`，
+  顶栏 8 子控件同行无重叠、按钮文本全装下（71px vs 114px），项目/权限/通讯可见；
+  顶条截图：单行齐整，工作站大字正常显示。
+- 全量回归 1869 断言全绿（改名净增减相抵；HomeLayoutConfig 模块 13 条单跑全绿）。
+- 血泪：Edit 多行块替换糊掉声明区一行（注释与声明粘连致 CS1061），
+  靠构建＋删除行全量复查捞回——Designer 改完必跑"声明/实例化配对＋删除行复查＋构建"三件套。
+
+## V1.88.22 — 工作站大字版：默认按宽顶满只上下滑动＋关于下拉可切铺满（2026-09-15，用户要求"字太小看不清"）
+
+### 改动范围
+
+- **新增 `WorkstationFitMode` 开关**（`Views/WorkstationGridView.cs` 顶层枚举，
+  `FitMode` 属性默认 `FitWidth`，setter 内即 `UpdateAutoFit` 一条龙）：
+  `FitWidth` = 按宽顶满（单 zoom 等比，`_zoomX=_zoomY`，面板不变形），画布宽恒顶满、
+  高超出走纵向滚动条（只上下滑动，左右不出条）；`FillScreen` = V1.88.17 双向独立、
+  72 站一屏无滚动（字小，面板宽扁拉伸）。`AutoFit` 总闸不动（关=1:1 原尺寸）。
+- **`ComputeFitZoom` 从 V1.88.14 原样捞回**（单轴纯函数，非法回 1；`UpdateAutoFit`
+  按模式分流，钳制统一走 `MinZoom=0.15/MaxZoom=4`；`RebuildFonts` 不动，
+  FitWidth 下窄边即单 zoom，等比天然成立）。
+- **主窗两处**（`Views/MainForm.cs`，不动 Designer）：装配显式
+  `_gridView.FitMode = FitWidth`（与网格缺省一致、意图落字）；"关于"下拉加一项
+  （所有人可见，与"主页区域调整"同级；文字永远表示"下一次去哪"，
+  `MenuHelpWorkstationFit_Click` 翻模式＋写 LOG；切换不落盘，重启回大字版）。
+- **回归加9条锁**（`tests/TestRunner.cs`，`UiPureHelpers` 模块）：
+  `ComputeFitZoom` 宽口径/等宽为1/非法回1、默认 `FitWidth`、
+  `FillScreen` 挂载双轴＋铺满±1px（旧断言显式切模式保住）、
+  `FitWidth` 等比/宽顶满/高超出/MinSize 一致/字号=配置×单zoom。
+- **水印对齐**：`BuildWatermark.ReleaseLabel` V1.88.21→V1.88.22。
+
+### 为什么这么改
+
+- 双向铺满下字号取窄边：1080p（zoomY≈0.49）字≈4.4pt、1280×1024（zoomY≈0.45）
+  字≈4.0pt——即用户报的"看不清"。按宽顶满只用宽算 zoom：1080p（zoom≈0.81）
+  字≈7.3pt、1280×1024（zoom≈0.56）字≈5.0pt，大一号，且单 zoom 等比、
+  面板不变形（铺满版面板是宽扁拉伸的），和谐性反而更好。
+  代价是纵向要滑一屏看下半（1080p 画布约 1330 高 vs 显示 800），用户已确认可接受；
+  非要一屏看全的人去"关于"下拉一切即回，不丢老路。
+
+### 验证
+
+- harness 真屏截图目检（1400×800 / 972×736 两档 × 双模式）：
+  FitWidth 字大一圈（6.56pt/4.95pt vs 4.39pt/4.04pt）、面板方正无拉伸、
+  标签/值字无重叠（1~2px GDI 非线性擦边肉眼不可见）、横向条无、纵向可滑到底；
+  FillScreen 72 站一屏但字小（老样子）。
+  （注：探针机屏幕小，窗体被夹到 1267×800 / 955×736，数字是保守值，
+  真 1080p Panel1 更宽、字更大。）
+- `build_and_test.ps1 -Affected` 1869断言全绿（含新增9条）。
+
 ## V1.88.21 — 1280×1024小屏适配：字号下限6→4pt跟随缩小不挤叠（2026-09-15，用户要求）
 
 ### 改动范围
