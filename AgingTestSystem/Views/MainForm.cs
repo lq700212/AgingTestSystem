@@ -3176,14 +3176,16 @@ namespace AgingTestSystem.Views
             //（Gitee 官方 issue 同款 bug，截图实证），确认框会丢掉"否"路；
             // OKCancel 经截图验证是"确定+取消"双键。返回值语义经 IL 实证：
             // 确定键置 DialogResult.OK（Show 返回 True），取消/X 置 None（返回 False）。
+            // 【文案压短】同急停确认：UIMessageBox 限高不可调，基本文案压到 6 短行一次看全；
+            // riskWarning（0 时长/空 SN 警告，有才拼）超长时仍可能出滚动条，
+            // 那是极少数台的异常提示，非常态，可接受。
             if (!Sunny.UI.UIMessageBox.Show(
-                $"确认启动 {ids.Length} 台老化测试？\n\n" +
-                "将执行：\n" +
-                "1. 开启真空电磁阀（建立负压固定产品）\n" +
-                "2. 真空到位且延时开启到后，自动载台上电（未吸附固定不通电）\n" +
-                "3. 按配方启动时间老化计时，到时自动下电关阀并标\"已完成\"\n" +
-                "4. 送风机定值启动（保持环境温控）\n\n" +
-                "注：开阀后若真空长时间未建立会自动报警断电（该台全程不会带电）。" +
+                $"确认启动 {ids.Length} 台老化测试？\n" +
+                "1. 开真空阀建立负压固定产品\n" +
+                "2. 到位+延时到自动载台上电\n" +
+                "3. 按配方计时，到时下电标完成\n" +
+                "4. 送风机定值启动\n" +
+                "注：真空久未建立自动报警断电。" +
                 riskWarning,
                 "启动运行",
                 Sunny.UI.UIStyle.Orange, Sunny.UI.UIMessageBoxButtons.OKCancel, true, 0)) return;
@@ -3308,12 +3310,13 @@ namespace AgingTestSystem.Views
         private async void btnStopAll_Click(object sender, EventArgs e)
         {
             // 【SunnyUI 确认框】同启动确认：OKCancel，确定=True 继续（YesNoCancel 在 3.9.8 只出单键，见上）。
+            // 【文案压到 5 短行】UIMessageBox 限高不可调（内部滚动+末行会被按钮区裁掉，
+            // 真屏截图实证）：去空行去"将执行"头，每行不超 15 字不换行，5 行一次看全。
             if (!Sunny.UI.UIMessageBox.Show(
-                "确认【全部停止】？\n\n" +
-                "将执行：\n" +
-                "1. 关闭所有 72 路真空电磁阀\n" +
+                "确认【全部停止】？\n" +
+                "1. 关闭所有 72 路真空阀\n" +
                 "2. 断开所有 72 路载台上电\n" +
-                "3. 停止送风机\n\n" +
+                "3. 停止送风机\n" +
                 "此操作不可撤销，请确认现场安全！",
                 "全部停止（急停）",
                 Sunny.UI.UIStyle.Orange, Sunny.UI.UIMessageBoxButtons.OKCancel, true, 0)) return;
