@@ -278,6 +278,7 @@ static class DocShot
             Track(f); // 看门狗名单：自己打开的不算意外弹窗
             Thread.Sleep(sleepMs);
             Application.DoEvents();
+            Track(f); // 睡后重登记一次：SunnyUI 主题/字体可能 RecreateHandle，老句柄失登记会被看门狗当弹窗关掉（07 号坑）
             string path = Path.Combine(outDir, name);
             for (int attempt = 0; attempt < 2; attempt++)
             {
@@ -319,6 +320,23 @@ static class DocShot
         try { nud.Value = Math.Max(nud.Minimum, Math.Min(nud.Maximum, v)); }
         catch (Exception ex) { Console.WriteLine("  nud " + field + " set fail: " + ex.Message); }
     }
+    // V1.88.13补：配方名由输入框改下拉（UIComboBox DropDownList），harness不能再Fill文本。
+    // 选中第0项即触发回填（延时/烧屏/温度/负压自动填好），截图显示下拉框+选中值。
+    static void SelectCombo(Form f, string field, int index)
+    {
+        var fi = f.GetType().GetField(field, BindingFlags.NonPublic | BindingFlags.Instance);
+        if (fi == null) { Console.WriteLine("  no field " + field + " on " + f.GetType().Name); return; }
+        var c = fi.GetValue(f) as Control;
+        if (c == null) { Console.WriteLine("  field " + field + " not a Control"); return; }
+        try
+        {
+            var prop = c.GetType().GetProperty("SelectedIndex");
+            if (prop == null) { Console.WriteLine("  combo " + field + " no SelectedIndex"); return; }
+            prop.SetValue(c, index, null);
+            Application.DoEvents();
+        }
+        catch (Exception ex) { Console.WriteLine("  combo " + field + " set fail: " + ex.Message); }
+    }
 
     static void ScanBarcode(Form f, string code)
     {
@@ -349,9 +367,9 @@ static class DocShot
             cfg.UseMockCommunication = true;
             cfg.CollectInterval = 1000;
             var recipes = new List<RecipeConfig> {
-                new RecipeConfig { Id=1, Name="烧屏8小时", DelayTime=TimeSpan.FromSeconds(30), StartTime=TimeSpan.FromHours(8), LimitTemperature=60, NegativePressure=-5.0m, CreateTime=DateTime.Now },
-                new RecipeConfig { Id=2, Name="老化24小时", DelayTime=TimeSpan.FromSeconds(60), StartTime=TimeSpan.FromHours(24), LimitTemperature=65, NegativePressure=-6.0m, CreateTime=DateTime.Now },
-                new RecipeConfig { Id=3, Name="试产验证2小时", DelayTime=TimeSpan.FromSeconds(10), StartTime=TimeSpan.FromHours(2), LimitTemperature=55, NegativePressure=-4.0m, CreateTime=DateTime.Now }
+                new RecipeConfig { Id=1, Name="烧屏8小时", DelayTime=TimeSpan.FromSeconds(30), BurnInTime=TimeSpan.FromHours(8), LimitTemperature=60, NegativePressure=-5.0m, CreateTime=DateTime.Now },
+                new RecipeConfig { Id=2, Name="老化24小时", DelayTime=TimeSpan.FromSeconds(60), BurnInTime=TimeSpan.FromHours(24), LimitTemperature=65, NegativePressure=-6.0m, CreateTime=DateTime.Now },
+                new RecipeConfig { Id=3, Name="试产验证2小时", DelayTime=TimeSpan.FromSeconds(10), BurnInTime=TimeSpan.FromHours(2), LimitTemperature=55, NegativePressure=-4.0m, CreateTime=DateTime.Now }
             };
             var dm = new DeviceManager(cfg, new SteadyReader(), null, null); // 定压注入，确定性状态
             string lot = "LOT2026091401";
@@ -469,9 +487,9 @@ static class DocShot
             var batch = new BatchRecipeForm(dm, recipes, new List<int> { 1, 2, 5, 6 });
             batch.StartPosition = FormStartPosition.CenterScreen;
             batch.Show(); Application.DoEvents(); Thread.Sleep(400);
-            Fill(batch, "txtRecipeName", "烧屏8小时");
+            SelectCombo(batch, "cmbRecipeName", 0); // V1.88.13起下拉单选，选中触发回填
             FillNum(batch, "nudDelayHours", 0); FillNum(batch, "nudDelayMinutes", 0); FillNum(batch, "nudDelaySeconds", 30);
-            FillNum(batch, "nudStartHours", 8); FillNum(batch, "nudStartMinutes", 0); FillNum(batch, "nudStartSeconds", 0);
+            FillNum(batch, "nudBurnInHours", 8); FillNum(batch, "nudBurnInMinutes", 0); FillNum(batch, "nudBurnInSeconds", 0);
             Fill(batch, "txtLimitTemp", "60");
             Fill(batch, "txtNegativePressure", "-5");
             Application.DoEvents(); Thread.Sleep(300);
@@ -501,6 +519,12 @@ static class DocShot
                 if (!HasContent(bmp)) failCount++;
             }
             Untrack(common);
+
+            // V1.88.13补拍：此前harness缺这三张（01主界面/13授权/18连线页），靠手工存量图。
+            // 01用真MainForm（后台连接失败不影响布局截图）；13/18用无参构造直拍。
+            Shot(new SoftActivation(), "13-activation.png", false, 600);
+            Shot(new IoRemapVisualForm(), "18-ioremap.png", true, 800);
+            Shot(new MainForm(), "01-main.png", true, 3000);
 
             try { dm.Stop(); } catch { } try { dm.Dispose(); } catch { }
             StopWatchdog();
