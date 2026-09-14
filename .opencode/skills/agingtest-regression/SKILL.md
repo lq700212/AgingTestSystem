@@ -51,6 +51,8 @@ powershell -ExecutionPolicy Bypass -Command "& '.opencode\skills\agingtest-regre
   六步全自动：前置检查 → Release 构建（临时翻 `IsObfuscatedBuild` 为 true，打完 finally 还原，
   日常 Debug 包不受影响）→ Obfuscar 混淆 → 组包 → 三项验收 → 还原校验。
   看到 `发版成功 + 验收全过` 才算成；退出码 1=构建/混淆挂、2=验收挂、3=环境缺、4=工作区脏。
+  调试期加 `-DebugPackage` 打调试包（不翻标记不混淆，产物 `release/<版本>-dbg/`，其余同路；
+  构建一律 Rebuild，增量 Build 会残留上次的标记）。
 - **产物**（`release/<版本>-obf/`，gitignore 永不入库）：`包/`（混淆 exe＋依赖 dll＋exe.config＋
   部署说明.txt，无 pdb/源码/旧数据，整包拷工控机）＋`归档/`（Mapping.txt＋全包 MD5＋pdb＋
   本次配置＋版本.txt 含 git 号与当时工作区diff，客户堆栈反解全靠它）。
