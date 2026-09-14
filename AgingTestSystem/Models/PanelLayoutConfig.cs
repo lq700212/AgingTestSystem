@@ -68,10 +68,10 @@ namespace AgingTestSystem.Models
     /// 【依赖顺序铁律】被依赖元素必须先解析（<see cref="ResolveElementAlign"/> 注释为准，
     ///   此处是摘要）：
     ///   ① 面板 → ② 设置按钮(BottomMargin，有效高) → 配方(BottomToTop:SetButton)；
-    ///   ③ 空闲(右缘跟随，Y=29 顶区不动) → 真空关(TopToBottom:空闲) → SN(X 右缘跟随，
-    ///   Y 按电流缺省先解) → 压力框(双端 X 读 SN/真空关，Y 吊空闲) → 下电 → 电流行
-    ///   (TopToBottom:压力框) → SN 终解 Y → ④ 下电(VerticalAlignTo:空闲)；⑤ 延时两行
-    ///   (VerticalCenter:SetButton) → ⑥ 标签。
+    ///   【V1.88.16】工作状态块已删，真空块搬去第一行(153,29)当上链基准：
+    ///   ③ 真空关(右缘跟随+Y=29 顶区不动) → 下电(Y/H 对齐真空块，X 跟 SN) → 压力框
+    ///   (左缘 SN/右缘设置按钮宽 148，Y 吊真空块) → SN(X 右缘跟随，Y 按电流缺省先解)
+    ///   → 电流行(TopToBottom:压力框) → SN 终解 Y；延时两行(VerticalCenter:SetButton) → 标签。
     ///   顺序错会取到目标旧值，表现为"改了不生效 / 元素错位"。
     ///   【V1.77 变更】压力/真空关/SN 由"自下而上链"改为"自上而下链"（电流行插入所迫，
     ///   位置零变化）；SN→配方之间改为"交接缝"（缺省高度下间距恰好 4px 与原来一致，
@@ -82,13 +82,13 @@ namespace AgingTestSystem.Models
     ///     └─ 设置按钮 RcSetButton(RightMargin=9 + BottomMargin=10 → X=222-9-60=153、Y=205-10-50=145，
     ///        右缘 213 距面板右缘 9px，下缘距面板底 10px)
     ///          └─ 配方框 RcRecipeValue(右缘:SetButton→X=65 + 下缘贴设置上缘、Gap=6 → Y=145-21-6=118)
-    ///   上链（顶部→下，面板增高时不动；【V1.77】电流行插入后压力/真空关/SN 改走本链，位置零变化）：
-    ///     ├─ 空闲 RcWorkState(右缘:SetButton→X=153；Y=29 固定顶区)
-    ///     │    ├─ 下电 RcPower(Y/H=VerticalAlignTo:WorkState, X=LeftAlignTo:PressureValue→X=65)
-    ///     │    ├─ 压力框 RcPressureValue(双端:SN(65)/VacuumOpen(153)+RightToLeftGap=3 → 宽85 右缘150；
-    ///     │    │    Y 吊空闲下方 TopToBottomGap=15 → 29+23+15=67，与原来一致)
-    ///     │    ├─ 真空关 RcVacuumOpen(右缘:SetButton→X=153；Y 同压力框 67)
-    ///     │    └─ 电流行 RcCurrentValue(双端同压力框→X=65 宽85；Y 吊压力框下方 Gap=2 → 67+21+2=90)
+    ///   上链（顶部→下，面板增高时不动；【V1.77】电流行插入后压力/真空关/SN 改走本链，位置零变化；
+    ///   【V1.88.16】工作状态块已删，真空块搬去第一行当基准，位置零变化）：
+    ///     ├─ 真空关 RcVacuumOpen(右缘:SetButton→X=153；Y=29 固定顶区)
+    ///     │    ├─ 下电 RcPower(Y/H=VerticalAlignTo:VacuumOpen, X=LeftAlignTo:PressureValue→X=65)
+    ///     │    ├─ 压力框 RcPressureValue(左缘:SN(65)/右缘:SetButton(213)→宽148；
+    ///     │    │    Y 吊真空块下方 TopToBottomGap=15 → 29+23+15=67，与原来一致)
+    ///     │    └─ 电流行 RcCurrentValue(双端 X 同原来→X=65 宽85；Y 吊压力框下方 Gap=2 → 67+21+2=90)
     ///     │         └─ SN 框 RcSNValue(右缘:SetButton→X=213-148=65；Y 吊电流行下方 Gap=3：
     ///     │              关电流电流行高按 0 → Y=90+0+3=93 与原来一致；开时 Y=90+21+3=114)
     ///     ├─ 延时时间/烧屏时间 值框(左缘:SNValue→X=65 + 垂直居中于设置按钮，CenterOffsetY=-12/+13)
@@ -110,7 +110,7 @@ namespace AgingTestSystem.Models
     /// 【调整指南】
     /// - 改面板宽度：改 PanelInnerWidth / PanelColumnWidth，右缘元素自动跟随，无需手改坐标。
     /// - 改面板高度：改 PanelInnerHeight，设置按钮按 BottomMargin 贴底自动下移，下链
-    ///   （配方/延时/标签）按各自 Gap/偏移自动联动；上链（空闲/下电/压力/真空关/电流/SN）不动，
+    ///   （配方/延时/标签）按各自 Gap/偏移自动联动；上链（真空关/下电/压力/电流/SN）不动，
     ///   交接缝 SN→配方间距吸收高度差（【V1.77】原来全链联动，电流行插入后顶部锁定）。
     /// - 【V1.77 电流行开关】ShowCurrent 是运行时内存开关（JsonIgnore，不进 PanelLayout.json）：
     ///   WorkstationGridView.ShowCurrentRow 置 true → ResolveAnchors 重解 → 面板有效高 +21、
@@ -213,28 +213,23 @@ namespace AgingTestSystem.Models
         // 右侧留白太多），故 X 全部还原为 V1.58.9 布局，改为缩小面板宽度
         // （PanelInnerWidth 240→222、PanelColumnWidth 245→227）来减小右侧空隙。
 
-        /// <summary>上电/下电状态块（V1.58.14 垂直对齐锚定空闲；V1.58.15 增加 LeftAlignTo="PressureValue"
-        /// 左边缘与真空压力显示框左边缘对齐，X 自动=65（V1.58.20 随压力框内容居中））</summary>
-        public ElementRect RcPower { get; set; } = new ElementRect { X = 65, Y = 29, Width = 60, Height = 23, LeftAlignTo = "PressureValue", VerticalAlignTo = "WorkState" };
+        /// <summary>上电/下电状态块（【V1.88.16】工作状态块已删，改以上电/下电对齐真空块：
+        /// VerticalAlignTo="VacuumOpen"，Y/Height 取真空块（同行等高）；
+        /// X 仍 LeftAlignTo="PressureValue" 左边缘与真空压力显示框左边缘对齐，X 自动=65）</summary>
+        public ElementRect RcPower { get; set; } = new ElementRect { X = 65, Y = 29, Width = 60, Height = 23, LeftAlignTo = "PressureValue", VerticalAlignTo = "VacuumOpen" };
 
-        /// <summary>工作状态块（V1.58.14 右缘对齐锚定设置按钮：RightAlignTo="SetButton"，
-        /// X=设置按钮右缘(213)-自身宽=153；上下边缘需对齐下电时也由此基准决定。
-        /// 【V1.58.20】跟随设置按钮右缘右移 8px（153），保持右缘对齐、内容居中）</summary>
-        public ElementRect RcWorkState { get; set; } = new ElementRect { X = 153, Y = 29, Width = 60, Height = 23, RightAlignTo = "SetButton" };
+        /// <summary>真空开/关状态块（【V1.88.16】工作状态块已删，真空块搬到它原来的位置
+        /// (153,29,60,23)，并接替它当上链锚定基准：右缘仍对齐设置按钮
+        /// RightAlignTo="SetButton"（X=153），Y 改 TopMargin=29 固定顶区；
+        /// 下电块 Y/H 对齐它、压力框 Y 吊它下方（29+23+15=67 不变）。）</summary>
+        public ElementRect RcVacuumOpen { get; set; } = new ElementRect { X = 153, Y = 29, Width = 60, Height = 23, RightAlignTo = "SetButton", TopMargin = 29 };
 
-        /// <summary>真空开/关状态块（V1.58.14 右缘对齐锚定设置按钮；【V1.77】Y 改由
-        /// TopToBottomAlignTo="WorkState"+TopToBottomGap=15 自上而下定位，保持 Y=67 不变：
-        /// 29+23+15=67（原来 BottomToTop 贴 SN，电流行插入后 SN 会下移，继续贴 SN 就错位）。
-        /// 【V1.58.20】右缘跟随设置按钮→153（与工作状态块右缘对齐、内容居中））</summary>
-        public ElementRect RcVacuumOpen { get; set; } = new ElementRect { X = 153, Y = 67, Width = 60, Height = 21, RightAlignTo = "SetButton", TopToBottomAlignTo = "WorkState", TopToBottomGap = 15 };
-
-        /// <summary>真空压力值框（V1.58.15 双端锚定：LeftAlignTo="SNValue"（左缘对齐 SN 框左缘）、
-        /// RightToLeftAlignTo="VacuumOpen"（右缘贴合真空关左缘）；V1.58.19 补 RightToLeftGap=3，
-        /// 右缘距真空关左缘 3px，宽自动=153-65-3=85（恢复 V1.58.9 的 3px 间距，不再紧贴）；
-        /// 【V1.77】Y 改由 TopToBottomAlignTo="WorkState"+TopToBottomGap=15 自上而下定位，
-        /// 保持 Y=67 不变：29+23+15=67（原来贴 SN，电流行插入后 SN 下移，继续贴 SN 压力框会被顶走）。
-        /// 【V1.58.20】左缘跟随 SN 框→65、右缘贴真空关左缘(153)，整体随内容居中）</summary>
-        public ElementRect RcPressureValue { get; set; } = new ElementRect { X = 65, Y = 67, Width = 85, Height = 21, LeftAlignTo = "SNValue", RightToLeftAlignTo = "VacuumOpen", RightToLeftGap = 3, TopToBottomAlignTo = "WorkState", TopToBottomGap = 15 };
+        /// <summary>真空压力值框（V1.58.15 双端锚定改右缘对齐：【V1.88.16】工作状态块已删、
+        /// 真空块已搬去第一行，第二行只剩本框，右缘改对齐设置按钮 RightAlignTo="SetButton"、
+        /// 左缘仍对齐 SN 框 LeftAlignTo="SNValue"，宽=213-65=148（与 SN/配方框左右同界）；
+        /// Y 改吊真空块下方 TopToBottomAlignTo="VacuumOpen"+TopToBottomGap=15，
+        /// 保持 Y=67 不变：29+23+15=67。）</summary>
+        public ElementRect RcPressureValue { get; set; } = new ElementRect { X = 65, Y = 67, Width = 148, Height = 21, LeftAlignTo = "SNValue", RightAlignTo = "SetButton", TopToBottomAlignTo = "VacuumOpen", TopToBottomGap = 15 };
 
         /// <summary>载台电流值框（【V1.77 新增】UsePowerMeter 开才显示的行，紧贴压力框下方）。
         /// X 双端锚定同压力框（左缘 SN 框→65、右缘贴真空关左缘-3px→宽 85）；
@@ -287,8 +282,8 @@ namespace AgingTestSystem.Models
         public ElementRect RcSetButton { get; set; } = new ElementRect { X = 153, Y = 145, Width = 60, Height = 50, RightMargin = 9, BottomMargin = 10 };
 
         /// <summary>右上角选中指示框（V1.58.17 右上角锚定：RightMargin=5 右缘贴 View 右缘 + TopMargin=2 上缘贴顶。
-        /// 【V1.58.20】TopMargin 由 4→2：选中框上移 2px，底缘 25 与下方工作状态块（"空闲"，上缘 29）
-        /// 的垂直间隔由 2px 加大到 4px，避免"选中框贴着空闲块上边缘"的拥挤感。
+        /// 【V1.58.20】TopMargin 由 4→2：选中框上移 2px，底缘 25 与下方真空块（上缘 29）
+        /// 的垂直间隔由 2px 加大到 4px，避免"选中框贴着真空块上边缘"的拥挤感。
         /// 注意：选中框属"右上角元素"，不参与内容居中平移，保持右缘距面板右缘 5px）</summary>
         public ElementRect RcSelectBox { get; set; } = new ElementRect { X = 194, Y = 2, Width = 23, Height = 23, RightMargin = 5, TopMargin = 2 };
 
@@ -369,26 +364,6 @@ namespace AgingTestSystem.Models
         /// <summary>真空关状态块背景色（浅灰）</summary>
         public string ColorVacuumOff { get; set; } = "211,211,211";
 
-        /// <summary>工作状态-故障（红）</summary>
-        public string ColorWorkFault { get; set; } = "255,0,0";
-
-        /// <summary>工作状态-繁忙/测试中（金黄）</summary>
-        public string ColorWorkBusy { get; set; } = "255,215,0";
-
-        /// <summary>工作状态-选中/已上电待测试（橙）</summary>
-        public string ColorWorkSelected { get; set; } = "255,165,0";
-
-        /// <summary>工作状态-空闲（绿）</summary>
-        public string ColorWorkIdle { get; set; } = "50,205,50";
-
-        /// <summary>
-        /// 工作状态-已完成·待取料（皇家蓝，V1.59 新增）
-        /// 【为什么用蓝色】空闲已是绿色、测试金黄、故障红、选中橙，
-        /// 完成态要"一眼能从 72 个面板里挑出来"且不与现有语义混淆，
-        /// 蓝色系在工厂现场习惯里也常表示"流程走完等确认"。
-        /// </summary>
-        public string ColorWorkCompleted { get; set; } = "65,105,225";
-
         /// <summary>面板背景-已完成·待取料（淡钢蓝，V1.59 新增）</summary>
         public string ColorCompletedBackground { get; set; } = "176,196,222";
 
@@ -422,19 +397,30 @@ namespace AgingTestSystem.Models
                 if (File.Exists(path))
                 {
                     string json = File.ReadAllText(path, System.Text.Encoding.UTF8);
-                    var cfg = JsonConvert.DeserializeObject<PanelLayoutConfig>(json);
-                    if (cfg != null)
+                    // 【V1.88.16】旧布局文件直接作废：工作状态块删除＋真空块上移＋压力框加长，
+                    // 旧文件三处坐标全系旧口径（指纹：含 RcWorkState 段），留着必错位。
+                    // 项目未上线、无兼容包袱，删文件回新缺省（Configure 会自动重导一份新的），
+                    // 不做字段级迁移（迁了也是半吊子：用户自定义的颜色值得保留，但坐标系已换代）。
+                    if (json.Contains("\"RcWorkState\""))
                     {
-                        // 【大扫荡】旧 json 自愈：V1.77 前的文件无 RcCurrentValue（null），
-                        // 以前开电流行静默丢整行且零提示；现在补缺省，旧文件开电流即显示。
-                        // 【复查补齐】缺省值唯一出处 DefaultRcCurrentValue（与属性初始值同源，
-                        // 以前这里手抄一份，改一边忘另一边即分叉）。
-                        if (cfg.RcCurrentValue == null)
+                        try { File.Delete(path); } catch { /* 删不掉就当无文件，回缺省 */ }
+                    }
+                    else
+                    {
+                        var cfg = JsonConvert.DeserializeObject<PanelLayoutConfig>(json);
+                        if (cfg != null)
                         {
-                            cfg.RcCurrentValue = DefaultRcCurrentValue();
+                            // 【大扫荡】旧 json 自愈：V1.77 前的文件无 RcCurrentValue（null），
+                            // 以前开电流行静默丢整行且零提示；现在补缺省，旧文件开电流即显示。
+                            // 【复查补齐】缺省值唯一出处 DefaultRcCurrentValue（与属性初始值同源，
+                            // 以前这里手抄一份，改一边忘另一边即分叉）。
+                            if (cfg.RcCurrentValue == null)
+                            {
+                                cfg.RcCurrentValue = DefaultRcCurrentValue();
+                            }
+                            cfg.ResolveAnchors();   // 解析面板锚定 + 元素间锚定（V1.58.13/1.58.14）
+                            return cfg;
                         }
-                        cfg.ResolveAnchors();   // 解析面板锚定 + 元素间锚定（V1.58.13/1.58.14）
-                        return cfg;
                     }
                 }
             }
@@ -459,8 +445,8 @@ namespace AgingTestSystem.Models
         public void ResolveAnchors()
         {
             // 第一步：面板边缘锚定（RightMargin/TopMargin/BottomMargin）
+            // 【V1.88.16】RcWorkState 已删；RcVacuumOpen 新增 TopMargin=29 在此步定 Y。
             RcPower = ResolveRight(RcPower);
-            RcWorkState = ResolveRight(RcWorkState);
             RcVacuumOpen = ResolveRight(RcVacuumOpen);
             RcPressureValue = ResolveRight(RcPressureValue);
             RcCurrentValue = ResolveRight(RcCurrentValue);
@@ -499,11 +485,13 @@ namespace AgingTestSystem.Models
         /// <see cref="ElementRect.TopToBottomAlignTo"/>（上缘贴目标下缘，【V1.77】）、
         /// <see cref="ElementRect.VerticalCenterAlignTo"/>（垂直居中）解析元素间锚定。
         /// 基准矩形名（字符串）→ 实际属性的映射见 <see cref="GetRectByName"/>。
-        /// 【注意依赖顺序（V1.77 改为上下双链，替代 V1.58.19 纯自下而上链）】被依赖的元素必须先解析：
+        /// 【注意依赖顺序（V1.77 改为上下双链，替代 V1.58.19 纯自下而上链；
+        /// V1.88.16 工作状态块已删，真空块当上链头）】被依赖的元素必须先解析：
         /// 下链（面板底→上，面板增高时整体下移）：设置按钮（BottomMargin，有效高）→ 配方（贴设置按钮）
-        /// 上链（顶部→下，面板增高时不动）：空闲（右缘跟随）→ 真空关（吊空闲下方）
-        /// → SN（X 右缘跟随，Y 先按电流缺省值；电流解完后再终解一次 Y，防手改间隙）→ 压力框（X 双端、
-        /// Y 吊空闲）→ 下电 → 电流行（吊压力框）→ SN 终解 → 延时两行（居中设置按钮）。
+        /// 上链（顶部→下，面板增高时不动）：真空关（右缘跟随+Y 顶区不动）
+        /// → SN（X 右缘跟随，Y 先按电流缺省值；电流解完后再终解一次 Y，防手改间隙）→ 下电
+        /// （X 跟 SN，Y/H 对齐真空块）→ 压力框（X 左缘 SN/右缘设置按钮，Y 吊真空块）
+        /// → 电流行（吊压力框）→ SN 终解 → 延时两行（居中设置按钮）。
         /// 两链在"SN→配方"之间交接：缺省高度下 SN 下缘距配方上缘恰好 4px（与原来一致），
         /// 面板增高时该间距拉大（顶部信息行位置永不动，见类头"完整锚定链（V1.77）"）。
         /// 延时两行垂直居中于设置按钮（跟下链走）。
@@ -515,17 +503,16 @@ namespace AgingTestSystem.Models
             // ① 下链头：设置按钮（BottomMargin 已在第一步按有效高解析出 Y）
             //    配方：下边缘贴设置按钮上边缘
             RcRecipeValue = AlignSelf(RcRecipeValue);
-            // ② 上链：空闲右缘跟随设置按钮（Y=29 固定顶区，无 Y 锚定所以 Y 不动）
-            RcWorkState = AlignSelf(RcWorkState);
-            // ③ 真空关：X 右缘跟随 + Y 吊空闲下方（Y=29+23+15=67，与原来一致）
+            // ② 上链头：真空块右缘跟随设置按钮（Y=29 第一步 TopMargin 已定；【V1.88.16】接替已删的工作状态块当上链基准）
             RcVacuumOpen = AlignSelf(RcVacuumOpen);
-            // ④ SN：X 右缘跟随设置按钮（必须在压力框之前——压力框双端 X 读 SN.X）；
+            // ③ SN：X 右缘跟随设置按钮（必须在压力框/下电之前——两者 X 都读 SN.X）；
             //    Y 按电流缺省值先解（缺省 Y=90/H=21 与解完一致，宽/高变化不影响 Y 链），终解在⑦。
             RcSNValue = AlignSelf(RcSNValue);
-            // ⑤ 依赖 SN/真空关：压力框双端定 X 与宽 + Y 吊空闲下方（Y=67 与原来一致）
-            RcPressureValue = AlignSelf(RcPressureValue);
-            // ⑥ 依赖压力框/空闲（左缘对齐/上下对齐）
+            // ④ 下电：X 左缘对齐 SN（LeftAlignTo）+ Y/H 对齐真空块（VerticalAlignTo，同行等高）；
+            //    SN.X 与真空块 Y/H 上面已定。
             RcPower = AlignSelf(RcPower);
+            // ⑤ 依赖 SN/真空块：压力框左缘对齐 SN + 右缘对齐设置按钮 + Y 吊真空块下方（Y=67 与原来一致）
+            RcPressureValue = AlignSelf(RcPressureValue);
             // ⑦ 依赖压力框：电流行吊在压力框下方（Y=67+21+2=90）
             RcCurrentValue = AlignSelf(RcCurrentValue);
             // ⑧ SN 终解 Y（电流已解：手改 TopToBottomGap 也能终值正确；缺省值下与④一致，幂等）
@@ -605,7 +592,6 @@ namespace AgingTestSystem.Models
             switch (name)
             {
                 case "Power": return RcPower;
-                case "WorkState": return RcWorkState;
                 case "VacuumOpen": return RcVacuumOpen;
                 case "PressureValue": return RcPressureValue;
                 case "CurrentValue": return RcCurrentValue;
@@ -774,7 +760,7 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 垂直对齐目标（可空）——【V1.58.14 链式锚定】
-        /// 若设置（如 "WorkState"），加载时 Y 与 Height 取目标矩形的值，
+        /// 若设置（如 "VacuumOpen"），加载时 Y 与 Height 取目标矩形的值，
         /// 即本元素与目标元素"上边缘、下边缘对齐"。未设置则忽略。
         /// </summary>
         public string VerticalAlignTo { get; set; }
