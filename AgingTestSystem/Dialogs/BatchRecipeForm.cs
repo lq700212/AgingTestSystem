@@ -32,7 +32,7 @@ namespace AgingTestSystem.Dialogs
     /// ┌─────────────────────────────────────────────┐
     /// │ 批量设置设置配方窗口                         │  ← 标题栏
     /// ├─────────────────────────────────────────────┤
-    /// │ 配方名称：[____________]                    │  ← 配方名称输入框（支持自动检索）
+    /// │ 配方名称：[下拉选择▼]                    │  ← 配方下拉（V1.88.13：只能选库中配方）
     /// │ 延时时间：[__]:[__]:[__]                    │  ← 延时时间（NumericUpDown，对应延时时间）
     /// │ 烧屏时间：[__]:[__]:[__]                    │  ← 烧屏时间（NumericUpDown，对应烧屏时间）
     /// │ 极限温度：[____] °C                         │  ← 极限温度输入框
@@ -54,9 +54,10 @@ namespace AgingTestSystem.Dialogs
     /// 1. 延时时间 / 烧屏时间均使用三个 NumericUpDown（时:分:秒，V1.28 由 TextBox 改）：
     ///    时 0-99、分 0-59、秒 0-59，控件自带范围限制，无需再校验；
     /// 2. 温度输入框限制为3位数字，范围 0-999°C；
-    /// 3. 配方名称不能为空。
-    /// 4. 配方名称输入框支持自动检索：输入时弹出模糊匹配的已存在配方列表供选择，
-    ///    选中后自动填写配方名称、延时时间、烧屏时间、极限温度、负压阈值、显示模式（V1.29 新增，V1.66 补后两项）。
+    /// 3. 配方名称不能为空（下拉没选即空，照旧拦截）。
+    /// 4. 配方名称是下拉选择（V1.88.13 由输入框改，自动检索 Provider 同步删除）：
+    ///    只能选配方库中已有的配方，选中后自动回填延时时间、烧屏时间、极限温度、
+    ///    负压阈值、显示模式；新建配方走「参数设置 → 配方管理」。
     /// </summary>
     public partial class BatchRecipeForm : Sunny.UI.UIForm
     {
@@ -75,11 +76,6 @@ namespace AgingTestSystem.Dialogs
         /// 当前选中的工位编号数组（主窗体传入，可能为空表示一个工位都没选中）
         /// </summary>
         private readonly IReadOnlyList<int> _selectedDeviceIds;
-
-        /// <summary>
-        /// 配方名称自动检索提供者（V1.29 新增，使用后需释放）
-        /// </summary>
-        private RecipeAutoCompleteProvider _recipeAutoComplete;
 
         /// <summary>
         /// 悬停说明（【V1.73 新增】每个设置项都挂 tooltip，超 40 字走
@@ -108,11 +104,10 @@ namespace AgingTestSystem.Dialogs
             _recipes = recipes;
             _selectedDeviceIds = selectedDeviceIds ?? new List<int>();
 
-            // 初始化配方名称自动检索（V1.29 新增）
-            _recipeAutoComplete = new RecipeAutoCompleteProvider(
-                txtRecipeName,
-                _recipes,
-                OnRecipeSelected);
+            // 【V1.88.13】配方下拉填项（只能从库里选，手输错名串配方从根上堵死；
+            // 新建配方走「参数设置 → 配方管理」。默认不选中，由用户亲手选）。
+            FillRecipeCombo();
+            cmbRecipeName.SelectedIndexChanged += CmbRecipeName_SelectedIndexChanged;
 
             // 【V1.66】负压阈值框新建默认值=全局阈值（项目未上线无老包袱，所见即所得）；
             // _deviceManager 为 null（纯保存模式）时用 DeviceConfig 类默认值（-5kPa）。
@@ -159,9 +154,9 @@ namespace AgingTestSystem.Dialogs
             _tip.ShowAlways = true;
             // 说明偏长，悬停提示多停留 15 秒（默认 5 秒看不完）。
             _tip.AutoPopDelay = 15000;
-            SetTip(new Control[] { lblRecipeNameLabel, txtRecipeName },
-                "配方名称：延时、温度、负压等一整套参数打包存一个名字，保存后在配方管理中选用。" +
-                "输入时自动联想已有配方，选中后自动回填延时、温度、负压、显示模式。");
+            SetTip(new Control[] { lblRecipeNameLabel, cmbRecipeName },
+                "配方名称：从下拉选择已有配方（只能选库里有的，打错字串配方的事从根上堵死），" +
+                "选中后自动回填延时、温度、负压、显示模式。新建配方走「参数设置 → 配方管理」。");
             SetTip(new Control[] { lblDelayTime1Label, tableLayoutPanelDelay1 },
                 "延时时间：上电前等待。点启动后先只开真空阀（不上电），等够这么久才上电，" +
                 "例如00:00:30=开阀30秒后上电，给吸附留稳定时间。填0=真空一到位立刻上电。" +
@@ -196,15 +191,53 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 配方自动检索选中回调（V1.29 新增）
-        /// 用户从自动检索列表中选择一个配方后，自动填写配方名称、延时时间、烧屏时间、极限温度。
+        /// 配方下拉填项（【V1.88.13 新增】构造时调一次：选项 = 配方库全部配方名。
+        /// 默认不选中（SelectedIndex=-1），保存时空名字照旧拦截，逼用户亲手选）。
+        /// </summary>
+        private void FillRecipeCombo()
+        {
+            cmbRecipeName.Items.Clear();
+            if (_recipes != null)
+            {
+                foreach (RecipeConfig r in _recipes)
+                {
+                    if (r != null && !string.IsNullOrWhiteSpace(r.Name))
+                    {
+                        cmbRecipeName.Items.Add(r.Name.Trim());
+                    }
+                }
+            }
+            cmbRecipeName.SelectedIndex = -1;
+            cmbRecipeName.Text = "";
+        }
+
+        /// <summary>
+        /// 配方下拉选择变化（【V1.88.13 新增】按选中名查库回填参数；
+        /// 未选中/名字在库中已无（库被改过）直接返回，不动现有输入）。
+        /// </summary>
+        private void CmbRecipeName_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            string name = cmbRecipeName.Text.Trim();
+            if (string.IsNullOrEmpty(name) || _recipes == null) return;
+            foreach (RecipeConfig r in _recipes)
+            {
+                if (r != null && string.Equals(r.Name, name, StringComparison.Ordinal))
+                {
+                    OnRecipeSelected(r);
+                    return;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 配方下拉选中回调（V1.29 自动检索时代新增，V1.88.13 转下拉后只回填参数：
+        /// 名字已是下拉选中的，不用再写一遍）。
+        /// 用户从下拉中选择一个配方后，自动填写延时时间、烧屏时间、极限温度。
         /// </summary>
         /// <param name="recipe">选中的配方</param>
         private void OnRecipeSelected(RecipeConfig recipe)
         {
             if (recipe == null) return;
-
-            txtRecipeName.Text = recipe.Name;
 
             // 回填延时时间（时:分:秒）
             nudDelayHours.Value = Math.Max(nudDelayHours.Minimum,
@@ -262,13 +295,13 @@ namespace AgingTestSystem.Dialogs
         /// <returns>配方配置对象；验证失败返回 null（已弹窗提示）</returns>
         private RecipeConfig GetCurrentRecipeConfig()
         {
-            // 验证配方名称
-            string recipeName = txtRecipeName.Text.Trim();
+            // 验证配方名称（下拉必选一项；没选=空，照旧拦截）
+            string recipeName = cmbRecipeName.Text.Trim();
             if (string.IsNullOrEmpty(recipeName))
             {
-                MessageBox.Show("请输入配方名称", "输入验证",
+                MessageBox.Show("请从下拉选择配方名称", "输入验证",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                txtRecipeName.Focus();
+                cmbRecipeName.Focus();
                 return null;
             }
 

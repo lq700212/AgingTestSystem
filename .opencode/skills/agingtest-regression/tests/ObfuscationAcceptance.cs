@@ -19,7 +19,7 @@
 //  A. 执行态（跑起来调公开 API）：水印含版本＋混淆标记 / AppLog 落盘中文无乱码 /
 //     Crash 落盘 / DeviceConfig 缺省 / PolicyKeys×GetProperty 全命中 /
 //     RecipeConfig JSON 往返 / 规则解析 / 激活比对不抛 / SetDarkMode 与两窗
-//     _recipeAutoComplete 反射仍在（Skip 表生效的直接证据）。
+//     SetDarkMode 反射仍在（Skip 表生效的直接证据）。
 //  B. 元数据对账（dump＋diff）：未混淆版是"标准答案"，Models 命名空间下同名类型
 //     的公开属性/字段名集合必须一字不差（Json 存盘＋字符串反射全靠这些名字）。
 //     设计师私字段（窗体/控件）允许改名（代码引用随改，不靠名字），不在对账范围。
@@ -203,18 +203,19 @@ namespace AgingTestSystem.Tests
             catch { darkOk = false; }
             Check("A11 SetDarkMode 反射仍在", darkOk);
 
-            // 两窗 _recipeAutoComplete 私字段仍在（SkipField 生效的直接证据；被改名则配方联想崩）。
-            bool fldOk = false;
+            // A12（V1.88.13 改）：两窗配方名已转下拉、_recipeAutoComplete 整文件删除，
+            // 原 SkipField 随之移除——这里改锁"字段确已删除"（若日后误引回，验收当场红）。
+            bool fldGone = false;
             try
             {
                 var f1 = typeof(AgingTestSystem.Dialogs.BatchRecipeForm).GetField("_recipeAutoComplete",
                     BindingFlags.NonPublic | BindingFlags.Instance);
                 var f2 = typeof(AgingTestSystem.Dialogs.StationSettingsForm).GetField("_recipeAutoComplete",
                     BindingFlags.NonPublic | BindingFlags.Instance);
-                fldOk = f1 != null && f2 != null;
+                fldGone = f1 == null && f2 == null;
             }
-            catch { fldOk = false; }
-            Check("A12 两窗联想字段反射仍在", fldOk);
+            catch { fldGone = false; }
+            Check("A12 两窗联想字段已删除", fldGone);
 
             Console.WriteLine();
             Console.WriteLine("PASS = " + _pass + "   FAIL = " + _fail);

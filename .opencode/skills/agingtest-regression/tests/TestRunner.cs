@@ -3254,35 +3254,18 @@ namespace AgingTestSystem.Tests
                 }
             }
 
-            // ── 检索框光标定位（V1.71 provider 泛化 Control：原生与 Sunny 同名属性） ──
-            // provider 是 internal 类，走程序集按名取类型（与 ValidateValue 反射同套路）
+            // ── 配方自动检索 Provider 已删（V1.88.13：两窗配方名转下拉单选，
+            // 手输错名串配方的根拔掉；类型/字段双锁，防删一半复活） ──
             {
-                var provType = typeof(DeviceConfig).Assembly.GetType(
+                var provGone = typeof(DeviceConfig).Assembly.GetType(
                     "AgingTestSystem.Services.RecipeAutoCompleteProvider");
-                Check("反射找到 provider 类型", provType != null);
-                var miCaret = provType != null ? provType.GetMethod("SetCaretToEnd",
-                    BindingFlags.NonPublic | BindingFlags.Static) : null;
-                Check("反射找到 SetCaretToEnd", miCaret != null);
-                if (miCaret != null)
-                {
-                    var tb = new TextBox { Text = "abc" };
-                    miCaret.Invoke(null, new object[] { tb });
-                    Check("原生框光标到末尾",
-                        tb.SelectionStart == 3 && tb.SelectionLength == 0);
-                    var stxt = new Sunny.UI.UITextBox { Text = "abc" };
-                    bool sunnyOk = true;
-                    try { miCaret.Invoke(null, new object[] { stxt }); }
-                    catch { sunnyOk = false; }
-                    Check("Sunny框光标调用不抛", sunnyOk);
-                    Check("Sunny框光标到末尾",
-                        stxt.SelectionStart == 3 && stxt.SelectionLength == 0);
-                    bool panelOk = true;
-                    try { miCaret.Invoke(null, new object[] { new Panel() }); }
-                    catch { panelOk = false; }
-                    Check("无光标属性控件静默跳过", panelOk);
-                    tb.Dispose();
-                    stxt.Dispose();
-                }
+                Check("补全提供者类型已删除", provGone == null);
+                Check("批量窗无_provider字段",
+                    typeof(BatchRecipeForm).GetField("_recipeAutoComplete",
+                        BindingFlags.NonPublic | BindingFlags.Instance) == null);
+                Check("工位窗无_provider字段",
+                    typeof(StationSettingsForm).GetField("_recipeAutoComplete",
+                        BindingFlags.NonPublic | BindingFlags.Instance) == null);
             }
         }
 
@@ -5517,58 +5500,92 @@ namespace AgingTestSystem.Tests
                 finally { try { dm2.Dispose(); } catch { } }
             }
 
-            // 自动补全提供者：释放排空延迟定时器（internal 类一律反射，不直引）。
-            try
+            // ── 配方下拉单选（V1.88.13：两窗配方名输入框→UIComboBox DropDownList，
+            // 手输错名串配方从根上堵死；只构造不 Show，设选中即同步触发回填） ──
             {
-                var provType = typeof(DeviceManager).Assembly
-                    .GetType("AgingTestSystem.Services.RecipeAutoCompleteProvider");
-                Check("反射找到RecipeAutoCompleteProvider", provType != null);
-                if (provType != null)
+                var recs = new List<RecipeConfig>
                 {
-                    var box = new Sunny.UI.UITextBox();
-                    object prov = null;
+                    new RecipeConfig { Name = "A", DelayTime = TimeSpan.FromSeconds(30),
+                        BurnInTime = TimeSpan.FromHours(8), LimitTemperature = 60,
+                        NegativePressure = -5, IsEnabled = true },
+                    new RecipeConfig { Name = "B", DelayTime = TimeSpan.Zero,
+                        BurnInTime = TimeSpan.FromHours(4), LimitTemperature = 50,
+                        NegativePressure = -6, IsEnabled = true },
+                };
+                BatchRecipeForm bf = null;
+                try { bf = new BatchRecipeForm(null, recs, new List<int>()); }
+                catch { }
+                Check("下拉改造批量窗可构造", bf != null);
+                if (bf != null)
+                {
                     try
                     {
-                        prov = Activator.CreateInstance(provType,
-                            new object[] { box, new List<RecipeConfig>(), new Action<RecipeConfig>(r => { }) });
-                    }
-                    catch (Exception ex)
-                    {
-                        Check("补全提供者构造（" + ex.GetType().Name + "）", false);
-                    }
-                    if (prov != null)
-                    {
-                        try
+                        var cmb = typeof(BatchRecipeForm).GetField("cmbRecipeName", Flags)
+                            ?.GetValue(bf) as Sunny.UI.UIComboBox;
+                        Check("批量窗配方是下拉且禁手输",
+                            cmb != null && cmb.DropDownStyle == Sunny.UI.UIDropDownStyle.DropDownList);
+                        Check("批量窗下拉选项=库名",
+                            cmb != null && cmb.Items.Count == 2
+                            && (string)cmb.Items[0] == "A" && (string)cmb.Items[1] == "B");
+                        Check("批量窗下拉默认不选中",
+                            cmb != null && cmb.SelectedIndex == -1);
+                        if (cmb != null)
                         {
-                            var pendF = provType.GetField("_pendingHideTimers", Flags);
-                            var pend = pendF?.GetValue(prov) as System.Collections.IList;
-                            Check("补全提供者有延迟定时器登记表", pend != null);
-                            bool quiet = true;
-                            try { provType.GetMethod("Dispose").Invoke(prov, null); }
-                            catch { quiet = false; }
-                            Check("补全提供者释放不炸", quiet && pend.Count == 0);
-                            // 释放后消息过滤静默（Post 关窗期点击不碰释放后列表）。
-                            bool filterQuiet = true;
-                            try
-                            {
-                                var msg = new Message();
-                                object[] args = new object[] { msg };
-                                provType.GetMethod("PreFilterMessage").Invoke(prov, args);
-                            }
-                            catch { filterQuiet = false; }
-                            Check("补全提供者释放后过滤静默", filterQuiet);
+                            cmb.SelectedIndex = 0;
+                            var nudS = typeof(BatchRecipeForm).GetField("nudDelaySeconds", Flags)
+                                ?.GetValue(bf) as NumericUpDown;
+                            var txtP = typeof(BatchRecipeForm).GetField("txtNegativePressure", Flags)
+                                ?.GetValue(bf) as Control;
+                            Check("批量窗选A回填延时30秒/负压-5",
+                                nudS != null && nudS.Value == 30 && txtP != null && txtP.Text == "-5");
                         }
-                        finally { try { box.Dispose(); } catch { } }
                     }
-                    else
-                    {
-                        try { box.Dispose(); } catch { }
-                    }
+                    finally { try { bf.Dispose(); } catch { } }
                 }
-            }
-            catch (Exception ex)
-            {
-                Check("补全提供者构造释放链路（" + ex.GetType().Name + "）", false);
+                StationSettingsForm sf = null;
+                try { sf = new StationSettingsForm(null, new DeviceConfig(), recs, 1); }
+                catch { }
+                Check("下拉改造工位窗可构造", sf != null);
+                if (sf != null)
+                {
+                    try
+                    {
+                        var cmb = typeof(StationSettingsForm).GetField("cmbRecipe", Flags)
+                            ?.GetValue(sf) as Sunny.UI.UIComboBox;
+                        Check("工位窗配方是下拉且禁手输",
+                            cmb != null && cmb.DropDownStyle == Sunny.UI.UIDropDownStyle.DropDownList);
+                        Check("工位窗下拉首项空=不绑",
+                            cmb != null && cmb.Items.Count == 3 && (string)cmb.Items[0] == "");
+                        Check("工位窗下拉默认选空项",
+                            cmb != null && cmb.SelectedIndex == 0);
+                        var selMi = typeof(StationSettingsForm).GetMethod("SelectRecipe", Flags);
+                        Check("反射找到SelectRecipe", selMi != null);
+                        if (selMi != null && cmb != null)
+                        {
+                            selMi.Invoke(sf, new object[] { "已删配方" });
+                            Check("脏数据追加显示（保存拦停见CommitConfig）",
+                                cmb.Items.Count == 4 && cmb.SelectedIndex == 3
+                                && cmb.Text == "已删配方");
+                            selMi.Invoke(sf, new object[] { "B" });
+                            Check("回填选中库中配方",
+                                cmb.SelectedIndex == 2 && cmb.Text == "B");
+                        }
+                        if (cmb != null)
+                        {
+                            // 模拟"用户亲手换选"：先回空项再选 B（同值赋值不触发
+                            // SelectedIndexChanged，必须先换一次，否则断言恒读旧值=假红）
+                            cmb.SelectedIndex = 0;
+                            cmb.SelectedIndex = 2;
+                            var nudH = typeof(StationSettingsForm).GetField("nudBurnInHours", Flags)
+                                ?.GetValue(sf) as NumericUpDown;
+                            var nudP = typeof(StationSettingsForm).GetField("nudPressure", Flags)
+                                ?.GetValue(sf) as NumericUpDown;
+                            Check("工位窗亲手选B回填烧屏4时/负压-6",
+                                nudH != null && nudH.Value == 4 && nudP != null && nudP.Value == -6);
+                        }
+                    }
+                    finally { try { sf.Dispose(); } catch { } }
+                }
             }
 
             // ── 项目切换窗tooltip+在测禁用（V1.73：_lblNote删了转tooltip，超40字换行） ──
