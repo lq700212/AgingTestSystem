@@ -1449,10 +1449,12 @@ namespace AgingTestSystem.Tests
             var sn = c.RcSNValue.ToRectangle();
             Check("SN 框右对齐设置按钮 X=65 宽148", sn.X == 65 && sn.Width == 148, "实际 " + sn.ToString());
             var pressure = c.RcPressureValue.ToRectangle();
-            Check("压力框双端锚定自动定宽 85", pressure.Width == 85 && pressure.X == 65,
+            Check("压力框右缘对齐设置按钮宽148(与SN/配方同界)",
+                pressure.Width == 148 && pressure.X == 65,
                 "实际 " + pressure.ToString());
-            Check("压力框与真空关保持 3px 间隙",
-                c.RcVacuumOpen.ToRectangle().X - (pressure.X + pressure.Width) == 3);
+            Check("压力框右缘=设置按钮右缘",
+                pressure.X + pressure.Width
+                == c.RcSetButton.ToRectangle().X + c.RcSetButton.ToRectangle().Width);
 
             // ── 幂等性：重复解析结果必须完全一致（多次 Load 不漂移）──
             var snap1 = SnapshotLayout(c);
@@ -1470,15 +1472,17 @@ namespace AgingTestSystem.Tests
             Check("高度+10: 配方框 Y 118→128", tall.RcRecipeValue.ToRectangle().Y == 128);
             Check("高度+10: 交接缝吸收差值(SN→配方间距4→14)",
                 tall.RcRecipeValue.ToRectangle().Y - (tall.RcSNValue.ToRectangle().Y + 21) == 14);
-            Check("高度+10: 真空开/压力框 Y=67 不动(吊空闲下方)",
-                tall.RcVacuumOpen.ToRectangle().Y == 67 && tall.RcPressureValue.ToRectangle().Y == 67);
+            Check("高度+10: 真空块搬去第一行 Y=29(TopMargin固定)", tall.RcVacuumOpen.ToRectangle().Y == 29);
+            Check("高度+10: 压力框 Y=67 不动(吊真空块下方)",
+                tall.RcPressureValue.ToRectangle().Y == 67);
             Check("高度+10: 延时两行 Y 147/172→157/182",
                 tall.RcDelayTimeValue.ToRectangle().Y == 157 && tall.RcBurnInValue.ToRectangle().Y == 182);
             Check("高度+10: 选中框 TopMargin 锚定不动仍 Y=2", tall.RcSelectBox.ToRectangle().Y == 2);
-            Check("高度+10: 工作状态块绝对坐标不动仍 Y=29", tall.RcWorkState.ToRectangle().Y == 29);
-            Check("高度+10: 下电框跟随工作状态仍 Y=29", tall.RcPower.ToRectangle().Y == 29);
-            Check("高度+10: 压力框与真空关间隙仍 3px",
-                tall.RcVacuumOpen.ToRectangle().X - (tall.RcPressureValue.ToRectangle().X + tall.RcPressureValue.ToRectangle().Width) == 3);
+            Check("高度+10: 真空块 Y=29 不动(上链基准)", tall.RcVacuumOpen.ToRectangle().Y == 29);
+            Check("高度+10: 下电框跟随真空块仍 Y=29", tall.RcPower.ToRectangle().Y == 29);
+            Check("高度+10: 压力框右缘=设置按钮右缘(与SN/配方同界)",
+                tall.RcPressureValue.ToRectangle().X + tall.RcPressureValue.ToRectangle().Width
+                == tall.RcSetButton.ToRectangle().X + tall.RcSetButton.ToRectangle().Width);
 
             // ── 宽度联动：面板宽 +10 → 右锚定组整体右移、双端锚定宽度随动 ──
             // 右对齐公式 X = 目标右缘 - 自身宽：SetButton.X=232-9-60=163，
@@ -1489,9 +1493,10 @@ namespace AgingTestSystem.Tests
             Check("宽度+10: 设置按钮 X 153→163", wide.RcSetButton.ToRectangle().X == 163);
             Check("宽度+10: SN 框 X 65→75(右缘跟随设置按钮)", wide.RcSNValue.ToRectangle().X == 75,
                 "实际 " + wide.RcSNValue.ToRectangle().ToString());
-            // 双端锚定的压力框两端都随动（左贴 SN、右贴真空关-3px），宽度保持不变、间隙恒定
+            // 压力框右缘改对齐设置按钮（左贴 SN）：宽度 148 与 SN/配方同界，不再是 85 窄框
             var wPressure = wide.RcPressureValue.ToRectangle();
-            Check("宽度+10: 压力框两端随动 X=75 宽仍 85", wPressure.X == 75 && wPressure.Width == 85,
+            Check("宽度+10: 压力框 X=75 宽148(右缘跟设置按钮)",
+                wPressure.X == 75 && wPressure.Width == 148,
                 "实际 " + wPressure.ToString());
             Check("宽度+10: 选中框 X 194→204(RightMargin=5 跟随)", wide.RcSelectBox.ToRectangle().X == 204);
 
@@ -1545,14 +1550,28 @@ namespace AgingTestSystem.Tests
                 cur.RcSetButton.ToRectangle().Y == 166
                 && cur.RcDelayTimeValue.ToRectangle().Y == 168
                 && cur.RcBurnInValue.ToRectangle().Y == 193);
-            Check("开电流压力/真空关不动67",
-                cur.RcPressureValue.ToRectangle().Y == 67 && cur.RcVacuumOpen.ToRectangle().Y == 67);
+            Check("开电流压力框不动67/真空块29",
+                cur.RcPressureValue.ToRectangle().Y == 67 && cur.RcVacuumOpen.ToRectangle().Y == 29);
             Check("开电流标签93", cur.LabelCurrentPosition.ToPoint().Y == 93);
             Check("开电流SN标签跟随117", cur.LabelSnPosition.ToPoint().Y == 117);
             // 关回去：与默认快照零差异（开关往返不漂移）
             cur.ShowCurrent = false;
             cur.ResolveAnchors();
             Check("开关往返布局零漂移", DictionaryEquals(snap1, SnapshotLayout(cur)));
+
+            // —— 工作状态块已删（V1.88.16：信息冗余，看面板底色+上电/真空块） ——
+            Check("布局无RcWorkState属性",
+                typeof(PanelLayoutConfig).GetProperty("RcWorkState") == null);
+            Check("布局无ColorWork*配色",
+                typeof(PanelLayoutConfig).GetProperty("ColorWorkIdle") == null
+                && typeof(PanelLayoutConfig).GetProperty("ColorWorkFault") == null);
+            var gridType = typeof(WorkstationGridView);
+            Check("网格无_colorWork*字段",
+                gridType.GetField("_colorWorkIdle", BindingFlags.NonPublic | BindingFlags.Instance) == null);
+            var gridItemType = gridType.GetNestedType("GridItem", BindingFlags.NonPublic);
+            Check("GridItem无WorkText字段",
+                gridItemType == null || gridItemType.GetField("WorkText",
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance) == null);
         }
 
         /// <summary>把布局对象里所有 ElementRect/ElementPoint 属性拍成 名称→字符串 快照</summary>

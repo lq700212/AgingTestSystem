@@ -100,19 +100,17 @@ namespace AgingTestSystem.Views
     /// 关掉 AutoFit 回原尺寸（滚动条按内容出现）。
     /// 实现见 ComputeFitZoom/UpdateAutoFit/RebuildFonts/UpdateCanvasSize（zoom 并进 Scaled）。
     ///
-    /// 二、单个面板内容（222×205，坐标均为"相对面板左上角"；V1.58.19 只加锚定、位置与 V1.58.18
-    /// 完全一致；【V1.58.20 内容居中】编号/标签左缘 X=9、设置按钮右缘=213，左留白 9 = 右留白 9，
-    /// 面板内内容整体水平居中；选中框上移 Y=4→2 加大与"空闲"块间距）：
+    /// 二、单个面板内容（222×205，坐标均为"相对面板左上角"；【V1.88.16】工作状态块已删，
+    /// 真空块搬去第一行(153,29)，压力值框加长到宽 148，其余位置零变化）：
     /// ┌──────────────────────────────────────────────┐
     /// │ NO.1（标题，左上角）            ┌────────────┐│
     /// │ ┌──────────┐  ┌──────────┐     │ 选中指示框  ││ ← 右上角 23×23
-    /// │ │ 上电/下电 │  │ 空闲/选中 │     │ (绿底白✓)  ││    选中框常显
-    /// │ └──────────┘  │ 繁忙/故障 │     └────────────┘│
-    /// │               │ 已完成    │                   │ ← 【V1.59】蓝=待取料
-    /// │               └──────────┘                   │
-    /// │ 真空压力 ┌──────────────────┐   ┌──────────┐  │
-    /// │          │  78 kPa          │   │ 真空开/关  │  │
-    /// │          └──────────────────┘   └──────────┘  │
+    /// │ │ 上电/下电 │  │ 真空开/关 │     │ (绿底白✓)  ││    选中框常显
+    /// │ └──────────┘  └──────────┘     └────────────┘│
+    /// │                                              │
+    /// │ 真空压力 ┌────────────────────────────────┐  │
+    /// │          │  78 kPa                        │  │
+    /// │          └────────────────────────────────┘  │
     /// │ SN:    ┌────────────────────────┐             │
     /// │ 配方:  ┌────────────────────────┐             │
     /// │        └────────────────────────┘             │
@@ -123,10 +121,10 @@ namespace AgingTestSystem.Views
     /// │          └───────────┘                        │
     /// └──────────────────────────────────────────────┘
     /// 标注说明（括号内为锚定关系）：
-    /// - 行1：上电/下电块(65,29,60,23) + 工作状态块(153,29,60,23) + 选中框(194,2,23,23)
-    /// - 行2：真空压力值框(65,67,85,21；双端锚定+RightToLeftGap=3，右缘150距真空关左缘153留3px间隙、
-    ///   下缘原贴 SN 上缘；【V1.77】改吊空闲下方 TopToBottomGap=15，Y=29+23+15=67 不变)
-    ///   + 真空开/关块(153,67,60,21；【V1.77】同改吊空闲下方，Y 不变)
+    /// - 行1：上电/下电块(65,29,60,23；Y/H 对齐真空块） + 真空开/关块(153,29,60,23；
+    ///   右缘对齐设置按钮＋TopMargin=29） + 选中框(194,2,23,23)
+    /// - 行2：真空压力值框(65,67,148,21；左缘对齐 SN 框＋右缘对齐设置按钮，宽 148；
+    ///   Y 吊真空块下方 TopToBottomGap=15，Y=29+23+15=67 不变)
     ///   + 【V1.77】电流值框 RcCurrentValue(65,90,85,21；双端同压力框，Y 吊压力框下方 Gap=2；
     ///   ShowCurrentRow 关=整行不画；开=面板 205→226、SN 93→114、配方 118→139、
     ///   延时 147/172→168/193、按钮 145→166，间距全都不变，见下方"V1.77 开态几何")
@@ -140,7 +138,7 @@ namespace AgingTestSystem.Views
     ///   （X=9 为右缘贴合压力框左缘推导 65-56=9；Y 以各自框中心为基准、VerticalCenterOffset=-1）
     /// - 【V1.58.20 内容居中 + 选中框上移】编号/标签列左缘 LeftMargin=9，设置按钮右缘=213
     ///   （RightMargin=9），左留白 9 = 右留白 222-213=9 → 面板内内容整体水平居中；
-    ///   选中框 TopMargin 4→2（Y=2，底缘 25 与"空闲"块上缘 29 间距由 2px 加大到 4px）。
+    ///   选中框 TopMargin 4→2（Y=2，底缘 25 与真空块上缘 29 间距由 2px 加大到 4px）。
     /// - 值框文字左内边距：ValueTextLeftPadding=6px（V1.52，文字不贴值框左边框，值框坐标不变）
     /// - 状态块配色见下方"状态块配色"；颜色值均可由 PanelLayout.json 覆盖
     /// - 【V1.58.6 对齐】延时时间/烧屏时间两行中心(157.5+182.5)/2=170 与设置按钮中心
@@ -161,9 +159,8 @@ namespace AgingTestSystem.Views
     /// - 【V1.58.13 右侧锚定】ElementRect 新增可选 RightMargin（右侧锚定边距）：选中框(5)、
     ///   空闲/真空关/SN/配方/设置按钮(17) 改为锚定，加载时 X 自动 = PanelInnerWidth - RightMargin - Width。
     ///   以后改面板宽度（PanelInnerWidth）右缘元素自动跟随，不再手改坐标（V1.58.11/12 的坑）。
-    /// - 【V1.58.14 链式锚定】设置按钮锚定 View 右缘(RightMargin=17)；空闲/真空关/SN/配方
-    ///   改 RightAlignTo="SetButton"（右缘对齐设置按钮右缘，右侧对齐跟随设置按钮）；
-    ///   下电 VerticalAlignTo="WorkState"（Y/Height 取空闲，上下边缘对齐）。
+    /// - 【V1.58.14 链式锚定】设置按钮锚定 View 右缘(RightMargin=17)；【V1.88.16】工作状态块已删，
+    ///   真空块接替当上链基准（见 PanelLayoutConfig 类头"完整锚定链"）；下电改对齐真空块。
     ///   解析顺序：先 RightMargin 面板锚定，再 RightAlignTo/VerticalAlignTo 元素间锚定。
     /// - 【V1.58.15 双端锚定】真空压力框 LeftAlignTo="SNValue"（左缘对齐 SN 框左缘）+
     ///   RightToLeftAlignTo="VacuumOpen"（右缘贴合真空关左缘），宽度自动=145-57=88；
@@ -177,10 +174,10 @@ namespace AgingTestSystem.Views
     /// - 【V1.58.19 垂直锚定链（【V1.77】压力/真空关/SN 改走自上而下链 TopToBottom，位置零变化；
     ///   SN→配方之间改为两链交接缝，缺省高度下间距仍 4px，详见 PanelLayoutConfig 类头"完整锚定链（V1.77）"）】
     ///   保持位置零变化——设置按钮 BottomMargin=10(距面板底)；配方 BottomToTopGap=6(贴按钮上缘)；
-    ///   压力/真空关 TopToBottomGap=15(吊空闲下方)；SN 吊电流行下方 Gap=3(关电流=93)；
+    ///   压力/真空关 TopToBottomGap=15(吊真空块下方)；SN 吊电流行下方 Gap=3(关电流=93)；
     ///   延时两行 VerticalCenterAlignTo="SetButton"+CenterOffsetY=-12/+13(以按钮中心为基准对称)；
     ///   各标签 VerticalCenterAlignTo 各自框+offset=-1。改 PanelInnerHeight 时下链自动联动，
-    ///   上链（空闲及以上+压力/真空关/电流/SN）不动，差值由交接缝吸收。
+    ///   上链（真空块及以上+压力/电流/SN）不动，差值由交接缝吸收。
     /// - 【V1.77 开态几何】ShowCurrentRow=true（UsePowerMeter 开）时单面板内容 222×226
     ///   （行高 225→246），压力行(67)及以上逐像素不动，新增电流行(90,高21)+标签"电流："，
     ///   SN(114)/配方(139)/延时(168/193)/按钮(166)整体下移 21，间距全都不变；
@@ -189,11 +186,9 @@ namespace AgingTestSystem.Views
     /// - 值框文字左内边距：ValueTextLeftPadding=6px（V1.52，文字不贴值框左边框，值框坐标不变）
     /// - 状态块配色见下方"状态块配色"；颜色值均可由 PanelLayout.json 覆盖
     ///
-    /// 【状态块配色（V1.28 约定，V1.59 补完成态）】
+    /// 【状态块配色（V1.28 约定；【V1.88.16】工作状态块已删，状态只看面板底色＋上电/真空块）】
     /// - 上电/下电：绿=LimeGreen=上电，浅灰=LightGray=下电
-    /// - 工作状态：空闲=绿 / 选中(已上电待测试)=橙 / 繁忙(测试中)=黄 / 故障=红 /
-    ///   已完成·待取料=皇家蓝（V1.59：老化到时自动完成后显示，取件复位后回空闲）
-    /// - 面板背景：空闲=白 / 繁忙=浅黄 / 故障=浅粉 / 已完成=淡钢蓝（V1.59）
+    /// - 面板背景：空闲=白 / 测试中=浅黄 / 故障=浅粉 / 已完成·待取料=淡钢蓝（V1.59）
     /// - 真空块三色：阀开且负压到位=绿底 / 阀开但没吸住=红底（真空开，ColorVacuumAlarm）/
     ///   阀没开=灰底（真空关，浅色配置灰/深色 DimGray）
     ///
@@ -227,11 +222,6 @@ namespace AgingTestSystem.Views
         private readonly Color _colorVacuumOn; // 真空开块背景（绿，不跟主题）
         private readonly Color _colorVacuumAlarm; // 真空异常块背景（红：阀开但负压未到位，不跟主题）
         private readonly Color _colorVacuumOff;// 真空关块背景（浅灰，不跟主题）
-        private readonly Color _colorWorkFault;    // 工作状态-故障（红，不跟主题）
-        private readonly Color _colorWorkBusy;     // 工作状态-繁忙（黄，不跟主题）
-        private readonly Color _colorWorkSelected; // 工作状态-选中/已上电待测试（橙，不跟主题）
-        private readonly Color _colorWorkIdle;     // 工作状态-空闲（绿，不跟主题）
-        private readonly Color _colorWorkCompleted; // 【V1.59】工作状态-已完成·待取料（皇家蓝，不跟主题）
         private Color _completedColor;     // 【V1.59】面板背景-已完成·待取料（浅色淡钢蓝 / 深色深蓝）
         private readonly Color _colorSetButton;    // 设置按钮背景（绿，不跟主题）
         private Color _colorRowSelect;    // 行全选按钮背景（浅色浅灰 / 深色中灰）
@@ -351,12 +341,6 @@ namespace AgingTestSystem.Views
             _colorVacuumOn = Parse(_layout.ColorVacuumOn, Color.LimeGreen);
             _colorVacuumAlarm = Parse(_layout.ColorVacuumAlarm, Color.Red);
             _colorVacuumOff = Parse(_layout.ColorVacuumOff, Color.LightGray);
-            _colorWorkFault = Parse(_layout.ColorWorkFault, Color.Red);
-            _colorWorkBusy = Parse(_layout.ColorWorkBusy, Color.Gold);
-            _colorWorkSelected = Parse(_layout.ColorWorkSelected, Color.Orange);
-            _colorWorkIdle = Parse(_layout.ColorWorkIdle, Color.LimeGreen);
-            // 【V1.59】已完成·待取料状态色（皇家蓝/淡钢蓝，可在 PanelLayout.json 覆盖）
-            _colorWorkCompleted = Parse(_layout.ColorWorkCompleted, Color.RoyalBlue);
             _colorSetButton = Parse(_layout.ColorSetButton, Color.LimeGreen);
             ApplyLightColors();
 
@@ -368,7 +352,7 @@ namespace AgingTestSystem.Views
             // 【V1.57.2】初始化缓存画刷/画笔：语义色两个一次建好，主题色四个走 RebuildThemeBrushes
             // （SetDarkMode 里复用它重建，保证颜色与字段永远一致）。
             _brushSetButton = new SolidBrush(_colorSetButton);
-            _brushSelectChecked = new SolidBrush(_colorWorkIdle);
+            _brushSelectChecked = new SolidBrush(Color.LimeGreen); // 选中✓绿（与原来 _colorWorkIdle 同值，工作状态块删了直接写死）
             RebuildThemeBrushes();
 
             _toolTip = new ToolTip(components);
@@ -1003,28 +987,8 @@ namespace AgingTestSystem.Views
             item.PowerColor = carrierPower ? _colorPowerOn : GetOffBlockBack(_darkMode, _colorPowerOff);
             item.PowerForeColor = carrierPower ? Color.White : GetOffBlockFore(_darkMode);
 
-            // 工作状态（故障=红 / 繁忙=黄 / 已上电待测试=橙"选中" / 空闲=绿 / 已完成=蓝【V1.59】）
-            switch (data.Status)
-            {
-                case DeviceStatus.Fault:
-                    item.WorkText = "故障"; item.WorkColor = _colorWorkFault; item.WorkForeColor = Color.White; break;
-                case DeviceStatus.Testing:
-                    item.WorkText = "繁忙"; item.WorkColor = _colorWorkBusy; item.WorkForeColor = Color.White; break;
-                case DeviceStatus.Completed:
-                    // 【V1.59】老化到时自动完成：待取料提示（结果 PASS/FAIL 看面板压力框旁的
-                    // 结果标记由主窗体日志追溯，这里状态块只表达"该取件了"这一件事）
-                    item.WorkText = "已完成"; item.WorkColor = _colorWorkCompleted; item.WorkForeColor = Color.White; break;
-                default:
-                    if (carrierPower)
-                    {
-                        item.WorkText = "选中"; item.WorkColor = _colorWorkSelected; item.WorkForeColor = Color.White;
-                    }
-                    else
-                    {
-                        item.WorkText = "空闲"; item.WorkColor = _colorWorkIdle; item.WorkForeColor = Color.White;
-                    }
-                    break;
-            }
+            // 【V1.88.16】工作状态块已删：状态只看面板底色（空闲白/测试浅黄/故障浅粉/
+            // 完成淡钢蓝）＋上电/真空块，不再有文字块。item.Status 照记（切主题重算底色用）。
 
             // 面板背景色（空闲白/测试浅黄/故障浅粉/完成淡钢蓝【V1.59】；深色下走深色档【V1.60】）
             // 【V1.60】状态同步记到 item.Status：切主题时 RefreshItemBackgrounds 靠它重算底色；
@@ -1117,11 +1081,10 @@ namespace AgingTestSystem.Views
             TextRenderer.DrawText(g, $"NO.{item.DeviceId}", _titleFont,
                 new Point(panelLeft + Scaled(_layout.TitlePosition.X), panelTop + Scaled(_layout.TitlePosition.Y)), _colorText);
 
-            // 状态块
+            // 状态块（【V1.88.16】工作状态块已删：第一行只剩上电/下电＋真空开/关；
+            // 状态看面板底色＋这两块，不再有文字状态块）
             DrawStatusBlock(g, Offset(Scaled(_layout.RcPower.ToRectangle()), panelLeft, panelTop),
                 item.PowerColor, item.PowerForeColor, item.PowerText);
-            DrawStatusBlock(g, Offset(Scaled(_layout.RcWorkState.ToRectangle()), panelLeft, panelTop),
-                item.WorkColor, item.WorkForeColor, item.WorkText);
             DrawStatusBlock(g, Offset(Scaled(_layout.RcVacuumOpen.ToRectangle()), panelLeft, panelTop),
                 item.VacuumColor, item.VacuumForeColor, item.VacuumText);
 
@@ -1520,7 +1483,6 @@ namespace AgingTestSystem.Views
             if (!TryHitPanel(p, out int deviceId, out Point local)) return null;
             // 【V1.55】local 是物理像素坐标，布局矩形需缩放后比较
             if (Scaled(_layout.RcPower.ToRectangle()).Contains(local)) return "上电状态：绿=上电，浅灰=下电";
-            if (Scaled(_layout.RcWorkState.ToRectangle()).Contains(local)) return "工作状态：空闲=绿 / 选中(已上电待测试)=橙 / 繁忙(测试中)=黄 / 故障=红";
             if (Scaled(_layout.RcVacuumOpen.ToRectangle()).Contains(local)) return "真空状态：阀开且负压到位=绿底 / 阀开但没吸住=红底 / 阀没开=灰底";
             // 【V1.77】压力框悬停回退到原来（无提示）：电流已改直绘（电流行），
             // 悬停不再承担"看得到电流"的需求，压力框回到 V1.73 及以前的无提示行为。
@@ -1574,9 +1536,6 @@ namespace AgingTestSystem.Views
             public Color VacuumColor = Color.LightGray;
             public Color VacuumForeColor = Color.Black;
             public string VacuumText = "真空关";
-            public Color WorkColor = Color.LimeGreen;
-            public Color WorkForeColor = Color.White;
-            public string WorkText = "空闲";
             public Color BackColor = Color.White;
             public bool IsSelected;
         }

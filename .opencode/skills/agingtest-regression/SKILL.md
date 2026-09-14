@@ -1,6 +1,6 @@
 ﻿---
 name: agingtest-regression
-description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案热更删除/终结器释放/关窗竞态/MES映射上报/规则表达式/工艺策略窗/电流报表画面/软件激活(HJVision同源MD5三件套)等全部核心逻辑类（1826 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
+description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案热更删除/终结器释放/关窗竞态/MES映射上报/规则表达式/工艺策略窗/电流报表画面/软件激活(HJVision同源MD5三件套)等全部核心逻辑类（1831 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
 ---
 
 # AgingTestSystem 回归测试套件（冒烟 + 用例一体）
@@ -88,7 +88,7 @@ agingtest-regression/
     └── ObfuscationAcceptance.cs ← 混淆验收跑器（behavior/dump 双模式，见一点六）
 ```
 
-## 三、测试覆盖范围（46 个模块，1826 断言）
+## 三、测试覆盖范围（46 个模块，1831 断言）
 
 | 模块 | 覆盖点 |
 | --- | --- |
@@ -100,7 +100,7 @@ agingtest-regression/
 | RecipeStorage | Load/Save 往返全字段、损坏 json 返 null、空数组、"null"字面量、SaveWithDuplicateCheck 新增分支、删中间配方后 Max+1 不撞号(V1.62)、DisplayMode 往返(V1.66) |
 | TestEventLogger | CsvEscape 转义（逗号/引号翻倍/换行/回车 V1.62）、表头（V1.76 共 11 列：时间/批号/SN/配方/设备/事件/结果/详情/压力/温度/电流）、落盘字段格式、null 字段 11 列、温度一位小数、电流有数两位小数/NaN 记空不写字样、结构化列序（SN001/R-A/PASS）、整机行身份结果记空、20×5 并发零丢失、删目录自重建 |
 | AppLogFileWriter | UTF-8 追加、空串忽略、8 线程×5 行并发一条不少（lock 生效） |
-| PanelLayoutConfig | 默认布局基准坐标、ResolveAnchors 幂等零漂移、高度+10 下链跟随+上链锁定+交接缝吸收（V1.77：SN/压力定高位）、宽度+10 右锚定组随动、颜色解析钳位/回退、SaveDefault→重载零差异、电流行几何（V1.77：缺省关/有效高226行高246/电流行65,90,85,21/SN114配方139按钮166/压力67不动/标签93/SN标签117/开关往返零漂移） |
+| PanelLayoutConfig | 默认布局基准坐标、ResolveAnchors 幂等零漂移、高度+10 下链跟随+上链锁定+交接缝吸收（V1.77：SN/压力定高位）、宽度+10 右锚定组随动、颜色解析钳位/回退、SaveDefault→重载零差异、电流行几何（V1.77：缺省关/有效高226行高246/电流行65,90,85,21/SN114配方139按钮166/压力67不动/标签93/SN标签117/开关往返零漂移）、工作状态块删除（V1.88.16：真空块上第一行29当基准/压力宽148右缘同界/下电跟随/删除三处无残留锁） |
 | HomeLayoutConfig | 默认值、Save→Load 往返、范围约束、损坏文件回退默认 |
 | ModelRoundtrip | RecipeConfig/UserAccount JSON 往返（含特殊字符）、StationInfo/FanData Clone 深拷贝互不影响 |
 | AgingSequencer | ShouldPowerOn(压力×延时双条件)、ShouldComplete(0=不限时长)、IsVacuumBuildFailed(到位即不失败) 边界族、IsPressureOutOfRange 双方向+恰等不越限(V1.62)、负时间语义锁、BuildStartWarningText 0时长/空SN 警告文案(V1.66)、IsFanOverTempShutdown 开关+上限+边界(V1.66) |
