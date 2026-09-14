@@ -334,8 +334,9 @@ namespace AgingTestSystem.Dialogs
         {
             if (_shown.Count == 0)
             {
-                MessageBox.Show("当前没有可导出的数据，请先查询", "提示",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                // 【SunnyUI 弹窗】中性说明类用 Blue。
+                Sunny.UI.UIMessageBox.Show("当前没有可导出的数据，请先查询", "提示",
+                    Sunny.UI.UIStyle.Blue, Sunny.UI.UIMessageBoxButtons.OK, true, 0);
                 return;
             }
 
@@ -356,13 +357,15 @@ namespace AgingTestSystem.Dialogs
                 try
                 {
                     WriteReportXlsx(saveDialog.FileName, columns, _shown);
-                    MessageBox.Show($"报表已生成：{_shown.Count} 条，{columns.Count} 列。\n{saveDialog.FileName}",
-                        "导出成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    // 【SunnyUI 弹窗】成功类用 Green。
+                    Sunny.UI.UIMessageBox.Show($"报表已生成：{_shown.Count} 条，{columns.Count} 列。\n{saveDialog.FileName}",
+                        "导出成功", Sunny.UI.UIStyle.Green, Sunny.UI.UIMessageBoxButtons.OK, true, 0);
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show($"生成报表失败：\n{ex.Message}", "错误",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    // 【SunnyUI 弹窗】失败类用 Red。
+                    Sunny.UI.UIMessageBox.Show($"生成报表失败：\n{ex.Message}", "错误",
+                        Sunny.UI.UIStyle.Red, Sunny.UI.UIMessageBoxButtons.OK, true, 0);
                 }
             }
         }
