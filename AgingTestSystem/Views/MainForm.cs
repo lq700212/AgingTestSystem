@@ -281,10 +281,6 @@ namespace AgingTestSystem.Views
             // 默认未登录（操作员权限），参数设置按钮不可用
             UpdateButtonPermissionStates();
 
-            // 【V1.83】授权状态挂标题栏 + 写 LOG（判定是 Program 启动闸算好的，
-            // 这里只展示；启动闸没算出来（如单测直 new 主窗）才现场补算一次）。
-            ApplyLicenseStatus();
-
             // 注意：下拉菜单不再需要预先初始化
             // 改为在按钮点击事件中动态创建弹出窗体（见 ShowDropdownPopup 方法）
         }
@@ -1144,6 +1140,10 @@ namespace AgingTestSystem.Views
 
             // 启动定时器更新状态栏时间显示
             timerTime.Start();
+
+            // 【V1.87】授权计时器（与 HJVision 的 HashTimer 一致：1 小时一格，
+            // 新设备/过期弹框 + 置灰用户权限入口，不阻断启动与生产）。
+            hashTimer.Start();
         }
 
         /// <summary>
@@ -2847,96 +2847,63 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 软件授权 → 弹出授权窗（【V1.83 新增】一机一证：拷机复用/新开项目即拦）。
-        /// 查看状态所有人可看；导入授权文件仅管理员（窗体内二次限，非管理员点导入
-        /// 会被拦——与系统设置"仅管理员可改"同级，不开后门）。
-        /// 导入成功后重查一次授权并刷新标题栏（点数/到期当场看得见，不用重启）。
+        /// 软件授权 → 弹出激活窗（【V1.87】与 HJVision 一致：设备ID/设备码/激活码，
+        /// 同一套《获取激活码》工具通用；激活无需权限，人人可开）。
         /// </summary>
         private void MenuHelpLicense_Click(object sender, EventArgs e)
         {
-            bool canEdit = _userManager.HasPermission(UserRole.Administrator);
-            Services.License.LicenseResult cur = RunLicenseCheck();
-            using (var form = new LicenseForm(cur, canEdit))
+            using (var form = new SoftActivation())
             {
                 ThemeManager.ApplyTo(form);
                 form.ShowDialog(this);
-                if (form.Imported)
-                {
-                    ApplyLicenseStatus();
-                }
             }
         }
 
         /// <summary>
-        /// 用内存 _config 的真实值算一次授权（【V1.83】主窗体内唯一口径）。
-        /// 启动闸在 Program 里用配置文件粗算过一次；这里 _config 已是
-        /// "App.config + Policy.json 叠加"的生效值，以这里为准刷新显示。
+        /// 授权计时器（【V1.87】与 HJVision 的 HashTimer_Tick 对齐：每小时推一格）。
+        /// 先对 RunHash1（设备不对=新设备），再看 RunHash2（永久跳过，否则在
+        /// 0..839 格里找当前格：找到且小于 768 就写下一格；大于等于 768 或
+        /// 找不到=过期）。新设备/过期只弹框 + 置灰用户权限入口（= HJVision 置灰
+        /// 它的口令按钮 button4），不阻断启动、不拦生产；置灰本轮不再恢复
+        /// （重启重查，与 HJVision 一致）。
         /// </summary>
-        private Services.License.LicenseResult RunLicenseCheck()
+        private void HashTimer_Tick(object sender, EventArgs e)
         {
             try
             {
-                string project = "";
-                try { project = Services.ProjectProfile.ActiveProfileName ?? ""; }
-                catch { }
-                int stations = _config != null ? _config.TotalBarometers : 72;
-                bool mes = _config != null && _config.MesEnabled;
-                bool rules = _config != null && (
-                    _config.SkipVacuum
-                    || !string.IsNullOrWhiteSpace(_config.CompleteExpression)
-                    || !string.IsNullOrWhiteSpace(_config.CustomAlarmRules));
-                var res = Services.License.LicenseManager.EnsureStartupLicense(
-                    project, stations, mes, rules);
-                Program.CurrentLicense = res;
-                return res;
-            }
-            catch { return Program.CurrentLicense; }
-        }
-
-        /// <summary>
-        /// 授权状态挂标题栏 + 写 LOG（【V1.83】构造末尾调一次 + 导入成功后调一次）。
-        /// 标题后缀如 [已授权至2027-09-01] / [试用版剩余12天]，现场一眼看出来是哪种身份；
-        /// 功能超范围的软警告写进 LOG（放行但留痕，续费对账有据）。
-        /// Program 没算出来（如单测直 new 主窗）就现场补算，绝不让标题空挂。
-        ///
-        /// 【V1.83.1】后缀只替换不堆叠：首次调用先记下干净标题（Designer 给的），
-        /// 每次都从干净标题重拼。以前是 Contains 判定追加，试用转正/续费换证后
-        /// 老后缀赖着不走，标题越挂越长（[试用版剩余29天] [已授权至…]）。
-        /// 拼串逻辑抽纯函数 <see cref="WithLicenseSuffix"/>，回归可直测。
-        /// </summary>
-        private string _licenseBaseTitle;
-
-        /// <summary>
-        /// 标题授权后缀纯函数（【V1.83.1】替换语义：同一基础标题挂新后缀时，
-        /// 不残留老后缀；空后缀原样返回基础标题）。
-        /// </summary>
-        internal static string WithLicenseSuffix(string baseTitle, string suffix)
-        {
-            if (string.IsNullOrEmpty(suffix)) return baseTitle ?? "";
-            return (baseTitle ?? "") + " " + suffix;
-        }
-
-        private void ApplyLicenseStatus()
-        {
-            try
-            {
-                Services.License.LicenseResult res = Program.CurrentLicense ?? RunLicenseCheck();
-                if (res == null) return;
-                try
+                if (IsDisposed || Disposing) return;
+                string runHash1;
+                string runHash2;
+                Services.SoftwareActivation.ReadRunHash(out runHash1, out runHash2);
+                // CPU 序列号在整个校验过程中不会变，提到循环外只查一次 WMI
+                //（HJVision 同款优化：旧版在循环内调用导致 840 次 WMI 卡 UI）。
+                string cpuId = Services.SoftwareActivation.GetCpuSerialNumber();
+                if (!Services.SoftwareActivation.IsDeviceBound(runHash1, cpuId))
                 {
-                    if (_licenseBaseTitle == null) _licenseBaseTitle = Text ?? "";
-                    Text = WithLicenseSuffix(_licenseBaseTitle, res.TitleSuffix ?? "");
-                }
-                catch { /* 标题挂不上不影响生产 */ }
-                try { WriteLog("[授权] " + res.Message.Split('\n')[0]); }
-                catch { }
-                if (!string.IsNullOrEmpty(res.FeatureWarning))
-                {
-                    try { WriteLog("[授权提醒] " + res.FeatureWarning); }
+                    try { btnUserPermission.Enabled = false; }
                     catch { }
+                    MessageBox.Show("新设备请联系厂商激活", "软件授权",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
                 }
+                if (runHash2 == Services.SoftwareActivation.PermanentMark(cpuId)) return;
+                int slot = Services.SoftwareActivation.FindSlot(runHash2, cpuId);
+                if (Services.SoftwareActivation.IsSlotValid(slot))
+                {
+                    try
+                    {
+                        Services.SoftwareActivation.WriteRunHash2(
+                            Services.SoftwareActivation.Encrypt(cpuId + (slot + 1).ToString()));
+                    }
+                    catch { }
+                    return;
+                }
+                try { btnUserPermission.Enabled = false; }
+                catch { }
+                MessageBox.Show("软件已过期，请联系厂商", "软件授权",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
-            catch { /* 授权显示永不拖垮主窗构造 */ }
+            catch { /* 计时器永不拖垮主窗 */ }
         }
 
         /// <summary>

@@ -20,7 +20,7 @@
 //   12d. RuleExprV169            —— 规则表达式解析求值 + 规则表 + 执行器（假时钟）
 //   12e. ProcessPolicyV170          —— 流程图静态文本 + 布局存取（纯函数，零 UI）
 //   12f. PowerReportV174          —— 电流骨架(Mock/桩/接线/规则变量) + 报表列 + 显示字典
-//   12g. LicenseV183              —— 授权签名验签 + 四道关 + 试用双记（隔离目录+隔离注册表+运行时测试密钥）
+//   12g. SoftActivation           —— 软件激活（HJVision 同源：Encrypt 方程 + 计数格 + 激活比对 + ini 往返 + 激活窗构造）
 //   12h. PolicyPresetV185          —— 预置策略 A/B/C（套用/探测纯函数 + 名单/口径/安全锁 + UI 预置行回显）
 //   12i. PolicyNodeComboV1851      —— 节点选项框按预置下拉口径统一（下拉实测拉宽 + 悬停全文 + 切节点清表）
 //
@@ -200,7 +200,7 @@ namespace AgingTestSystem.Tests
                 { "LegacyRecipeGuard", LegacyRecipeGuardTests },
                 { "DesignerStabilityV172_16", DesignerStabilityV172_16Tests },
                 { "PowerReportV174", PowerReportV174Tests },
-                { "LicenseV183", LicenseTests },
+                { "SoftActivation", SoftActivationTests },
                 { "PolicyPresetV185", PolicyPresetTests },
                 { "PolicyNodeComboV1851", PolicyNodeComboTests },
             };
@@ -3285,325 +3285,211 @@ namespace AgingTestSystem.Tests
         }
 
         // =====================================================================
-        // 12g. LicenseV183 —— 软件授权（一机一证 + 试用双记，V1.83 新增）
-        //     隔离三件套：BaseDirOverride（证/试用文件进临时目录）+
-        //     RegistryPathOverride（试用第二记进 GUID 子键，跑完删键）+
-        //     PublicKeyXmlOverride（运行时现造测试密钥对，不碰产品私钥）。
-        //     三缝全经反射赋值，finally 复位 null（MesReporter.Transport 同先例）。
+        // 12g. SoftActivation —— 软件激活（V1.87：与 HJVision 同源，同一套《获取激活码》工具）。
+        //     Encrypt 与 HJVision MainForm.Encrypt / 工具 Form1.Encrypt 逐字节一致
+        //     （RFC1321 标准向量 pin 住算法本身，关系式锁住"工具算的码本软件认"）；
+        //     判定全是纯函数（字符串进出，不碰 WMI/真实 ini）；
+        //     ini 读写走显式 path 进隔离临时目录（EnterCleanDir），不碰真实 MainSetting.ini；
+        //     激活窗只构造不 Show（未 Show 不点按钮，直接调私有 handler，V1.86 先例）。
         // =====================================================================
-        private static void LicenseTests()
+        private static void SoftActivationTests()
         {
-            string dir = EnterCleanDir();   // 证与试用文件全落这里，不碰仓库与 bin
-            string regPath = @"Software\AgingTestSystem_UT_" + Guid.NewGuid().ToString("N");
-            var t = typeof(Services.License.LicenseManager);
-            var fBase = t.GetField("BaseDirOverride", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
-            var fKey = t.GetField("PublicKeyXmlOverride", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
-            var fNow = t.GetField("UtcNowFunc", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
-            var fReg = t.GetField("RegistryPathOverride", BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
-            Check("授权测试缝齐全（隔离三件套+时钟）",
-                fBase != null && fKey != null && fNow != null && fReg != null);
-            if (fBase == null || fKey == null || fNow == null || fReg == null) return;
+            const string cpu = "BFEBFBFF000906A9";   // 固定假 CPU：公式不断言真机 WMI，只锁方程
 
-            // 运行时现造测试密钥对（2048；只活在内存，跑完即焚，不碰产品私钥）。
-            string testPub;
-            string testPriv;
-            using (var rsa = new System.Security.Cryptography.RSACryptoServiceProvider(2048))
-            {
-                testPub = rsa.ToXmlString(false);
-                testPriv = rsa.ToXmlString(true);
-            }
-            string otherPub;
-            using (var rsa2 = new System.Security.Cryptography.RSACryptoServiceProvider(2048))
-            {
-                otherPub = rsa2.ToXmlString(false);
-            }
-            DateTime t0 = new DateTime(2026, 9, 13, 0, 0, 0, DateTimeKind.Utc);
+            // ── Encrypt：RFC1321 标准向量（MD5("")/MD5("a") 取前 15 字节 hex） ──
+            Check("Encrypt空串",
+                Services.SoftwareActivation.Encrypt("") == "d41d8cd98f00b204e9800998ecf842");
+            Check("Encrypt(a)",
+                Services.SoftwareActivation.Encrypt("a") == "0cc175b9c0f1b6a831c399e2697726");
+            Check("Encrypt恒30字符",
+                Services.SoftwareActivation.Encrypt(cpu).Length == 30);
 
-            fBase.SetValue(null, dir);
-            fKey.SetValue(null, testPub);
-            fReg.SetValue(null, regPath);
-            fNow.SetValue(null, (Func<DateTime>)(() => t0));
+            // ── 公式与工具同源（关系式即兼容契约：工具按同式算，本软件按同式认） ──
+            Check("设备ID码=Encrypt(ID+A)",
+                Services.SoftwareActivation.DeviceIdCode(cpu)
+                == Services.SoftwareActivation.Encrypt(cpu + "A"));
+            Check("设备码=Encrypt(ID+1)",
+                Services.SoftwareActivation.DeviceCode(cpu)
+                == Services.SoftwareActivation.Encrypt(cpu + "1"));
+            Check("永久标记=Encrypt(ID+ALL)",
+                Services.SoftwareActivation.PermanentMark(cpu)
+                == Services.SoftwareActivation.Encrypt(cpu + "ALL"));
+            Check("30天起点=Encrypt(ID+0)",
+                Services.SoftwareActivation.TrialStartMark(cpu)
+                == Services.SoftwareActivation.Encrypt(cpu + "0"));
+            string dev = Services.SoftwareActivation.DeviceCode(cpu);
+            Check("30天码=Encrypt(设备码+30)",
+                Services.SoftwareActivation.Code30(dev)
+                == Services.SoftwareActivation.Encrypt(dev + "30"));
+            Check("永久码=Encrypt(设备码+ALL)",
+                Services.SoftwareActivation.CodePermanent(dev)
+                == Services.SoftwareActivation.Encrypt(dev + "ALL"));
+
+            // ── 激活比对：先永久后 30 天，对不上静默（与 HJVision 激活_Click 对齐） ──
+            Check("永久码认出",
+                Services.SoftwareActivation.VerifyActivationCode(
+                    Services.SoftwareActivation.CodePermanent(dev), dev)
+                == Services.SoftwareActivation.ActivationKind.Permanent);
+            Check("30天码认出",
+                Services.SoftwareActivation.VerifyActivationCode(
+                    Services.SoftwareActivation.Code30(dev), dev)
+                == Services.SoftwareActivation.ActivationKind.ThirtyDays);
+            Check("错码无操作",
+                Services.SoftwareActivation.VerifyActivationCode("000000000000000000000000000000", dev)
+                == Services.SoftwareActivation.ActivationKind.None);
+            Check("空输入无操作",
+                Services.SoftwareActivation.VerifyActivationCode("", dev)
+                == Services.SoftwareActivation.ActivationKind.None);
+            Check("空设备码无操作",
+                Services.SoftwareActivation.VerifyActivationCode(
+                    Services.SoftwareActivation.Code30(dev), "")
+                == Services.SoftwareActivation.ActivationKind.None);
+
+            // ── 设备绑定：RunHash1 == Encrypt(设备ID + "A") ──
+            Check("绑定对上",
+                Services.SoftwareActivation.IsDeviceBound(
+                    Services.SoftwareActivation.DeviceIdCode(cpu), cpu));
+            Check("绑定错位",
+                !Services.SoftwareActivation.IsDeviceBound(
+                    Services.SoftwareActivation.DeviceIdCode("OTHERCPU"), cpu));
+            Check("空RunHash1=新设备",
+                !Services.SoftwareActivation.IsDeviceBound("", cpu));
+
+            // ── 计数格：0..839 找格，768 以下有效 ──
+            Check("第0格找到",
+                Services.SoftwareActivation.FindSlot(
+                    Services.SoftwareActivation.Encrypt(cpu + "0"), cpu) == 0);
+            Check("第767格找到",
+                Services.SoftwareActivation.FindSlot(
+                    Services.SoftwareActivation.Encrypt(cpu + "767"), cpu) == 767);
+            Check("第839格找到",
+                Services.SoftwareActivation.FindSlot(
+                    Services.SoftwareActivation.Encrypt(cpu + "839"), cpu) == 839);
+            Check("840之外找不到",
+                Services.SoftwareActivation.FindSlot(
+                    Services.SoftwareActivation.Encrypt(cpu + "840"), cpu) == -1);
+            Check("乱串找不到",
+                Services.SoftwareActivation.FindSlot("zzzz", cpu) == -1);
+            Check("0与767有效/768与-1无效",
+                Services.SoftwareActivation.IsSlotValid(0)
+                && Services.SoftwareActivation.IsSlotValid(767)
+                && !Services.SoftwareActivation.IsSlotValid(768)
+                && !Services.SoftwareActivation.IsSlotValid(-1));
+            Check("0格剩30天", Services.SoftwareActivation.SlotDaysLeft(0) == 30);
+            Check("24格剩29天", Services.SoftwareActivation.SlotDaysLeft(24) == 29);
+
+            // ── 综合判定：先设备、再永久、再计数 ──
+            int slot;
+            int days;
+            Check("未绑定=新设备",
+                Services.SoftwareActivation.ComputeStatus("nope",
+                    Services.SoftwareActivation.Encrypt(cpu + "0"), cpu, out slot, out days)
+                == Services.SoftwareActivation.ActivationStatus.NewDevice);
+            Check("永久",
+                Services.SoftwareActivation.ComputeStatus(
+                    Services.SoftwareActivation.DeviceIdCode(cpu),
+                    Services.SoftwareActivation.PermanentMark(cpu), cpu, out slot, out days)
+                == Services.SoftwareActivation.ActivationStatus.Permanent);
+            Check("计数有效=试用",
+                Services.SoftwareActivation.ComputeStatus(
+                    Services.SoftwareActivation.DeviceIdCode(cpu),
+                    Services.SoftwareActivation.Encrypt(cpu + "5"), cpu, out slot, out days)
+                == Services.SoftwareActivation.ActivationStatus.InTrial
+                && slot == 5 && days == 30);
+            Check("768格=过期",
+                Services.SoftwareActivation.ComputeStatus(
+                    Services.SoftwareActivation.DeviceIdCode(cpu),
+                    Services.SoftwareActivation.Encrypt(cpu + "768"), cpu, out slot, out days)
+                == Services.SoftwareActivation.ActivationStatus.Expired);
+            Check("找不到=过期",
+                Services.SoftwareActivation.ComputeStatus(
+                    Services.SoftwareActivation.DeviceIdCode(cpu),
+                    "nope", cpu, out slot, out days)
+                == Services.SoftwareActivation.ActivationStatus.Expired);
+            Check("永久文案",
+                Services.SoftwareActivation.StatusText(
+                    Services.SoftwareActivation.ActivationStatus.Permanent, -1, 0)
+                == "激活状态: 永久使用");
+            Check("试用文案带天数",
+                Services.SoftwareActivation.StatusText(
+                    Services.SoftwareActivation.ActivationStatus.InTrial, 5, 30).Contains("30"));
+            Check("过期文案",
+                Services.SoftwareActivation.StatusText(
+                    Services.SoftwareActivation.ActivationStatus.Expired, -1, 0).Contains("已过期"));
+            Check("新设备文案",
+                Services.SoftwareActivation.StatusText(
+                    Services.SoftwareActivation.ActivationStatus.NewDevice, -1, 0).Contains("未绑定"));
+
+            // ── ini 往返（隔离目录，不碰真实 MainSetting.ini） ──
+            string dir = EnterCleanDir();
+            string ini = Path.Combine(dir, "MainSetting.ini");
+            Services.SoftwareActivation.WriteValueTo(
+                ini, Services.SoftwareActivation.KeyDevice,
+                Services.SoftwareActivation.DeviceIdCode(cpu));
+            Services.SoftwareActivation.WriteValueTo(
+                ini, Services.SoftwareActivation.KeyRuntime,
+                Services.SoftwareActivation.Encrypt(cpu + "3"));
+            string h1;
+            string h2;
+            Services.SoftwareActivation.ReadRunHashFrom(ini, out h1, out h2);
+            Check("ini双键往返",
+                h1 == Services.SoftwareActivation.DeviceIdCode(cpu)
+                && h2 == Services.SoftwareActivation.Encrypt(cpu + "3"));
+            string m1;
+            string m2;
+            Services.SoftwareActivation.ReadRunHashFrom(
+                Path.Combine(dir, "NoSuch.ini"), out m1, out m2);
+            Check("缺文件读空", m1 == "" && m2 == "");
+            // 推进一格 = HJVision Tick 语义（找到 i 就写 i+1）
+            int s = Services.SoftwareActivation.FindSlot(h2, cpu);
+            Services.SoftwareActivation.WriteValueTo(ini,
+                Services.SoftwareActivation.KeyRuntime,
+                Services.SoftwareActivation.Encrypt(cpu + (s + 1).ToString()));
+            Services.SoftwareActivation.ReadRunHashFrom(ini, out h1, out h2);
+            Check("推进一格", Services.SoftwareActivation.FindSlot(h2, cpu) == 4);
+
+            // ── 激活窗构造（只构造不 Show，不断言弹窗） ──
+            var fl = typeof(SoftActivation);
+            var flInst = BindingFlags.NonPublic | BindingFlags.Instance;
+            SoftActivation frm = null;
             try
             {
-                // ── 规范串稳定：同值同串，改一字就变（签名逐字节认它） ──
-                var a = new Services.License.LicenseInfo { project = "烧屏测试", maxStations = 72 };
-                var b = new Services.License.LicenseInfo { project = "烧屏测试", maxStations = 72 };
-                Check("同值规范串一致", a.CanonicalString() == b.CanonicalString());
-                b.maxStations = 36;
-                Check("改值规范串变", a.CanonicalString() != b.CanonicalString());
-
-                // ── 签名互逆：对了过，改载荷/换钥匙都不过 ──
-                string sig = Services.License.LicenseManager.SignForIssuer(a, testPriv);
-                Check("签发有签名", !string.IsNullOrEmpty(sig));
-                Check("原样验签过", Services.License.LicenseManager.VerifySignature(a, sig));
-                var tampered = new Services.License.LicenseInfo { project = "新项目", maxStations = 72 };
-                Check("改项目签不过", !Services.License.LicenseManager.VerifySignature(tampered, sig));
-                fKey.SetValue(null, otherPub);
-                Check("换钥匙签不过", !Services.License.LicenseManager.VerifySignature(a, sig));
-                fKey.SetValue(null, testPub);
-
-                // ── 落盘往返：Save→Load→验签一条龙（文件进隔离目录） ──
-                string fp;
-                try { fp = Services.License.MachineFingerprint.Ungroup(Services.License.MachineFingerprint.Compute()); }
-                catch { fp = ""; }
-                Check("本机指纹可算（64hex）", !string.IsNullOrEmpty(fp) && fp.Length == 64, fp);
-                var lic = new Services.License.LicenseInfo
+                frm = new SoftActivation();
+                var fId = fl.GetField("_txtDeviceId", flInst);
+                var fCode = fl.GetField("_txtDeviceCode", flInst);
+                var fAct = fl.GetField("_txtActivationCode", flInst);
+                var fStatus = fl.GetField("_lblStatus", flInst);
+                var idBox = fId != null ? fId.GetValue(frm) as Sunny.UI.UITextBox : null;
+                var codeBox = fCode != null ? fCode.GetValue(frm) as Sunny.UI.UITextBox : null;
+                var actBox = fAct != null ? fAct.GetValue(frm) as Sunny.UI.UITextBox : null;
+                var statusLbl = fStatus != null ? fStatus.GetValue(frm) as Control : null;
+                Check("无参构造三框齐全",
+                    frm != null && idBox != null && codeBox != null && actBox != null
+                    && statusLbl != null);
+                if (idBox != null && codeBox != null && statusLbl != null)
                 {
-                    machine = fp, project = "烧屏测试", expiry = "2027-09-01",
-                    maxStations = 72, featuresMes = true, featuresRules = true,
-                    serial = "UT001", issued = "2026-09-13",
-                };
-                string sig2 = Services.License.LicenseManager.SignForIssuer(lic, testPriv);
-                Check("授权文件落盘",
-                    Services.License.LicenseManager.SaveLicenseFile(lic, sig2)
-                    && File.Exists(Path.Combine(dir, "License.lic")));
-                Services.License.LicenseInfo back;
-                string backSig;
-                Check("授权文件读回",
-                    Services.License.LicenseManager.TryLoadLicense(out back, out backSig)
-                    && back != null && back.project == "烧屏测试" && backSig == sig2);
-
-                // ── 持证四道关：全对放行，错一道拦一道 ──
-                var ok = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, true, true);
-                Check("持证全对放行", ok.Allowed && ok.Status == Services.License.LicenseStatus.Authorized, ok.Message);
-                Check("标题挂到期", ok.TitleSuffix.Contains("2027-09-01"), ok.TitleSuffix);
-                // （机器关单独测：重签发一张"别人机器"的证）
-                var otherComp = new List<string>();
-                for (int i = 0; i < Services.License.MachineFingerprint.ComponentNames.Length; i++)
-                    otherComp.Add(new string((char)('a' + (i + 1) % 26), 64));   // 假外来机分量
-                var other = new Services.License.LicenseInfo
-                {
-                    machine = new string('0', 64), project = "烧屏测试", expiry = "2027-09-01",
-                    maxStations = 72, serial = "UT002", issued = "2026-09-13",
-                };
-                string sigOther = Services.License.LicenseManager.SignForIssuer(other, testPriv);
-                Services.License.LicenseManager.SaveLicenseFile(other, sigOther, otherComp);
-                var mm = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
-                Check("机器不对阻断（分量全不对）", !mm.Allowed && mm.Message.Contains("机器"), mm.Message);
-                // 漂移容忍：只换一块硬件（3/4 分量命中）放行 + 警告
-                string[] curComp = Services.License.MachineFingerprint.GetComponentHashes();
-                var drift = new List<string>(curComp);
-                drift[0] = new string('f', 64);   // 换系统盘（board 分量变了）
-                var driftLic = new Services.License.LicenseInfo
-                {
-                    machine = new string('0', 64), project = "烧屏测试", expiry = "2027-09-01",
-                    maxStations = 72, serial = "UT007", issued = "2026-09-13",
-                };
-                Services.License.LicenseManager.SaveLicenseFile(driftLic,
-                    Services.License.LicenseManager.SignForIssuer(driftLic, testPriv), drift);
-                var dw = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
-                Check("换一块硬件漂移放行+警告",
-                    dw.Allowed && !string.IsNullOrEmpty(dw.FeatureWarning)
-                    && dw.FeatureWarning.Contains("硬件变更"), dw.FeatureWarning);
-                // 项目：限定版跑别的项目拦，通用版（空）放行
-                Services.License.LicenseManager.SaveLicenseFile(lic, sig2);
-                var pm = Services.License.LicenseManager.EnsureStartupLicense("新项目", 72, false, false);
-                Check("限定版跑新项目阻断", !pm.Allowed && pm.Message.Contains("新项目"), pm.Message);
-                var uni = new Services.License.LicenseInfo
-                {
-                    machine = fp, project = "", expiry = "2027-09-01",
-                    maxStations = 72, serial = "UT003", issued = "2026-09-13",
-                };
-                Services.License.LicenseManager.SaveLicenseFile(uni,
-                    Services.License.LicenseManager.SignForIssuer(uni, testPriv));
-                var um = Services.License.LicenseManager.EnsureStartupLicense("随便什么项目", 72, false, false);
-                Check("通用版不限项目", um.Allowed, um.Message);
-                // 点数：72 点的证跑 80 点的线拦
-                Services.License.LicenseManager.SaveLicenseFile(lic, sig2);
-                var sm = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 80, false, false);
-                Check("点数超配阻断", !sm.Allowed && sm.Message.Contains("80"), sm.Message);
-                // 有效期：昨天到期=宽限放行，8 天前到期=阻断
-                var exp1 = new Services.License.LicenseInfo
-                {
-                    machine = fp, project = "烧屏测试",
-                    expiry = t0.AddDays(-1).ToString("yyyy-MM-dd"),
-                    maxStations = 72, serial = "UT004", issued = "2026-09-13",
-                };
-                Services.License.LicenseManager.SaveLicenseFile(exp1,
-                    Services.License.LicenseManager.SignForIssuer(exp1, testPriv));
-                var g = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
-                Check("过期1天宽限放行",
-                    g.Allowed && g.Status == Services.License.LicenseStatus.GraceExpired, g.Message);
-                var exp8 = new Services.License.LicenseInfo
-                {
-                    machine = fp, project = "烧屏测试",
-                    expiry = t0.AddDays(-8).ToString("yyyy-MM-dd"),
-                    maxStations = 72, serial = "UT005", issued = "2026-09-13",
-                };
-                Services.License.LicenseManager.SaveLicenseFile(exp8,
-                    Services.License.LicenseManager.SignForIssuer(exp8, testPriv));
-                var e8 = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
-                Check("过期8天阻断", !e8.Allowed, e8.Message);
-                // 功能超范围：只警告不阻断（现场不断线）
-                var nofeat = new Services.License.LicenseInfo
-                {
-                    machine = fp, project = "烧屏测试", expiry = "2027-09-01",
-                    maxStations = 72, featuresMes = false, featuresRules = false,
-                    serial = "UT006", issued = "2026-09-13",
-                };
-                Services.License.LicenseManager.SaveLicenseFile(nofeat,
-                    Services.License.LicenseManager.SignForIssuer(nofeat, testPriv));
-                var fw = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, true, true);
-                Check("功能超范围放行+警告",
-                    fw.Allowed && !string.IsNullOrEmpty(fw.FeatureWarning), fw.FeatureWarning);
-                // 真改文件：落盘后改一个字符，验签即拦
-                Services.License.LicenseManager.SaveLicenseFile(lic, sig2);
-                string licPath = Path.Combine(dir, "License.lic");
-                string raw = File.ReadAllText(licPath);
-                File.WriteAllText(licPath, raw.Replace("烧屏测试", "烧屏测X"));
-                var mod = Services.License.LicenseManager.EnsureStartupLicense("烧屏测X", 72, false, false);
-                Check("改文件一个字即拦", !mod.Allowed, mod.Message);
-                // 空指纹证照样签名有效也不能放（V1.83.1 fail-closed：签发端强制64位，
-                // 空 machine 只有手造一种来源，不能按"没绑机器"放行）
-                var emptyFp = new Services.License.LicenseInfo
-                {
-                    machine = "", project = "烧屏测试", expiry = "2027-09-01",
-                    maxStations = 72, serial = "UT008", issued = "2026-09-13",
-                };
-                Services.License.LicenseManager.SaveLicenseFile(emptyFp,
-                    Services.License.LicenseManager.SignForIssuer(emptyFp, testPriv));
-                var ef = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
-                Check("空指纹证阻断", !ef.Allowed && ef.Message.Contains("绑定"), ef.Message);
-                // 缺 maxStations 字段=证损坏≠点数超配（不误导用户去升级点数）
-                var noStations = new Services.License.LicenseInfo
-                {
-                    machine = fp, project = "烧屏测试", expiry = "2027-09-01",
-                    maxStations = 0, serial = "UT009", issued = "2026-09-13",
-                };
-                Services.License.LicenseManager.SaveLicenseFile(noStations,
-                    Services.License.LicenseManager.SignForIssuer(noStations, testPriv));
-                var ns = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
-                Check("点数字段非法=证损坏不误报超配",
-                    !ns.Allowed && ns.Message.Contains("重新导入") && !ns.Message.Contains("超配"), ns.Message);
-
-                // ── 无证试用：首跑放行 30 天，31 天拦，回拨占不到便宜 ──
-                try { File.Delete(licPath); } catch { }
-                try { File.Delete(Path.Combine(dir, "License.trial")); } catch { }
-                try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(regPath); } catch { }
-                var tr = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
-                Check("首跑试用放行", tr.Allowed
-                    && (tr.Status == Services.License.LicenseStatus.Trial
-                        || tr.Status == Services.License.LicenseStatus.TrialExpiring), tr.Message);
-                fNow.SetValue(null, (Func<DateTime>)(() => t0.AddDays(31)));
-                var te = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
-                Check("试用31天阻断", !te.Allowed, te.Message);
-                fNow.SetValue(null, (Func<DateTime>)(() => t0));   // 回到首跑日再new一轮
-                try { File.Delete(Path.Combine(dir, "License.trial")); } catch { }
-                try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(regPath); } catch { }
-                var tr2 = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
-                fNow.SetValue(null, (Func<DateTime>)(() => t0.AddDays(-5)));   // 回拨5天
-                var rb = Services.License.LicenseManager.EnsureStartupLicense("烧屏测试", 72, false, false);
-                Check("时钟回拨占不到便宜（剩余天数不变）",
-                    rb.Allowed && tr2.Allowed && rb.DaysLeft == tr2.DaysLeft,
-                    "回拨前" + tr2.DaysLeft + "天/回拨后" + rb.DaysLeft + "天");
-
-                // ── 授权窗构造（只读模式导入按钮禁用，不断言弹窗） ──
-                fNow.SetValue(null, (Func<DateTime>)(() => t0));
-                LicenseForm frm = null;
-                try
-                {
-                    frm = new LicenseForm(tr, false);
-                    var fb = typeof(LicenseForm).GetField("_btnImport",
-                        BindingFlags.NonPublic | BindingFlags.Instance);
-                    var btn = fb != null ? fb.GetValue(frm) as System.Windows.Forms.Control : null;
-                    Check("只读模式导入按钮禁用", btn != null && !btn.Enabled);
-                    var fm = typeof(LicenseForm).GetField("_txtMachine",
-                        BindingFlags.NonPublic | BindingFlags.Instance);
-                    var txt = fm != null ? fm.GetValue(frm) as System.Windows.Forms.Control : null;
-                    Check("窗体机器码非空", txt != null && !string.IsNullOrWhiteSpace(txt.Text), txt != null ? txt.Text : "?");
-                }
-                finally { try { if (frm != null) frm.Dispose(); } catch { } }
-
-                // ── 授权窗 Designer 化 + 眼睛显隐（V1.86，只点眼睛，不碰弹框键） ──
-                var fl = typeof(LicenseForm);
-                var flInst = BindingFlags.NonPublic | BindingFlags.Instance;
-                var flStat = BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static;
-                LicenseForm eyeFrm = null;
-                try
-                {
-                    eyeFrm = new LicenseForm();
-                    var fEye = fl.GetField("_eyeIcon", flInst);
-                    var fTx = fl.GetField("_txtMachine", flInst);
-                    var eyeIcon = fEye != null ? fEye.GetValue(eyeFrm) as AgingTestSystem.Controls.EyeIcon : null;
-                    var mBox = fTx != null ? fTx.GetValue(eyeFrm) as Sunny.UI.UITextBox : null;
-                    Check("无参构造可用（Designer预览口）", eyeFrm != null && eyeIcon != null && mBox != null);
-                    if (eyeIcon != null && mBox != null)
+                    // 不 Show 直接刷（读真机 WMI + 真实 ini；关系式与机器无关恒成立）
+                    frm.RefreshStatus();
+                    Check("设备码=Encrypt(设备ID+1)",
+                        codeBox.Text == Services.SoftwareActivation.DeviceCode(idBox.Text),
+                        "len=" + (codeBox.Text ?? "").Length);
+                    Check("状态行非空且激活口径",
+                        !string.IsNullOrWhiteSpace(statusLbl.Text)
+                        && statusLbl.Text.StartsWith("激活状态"),
+                        statusLbl.Text);
+                    // 错码点激活：静默无操作不抛（与 HJVision 一致；直接调 handler）
+                    string before = statusLbl.Text;
+                    var actHandler = fl.GetMethod("BtnActivate_Click", flInst);
+                    Check("激活handler存在", actHandler != null);
+                    if (actHandler != null)
                     {
-                        // 眼睛是显示框的子控件：天然浮在输入框上（比"窗体级叠放"稳，
-                        // V1.86 血泪：窗体级叠加被输入框整体盖住，见 AGENTS 叠放控件层级三锁）
-                        Check("眼睛是显示框子控件", eyeIcon.Parent == mBox);
-                        // 【V1.86复查】旧断言只验"框内偏右"(Left>0)，眼睛贴左缘也绿。
-                        // 收紧到 PositionEye 公式位（右缘-2px，容差1px 防DPI取整）。
-                        Check("眼睛贴显示框右缘内侧",
-                            Math.Abs(eyeIcon.Location.X
-                                - (mBox.ClientSize.Width - eyeIcon.Width - 2)) <= 1,
-                            "x=" + eyeIcon.Location.X + " expect="
-                            + (mBox.ClientSize.Width - eyeIcon.Width - 2));
-                        // 【V1.86复查】被内层编辑框盖住时几何全对但看不见点不到
-                        // （本坑本尊），必须锁"最前"：子控件集合里序号0=最上。
-                        Check("眼睛浮在最前(未被内层编辑框盖住)",
-                            mBox.Controls.GetChildIndex(eyeIcon) == 0);
-                        Check("眼睛垂直居中于显示框",
-                            Math.Abs((eyeIcon.Location.Y + eyeIcon.Height / 2f)
-                                - mBox.ClientSize.Height / 2f) <= 2f);
-                        Check("默认掩码", mBox.PasswordChar == '●');
-                        Check("默认隐藏态(Shown=false)", eyeIcon.Shown == false);
-                        var tipObj = fl.GetField("_tipEye", flInst) != null
-                            ? fl.GetField("_tipEye", flInst).GetValue(eyeFrm) as ToolTip : null;
-                        string wantMasked = fl.GetField("EyeTipMasked", flStat) != null
-                            ? (string)fl.GetField("EyeTipMasked", flStat).GetValue(null) : null;
-                        string wantShown = fl.GetField("EyeTipShown", flStat) != null
-                            ? (string)fl.GetField("EyeTipShown", flStat).GetValue(null) : null;
-                        Check("默认悬停=显示明文",
-                            tipObj != null && wantMasked != null && tipObj.GetToolTip(eyeIcon) == wantMasked);
-                        string keep = mBox.Text;
-                        // PerformClick 在窗体未 Show 时 CanSelect=false 不触发事件（harness 实锤），
-                        // 回归不 Show 弹窗，直接调私有 handler，效果与点眼睛一致。
-                        var eyeHandler = fl.GetMethod("BtnEye_Click", flInst);
-                        Check("眼睛handler存在", eyeHandler != null);
-                        if (eyeHandler != null) eyeHandler.Invoke(eyeFrm, new object[] { eyeIcon, EventArgs.Empty });
-                        Check("点眼睛→明文", mBox.PasswordChar == '\0');
-                        Check("点眼睛→可见态(Shown=true)", eyeIcon.Shown == true);
-                        Check("悬停换隐藏",
-                            tipObj != null && wantShown != null && tipObj.GetToolTip(eyeIcon) == wantShown);
-                        // 机器码原文不打进日志（长度即可，防用例输出外泄本机指纹）。
-                        Check("显隐不丢值", mBox.Text == keep && !string.IsNullOrWhiteSpace(keep),
-                            "len=" + (keep ?? "").Length);
-                        if (eyeHandler != null) eyeHandler.Invoke(eyeFrm, new object[] { eyeIcon, EventArgs.Empty });
-                        Check("再点→掩码回去", mBox.PasswordChar == '●');
-                        Check("再点→隐藏态(Shown=false)", eyeIcon.Shown == false);
-                        Check("悬停换回来",
-                            tipObj != null && wantMasked != null && tipObj.GetToolTip(eyeIcon) == wantMasked);
+                        actBox.Text = "错的激活码";
+                        actHandler.Invoke(frm, new object[] { actBox, EventArgs.Empty });
+                        Check("错码静默（状态不动）", statusLbl.Text == before, statusLbl.Text);
                     }
                 }
-                finally { try { if (eyeFrm != null) eyeFrm.Dispose(); } catch { } }
-
-                // ── 标题后缀只替换不堆叠（V1.83.1：试用转正/续费换证后老后缀不能赖着） ──
-                var mTitle = typeof(Views.MainForm).GetMethod("WithLicenseSuffix",
-                    BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
-                Check("标题后缀纯函数存在", mTitle != null);
-                if (mTitle != null)
-                {
-                    Func<string, string, string> merge = (b, s) =>
-                        (string)mTitle.Invoke(null, new object[] { b, s });
-                    Check("挂后缀",
-                        merge("老化测试系统", "[已授权至2027-09-01]") == "老化测试系统 [已授权至2027-09-01]");
-                    Check("空后缀原样返回", merge("老化测试系统", "") == "老化测试系统");
-                    Check("空标题不炸", merge(null, "[已授权至2027-09-01]") == " [已授权至2027-09-01]");
-                    // 注：真正的"换证不堆叠"靠 ApplyLicenseStatus 的 _licenseBaseTitle
-                    // （首次记干净标题、每次重拼），需完整主窗构造太重不直测；
-                    // 此处锁纯函数"只认干净标题"的契约：调用方永远传 base，不传当前 Text。
-                }
             }
-            finally
-            {
-                // 测试缝复位 + 隔离注册表删键（生产行为零残留）
-                try { fBase.SetValue(null, null); } catch { }
-                try { fKey.SetValue(null, null); } catch { }
-                try { fNow.SetValue(null, null); } catch { }
-                try { fReg.SetValue(null, null); } catch { }
-                try { Microsoft.Win32.Registry.CurrentUser.DeleteSubKeyTree(regPath); } catch { }
-            }
+            finally { try { if (frm != null) frm.Dispose(); } catch { } }
         }
 
         /// <summary>轮询等待（MesTests 用：后台线程投递需等待；超时返回 false）</summary>

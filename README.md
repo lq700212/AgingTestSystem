@@ -14,7 +14,6 @@ WinForms 桌面程序（.NET Framework 4.7.2 / C#）：监控 72 台气压表真
 | 改动历史 | 下文「8. 版本历史」+ `CHANGELOG.md` |
 | 现场调试 | 主程序"关于"菜单：**通讯测试 / 送风机测试**（技术员及以上；复用主程序共享连接，不自建连接） |
 | 现场操作培训 | [`docs/现场工程师培训手册.md`](docs/现场工程师培训手册.md)（开机→生产→报警处理→点检→禁忌，照着做） |
-| AI 接手开发 | [`docs/AI开发引导.md`](docs/AI开发引导.md)（10 分钟：项目速览+代码地图+高频任务 cookbook+验证闭环；规范仍以 `AGENTS.md` 为准） |
 | 内部开发接手 | [`docs/内部开发人员说明.md`](docs/内部开发人员说明.md)（地图+同步清单+红线索引，规范唯一源仍是 `AGENTS.md`） |
 
 > 原独立测试工程（`ModbusRtuBarometerTest` / `ModbusTcpIoControllerTest` / `ModbusTCPFanControllerTest` / `SerialScannerTest`）
@@ -70,7 +69,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Services/AppLogFileWriter.cs` | 主窗体 UI 操作日志落盘（Logs\AppLog_yyyyMMdd.log，按日期分文件，与文本框逐行一致，写失败静默） |
 | `Services/UserManager.cs` | 用户/登录/权限，Users.json 持久化（密码哈希，V1.58.22）；V1.64 起含 dev 最高权限账号（可删改管理员，dev 名系统保留） |
 | `Services/PasswordHasher.cs` | 密码哈希（PBKDF2-HMAC-SHA256，随机盐 + 10 万次迭代，`PBKDF2$迭代$盐$哈希` 自描述格式） |
-| `Services/License/*`（V1.83）+ `Dialogs/LicenseForm.cs` | 软件授权：机器码（主板/CPU/系统盘/MachineGuid WMI 指纹）+ RSA2048 离线授权文件（一机一证/限定版绑项目/按点数档/按年到期/7 天宽限；无证试用 30 天双记防删库+时钟回拨对冲）；启动闸在 Program.Run 前，主窗标题栏挂 `[已授权至…]`/`[试用版剩余N天]`，【关于→软件授权】导出机器码/导入授权；签发工具 `tools/LicenseKeyGen`（私钥 gitignore，公钥嵌产品） |
+| `Services/SoftwareActivation.cs`（V1.87）+ `Dialogs/SoftActivation.cs` | 软件激活：与 HJVision 同源同口径（CPU 序列号 + MD5 30 字符码，同一套《获取激活码》工具通用）；设备ID/设备码/激活码三件套，30天（768 运行小时格）/永久两档；`MainSetting.ini [RunHash]` 存双键（gitignore），主窗 1 小时 Timer 提醒，新设备/过期只置灰用户权限入口，不阻断启动与生产 |
 | `Services/RecipeStorage.cs` | 配方列表持久化（V1.67 起跟项目走 `Projects/<项目>/Recipes.json`，启动加载/操作即写盘；SaveWithDuplicateCheck 同名覆盖保存，V1.25/1.26） |
 | `Services/StationSettingsCache.cs` | 工位配置缓存（V1.67 起跟项目走 `Projects/<项目>/StationSettings.json`，按工位缓存 SN/配方/延时/极限温度/负压阈值/显示模式，设置窗口下次打开自动回填，V1.26；V1.66 加后两项） |
 | `Services/ThemeManager.cs` | 深色/浅色主题服务（V1.60）：App.config 存 AppTheme（Light/Dark），双向映射表递归着色（语义色保留、按钮不动），打开窗体前 ApplyTo、切换时 ApplyToAllOpenForms |
@@ -233,6 +232,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 | 版本 | 要点 |
 | :--- | :--- |
+| V1.87 | 授权改与 HJVision 同源：删 RSA 全套（无老证包袱），CPU+MD5 三件套激活（30天/永久），同一套《获取激活码》工具通用；`MainSetting.ini [RunHash]` 双键 + 主窗 1 小时 Timer（新设备/过期弹框+置灰用户权限，不阻断生产；1718 断言全绿） |
 | V1.86.1 | 授权窗眼睛显隐复查修复 9 项：初始掩码态代码收敛/Message空加固/空机器码复制导出明示拦截/换肤底色跟随/具名退订+补Dispose/字体移出Designer/眼睛小尺寸守卫；回归收紧右缘精确+最前断言+日志脱敏（1712 断言全绿） |
 | V1.86 | 授权窗 Designer 化 + 机器码眼睛显隐（默认●掩码防偷窥，右缘自绘眼睛图标：掩码态=眼睛+斜线/明文态=实心瞳孔，点击显隐，复制导出不受影响；1711 断言全绿） |
 | V1.85.1 | 节点选项框按预置下拉口径统一：全节点 16 下拉按最长选项实测拉宽（最宽 389，最长 22 字旧口径下被截断）+ 悬停看选中项全文（闭合框 270 放不下时兜底）+ 切节点清提示表防钉住泄漏（1696 断言全绿） |

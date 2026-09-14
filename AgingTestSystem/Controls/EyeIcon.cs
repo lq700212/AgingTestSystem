@@ -16,7 +16,8 @@ namespace AgingTestSystem.Controls
     /// - Shown=false → 眼睛轮廓 + 空心瞳孔 + 斜线（当前是圆点隐藏，点我显示明文）；
     /// - Shown=true  → 眼睛轮廓 + 实心瞳孔（当前明文可见，点我藏回圆点）。
     ///
-    /// 【宿主要做三件事】（宿主窗体构造里，参照 LicenseForm.ApplyEditState）
+    /// 【宿主要做三件事】（宿主窗体构造里；V1.87 前参照旧 LicenseForm.ApplyEditState，
+    /// V1.87 起激活窗与 HJVision 一致无眼睛，本控件暂无挂接，保持可用）
     /// ①把本控件 Add 进输入框.Controls（子控件天然浮在输入框上，不会被组件遮）；
     /// ②绑输入框 Resize 调 PositionEye 精确定位（输入框缩放/DPI 变化时眼睛跟右缘走）；
     /// ③BackColor 设成输入框底色（单行框文本让不出右边距，眼睛只能盖在文本右端，
@@ -47,7 +48,7 @@ namespace AgingTestSystem.Controls
             Cursor = Cursors.Hand;
             // 【V1.86复查】TabStop 收进构造自包含：本控件是装饰性图标按钮，
             // Tab 顺序里停它只会干扰录入/复制主流程（键盘用户复制/导出读真值，
-            // 不依赖眼睛态）；原来只写在 LicenseForm.Designer 里，别人 new 一个
+            // 不依赖眼睛态）；原来只写在旧授权窗 Designer 里，别人 new 一个
             // 就默认可 Tab，自包含后在哪用都不分叉。
             TabStop = false;
         }
