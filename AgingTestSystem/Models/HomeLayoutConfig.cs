@@ -86,6 +86,9 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 从程序目录加载 HomeLayout.json；文件不存在或解析失败时返回内置默认配置。
+        /// 【V1.88.17】读到的值一律按 Range 钳制后返回（手改 json 越界、上版本存的脏值，
+        /// 进不了主窗：顶栏 5000 高这种不会再把工作站区挤没；纯函数 <see cref="ClampToRange"/>，
+        /// 回归可直接断言）。
         /// </summary>
         public static HomeLayoutConfig LoadOrDefault()
         {
@@ -96,7 +99,7 @@ namespace AgingTestSystem.Models
                 {
                     string json = File.ReadAllText(path, System.Text.Encoding.UTF8);
                     var cfg = JsonConvert.DeserializeObject<HomeLayoutConfig>(json);
-                    if (cfg != null) return cfg;
+                    if (cfg != null) return cfg.ClampToRange();
                 }
             }
             catch (Exception)
@@ -104,6 +107,29 @@ namespace AgingTestSystem.Models
                 // 配置损坏时静默回退默认值，避免程序无法启动
             }
             return new HomeLayoutConfig();
+        }
+
+        /// <summary>
+        /// 把四个尺寸钳到各自 Range 内（【V1.88.17 新增】就地钳制并返回 this，方便链式调用）。
+        ///
+        /// 【为什么加载也要钳】编辑器输入框有自己的 Minimum/Maximum，但 json 是手改得到的：
+        /// RightPanelWidth 写 5000 → SplitterDistance 越界抛异常主窗起不来；
+        /// TopBarHeight 写 5000 → 工作站区高度被挤成负数。钳制后坏文件最多变成"不好看"，
+        /// 不会变成"起不来/看不见"，与"损坏回退默认"同属保命逻辑。
+        /// </summary>
+        public HomeLayoutConfig ClampToRange()
+        {
+            TopBarHeight = Clamp(TopBarHeight, TopBarRange);
+            MenuHeight = Clamp(MenuHeight, MenuRange);
+            RightPanelWidth = Clamp(RightPanelWidth, RightPanelRange);
+            StatusBarHeight = Clamp(StatusBarHeight, StatusBarRange);
+            return this;
+        }
+
+        /// <summary>整数钳到 [Min, Max]（ClampToRange 共用，单测可直调 LoadOrDefault 越界文件验证）</summary>
+        private static int Clamp(int v, (int Min, int Max) range)
+        {
+            return v < range.Min ? range.Min : (v > range.Max ? range.Max : v);
         }
 
         /// <summary>

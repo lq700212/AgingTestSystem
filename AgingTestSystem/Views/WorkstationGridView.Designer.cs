@@ -45,7 +45,7 @@ namespace AgingTestSystem.Views
             this.components = new System.ComponentModel.Container();
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
             this.Name = "WorkstationGridView";
-            this.Size = new System.Drawing.Size(2040, 2025);
+            this.Size = new System.Drawing.Size(1736, 1638);
         }
 
         #endregion

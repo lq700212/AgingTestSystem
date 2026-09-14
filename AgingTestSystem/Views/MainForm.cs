@@ -106,6 +106,18 @@ namespace AgingTestSystem.Views
         public const int RightPanelMaxWidth = 340;
 
         /// <summary>
+        /// 【V1.88.17】工作站列表区（splitContainerMain.Panel1）最小宽度（像素）。
+        ///
+        /// 【为什么要保 Panel1】"关于 → 主页区域调整"允许用户把右侧拖到 600 宽；
+        /// 小屏上 600 右侧会把 Panel1 挤到 500 不到，72 站被压成小方块、字全叠在一起
+        /// （无崩溃，但没法看）。本常量是最后一道闸：右侧再宽也不能吃掉 Panel1 这 640px。
+        /// 取值依据：紧凑后面板列宽 209，640 / 8 列 ≈ 每列 80px，zoomX ≈ 0.37，
+        /// 6pt 字刚好可辨认；再小就真没法用了，此时宁可让右侧不听话（被钳住），也不能丢显示。
+        /// 生效点见 <see cref="ClampRightPanelWidthForWorkstation"/>（纯函数，可单测）。
+        /// </summary>
+        public const int MinWorkstationPanelWidth = 640;
+
+        /// <summary>
         /// 设备配置
         /// 从 App.config 加载，包含设备数量、通信参数等
         /// </summary>
@@ -314,6 +326,33 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
+        /// 按工作站列表区最小宽度钳制右侧宽度（【V1.88.17 新增】纯函数，可单元测试，不碰任何控件）。
+        ///
+        /// 【为什么要第二道钳】<see cref="ComputeRightPanelWidth"/> 只管"右侧想要多宽"
+        /// （比例 180~340，或 json 自定义原样返回，最大可到 600）；不管"左侧还剩多少"。
+        /// 小屏 + 右侧 600 的组合下 Panel1 会被挤扁，72 站压成小方块。
+        /// 本函数保证 Panel1 = containerWidth - right - splitterWidth ≥ minWorkstationWidth：
+        /// 超了就把右侧压回来（右侧将就，显示优先）；容器本身太窄（连 右侧下限+左侧下限 都放不下，
+        /// 如构造极早期宽不可读）时保右侧下限（右侧按钮文字不能截断），左侧听天由命
+        /// （窗口 MinimumSize 1150 兜底，正常走不到这）。
+        /// </summary>
+        /// <param name="targetRight">ComputeRightPanelWidth 算出的右侧期望宽度</param>
+        /// <param name="containerWidth">分隔容器当前总宽（≤0 时不钳直接返回，构造早期宽不可读）</param>
+        /// <param name="splitterWidth">分隔条宽度（splitContainerMain.SplitterWidth）</param>
+        /// <param name="minWorkstationWidth">左侧最小宽度（传 <see cref="MinWorkstationPanelWidth"/>）</param>
+        /// <returns>钳制后的右侧宽度（≥RightPanelMinWidth，保证按钮文字不截断）</returns>
+        public static int ClampRightPanelWidthForWorkstation(int targetRight, int containerWidth,
+            int splitterWidth, int minWorkstationWidth)
+        {
+            if (containerWidth <= 0) return targetRight;
+            int maxRight = containerWidth - splitterWidth - minWorkstationWidth;
+            int clamped = targetRight < RightPanelMinWidth ? RightPanelMinWidth : targetRight;
+            if (maxRight < RightPanelMinWidth) return clamped;   // 容器本身太窄：保右侧下限
+            if (clamped > maxRight) clamped = maxRight;
+            return clamped;
+        }
+
+        /// <summary>
         /// 窗口宽度变化记忆（SplitContainer.Resize 防重复入口）：
         /// - 只有总宽变了才按比例重算右侧（高度变化不重算，避免无谓抖动）；
         /// - 用户手动拖分隔条只改 SplitterDistance、不改总宽，不会触发重算，
@@ -364,15 +403,27 @@ namespace AgingTestSystem.Views
                 custom = HomeLayoutConfig.LoadOrDefault().RightPanelWidth;
             }
             int targetRight = ComputeRightPanelWidth(splitContainerMain.Width, hasCustom, custom);
+            // 【V1.88.17】第二道钳：右侧再宽也不能吃掉 Panel1 的最小宽度（json 自定义 600
+            // 在小屏上会把 72 站挤成小方块；钳后右侧将就、显示优先，见 ClampRightPanelWidthForWorkstation）。
+            targetRight = ClampRightPanelWidthForWorkstation(targetRight, splitContainerMain.Width,
+                splitContainerMain.SplitterWidth, MinWorkstationPanelWidth);
             _lastSplitWidth = splitContainerMain.Width;
 
             // 1. 设置 SplitterDistance，让 Panel2 宽度 = 目标右侧宽度
             //    Panel2 宽度 = splitContainerMain 总宽 - SplitterDistance - 分隔条宽度
             //    => SplitterDistance = 总宽 - 右侧宽度 - 分隔条宽度
+            // 【V1.88.17】try/catch：窗口拖动极端尺寸瞬间 SplitterDistance 可能越界抛
+            // ArgumentOutOfRangeException（如 Panel1MinSize 约束），吞掉等下一次 Resize 再算，
+            // 不能因为调个布局把主窗拖崩。
             int distance = splitContainerMain.Width - targetRight - splitContainerMain.SplitterWidth;
             if (distance > 0)
             {
-                splitContainerMain.SplitterDistance = distance;
+                try
+                {
+                    splitContainerMain.SplitterDistance = distance;
+                }
+                catch (ArgumentOutOfRangeException) { /* 极端尺寸瞬间越界，下次 Resize 再算 */ }
+                catch (InvalidOperationException) { /* 同上 */ }
             }
 
             // 2. 同步缩放"操作"分组里的按钮宽度（按钮 X=15、宽 256 是设计值，
@@ -1299,8 +1350,9 @@ namespace AgingTestSystem.Views
         /// 【布局说明】
         /// - 整个工位区域（8列×9行面板 + 行全选按钮列）合并为 1 个自绘
         ///   <see cref="WorkstationGridView"/>，尺寸 = 内容总尺寸；
-        /// - 外层用 Panel.AutoScroll 容器托管，AutoFit 开时 72 站按本容器尺寸一屏显示全
-        ///   （关 AutoFit 或内容超出时出现滚动条）；
+        /// - 外层用 Panel.AutoScroll 容器托管，AutoFit 开时 72 站按本容器尺寸精确铺满一屏
+        ///   （【V1.88.17】zoomX/zoomY 双向独立，无纵向横向滚动条；
+        ///   关 AutoFit 或 zoom 触底（显示区被挤到极小）时才出滚动条兜底）；
         /// - 滚动时系统只需移动 1 个窗口（而非 V1.49 的 72 个），无撕裂。
         /// 【注意】不能放在 FlowLayoutPanel 中，因为 FlowLayoutPanel
         /// 不尊重子控件的 Dock=Fill 属性。
@@ -1319,8 +1371,9 @@ namespace AgingTestSystem.Views
             var scrollContainer = new Panel();
             scrollContainer.Dock = DockStyle.Fill;      // 填满整个左侧区域
             scrollContainer.AutoScroll = true;          // 内容超出时显示滚动条
-            // 【V1.88.14】只要纵向滚动条：网格 AutoFit 按宽顶满，横向永远不超宽，
-            // 横向条出来（启动瞬间/取整抖动）看着很怪，直接禁掉；上下滑动看。
+            // 【V1.88.17】正常无任何滚动条：网格 AutoFit 双向精确铺满，画布恒等于显示区；
+            // 横向条仍直接禁掉（启动瞬间/取整抖动出来看着怪）；纵向保留给 zoom 触底兜底
+            // （显示区被挤到极小时画布大于显示区、可滑到全部 72 站）。
             // 【V1.88.15】事后压制在网格 UpdateCanvasSize 里（BeginInvoke 布局完成后压，
             // Layout 事件里压不住：布局引擎在事件之后还会覆盖，已实锤）。
             scrollContainer.HorizontalScroll.Enabled = false;
@@ -1332,7 +1385,7 @@ namespace AgingTestSystem.Views
             _gridView = new WorkstationGridView();
             _gridView.Configure(_config.PanelColumns, _config.PanelRows, _config.TotalBarometers);
             // 【V1.77】电流行直绘开关：UsePowerMeter 开=每面板压力框下方加"电流："行
-            // （面板 205→226、行 225→246，下游下移 21 间距不变）；关=原来布局逐像素不动。
+            // （【V1.88.17】面板 170→188、行 182→200，下游下移 18 间距不变）；关=原来布局逐像素不动。
             // 结构型开关（改后重启生效），这里 startup 装配一次即可（_config 已 LoadConfig 就绪）。
             _gridView.ShowCurrentRow = _config.UsePowerMeter;
 

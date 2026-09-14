@@ -53,11 +53,13 @@ namespace AgingTestSystem.Views
     /// 新增 BottomMargin / BottomToTopAlignTo(+BottomToTopGap) / VerticalCenterAlignTo(+CenterOffsetY)
     /// 等垂直锚定字段。**原则：锚定只声明"以谁为基准、距离多少"，各间距取当前实际空隙，
     /// 解析结果与 V1.58.18 布局完全一致（视觉零变化）**：
-    /// - 设置按钮：以面板下缘为基准，BottomMargin=10（下缘距面板底 10px，Y=145 不变）；
-    /// - 配方框：以设置按钮上缘为基准，BottomToTopGap=6（下缘在其上方 6px，Y=118 不变）；
-    /// - 【V1.77】SN 框改吊电流行下方（TopToBottomGap=3，关电流=93 不变，开=114）、
-    ///   真空关/压力框改吊空闲下方（TopToTopGap=15，Y=67 不变）——位置零变化，见下"V1.77 开态几何"；
-    /// - 延时时间/烧屏时间：以设置按钮中心为基准，CenterOffsetY=-12/+13 对称分布（Y=147/172 不变）；
+    /// - 设置按钮：以面板下缘为基准，BottomMargin（下缘距面板底；V1.58.19 时=10/Y=145，
+    ///   【V1.88.17】现=8/Y=120，见 PanelLayoutConfig 类头）；
+    /// - 配方框：以设置按钮上缘为基准（V1.58.19 时 Gap=6/Y=118；【V1.88.17】现 Gap=4/Y=98）；
+    /// - 【V1.77】SN 框改吊电流行下方、真空关/压力框改吊真空块下方（自上而下链，
+    ///   位置零变化，见下"V1.77 开态几何"；【V1.88.17】现 Gap=2/8：SN 关电流=76、压力 Y=54）；
+    /// - 延时时间/烧屏时间：以设置按钮中心为基准对称分布（V1.58.19 时偏移 -12/+13、Y=147/172，
+    ///   【V1.88.17】现偏移 ±11、Y=121/143，见 PanelLayoutConfig 类头）；
     /// - 各标签：以各自框中心为基准，VerticalCenterOffset=-1（Y=70/96/121/150/175 不变）。
     /// 改 PanelInnerHeight 时下链（按钮/配方/延时）按各自间距自动联动，上链不动（【V1.77】）。
     /// 旧版 PanelLayout.json 无这些新字段
@@ -71,7 +73,8 @@ namespace AgingTestSystem.Views
     /// 且与周围被 AutoScaleMode.Font 放大的标准控件比例失调（"界面显示不正常"）。
     /// 适配方案：布局配置仍是"96DPI 逻辑像素"，但 <see cref="UpdateDpiScale"/> 在
     /// 句柄创建后计算缩放因子 _dpiScale = DeviceDpi / 96（150% 缩放下 = 1.5），
-    /// 所有绘制/命中坐标、画布尺寸一律经 <see cref="Scaled(int)"/> 放大，字体保持
+    /// 所有绘制/命中坐标、画布尺寸一律经 ScaledX/ScaledY 放大（【V1.88.17】横向走 zoomX、
+    /// 纵向走 zoomY），字体保持
     /// pt 单位自动放大 → 文字与格子同步放大、比例与 96DPI 完全一致。
     /// 注意：不能用 Graphics.ScaleTransform，因为 TextRenderer 走 GDI 不认坐标系变换
     /// （见上方 V1.51 踩坑），必须手动把每个坐标乘缩放因子。
@@ -86,22 +89,25 @@ namespace AgingTestSystem.Views
     /// │ │ NO.9 │ NO.10│ NO.11│ NO.12│ NO.13│ ... │ │ [全选]   │ ← 第3行
     /// │ │ ...  │ ...  │ ...  │ ...  │ ...  │ ... │ │ [全选]   │ ← 第4~9行
     /// │ └──────┴──────┴──────┴──────┴──────┴───  │ ├──────────┤
-    /// │ 8列（列宽227，每格内容222+左右边距各2）      │ 行内全部   │
-    /// │ × 9行（行高225，每格内容205+上下边距各2）   │ 选中→[取消]│
+    /// │ 8列（列宽209，每格内容204+左右边距各2）      │ 行内全部   │
+    /// │ × 9行（行高182，每格内容170+上下缝12）      │ 选中→[取消]│
     /// └───────────────────────────────────────────┴──────────┘
-    /// （【V1.88.14】保持 8×9=72：用户不要动列数；12×6 试过已回退，见 AutoFit 注释）
-    /// 【V1.58.8】行全选按钮高 = 面板内容高-1(=204)，含边框后上下边缘与工作站显示框(205)完全对齐；
+    /// （保持 8×9=72，不动列数；【V1.88.17】面板 222×205 紧凑到 204×170，
+    /// 内容 1896×2025→1736×1638，纵向缩放压力大减）
+    /// 【V1.58.8】行全选按钮高 = 面板内容高-1(=169)，含边框后上下边缘与工作站显示框(170)完全对齐；
     /// 按钮矩形 = (列右缘+2, 行顶+2, 列宽-4, PanelInnerHeight-1)；-1 修正边框底凸出1px
     /// 网格占满全部 72 台设备。
-    /// 【V1.88.14 自适应】默认 AutoFit=true：zoom 按父容器（中间显示区）可用宽度自动算，
-    /// 站尽可能大、无右侧空白；高度超出部分走外层纵向滚动条、上下滑动看
-    /// （窗口拉大/缩小/最大化跟随缩放，字体等比缩放、下限 6pt；列数保持 8×9 不动，
-    /// 等比一屏显示全试过：缩得太小、右边空一半，已否决）。
+    /// 【V1.88.17 自适应精确铺满】默认 AutoFit=true：zoomX 按显示区可用宽/内容宽、
+    /// zoomY 按显示区可用高/内容高独立算，画布精确等于显示区客户区，
+    /// 纵向横向滚动条都不出（窗口拉大/缩小/最大化跟随缩放；字体取窄边等比缩放、下限 6pt；
+    /// 列数保持 8×9 不动）。单轴触底（MinZoom=0.15，显示区被挤到极小）时才出滚动条兜底。
     /// 关掉 AutoFit 回原尺寸（滚动条按内容出现）。
-    /// 实现见 ComputeFitZoom/UpdateAutoFit/RebuildFonts/UpdateCanvasSize（zoom 并进 Scaled）。
+    /// 实现见 ComputeFitZoomBoth/UpdateAutoFit/RebuildFonts/UpdateCanvasSize
+    /// （zoomX/zoomY 并进 ScaledX/ScaledY）。
     ///
-    /// 二、单个面板内容（222×205，坐标均为"相对面板左上角"；【V1.88.16】工作状态块已删，
-    /// 真空块搬去第一行(153,29)，压力值框加长到宽 148，其余位置零变化）：
+    /// 二、单个面板内容（【V1.88.17】204×170，坐标均为"相对面板左上角"；
+    /// 【V1.88.16】工作状态块已删，真空块搬去第一行；本版紧凑：状态块 60×23→56×20、
+    /// 值框 148×21→130×18、延时框 80→66、设置按钮 60×50→50×42、选中框 23→18）：
     /// ┌──────────────────────────────────────────────┐
     /// │ NO.1（标题，左上角）            ┌────────────┐│
     /// │ ┌──────────┐  ┌──────────┐     │ 选中指示框  ││ ← 右上角 23×23
@@ -120,29 +126,32 @@ namespace AgingTestSystem.Views
     /// │          │ 00:00:00  │                        │
     /// │          └───────────┘                        │
     /// └──────────────────────────────────────────────┘
-    /// 标注说明（括号内为锚定关系）：
-    /// - 行1：上电/下电块(65,29,60,23；Y/H 对齐真空块） + 真空开/关块(153,29,60,23；
-    ///   右缘对齐设置按钮＋TopMargin=29） + 选中框(194,2,23,23)
-    /// - 行2：真空压力值框(65,67,148,21；左缘对齐 SN 框＋右缘对齐设置按钮，宽 148；
-    ///   Y 吊真空块下方 TopToBottomGap=15，Y=29+23+15=67 不变)
-    ///   + 【V1.77】电流值框 RcCurrentValue(65,90,85,21；双端同压力框，Y 吊压力框下方 Gap=2；
-    ///   ShowCurrentRow 关=整行不画；开=面板 205→226、SN 93→114、配方 118→139、
-    ///   延时 147/172→168/193、按钮 145→166，间距全都不变，见下方"V1.77 开态几何")
-    /// - 行3：SN 值框(65,93,148,21；【V1.77】改吊电流行下方 TopToBottomGap=3：
-    ///   关电流电流行高按 0，Y=90+0+3=93 不变；开时 Y=90+21+3=114)
-    /// - 行4：配方值框(65,118,148,21；下缘贴设置按钮上缘、Gap=6)
-    /// - 行5：延时时间值框(65,147,80,21；以设置按钮中心为基准、CenterOffsetY=-12) +
-    ///   设置按钮(153,145,60,50；下缘距面板底 BottomMargin=10) + 烧屏时间值框(65,172,80,21；CenterOffsetY=13)
+    /// 标注说明（括号内为锚定关系，【V1.88.17】紧凑值）：
+    /// - 行1：上电/下电块(65,26,56,20；Y/H 对齐真空块） + 真空开/关块(139,26,56,20；
+    ///   右缘对齐设置按钮＋TopMargin=26） + 选中框（右上：边长取 18 缩放后较小边，
+    ///   恒正方形跟面板走，1080p 下约 10×10，见 SelectBoxSide）
+    /// - 行2：真空压力值框(65,54,130,18；左缘对齐 SN 框＋右缘对齐设置按钮，宽 130；
+    ///   Y 吊真空块下方 TopToBottomGap=8，Y=26+20+8=54)
+    ///   + 【V1.77】电流值框 RcCurrentValue(65,74,71,18；左缘 SN/右缘贴真空关左缘-3，
+    ///   Y 吊压力框下方 Gap=2；ShowCurrentRow 关=整行不画；开=面板 170→188、SN 76→94、
+    ///   配方 98→116、延时 121/143→139/161、按钮 120→138，间距全都不变，见下方"V1.77 开态几何")
+    /// - 行3：SN 值框(65,76,130,18；【V1.77】改吊电流行下方 TopToBottomGap=2：
+    ///   关电流电流行高按 0，Y=74+0+2=76；开时 Y=74+18+2=94)
+    /// - 行4：配方值框(65,98,130,18；下缘贴设置按钮上缘、Gap=4)
+    /// - 行5：延时时间值框(65,121,66,18；以设置按钮中心为基准、CenterOffsetY=-11) +
+    ///   设置按钮(145,120,50,42；下缘距面板底 BottomMargin=8) + 烧屏时间值框(65,143,66,18；CenterOffsetY=11)
     /// - 编号：NO.1(9,4)（LeftMargin=9 + TopMargin=4）
-    /// - 标签列：真空压力(9,70)/SN:(9,96)/配方:(9,121)/延时时间(9,150)/烧屏时间(9,175)
+    /// - 标签列：真空压力(9,56)/SN:(9,78)/配方:(9,100)/延时时间(9,123)/烧屏时间(9,145)
     ///   （X=9 为右缘贴合压力框左缘推导 65-56=9；Y 以各自框中心为基准、VerticalCenterOffset=-1）
-    /// - 【V1.58.20 内容居中 + 选中框上移】编号/标签列左缘 LeftMargin=9，设置按钮右缘=213
-    ///   （RightMargin=9），左留白 9 = 右留白 222-213=9 → 面板内内容整体水平居中；
+    /// - 【V1.58.20 内容居中 + 选中框上移】编号/标签列左缘 LeftMargin=9，设置按钮右缘贴右
+    ///   （RightMargin=9），左留白 9 = 右留白 9 → 面板内内容整体水平居中
+    ///   （V1.58.20 时右缘=213/宽 222；【V1.88.17】现右缘=195/宽 204，对称关系不变）；
     ///   选中框 TopMargin 4→2（Y=2，底缘 25 与真空块上缘 29 间距由 2px 加大到 4px）。
     /// - 值框文字左内边距：ValueTextLeftPadding=6px（V1.52，文字不贴值框左边框，值框坐标不变）
     /// - 状态块配色见下方"状态块配色"；颜色值均可由 PanelLayout.json 覆盖
-    /// - 【V1.58.6 对齐】延时时间/烧屏时间两行中心(157.5+182.5)/2=170 与设置按钮中心
-    ///   (145+25=170) 垂直居中对齐；V1.58.19 起改为 VerticalCenterAlignTo 锚定自动保持居中。
+    /// - 【V1.58.6 对齐】延时时间/烧屏时间两行中心与设置按钮中心垂直居中对齐
+    ///   （V1.58.6 时 (157.5+182.5)/2=170=(145+25)；【V1.88.17】现 (130+152)/2=141=(120+21)）；
+    ///   V1.58.19 起改为 VerticalCenterAlignTo 锚定自动保持居中。
     /// - 【V1.58.7 右对齐】空闲/真空关/SN框/配方框/设置按钮五者右边缘统一 = 205：
     ///   工作状态块右移 X=153、真空关宽调成与空闲一致(48→52)并右移 X=153、
     ///   SN/配方加宽至 148；真空压力框加宽至 93（右边缘=150，与真空关左边缘 153 保持 3px）。
@@ -173,16 +182,16 @@ namespace AgingTestSystem.Views
     ///   LeftAlignTo="SNValue"（跟随值框列）。至此全部元素均已锚定，改面板宽/高基本布局不变。
     /// - 【V1.58.19 垂直锚定链（【V1.77】压力/真空关/SN 改走自上而下链 TopToBottom，位置零变化；
     ///   SN→配方之间改为两链交接缝，缺省高度下间距仍 4px，详见 PanelLayoutConfig 类头"完整锚定链（V1.77）"）】
-    ///   保持位置零变化——设置按钮 BottomMargin=10(距面板底)；配方 BottomToTopGap=6(贴按钮上缘)；
-    ///   压力/真空关 TopToBottomGap=15(吊真空块下方)；SN 吊电流行下方 Gap=3(关电流=93)；
+    ///   保持位置零变化（【V1.88.17】现值：按钮 BottomMargin=8；配方 Gap=4；
+    ///   压力 Gap=8；SN Gap=2，关电流 Y=76。V1.58.19 时为 10/6/15/3，见 PanelLayoutConfig 类头）；
     ///   延时两行 VerticalCenterAlignTo="SetButton"+CenterOffsetY=-12/+13(以按钮中心为基准对称)；
     ///   各标签 VerticalCenterAlignTo 各自框+offset=-1。改 PanelInnerHeight 时下链自动联动，
     ///   上链（真空块及以上+压力/电流/SN）不动，差值由交接缝吸收。
-    /// - 【V1.77 开态几何】ShowCurrentRow=true（UsePowerMeter 开）时单面板内容 222×226
-    ///   （行高 225→246），压力行(67)及以上逐像素不动，新增电流行(90,高21)+标签"电流："，
-    ///   SN(114)/配方(139)/延时(168/193)/按钮(166)整体下移 21，间距全都不变；
+    /// - 【V1.77 开态几何】【V1.88.17】ShowCurrentRow=true（UsePowerMeter 开）时单面板内容
+    ///   204×188（行高 182→200），压力行(54)及以上逐像素不动，新增电流行(74,高18)+标签"电流："，
+    ///   SN(94)/配方(116)/延时(139/161)/按钮(138)整体下移 18，间距全都不变；
     ///   false 时与本图逐像素一致。开关走 ShowCurrentRow 属性（MainForm 按 UsePowerMeter 装配一次），
-    ///   行高/画布/命中一律走 GetEffectiveRowHeight()/GetEffectiveInnerHeight()，禁止手写 205/225。
+    ///   行高/画布/命中一律走 GetEffectiveRowHeight()/GetEffectiveInnerHeight()，禁止手写 170/182。
     /// - 值框文字左内边距：ValueTextLeftPadding=6px（V1.52，文字不贴值框左边框，值框坐标不变）
     /// - 状态块配色见下方"状态块配色"；颜色值均可由 PanelLayout.json 覆盖
     ///
@@ -250,18 +259,37 @@ namespace AgingTestSystem.Views
         private float _dpiScale = 1f;
 
         /// <summary>
-        /// 自适应缩放因子（【V1.88.14 新增】站大、无右侧空白、纵向滑动）。
-        /// 现场反馈"拖动滑来滑去不方便"，又明确不要动列数、且嫌等比一屏太小右边空：
-        /// 做法改为按宽顶满——zoom = 父容器（中间显示区）可用宽 / 内容宽，
-        /// 高度超出部分走外层 AutoScroll 纵向滚动条（上下滑动看）。
-        /// zoom 并进布局基准（最终比例 s = _dpiScale × _zoom，绘制/命中/画布尺寸
-        /// 全走 Scaled，不碰 Graphics 变换矩阵——与 V1.55 DPI 同路、V1.82 画布缩放同口径）；
-        /// 字体按 zoom 等比缩放重建（pt 单位，下限 6pt，见 RebuildFonts）。
+        /// 自适应缩放因子（【V1.88.14 新增按宽顶满，【V1.88.17】改为双向精确铺满）。
+        /// 用户要求"72 站刚好铺满一屏、不同工控机屏自适应、不用上下左右拖滑块"：
+        /// zoomX = 显示区可用宽 / 内容宽，zoomY = 显示区可用高 / 内容高，
+        /// 画布尺寸精确等于显示区客户区（±1px 取整），纵向横向滚动条都不出。
+        /// zoom 并进布局基准（最终比例 sx = _dpiScale × _zoomX、sy = _dpiScale × _zoomY，
+        /// 绘制/命中/画布尺寸全走 ScaledX/ScaledY，不碰 Graphics 变换矩阵——
+        /// 与 V1.55 DPI 同路、V1.82 画布缩放同口径）；
+        /// 字体按 min(zoomX, zoomY) 等比缩放重建（pt 单位，下限 6pt，见 RebuildFonts，
+        /// 字不变形，窄边决定字号）。
+        /// 【V1.88.17】面板同步紧凑到 204×170（见 PanelLayoutConfig），内容高 2025→1638，
+        /// 1080p 下 zoomY 由 0.44 升到约 0.55，6pt 字在 18 高值框内放得下。
         /// </summary>
-        private float _zoom = 1f;
+        private float _zoomX = 1f;
+
+        /// <summary>纵向自适应缩放因子（见 _zoomX 注释；两者独立，面板允许宽扁拉伸）</summary>
+        private float _zoomY = 1f;
 
         /// <summary>
-        /// 是否自适应父容器宽度（默认 true = 站尽可能大、无右侧空白，纵向滑动看）。
+        /// 单轴缩放下限（【V1.88.17 新增】工作站显示区最小保护）。
+        /// 正常窗口下 zoomX/zoomY 约 0.3~1.0，远高于本下限；只有显示区被挤到极小
+        /// （如"主页区域调整"把右侧拉满、或窗口缩到最小）时才触底——触底后画布大于显示区，
+        /// 外层 AutoScroll 出滚动条兜底（能滑到、 total 72 站一个不少），而不是把站压成像素点。
+        /// 上限 4 不变（防窗口拉超大后字涨没边）。
+        /// </summary>
+        public const float MinZoom = 0.15f;
+
+        /// <summary>单轴缩放上限（防窗口拉超大后字涨没边，与 V1.88.14 同值）</summary>
+        public const float MaxZoom = 4f;
+
+        /// <summary>
+        /// 是否自适应父容器（默认 true = 72 站精确铺满一屏，无滚动条）。
         /// 关掉回 zoom=1 原尺寸（滚动条按内容出现）。结构型开关，运行时可随时翻。
         /// </summary>
         private bool _autoFit = true;
@@ -422,28 +450,36 @@ namespace AgingTestSystem.Views
         #region 自适应缩放（V1.88.14 新增：72 站一屏显示全）
 
         /// <summary>
-        /// 按可用宽度与内容宽度算自适应缩放比（纯函数，回归可直接断言）。
+        /// 按可用区与内容区算双向自适应缩放比（【V1.88.17 新增】纯函数，回归可直接断言）。
         ///
-        /// 【语义】【V1.88.14】按宽顶满：zoom = 可用宽/内容宽，站尽可能大、无右侧空白；
-        /// 高度超出部分由外层 AutoScroll 容器出纵向滚动条、上下滑动看
-        /// （用户明确不要动列数：8×9 等比一屏显示全会缩得很小，右边还空一半，目检实锤；
-        /// 按宽顶满后 1080p 下约 0.83，字清晰，只纵向滑一段）。
-        /// 调用方传可用宽度时已预扣 1px 余量（Size 取整后与 ClientSize 相等仍可能挤出滚动条）。
+        /// 【语义】精确铺满一屏：zoomX = 可用宽/内容宽，zoomY = 可用高/内容高，
+        /// 两轴独立（面板允许宽扁拉伸，字号取窄边，见字段注释）；画布精确等于显示区，
+        /// 纵向横向滚动条都不出（不同工控机屏即换即铺满）。
+        /// 任一边非法（≤0）时两轴都回 1（原尺寸，不摆烂半边）。
+        /// 钳制由调用方 <see cref="UpdateAutoFit"/> 按 <see cref="MinZoom"/>/
+        /// <see cref="MaxZoom"/> 做（触底转滚动条兜底），本函数只做除法、不断言范围。
         /// </summary>
-        /// <param name="availWidth">可用宽（物理像素，>0）</param>
-        /// <param name="contentWidth">内容宽（物理像素，>0）</param>
-        /// <returns>缩放比；任一边非法（≤0）回 1（原尺寸）</returns>
-        public static double ComputeFitZoom(double availWidth, double contentWidth)
+        /// <param name="availWidth">可用宽（物理像素）</param>
+        /// <param name="availHeight">可用高（物理像素）</param>
+        /// <param name="contentWidth">内容宽（物理像素）</param>
+        /// <param name="contentHeight">内容高（物理像素）</param>
+        /// <param name="zoomX">横向缩放比</param>
+        /// <param name="zoomY">纵向缩放比</param>
+        public static void ComputeFitZoomBoth(double availWidth, double availHeight,
+            double contentWidth, double contentHeight, out double zoomX, out double zoomY)
         {
-            if (availWidth <= 0 || contentWidth <= 0)
+            if (availWidth <= 0 || availHeight <= 0 || contentWidth <= 0 || contentHeight <= 0)
             {
-                return 1.0;
+                zoomX = 1.0;
+                zoomY = 1.0;
+                return;
             }
-            return availWidth / contentWidth;
+            zoomX = availWidth / contentWidth;
+            zoomY = availHeight / contentHeight;
         }
 
         /// <summary>
-        /// 是否自适应父容器（默认 true = 72 站一屏显示全，无滚动条）。
+        /// 是否自适应父容器（默认 true = 72 站精确铺满一屏，无滚动条）。
         /// 关掉回 zoom=1 原尺寸（滚动条按内容出现）；打开立即按当前父尺寸重算。
         /// </summary>
         public bool AutoFit
@@ -453,9 +489,10 @@ namespace AgingTestSystem.Views
             {
                 if (_autoFit == value) return;
                 _autoFit = value;
-                if (!value && _zoom != 1f)
+                if (!value && (_zoomX != 1f || _zoomY != 1f))
                 {
-                    _zoom = 1f;
+                    _zoomX = 1f;
+                    _zoomY = 1f;
                     RebuildFonts();
                     UpdateCanvasSize();
                     Invalidate();
@@ -496,40 +533,50 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 按父容器当前可用宽度重算 _zoom 并应用（字体+画布+重绘）。
+        /// 按父容器当前可用区重算 _zoomX/_zoomY 并应用（字体+画布+重绘）。
         /// 不满足任一条件直接返回（保持当前 zoom）：AutoFit 关/未 Configure/无父容器/
-        /// 父容器尚未布局（ClientSize 宽为 0）/算出的 zoom 与当前差 &lt;0.001（防抖，
+        /// 父容器尚未布局（ClientSize 宽或高为 0）/两轴与当前差都 &lt;0.001（防抖，
         /// Splitter 拖动连续 Resize 不反复重建字体）。
-        /// zoom 钳制 [0.1, 4]：下限防除零抖动，上限防窗口拉超大后字涨没边。
-        /// 高度不管：超出部分走外层 AutoScroll 纵向滚动条（上下滑动）。
+        /// 两轴各钳制 [MinZoom, MaxZoom]：触底（显示区被挤到极小）时画布大于显示区，
+        /// 外层 AutoScroll 出滚动条兜底（72 站一个不少，只滑不丢），而不是压成像素点；
+        /// 上限防窗口拉超大后字涨没边。正常窗口下不触界，精确铺满、无滚动条。
         /// </summary>
         private void UpdateAutoFit()
         {
             if (!_autoFit || _columns <= 0 || Parent == null) return;
-            int availW = Parent.ClientSize.Width - 1;    // 预扣 1px：Size 取整后顶满仍可能挤出横向滚动条
-            if (availW <= 0) return;
+            // 预扣 1px：Size 取整后与 ClientSize 相等仍可能挤出滚动条（宽高各扣）。
+            int availW = Parent.ClientSize.Width - 1;
+            int availH = Parent.ClientSize.Height - 1;
+            if (availW <= 0 || availH <= 0) return;
             double contentW = (double)(_columns * _layout.PanelColumnWidth
                 + _layout.RowSelectButtonColumnWidth) * _dpiScale;
-            double z = ComputeFitZoom(availW, contentW);
-            if (z < 0.1) z = 0.1;
-            if (z > 4) z = 4;
-            if (Math.Abs(z - _zoom) < 0.001) return;
-            _zoom = (float)z;
+            double contentH = (double)(_rows * _layout.GetEffectiveRowHeight()) * _dpiScale;
+            double zx, zy;
+            ComputeFitZoomBoth(availW, availH, contentW, contentH, out zx, out zy);
+            if (zx < MinZoom) zx = MinZoom;
+            if (zx > MaxZoom) zx = MaxZoom;
+            if (zy < MinZoom) zy = MinZoom;
+            if (zy > MaxZoom) zy = MaxZoom;
+            if (Math.Abs(zx - _zoomX) < 0.001 && Math.Abs(zy - _zoomY) < 0.001) return;
+            _zoomX = (float)zx;
+            _zoomY = (float)zy;
             RebuildFonts();
             UpdateCanvasSize();
             Invalidate();
         }
 
         /// <summary>
-        /// 按当前 _zoom 重建两套字体（旧字体先释放，防 GDI 句柄泄漏）。
-        /// 字号 = 配置字号 × _zoom，下限 6pt（与 V1.82 画布缩放口径一致）：
-        /// 缩得再小字也不再小，格子里的字走 EndEllipsis/居中截断不断行。
+        /// 按当前 zoom 重建两套字体（旧字体先释放，防 GDI 句柄泄漏）。
+        /// 字号 = 配置字号 × min(zoomX, zoomY)，下限 6pt（与 V1.82 画布缩放口径一致）：
+        /// 双向拉伸下面板允许宽扁，但字不变形、取窄边；缩得再小字也不再小，
+        /// 格子里的字走 EndEllipsis/居中截断不断行。
         /// </summary>
         private void RebuildFonts()
         {
-            float panelSize = (float)_layout.FontSize * _zoom;
+            float z = _zoomX < _zoomY ? _zoomX : _zoomY;
+            float panelSize = (float)_layout.FontSize * z;
             if (panelSize < 6f) panelSize = 6f;
-            float titleSize = (float)_layout.TitleFontSize * _zoom;
+            float titleSize = (float)_layout.TitleFontSize * z;
             if (titleSize < 6f) titleSize = 6f;
             Font oldPanel = _panelFont;
             Font oldTitle = _titleFont;
@@ -543,8 +590,9 @@ namespace AgingTestSystem.Views
         /// <summary>
         /// 按当前列/行/布局重算画布总尺寸（Configure/UpdateDpiScale/ShowCurrentRow/
         /// UpdateAutoFit 四处共用，改尺寸只改这里一处）。
-        /// 外层 Panel.AutoScroll 按此尺寸出滚动条；AutoFit 下宽度恒顶满（无横向滚动条），
-        /// 高度超出时出纵向滚动条（上下滑动看）。
+        /// 外层 Panel.AutoScroll 按此尺寸出滚动条；【V1.88.17】AutoFit 下画布精确等于
+        /// 显示区（zoomX/zoomY 即按可用区算出，取整 ±1px），纵向横向滚动条都不出；
+        /// 只有 zoom 触底（显示区被挤到极小）时画布才大于显示区、滚动条兜底。
         ///
         /// 【V1.88.15】Size 变化前后保持滚动比例：WinForms 在内容变小时
         /// 不自动把 AutoScrollPosition 钳到新范围，旧值超新范围会卡住——
@@ -567,8 +615,8 @@ namespace AgingTestSystem.Views
                 }
             }
 
-            this.Size = new Size(Scaled(_columns * _layout.PanelColumnWidth + _layout.RowSelectButtonColumnWidth),
-                                 Scaled(_rows * _layout.GetEffectiveRowHeight()));
+            this.Size = new Size(ScaledX(_columns * _layout.PanelColumnWidth + _layout.RowSelectButtonColumnWidth),
+                                 ScaledY(_rows * _layout.GetEffectiveRowHeight()));
 
             if (sp != null && _columns > 0)
             {
@@ -851,7 +899,7 @@ namespace AgingTestSystem.Views
                 if (_columns > 0)
                 {
                     UpdateCanvasSize();
-                    // 【V1.88.14】内容高变了（面板 205→226），自适应 zoom 跟着重算。
+                    // 【V1.77】内容高变了（【V1.88.17】面板 170→188），自适应 zoom 跟着重算。
                     UpdateAutoFit();
                 }
                 Invalidate();
@@ -860,22 +908,71 @@ namespace AgingTestSystem.Views
 
         #region DPI 缩放辅助
 
-        /// <summary>逻辑像素 → 物理像素（× _dpiScale × _zoom，四舍五入）</summary>
-        private int Scaled(int v)
+        /// <summary>逻辑像素横向 → 物理像素（× _dpiScale × _zoomX，四舍五入）</summary>
+        private int ScaledX(int v)
         {
-            return (int)Math.Round(v * _dpiScale * _zoom);
+            return (int)Math.Round(v * _dpiScale * _zoomX);
         }
 
-        /// <summary>逻辑像素 Point → 物理像素 Point</summary>
+        /// <summary>逻辑像素纵向 → 物理像素（× _dpiScale × _zoomY，四舍五入）</summary>
+        private int ScaledY(int v)
+        {
+            return (int)Math.Round(v * _dpiScale * _zoomY);
+        }
+
+        /// <summary>逻辑像素 Point → 物理像素 Point（X 走横向比、Y 走纵向比）</summary>
         private Point Scaled(Point p)
         {
-            return new Point(Scaled(p.X), Scaled(p.Y));
+            return new Point(ScaledX(p.X), ScaledY(p.Y));
         }
 
-        /// <summary>逻辑像素 Rectangle → 物理像素 Rectangle（坐标与尺寸同步放大）</summary>
+        /// <summary>逻辑像素 Rectangle → 物理像素 Rectangle（X/宽走横向比，Y/高走纵向比）</summary>
         private Rectangle Scaled(Rectangle r)
         {
-            return new Rectangle(Scaled(r.X), Scaled(r.Y), Scaled(r.Width), Scaled(r.Height));
+            return new Rectangle(ScaledX(r.X), ScaledY(r.Y), ScaledX(r.Width), ScaledY(r.Height));
+        }
+
+        /// <summary>
+        /// 选中框边长（物理像素，【V1.88.17 新增】恒正方形 + 跟面板尺寸走）。
+        ///
+        /// 【为什么不能直接画布局矩形】双向自适应下 zoomX≠zoomY（如 1080p 下 0.844/0.553），
+        /// 18×18 的布局框会被压成 15×10 的扁条（用户目检：长方形不好看）。
+        /// 改为取"缩放后宽高较小边"为边长：面板大框大、面板小框小（自适应），且永远是正方形；
+        /// 下限 4px（再小点不中画了，直接保底，此时早已触 zoom 下限走滚动兜底）。
+        /// </summary>
+        private int SelectBoxSide()
+        {
+            Rectangle r = Scaled(_layout.RcSelectBox.ToRectangle());
+            int side = r.Width < r.Height ? r.Width : r.Height;
+            return side < 4 ? 4 : side;
+        }
+
+        /// <summary>
+        /// 选中框画布绝对矩形（绘制用；位置：右缘距面板右缘 RightMargin、上缘距顶 TopMargin，
+        /// 与布局锚定同口径；边长见 <see cref="SelectBoxSide"/>）。
+        /// </summary>
+        private Rectangle GetSelectBoxRect(int panelLeft, int panelTop)
+        {
+            int side = SelectBoxSide();
+            int mR = ScaledX(_layout.RcSelectBox.RightMargin ?? 5);
+            int mT = ScaledY(_layout.RcSelectBox.TopMargin ?? 2);
+            return new Rectangle(
+                panelLeft + ScaledX(_layout.PanelInnerWidth) - side - mR,
+                panelTop + mT, side, side);
+        }
+
+        /// <summary>
+        /// 选中框面板内局部矩形（命中用；与 <see cref="GetSelectBoxRect"/> 同源，
+        /// 原点在面板内容左上角，绘制与点选永不错位）。
+        /// </summary>
+        private Rectangle GetSelectBoxLocalRect()
+        {
+            int side = SelectBoxSide();
+            int mR = ScaledX(_layout.RcSelectBox.RightMargin ?? 5);
+            int mT = ScaledY(_layout.RcSelectBox.TopMargin ?? 2);
+            return new Rectangle(
+                ScaledX(_layout.PanelInnerWidth) - side - mR,
+                mT, side, side);
         }
 
         #endregion
@@ -1022,8 +1119,8 @@ namespace AgingTestSystem.Views
 
             // 【V1.55 高DPI适配】e.ClipRectangle 是物理像素坐标，而布局配置是 96DPI 逻辑像素，
             // 所以可见列/行范围计算必须先乘缩放因子，否则 150% 缩放下只重绘左上角一小块。
-            int colW = Scaled(_layout.PanelColumnWidth);
-            int rowH = Scaled(_layout.GetEffectiveRowHeight());
+            int colW = ScaledX(_layout.PanelColumnWidth);
+            int rowH = ScaledY(_layout.GetEffectiveRowHeight());
 
             Rectangle clip = e.ClipRectangle;
             int startCol = Math.Max(0, clip.Left / colW);
@@ -1038,28 +1135,30 @@ namespace AgingTestSystem.Views
                     int deviceId = row * _columns + col + 1;
                     if (!_items.TryGetValue(deviceId, out GridItem item)) continue;
 
-                    // 面板左上角绝对坐标（面板内容设计尺寸 + 上下左右各 2px 外边距，均按 DPI 放大）
-                    int panelLeft = Scaled(col * _layout.PanelColumnWidth + 2);
-                    int panelTop = Scaled(row * _layout.GetEffectiveRowHeight() + 2);
+                    // 面板左上角绝对坐标（面板内容设计尺寸 + 上下左右各 2px 外边距，均按 DPI 放大；
+                    // 【V1.88.17】横向走 zoomX、纵向走 zoomY）
+                    int panelLeft = ScaledX(col * _layout.PanelColumnWidth + 2);
+                    int panelTop = ScaledY(row * _layout.GetEffectiveRowHeight() + 2);
                     DrawPanel(g, item, panelLeft, panelTop);
                 }
             }
 
             // 行全选按钮列
-            if (clip.Right > Scaled(_columns * _layout.PanelColumnWidth))
+            if (clip.Right > ScaledX(_columns * _layout.PanelColumnWidth))
             {
                 for (int row = startRow; row <= endRow; row++)
                 {
-                    // 【V1.58.8】按钮高度由"整行高-4"(=221)改为"面板内容高-1"(PanelInnerHeight-1=204)：
-                    // 使全选按钮含黑色边框的上下边缘与每行工作站显示框（面板内容 240×205，y=2~206）完全对齐。
-                    // 为什么 -1：DrawRectangle 边框线画在矩形下边界(y=2+高度)，若不减 1 边框底会到 207，
-                    // 比面板内容底(206)多 1px，肉眼可见底部凸出。高度 204 → 边框底=2+204=206，与面板对齐。
-                    // Y 与面板内容同为 row*行高+2，顶部天然对齐；宽度仍为列宽-左右边距(=76)。
+                    // 【V1.58.8】按钮高度取"面板内容高-1"：使全选按钮含黑色边框的上下边缘
+                    // 与每行工作站显示框完全对齐（【V1.88.17】面板 204×170：高=169，
+                    // 边框底=2+169=171，与面板内容底(2+170=172)差 1px 即 -1 修正）。
+                    // 为什么 -1：DrawRectangle 边框线画在矩形下边界(y=2+高度)，不减 1 边框底
+                    // 会比面板内容底多 1px，肉眼可见底部凸出。
+                    // Y 与面板内容同为 row*行高+2，顶部天然对齐；宽度为列宽-左右边距(=60)。
                     Rectangle btnRect = new Rectangle(
-                        Scaled(_columns * _layout.PanelColumnWidth + 2),
-                        Scaled(row * _layout.GetEffectiveRowHeight() + 2),
-                        Scaled(_layout.RowSelectButtonColumnWidth - 4),
-                        Scaled(_layout.GetEffectiveInnerHeight() - 1));
+                        ScaledX(_columns * _layout.PanelColumnWidth + 2),
+                        ScaledY(row * _layout.GetEffectiveRowHeight() + 2),
+                        ScaledX(_layout.RowSelectButtonColumnWidth - 4),
+                        ScaledY(_layout.GetEffectiveInnerHeight() - 1));
                     DrawRowSelectButton(g, btnRect, row);
                 }
             }
@@ -1071,15 +1170,15 @@ namespace AgingTestSystem.Views
         /// </summary>
         private void DrawPanel(Graphics g, GridItem item, int panelLeft, int panelTop)
         {
-            // 面板背景（状态色），尺寸按 DPI 放大
+            // 面板背景（状态色），尺寸按 DPI 放大（【V1.88.17】宽走 zoomX、高走 zoomY）
             using (var bg = new SolidBrush(item.BackColor))
             {
-                g.FillRectangle(bg, panelLeft, panelTop, Scaled(_layout.PanelInnerWidth), Scaled(_layout.GetEffectiveInnerHeight()));
+                g.FillRectangle(bg, panelLeft, panelTop, ScaledX(_layout.PanelInnerWidth), ScaledY(_layout.GetEffectiveInnerHeight()));
             }
 
             // 设备编号（左上角）
             TextRenderer.DrawText(g, $"NO.{item.DeviceId}", _titleFont,
-                new Point(panelLeft + Scaled(_layout.TitlePosition.X), panelTop + Scaled(_layout.TitlePosition.Y)), _colorText);
+                new Point(panelLeft + ScaledX(_layout.TitlePosition.X), panelTop + ScaledY(_layout.TitlePosition.Y)), _colorText);
 
             // 状态块（【V1.88.16】工作状态块已删：第一行只剩上电/下电＋真空开/关；
             // 状态看面板底色＋这两块，不再有文字状态块）
@@ -1105,17 +1204,17 @@ namespace AgingTestSystem.Views
             DrawValueBox(g, Offset(Scaled(_layout.RcDelayTimeValue.ToRectangle()), panelLeft, panelTop), item.DelayTimeText);
             DrawValueBox(g, Offset(Scaled(_layout.RcBurnInValue.ToRectangle()), panelLeft, panelTop), item.BurnInTimeText);
 
-            // 静态标签
-            DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelPressurePosition.X), panelTop + Scaled(_layout.LabelPressurePosition.Y)), "真空压力");
+            // 静态标签（【V1.88.17】X 走 zoomX、Y 走 zoomY）
+            DrawLabel(g, new Point(panelLeft + ScaledX(_layout.LabelPressurePosition.X), panelTop + ScaledY(_layout.LabelPressurePosition.Y)), "真空压力");
             // 【V1.77】"电流："标签（与值框同条件：开才画；关时坐标无意义，不画即可）。
             if (ShowCurrentRow && _layout.LabelCurrentPosition != null)
             {
-                DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelCurrentPosition.X), panelTop + Scaled(_layout.LabelCurrentPosition.Y)), "电流：");
+                DrawLabel(g, new Point(panelLeft + ScaledX(_layout.LabelCurrentPosition.X), panelTop + ScaledY(_layout.LabelCurrentPosition.Y)), "电流：");
             }
-            DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelSnPosition.X), panelTop + Scaled(_layout.LabelSnPosition.Y)), "SN:");
-            DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelRecipePosition.X), panelTop + Scaled(_layout.LabelRecipePosition.Y)), "配方:");
-            DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelDelayTimePosition.X), panelTop + Scaled(_layout.LabelDelayTimePosition.Y)), "延时时间");
-            DrawLabel(g, new Point(panelLeft + Scaled(_layout.LabelBurnInPosition.X), panelTop + Scaled(_layout.LabelBurnInPosition.Y)), "烧屏时间");
+            DrawLabel(g, new Point(panelLeft + ScaledX(_layout.LabelSnPosition.X), panelTop + ScaledY(_layout.LabelSnPosition.Y)), "SN:");
+            DrawLabel(g, new Point(panelLeft + ScaledX(_layout.LabelRecipePosition.X), panelTop + ScaledY(_layout.LabelRecipePosition.Y)), "配方:");
+            DrawLabel(g, new Point(panelLeft + ScaledX(_layout.LabelDelayTimePosition.X), panelTop + ScaledY(_layout.LabelDelayTimePosition.Y)), "延时时间");
+            DrawLabel(g, new Point(panelLeft + ScaledX(_layout.LabelBurnInPosition.X), panelTop + ScaledY(_layout.LabelBurnInPosition.Y)), "烧屏时间");
 
             // 设置按钮（绿底白字）
             Rectangle rcSet = Offset(Scaled(_layout.RcSetButton.ToRectangle()), panelLeft, panelTop);
@@ -1125,8 +1224,10 @@ namespace AgingTestSystem.Views
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
 
             // 选中指示（常显：选中=绿底白✓，未选中=空心白框；无选中时框也在，操作员一眼知道点哪里选中）
+            // 【V1.88.17】框恒正方形：边长取布局矩形缩放后的较小边（双向拉伸下宽≠高，
+            // 直接按原矩形画会被压成扁条）；右上位置仍走 RightMargin/TopMargin 锚定。
             {
-                Rectangle rcSelect = Offset(Scaled(_layout.RcSelectBox.ToRectangle()), panelLeft, panelTop);
+                Rectangle rcSelect = GetSelectBoxRect(panelLeft, panelTop);
                 if (item.IsSelected)
                 {
                     g.FillRectangle(_brushSelectChecked, rcSelect);
@@ -1180,7 +1281,8 @@ namespace AgingTestSystem.Views
             g.DrawRectangle(_penBorder, rc);
             // 文本绘制矩形 = 值框矩形左移内边距（宽度同步缩短，防止文字溢出到右边框）
             // 【V1.55】内边距按 DPI 放大，保证 150% 缩放下文字仍与值框左边框保持合理间距
-            int pad = Scaled(_layout.ValueTextLeftPadding);
+            // 【V1.88.17】内边距是横向量，走 zoomX
+            int pad = ScaledX(_layout.ValueTextLeftPadding);
             Rectangle textRc = new Rectangle(
                 rc.X + pad,
                 rc.Y,
@@ -1271,8 +1373,9 @@ namespace AgingTestSystem.Views
             if (TryHitPanel(e.Location, out int deviceId, out Point local))
             {
                 // 【V1.55】local 是物理像素坐标，布局矩形需缩放后比较
+                // 【V1.88.17】选中框命中与绘制同源（GetSelectBoxLocalRect），框变正方形后点选不漂移
                 Rectangle rcSet = Scaled(_layout.RcSetButton.ToRectangle());
-                Rectangle rcSelect = Scaled(_layout.RcSelectBox.ToRectangle());
+                Rectangle rcSelect = GetSelectBoxLocalRect();
                 if (rcSet.Contains(local))
                 {
                     OnSetClicked?.Invoke(this, deviceId);
@@ -1435,9 +1538,10 @@ namespace AgingTestSystem.Views
             local = Point.Empty;
             if (_columns == 0) return false;
 
-            int colW = Scaled(_layout.PanelColumnWidth);
-            int rowH = Scaled(_layout.GetEffectiveRowHeight());
-            if (p.X < 0 || p.Y < 0 || p.X >= Scaled(_columns * _layout.PanelColumnWidth) || p.Y >= Scaled(_rows * _layout.GetEffectiveRowHeight())) return false;
+            // 【V1.88.17】列宽走 zoomX、行高走 zoomY（与绘制同口径，否则点选错位）
+            int colW = ScaledX(_layout.PanelColumnWidth);
+            int rowH = ScaledY(_layout.GetEffectiveRowHeight());
+            if (p.X < 0 || p.Y < 0 || p.X >= ScaledX(_columns * _layout.PanelColumnWidth) || p.Y >= ScaledY(_rows * _layout.GetEffectiveRowHeight())) return false;
 
             int col = p.X / colW;
             int row = p.Y / rowH;
@@ -1447,12 +1551,12 @@ namespace AgingTestSystem.Views
             if (deviceId > _totalDevices) return false;
 
             // 面板内局部坐标 = 鼠标物理坐标 - 面板左上角物理坐标（含 2px 外边距，已缩放）
-            local = new Point(p.X - Scaled(col * _layout.PanelColumnWidth + 2), p.Y - Scaled(row * _layout.GetEffectiveRowHeight() + 2));
+            local = new Point(p.X - ScaledX(col * _layout.PanelColumnWidth + 2), p.Y - ScaledY(row * _layout.GetEffectiveRowHeight() + 2));
             // 内容 bounds：local 原点在面板内容左上角，落在内容外 = 点在面板间隙上
             // （左右缝 local.X 越界、上下缝 local.Y 越界），不命中任何面板。
             if (local.X < 0 || local.Y < 0
-                || local.X >= Scaled(_layout.PanelInnerWidth)
-                || local.Y >= Scaled(_layout.GetEffectiveInnerHeight()))
+                || local.X >= ScaledX(_layout.PanelInnerWidth)
+                || local.Y >= ScaledY(_layout.GetEffectiveInnerHeight()))
             {
                 deviceId = 0;
                 local = Point.Empty;
@@ -1469,11 +1573,11 @@ namespace AgingTestSystem.Views
             // 右界=绘制右界（左界+列宽；绘制宽=列宽-4，命中比绘制宽 2px，
             // 点到按钮右边缝也算——按钮列已是控件最右缘，无他物不误触；
             // 与 TryHitPanel 同为严格右界口径，不含容差）。
-            int left = Scaled(_columns * _layout.PanelColumnWidth);
-            int right = left + Scaled(_layout.RowSelectButtonColumnWidth);
+            int left = ScaledX(_columns * _layout.PanelColumnWidth);
+            int right = left + ScaledX(_layout.RowSelectButtonColumnWidth);
             if (p.X < left || p.X >= right
-                || p.Y < 0 || p.Y >= Scaled(_rows * _layout.GetEffectiveRowHeight())) return false;
-            row = p.Y / Scaled(_layout.GetEffectiveRowHeight());
+                || p.Y < 0 || p.Y >= ScaledY(_rows * _layout.GetEffectiveRowHeight())) return false;
+            row = p.Y / ScaledY(_layout.GetEffectiveRowHeight());
             return row >= 0 && row < _rows;
         }
 
@@ -1495,8 +1599,8 @@ namespace AgingTestSystem.Views
             int index = deviceId - 1;
             int col = index % _columns;
             int row = index / _columns;
-            return new Rectangle(Scaled(col * _layout.PanelColumnWidth), Scaled(row * _layout.GetEffectiveRowHeight()),
-                                 Scaled(_layout.PanelColumnWidth), Scaled(_layout.GetEffectiveRowHeight()));
+            return new Rectangle(ScaledX(col * _layout.PanelColumnWidth), ScaledY(row * _layout.GetEffectiveRowHeight()),
+                                 ScaledX(_layout.PanelColumnWidth), ScaledY(_layout.GetEffectiveRowHeight()));
         }
 
         #endregion

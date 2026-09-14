@@ -133,17 +133,28 @@ namespace AgingTestSystem.Dialogs
             }
         }
 
-        /// <summary>数值输入框变化 → 同步到配置并刷新预览</summary>
+        /// <summary>
+        /// 数值输入框变化 → 同步到配置并刷新预览。
+        /// 【V1.88.17】写入前按 Range 再钳一次：输入框自己的 Maximum 管得住上下箭头，
+        /// 管不住手输（_nudMenu 连 Maximum 都没设，靠默认 100 兜底）；钳后脏值到不了 json，
+        /// 保存的文件永远合法，下次 LoadOrDefault 不用替它收拾。
+        /// </summary>
         private void Nud_ValueChanged(object sender, EventArgs e)
         {
             if (_syncing) return;
             _syncing = true;
-            _layout.TopBarHeight = (int)_nudTop.Value;
-            _layout.MenuHeight = (int)_nudMenu.Value;
-            _layout.RightPanelWidth = (int)_nudRight.Value;
-            _layout.StatusBarHeight = (int)_nudStatus.Value;
+            _layout.TopBarHeight = ClampToRange((int)_nudTop.Value, HomeLayoutConfig.TopBarRange);
+            _layout.MenuHeight = ClampToRange((int)_nudMenu.Value, HomeLayoutConfig.MenuRange);
+            _layout.RightPanelWidth = ClampToRange((int)_nudRight.Value, HomeLayoutConfig.RightPanelRange);
+            _layout.StatusBarHeight = ClampToRange((int)_nudStatus.Value, HomeLayoutConfig.StatusBarRange);
             _preview.Invalidate();
             _syncing = false;
+        }
+
+        /// <summary>整数钳到 Range（输入框写入配置前的最后一道闸，与 LoadOrDefault 的钳制同口径）</summary>
+        private static int ClampToRange(int v, (int Min, int Max) range)
+        {
+            return v < range.Min ? range.Min : (v > range.Max ? range.Max : v);
         }
 
         /// <summary>拖动预览边缘 → 同步到输入框</summary>
