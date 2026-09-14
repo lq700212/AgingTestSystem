@@ -282,45 +282,43 @@
 | `AgingTestSystem/Services/RecipeAutoCompleteProvider.cs` | 配方名称自动检索 |
 | `AgingTestSystem/Services/ThemeManager.cs` | 深色/浅色主题服务（V1.60；AppTheme 配置 + 双向映射表着色；新窗体打开前 ApplyTo） |
 | `AgingTestSystem/Dialogs/SettingsForm.cs` | 系统设置（配置项编辑、校验、保存） |
-| `AgingTestSystem/Services/License/*` + `Dialogs/LicenseForm.cs` | 软件授权（V1.83；一机一证 RSA2048 离线授权，细化约定见下方"软件授权铁律"） |
-| `tools/LicenseKeyGen/Program.cs` | 授权签发工具（公司内部，私钥 `license_private.xml` gitignore 绝不入库；`genkeys`/`issue`/`verify`，中文参数用 cmd 跑，防 PS5.1 乱码） |
+| `AgingTestSystem/Services/SoftwareActivation.cs` + `Dialogs/SoftActivation.cs` | 软件授权（V1.87；与 HJVision 同源同口径，细化约定见下方"软件授权铁律"） |
 | `AgingTestSystem/Controls/DataGridViewNumericUpDownCell.cs` | 数字/下拉单元格控件 |
 | `.opencode/skills/agingtest-regression/` | 项目最终测试验证技能：冒烟 + 全量回归用例（tests/TestRunner.cs 为用例源码，新用例一律沉淀于此） |
 | `CHANGELOG.md` | 版本改动记录（最新在前，V1.xx 小节） |
 
-## 软件授权铁律（V1.83 新增；涉及授权/签发/试用的改动必读）
+## 软件授权铁律（V1.87 重写：与 HJVision 同源，同一套《获取激活码》工具通用；涉及授权的改动必读）
 
-- **私钥永不出公司**：`tools/LicenseKeyGen/license_private.xml`（RSA2048）gitignore 绝不入库，
-  丢 U 盘离线备份；产品 `LicenseManager.PublicKeyXml` 只嵌公钥。**换公钥=老证全废**，只在密钥泄露时换。
-- **规范串唯一口径**：`LicenseInfo.CanonicalString` 是签名/验签的共同基准，**改字段必须同步
-  改 `KeyGen.issue` 的手拼 canonical 和载荷 JSON 并升级 `v`**（少改一处=已签发证全验不过，查 KeyGen verify）。
-- **一机一证 + 四道关**：机器指纹（主板/CPU/系统盘/MachineGuid 四取三 SHA256，总指纹命中即过，
-  对不上再数分量：只差一块硬件放行+警告、差两块以上=换整机拦截）→ 项目（空=通用版 / 非空=限定版，
-  新项目名即拦）→ 点数（72/36/16 按档）→ 有效期（过期 7 天内宽限不断线，超 7 天阻断）。
-  拷贝文件夹到新工控机 = 机器关直接拦，这是"客户不能自部署新项目"的生意防线。
-- **试用防删库双记**：首跑时间 = min(DPAPI 文件 License.trial, 注册表 LicenseFirstRun) 取最早；
-  时钟回拨用"上次运行时间"对冲（生效 now=max(现在,上次)）。文件读取必须兼容 DPAPI 密文与
-  DPAPI 失败时的明文兜底两种格式（写过读不回 = 试用永不结束，P4 用例实锤）。`UpdateRunStamps`
-  遇 firstRun=MinValue 必须写 `NONE`/跳过注册表，**禁止把 0001-01-01 垃圾日期写进去**
-  （否则 ReadRunStamps 取 Min 把它当最早首跑，used 恒 0）。
-- **测试缝规矩**：`UtcNowFunc/BaseDirOverride/PublicKeyXmlOverride/RegistryPathOverride` 是
-  LicenseManager 的静态测试缝，用例全部反射赋值 + **try/finally 复位 null**（MesReporter.Transport 同先例）；
-  注册表路径必须给 GUID 子键隔离、跑完删键，绝不污染开发机 HKCU。
-- **启动与显示**：启动闸挂在 `Program.Main` 的 `Application.Run` 前（Blocked 弹 `LicenseForm` 可导入重查，
-  仍不过才退出；试用将尽/过期宽限/功能超范围提醒用 `MarkNotifiedToday` 每天最多弹一次）；
-  主窗标题栏挂 `[已授权至…]`/`[试用版剩余N天]` 后缀（**替换语义**：`ApplyLicenseStatus`
-  首次记干净标题、每次经纯函数 `WithLicenseSuffix` 重拼，禁 `Contains` 追加——V1.83.1
-  血泪：试用转正后双后缀堆叠），【关于→软件授权】显示/导出机器码/导入授权（导入仅管理员）。
-- **运行文件跟机器**：`License.lic`/`License.trial` 住程序目录（gitignore，绝不入库）；
-  授权窗 `SaveLicenseFile` 保留导入文件的分量段（无则按本机补），防外来证漂移放水。
-- **签发工具运行**：中文项目名用 **cmd 窗口 / .bat / ProcessStartInfo** 传参（PS5.1 `&` 会把中文
-  转成 U+FFFD，KeyGen 已加乱码硬停防线）；签发完跑 `verify` 自检。
+- **公式逐字节照抄，改一字工具就对不上**：`Encrypt` = MD5 取前 15 字节 hex（30 字符，
+  出处 HJVision `MainForm.Encrypt`）；设备ID = WMI 第一块 CPU 的 ProcessorId；
+  设备ID码 = `Encrypt(ID+"A")` / 设备码 = `Encrypt(ID+"1")` / 30天码 =
+  `Encrypt(设备码+"30")` / 永久码 = `Encrypt(设备码+"ALL")` /
+  `RunHash2` = `Encrypt(ID+i)`（i=0..839，<768 有效≈30天）/
+  永久 = `Encrypt(ID+"ALL")`。输入全是 ASCII，`Encoding.Default` 在各系统下结果一致。
+- **设备码恒 "1" 是照抄不是 bug**：HJVision 源码写 `Encrypt(ID+currentTime.Day)`，
+  但 `currentTime` 从初始提交就没赋值过（恒 0001-01-01），现场设备码恒定；
+  本项目直接写 `"1"`，行为一字不差。**不许"顺手修成当天"**——改了两边设备码分叉，
+  厂商按 HJVision 经验报的码就对不上了。
+- **无密钥、无试用、无启动闸**：新机无 ini 即"新设备"，每小时提醒一次；
+  不阻断启动、不拦生产（失败只置灰用户权限按钮 = HJVision 置灰口令按钮，
+  置灰本轮不恢复，重启重查）。不要加试用/宽限/项目/点数/到期——加了工具发不出，
+  破坏"同一套工具"的统一。
+- **存储与 Timer**：程序目录 `MainSetting.ini [RunHash] RunHash1/RunHash2`
+  （与 HJVision 同名同结构，kernel32 INI API 读写，gitignore 绝不入库，
+  出厂厂商按设备ID手写两键）；主窗 `hashTimer` 1 小时一格（挂 components 自动释放，
+  `MainForm_Load` 启动，`HashTimer_Tick` 与 HJVision 同分支：先设备→永久跳过→
+  命中有效格写下一格→否则过期）；判定逻辑只进 `SoftwareActivation` 纯函数
+  （`VerifyActivationCode`/`FindSlot`/`ComputeStatus`），Timer 与激活窗共用。
+- **回归锁**：`SoftActivation` 模块（RFC1321 标准向量 pin 算法 + 公式关系式 +
+  激活比对 + 计数格 + ini 隔离往返 + 窗构造）；ini 测试走显式 path，不碰真实文件；
+  激活窗只构造不 Show（错码调 handler 不断言弹窗）。
 
 ## 全局健壮性铁律（V1.84 大扫荡沉淀，涉及落盘/路径/解析/账号/自绘一律先读）
 
 - **运行时 json 一律 `AtomicFile.WriteAllText`（临时文件+改名），禁止裸 `File.WriteAllText`**：
   写半截断电=下次启动 Load 吞异常回空（配方被清空/策略全回缺省按错误工艺跑）。已统一：快照/配方/
-  策略/工位缓存/用户/记住密码/授权/试用。新增持久化类文件先想原子写。
+  策略/工位缓存/用户/记住密码。新增持久化类文件先想原子写。
+  （V1.87：激活 ini 走 kernel32 INI API，与 HJVision 同文件，不进 AtomicFile。）
 - **运行时文件路径一律 `BaseDirectory` 绝对路径**（除非确为相对=产品 cwd 恒定）：快照/MES 缓存以前
   裸文件名跟 CWD 走，快捷方式起始位置一变写散、重启找不到=整批任务静默丢失。测试隔离走 `BaseDirOverride`
   静态测试缝（finally 复位），不要靠切 cwd 自欺。
@@ -377,7 +375,7 @@
 - **新增 .cs 文件必须手工在 csproj 登记**（老式项目无通配，漏登记报 CS0246）：
   在 `<Compile Include="...">` 段按目录加一行（纯代码窗体加 `<SubType>Form</SubType>` 即可，
   无需 Designer/resx）。V1.67 实锤：5 个新文件漏登记编译全红。
-- **最终测试验证手段（V1.58.23 起）**：一键跑 `powershell -ExecutionPolicy Bypass -File .opencode\skills\agingtest-regression\scripts\build_and_test.ps1`，自动完成"构建 → 真机冒烟（exe 启动存活）→ 全量回归用例（1318 断言，覆盖 PasswordHasher/UserManager/配置归一化/IO 映射/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案/MES映射上报/规则表达式/流程驾驶舱/编排扩展场景等核心逻辑类）"。也可单独跑同目录 `smoke_test.ps1`（只冒烟）/ `run_unit_tests.ps1`（只回归）。退出码 0 = 全绿。
+- **最终测试验证手段（V1.58.23 起）**：一键跑 `powershell -ExecutionPolicy Bypass -File .opencode\skills\agingtest-regression\scripts\build_and_test.ps1`，自动完成"构建 → 真机冒烟（exe 启动存活）→ 全量回归用例（1718 断言，覆盖 PasswordHasher/UserManager/配置归一化/IO 映射/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案/MES映射上报/规则表达式/流程驾驶舱/编排扩展场景/软件激活等核心逻辑类）"。也可单独跑同目录 `smoke_test.ps1`（只冒烟）/ `run_unit_tests.ps1`（只回归）。退出码 0 = 全绿。
 - **界面像素级 bug（竖线/横线/颜色/叠色/裁剪/滚动条）**：调用全局技能 `winforms-ui-debug`——编译独立 harness 直接 new 目标窗体（指哪打哪，绕过登录/主流程），用反射探私有字段 + PrintWindow 截图 + 像素扫描定位根因并验证修复。含可复用的 csc 编译命令、坐标映射、色值字典与踩坑清单。
 - **调试完自动沉淀技能**：每次用 `winforms-ui-debug` 排查成功（尤其是"一次性改对"的高光案例）后，**主动把可复用的新套路/新踩坑/新型探针代码回写到全局技能 `winforms-ui-debug` 的 SKILL.md**（新增/补充小节、追加踩坑条目），不用等用户提醒。价值标准：换个人靠这份 skill 能更快解决同类问题。
 - 改构建输出（csproj 路径/bin 目录/主 exe 名）时，同步改全局技能 `winforms-ui-debug` 附录 A 的 AgingTestSystem 行（防开工查表拿到旧值）。

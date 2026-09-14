@@ -3,6 +3,41 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md).
 
+## V1.87 — 授权改与 HJVision 同源（2026-09-14，用户要求）
+
+### 改动范围
+
+- 删 RSA 一机一证全套（`Services/License/` 三件套 + `Dialogs/LicenseForm`
+  + `tools/LicenseKeyGen/` 含私钥 + `Program` 启动闸 + 主窗标题后缀），
+  不兼容老证（本项目未上线，无老证包袱，用户确认直接照抄）。
+- 新增 `Services/SoftwareActivation.cs`（与 HJVision `MainForm` 软件激活区逐字节同源）：
+  `Encrypt`（MD5 取前 15 字节 30 字符）/ `GetCpuSerialNumber`（WMI 第一块 CPU）/
+  设备ID码=`Encrypt(ID+"A")` / 设备码=`Encrypt(ID+"1")`（HJVision 的 `currentTime`
+  从初始提交就没赋值过，Day 恒 "1"，行为照抄）/ 30天码=`Encrypt(设备码+"30")` /
+  永久码=`Encrypt(设备码+"ALL")` / `RunHash2`=0..839 格（<768 有效≈30天）；
+  判定全是纯函数（`VerifyActivationCode`/`FindSlot`/`ComputeStatus`），ini 读写走显式 path。
+- 新增 `Dialogs/SoftActivation.cs`（布局照抄 HJVision `SoftActivation`，SunnyUI 口径）：
+  设备ID/设备码（只读）/激活码 + 激活状态 + 激活按钮；对不上静默无操作（同 HJVision）。
+- 主窗加 `hashTimer`（1 小时一格，挂 components 自动释放）：先对 `RunHash1`
+  （不对=新设备），再看 `RunHash2`（永久跳过，否则命中有效格写下一格）；
+  新设备/过期只弹框 + 置灰用户权限按钮（= HJVision 置灰口令按钮），不阻断启动与生产。
+- 存储 `MainSetting.ini [RunHash]`（与 HJVision 同名同结构，kernel32 INI API，
+  gitignore 绝不入库，出厂厂商按设备ID手写两键）；同一套《获取激活码》工具零改动通用。
+- 回归 `LicenseV183` 改写为 `SoftActivation`（42 条：RFC1321 标准向量 pin 算法/
+  公式关系式/激活比对/绑定/计数格/综合判定/文案/ini 往返/推进一格/窗构造）。
+
+### 为什么这么改
+
+- 公司统一项目管理：同一个《获取激活码》工具能激活 HJVision 和本项目，
+  厂商操作口径唯一（设备ID→设备ID码写 ini→设备码→30天/永久码）。
+- 代价同步告知用户并确认：无密钥（MD5 公开函数）、无试用、无项目/点数/到期抓手、
+  新设备/过期不阻断只提醒——与 HJVision 现象一致。
+
+### 验证
+
+- 构建一次过（3 警告全是改动前既有）；冒烟通过；
+  全量 `build_and_test.ps1` **1718 断言全绿**（含新 `SoftActivation` 模块 42 条）。
+
 ## V1.86.6 — 内部文档新增授权码签发教程（2026-09-14，用户要求）
 
 ### 改动范围

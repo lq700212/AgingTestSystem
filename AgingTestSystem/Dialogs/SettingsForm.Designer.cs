@@ -42,7 +42,7 @@ namespace AgingTestSystem.Dialogs
                 _groupFont = null;
             }
             // 【大扫荡】_copyTip 同上：无容器 ToolTip，不手放进终结器线程释放
-            //（LicenseForm/ProjectSwitchForm 早放了，此处漏网）。
+            //（旧授权窗/ProjectSwitchForm 早放了，此处漏网）。
             if (_copyTip != null)
             {
                 _copyTip.Dispose();

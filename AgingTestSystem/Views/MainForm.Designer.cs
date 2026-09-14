@@ -90,6 +90,7 @@
             this.toolStripStatusLabelScanner = new System.Windows.Forms.ToolStripStatusLabel();
             this.toolStripStatusLabelTime = new System.Windows.Forms.ToolStripStatusLabel();
             this.timerTime = new System.Windows.Forms.Timer(this.components);
+            this.hashTimer = new System.Windows.Forms.Timer(this.components);
             this.rootScrollPanel.SuspendLayout();
             this.tableLayoutPanelMain.SuspendLayout();
             this.tableLayoutPanelTop.SuspendLayout();
@@ -634,6 +635,10 @@
             // 
             this.timerTime.Interval = 1000;
             this.timerTime.Tick += new System.EventHandler(this.timerTime_Tick);
+            // hashTimer
+            //
+            this.hashTimer.Interval = 3600000;
+            this.hashTimer.Tick += new System.EventHandler(this.HashTimer_Tick);
             // 
             // MainForm
             // 
@@ -771,5 +776,7 @@
         private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabelTime;
         /// <summary>时间更新定时器</summary>
         private System.Windows.Forms.Timer timerTime;
+        /// <summary>授权计时器（V1.87：1 小时一格，与 HJVision 的 HashTimer 一致）</summary>
+        private System.Windows.Forms.Timer hashTimer;
     }
 }

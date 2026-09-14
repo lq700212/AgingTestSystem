@@ -134,7 +134,9 @@
     <Compile Include="Services\RecipeStorage.cs" />
     <Compile Include="Models\TestSession.cs" />
     <Compile Include="Controls\DataGridViewNumericUpDownCell.cs" />
-    <Compile Include="Controls\EyeIcon.cs" />
+    <Compile Include="Controls\EyeIcon.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="Controls\RuleListEditorPopup.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -164,14 +166,12 @@
     <Compile Include="Services\AtomicFile.cs" />
     <Compile Include="Services\StationSettingsCache.cs" />
     <Compile Include="Services\ThemeManager.cs" />
-    <Compile Include="Services\License\LicenseInfo.cs" />
-    <Compile Include="Services\License\MachineFingerprint.cs" />
-    <Compile Include="Services\License\LicenseManager.cs" />
-    <Compile Include="Dialogs\LicenseForm.cs">
+    <Compile Include="Services\SoftwareActivation.cs" />
+    <Compile Include="Dialogs\SoftActivation.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="Dialogs\LicenseForm.Designer.cs">
-      <DependentUpon>LicenseForm.cs</DependentUpon>
+    <Compile Include="Dialogs\SoftActivation.Designer.cs">
+      <DependentUpon>SoftActivation.cs</DependentUpon>
     </Compile>
     <Compile Include="Views\WorkstationGridView.cs">
       <SubType>UserControl</SubType>

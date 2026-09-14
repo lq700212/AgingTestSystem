@@ -80,9 +80,8 @@ $Map = @(
     @{ Pat = @("*AppLogFileWriter*");               Mods = @("AppLogFileWriter") },
     @{ Pat = @("*ThemeManager*");                   Mods = @("ThemeManager", "UiStyleV172_1") },
     @{ Pat = @("*ControlDisposeHelper*");           Mods = @("DesignerStabilityV172_16") },
-    @{ Pat = @("*EyeIcon*");                        Mods = @("LicenseV183") },
-    @{ Pat = @("*LicenseInfo*", "*MachineFingerprint*", "*LicenseManager*", "*LicenseForm*"); Mods = @("LicenseV183") },
-    @{ Pat = @("*AtomicFile*");                    Mods = @("TestSessionStore", "RecipeStorage", "StationCache", "MesV168", "LicenseV183") },
+    @{ Pat = @("*EyeIcon*", "*SoftwareActivation*", "*SoftActivation*"); Mods = @("SoftActivation") },
+    @{ Pat = @("*AtomicFile*");                    Mods = @("TestSessionStore", "RecipeStorage", "StationCache", "MesV168") },
     # --- Models ---
     @{ Pat = @("*DeviceConfig*");                   Mods = @("ModelDefaults", "SettingsValidate", "PolicyV167", "MesV168", "ProcessPolicyV170", "DeviceConfig.ParseFanIpCandidates", "DeviceManagerIntegration", "PowerReportV174") },
     @{ Pat = @("*IoOutputChannelRemap*");           Mods = @("IoOutputChannelRemap", "SettingsValidate") },
@@ -93,11 +92,9 @@ $Map = @(
     @{ Pat = @("*HomeLayoutConfig*");               Mods = @("HomeLayoutConfig", "DesignerStabilityV172_16") },
     @{ Pat = @("*TestSession*");                    Mods = @("TestSessionStore", "DeviceManagerIntegration", "DeviceManagerPolicy") },
     @{ Pat = @("*UserAccount*", "*UserRole*");      Mods = @("UserManager", "ModelRoundtrip") },
-    # --- Entry point: covered by build + smoke stages, no regression modules ---
-    # 【V1.83.1】Program 之前映射空：只改产品 Program.cs（启动授权闸）会算出 NONE
-    # 跳过回归。启动闸逻辑归 LicenseV183 锁（签发工具 tools\LicenseKeyGen\Program.cs
-    # 同名命中，多跑一个便宜模块，无害）。
-    @{ Pat = @("*Program*");                        Mods = @("LicenseV183") }
+    # --- Entry point: fail-safe FULL (no map entry on purpose) ---
+    # 【V1.87】Program 已无授权逻辑（启动闸随 RSA 方案删除），不再映射任何模块：
+    # 改 Program.cs 会走"映射表无登记→兜底全量"（安全；入口改动极少，可接受）。
 )
 
 # Files that force FULL no matter what (harness self-change must prove no
