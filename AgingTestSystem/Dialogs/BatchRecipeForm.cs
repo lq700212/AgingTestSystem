@@ -213,7 +213,10 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 配方下拉选择变化（【V1.88.13 新增】按选中名查库回填参数；
-        /// 未选中/名字在库中已无（库被改过）直接返回，不动现有输入）。
+        /// 未选中/名字在库中已无（库被改过）直接返回，不动现有输入。
+        /// 比较口径与工位窗 FindRecipe / RecipeStorage.FindDuplicateIndex 对齐
+        /// （Trim + 忽略大小写；以前 Ordinal 精确比，库名若含前后空格会选中不回填，
+        /// V1.88.13 复查补救）。
         /// </summary>
         private void CmbRecipeName_SelectedIndexChanged(object sender, EventArgs e)
         {
@@ -221,7 +224,7 @@ namespace AgingTestSystem.Dialogs
             if (string.IsNullOrEmpty(name) || _recipes == null) return;
             foreach (RecipeConfig r in _recipes)
             {
-                if (r != null && string.Equals(r.Name, name, StringComparison.Ordinal))
+                if (r != null && string.Equals((r.Name ?? "").Trim(), name, StringComparison.OrdinalIgnoreCase))
                 {
                     OnRecipeSelected(r);
                     return;

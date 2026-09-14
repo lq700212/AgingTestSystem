@@ -491,7 +491,7 @@ namespace AgingTestSystem.Dialogs
         private Sunny.UI.UITextBox txtSN;
         /// <summary>"配方"设置项名称标签</summary>
         private Sunny.UI.UILabel lblRecipe;
-        /// <summary>配方输入框</summary>
+        /// <summary>配方下拉框（V1.88.13 由输入框改：只能选库中配方，首项空=不绑）</summary>
         private Sunny.UI.UIComboBox cmbRecipe;
         /// <summary>"延时时间"设置项名称标签</summary>
         private Sunny.UI.UILabel lblDelay;

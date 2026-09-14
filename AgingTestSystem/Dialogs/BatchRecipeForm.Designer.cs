@@ -595,7 +595,7 @@ namespace AgingTestSystem.Dialogs
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelInput;
         /// <summary>"配方名称"标签</summary>
         private Sunny.UI.UILabel lblRecipeNameLabel;
-        /// <summary>配方名称输入框</summary>
+        /// <summary>配方名称下拉框（V1.88.13 由输入框改：只能选库中配方）</summary>
         private Sunny.UI.UIComboBox cmbRecipeName;
         /// <summary>"延时时间"标签</summary>
         private Sunny.UI.UILabel lblDelayTime1Label;
