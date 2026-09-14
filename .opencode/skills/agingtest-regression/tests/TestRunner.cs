@@ -3955,8 +3955,10 @@ namespace AgingTestSystem.Tests
             {
                 try
                 {
+                    // 【_descriptions 已转 static（说明与策略窗标题 tooltip 同源，无实例可取）】
+                    // 反射按 Static 取；实例字段已无，Instance 会取到 null。
                     var desc = (Dictionary<string, string>)typeof(SettingsForm).GetField("_descriptions",
-                        BindingFlags.NonPublic | BindingFlags.Instance).GetValue(sf);
+                        BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
                     var cats = (Array)typeof(SettingsForm).GetField("_categories",
                         BindingFlags.NonPublic | BindingFlags.Instance).GetValue(sf);
                     var catKeys = new List<string>();
@@ -4755,6 +4757,15 @@ namespace AgingTestSystem.Tests
             Check("有json自定义值原样优先",
                 MainForm.ComputeRightPanelWidth(1394, true, 260) == 260
                 && MainForm.ComputeRightPanelWidth(1394, true, 500) == 500);
+
+            // —— 参数设置入口无权限提示（新增：按钮常亮可点，无权限点后弹"权限不够"） ——
+            // 以前操作员下按钮 Enabled=false，点了零反馈像卡死；现常亮+点击时拦截。
+            // 纯函数 GetParameterDeniedMessage 不弹真框：有权限回空串放行，
+            // 无权限含"权限不够"并指明去【用户权限】提权（现场知道下一步干什么）。
+            Check("参数入口有权限放行", MainForm.GetParameterDeniedMessage(true) == "");
+            string denied = MainForm.GetParameterDeniedMessage(false);
+            Check("参数入口无权限提示权限不够", denied.Contains("权限不够"));
+            Check("参数入口无权限指明去用户权限", denied.Contains("用户权限"));
 
             // —— 风机状态中文（反射私有静态；与主窗文案差异已知，锁本窗契约） ——
             var gst = typeof(FanTestForm).GetMethod("GetStateText",
@@ -6419,6 +6430,88 @@ namespace AgingTestSystem.Tests
                 }
                 catch { syncOk = false; }
                 Check("改选后悬停同步换（非一次性快照）", syncOk);
+                // —— 每项标题 tooltip（新增：标题悬停看说明，超40字换行） ——
+                // 静态层：全部节点 key 在 SettingsForm 都有说明（与设置表同源，不另写一份）；
+                // 换行层：WrapTooltip 后每行≤40字（全仓唯一换行口）。
+                // 说明/换行都是 internal static，走反射（与本文件既有 WrapTooltip 用例同口径）。
+                var miDesc = typeof(SettingsForm).GetMethod("GetDescription",
+                    BindingFlags.NonPublic | BindingFlags.Static);
+                var miWrap2 = typeof(SettingsForm).GetMethod("WrapTooltip",
+                    BindingFlags.NonPublic | BindingFlags.Static);
+                Check("反射找到 GetDescription/WrapTooltip", miDesc != null && miWrap2 != null);
+                bool allDescOk = miDesc != null && miWrap2 != null;
+                bool allWrapOk = miDesc != null && miWrap2 != null;
+                if (miDesc != null && miWrap2 != null)
+                {
+                    foreach (var node in PolicyGraph.Nodes)
+                    {
+                        var keys = node.GetType().GetField("Keys").GetValue(node)
+                            as System.Collections.IList;
+                        foreach (var k in keys)
+                        {
+                            string key = (string)k.GetType().GetField("Key").GetValue(k);
+                            string desc = (string)miDesc.Invoke(null, new object[] { key });
+                            if (string.IsNullOrEmpty(desc)) { allDescOk = false; continue; }
+                            string wrapped = (string)miWrap2.Invoke(null, new object[] { desc });
+                            if (string.IsNullOrEmpty(wrapped)) { allWrapOk = false; continue; }
+                            foreach (string line in wrapped.Split(new[] { "\r\n" }, StringSplitOptions.None))
+                            {
+                                if (line.Length > 40) { allWrapOk = false; break; }
+                            }
+                        }
+                    }
+                }
+                Check("节点key全有标题说明（与设置表同源）", allDescOk);
+                Check("标题说明换行后每行≤40字", allWrapOk);
+                bool emptyOk = false;
+                try
+                {
+                    emptyOk = (string)miDesc.Invoke(null, new object[] { "BogusKey_Xyz" }) == ""
+                        && (string)miDesc.Invoke(null, new object[] { null }) == ""
+                        && (string)miWrap2.Invoke(null, new object[] { "" }) == "";
+                }
+                catch { emptyOk = false; }
+                Check("说明缺key回空不抛", emptyOk);
+                // UI 层：切到报警节点（key 最多），每个 20px 高的标题行都有悬停且每行≤40字；
+                // 文本框也同挂（下拉框是选中项全文，不管它）。
+                bool uiTipsOk = false;
+                try
+                {
+                    // 【防挂起】上面的"改选同步换"故意改了下拉选项（窗体已置脏）：
+                    // 直接切节点会弹"有未保存修改，切换前保存吗"模态框，无人值守下永远卡住
+                    // （现场复现：卡在"说明缺key回空不抛"之后）。这里只读悬停文本，
+                    // 不测脏提示，先把 _dirty 复位再切节点。
+                    var fDirty = t.GetField("_dirty",
+                        BindingFlags.NonPublic | BindingFlags.Instance);
+                    if (fDirty != null) fDirty.SetValue(form, false);
+                    mSelect.Invoke(form, new object[] { "alarm", false });
+                    var pnlF = t.GetField("_pnlEditors",
+                        BindingFlags.NonPublic | BindingFlags.Instance);
+                    var pnl = pnlF != null ? pnlF.GetValue(form) as Control : null;
+                    var getTip = tipObj.GetType().GetMethod("GetToolTip",
+                        new Type[] { typeof(Control) });
+                    int titleCount = 0, titleOk = 0;
+                    if (pnl != null)
+                    {
+                        foreach (Control c in pnl.Controls)
+                        {
+                            if (c == null || c.GetType().Name != "UILabel") continue;
+                            if (c.Height != 20) continue;
+                            titleCount++;
+                            string tt = (string)getTip.Invoke(tipObj, new object[] { c });
+                            if (string.IsNullOrEmpty(tt)) continue;
+                            bool wrapOk = true;
+                            foreach (string line in tt.Split(new[] { "\r\n" }, StringSplitOptions.None))
+                            {
+                                if (line.Length > 40) { wrapOk = false; break; }
+                            }
+                            if (wrapOk) titleOk++;
+                        }
+                    }
+                    uiTipsOk = titleCount > 0 && titleOk == titleCount;
+                }
+                catch { uiTipsOk = false; }
+                Check("报警节点每项标题都有换行tooltip", uiTipsOk);
                 // 释放配对（R2：与 _presetTip 同款无容器托管，关窗两字段皆 null）
                 try { ((Form)form).Close(); }
                 catch { try { form.Dispose(); } catch { } }

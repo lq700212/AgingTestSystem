@@ -1,6 +1,6 @@
 ﻿---
 name: agingtest-regression
-description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案热更删除/终结器释放/关窗竞态/MES映射上报/规则表达式/工艺策略窗/电流报表画面/软件激活(HJVision同源MD5三件套)等全部核心逻辑类（1722 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
+description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案热更删除/终结器释放/关窗竞态/MES映射上报/规则表达式/工艺策略窗/电流报表画面/软件激活(HJVision同源MD5三件套)等全部核心逻辑类（1730 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
 ---
 
 # AgingTestSystem 回归测试套件（冒烟 + 用例一体）
@@ -57,7 +57,7 @@ agingtest-regression/
     └── TestRunner.cs         ← 全部测试用例源码（加用例就改这里）
 ```
 
-## 三、测试覆盖范围（45 个模块，1722 断言）
+## 三、测试覆盖范围（45 个模块，1730 断言）
 
 | 模块 | 覆盖点 |
 | --- | --- |
@@ -87,7 +87,7 @@ agingtest-regression/
 | FanParse(V1.62) | 寄存器解析(/100 全字段)、不足 6 个、非法枚举透传、未连接约定、Connect(null) |
 | StationTime(V1.62) | 时分秒组合、25 小时不截断(V1.62 修复锁)、超 99 钳制、文本格式、Clamp |
 | HistoryCsv(V1.62) | CSV 解析边角、与 TestEventLogger 互逆 11 列（V1.76：SN/配方/结果结构化+报表格映射锁）、报表列设置按钮权限门与布局锁（V1.75：默认无权限/按钮五字/无重叠/不出右界/宽容五字/管理员有权限） |
-| UiPureHelpers(V1.62) | 批号去空格、配方查找(ignoreCase)+25h 不截断、工位温度读取(V1.63 数字框恒合法+回填钳制)、IP 合法、数字格钳制、网格命中/边界/四色、位值→通道、风机中文(V1.63 对齐主窗)、CH340 谓词/串口参数钳制(V1.63)、右侧宽度比例 ComputeRightPanelWidth(V1.65：0.234 常量/护栏/兜底/自定义优先 8 条)、配方窗负压/显示模式框回填(V1.66)、反射 as-cast 跟随控件换型（V1.71：TextBox→UITextBox 两处）、两窗tooltip+破空显隐纯函数（V1.73）、配方管理窗6项tooltip全覆盖+换行锁（V1.86.5） |
+| UiPureHelpers(V1.62) | 批号去空格、配方查找(ignoreCase)+25h 不截断、工位温度读取(V1.63 数字框恒合法+回填钳制)、IP 合法、数字格钳制、网格命中/边界/四色、位值→通道、风机中文(V1.63 对齐主窗)、CH340 谓词/串口参数钳制(V1.63)、右侧宽度比例 ComputeRightPanelWidth(V1.65：0.234 常量/护栏/兜底/自定义优先 8 条)、配方窗负压/显示模式框回填(V1.66)、反射 as-cast 跟随控件换型（V1.71：TextBox→UITextBox 两处）、两窗tooltip+破空显隐纯函数（V1.73）、配方管理窗6项tooltip全覆盖+换行锁（V1.86.5）、参数入口无权限提示3条（V1.88：有权限放行/无权限含权限不够/指明去用户权限） |
 | **DeviceManagerExtended(V1.62)** | 状态口/在线数/启动错误、批量 SN、配方名负压联动、副本隔离、非法电池、连接与间隔热生效、批量阈值+定时器恢复、反方向报警端到端、全局时长回退、定格隔离、清理回全局、不限时、2s 延时门、空闲容错、自愈计数、报警驻留、边沿单次(CSV 计数，V1.76 列序4/5)、快照全字段+双台+批号、急停、停止再启动、风机生命周期(MockFan)、超长数组与错 id 防火墙、脏快照恢复、显示模式下发/保持/清空+叠加采集可见+GetTestingDeviceIds(V1.66) |
 | PolicyV167(V1.67) | BuildStartBlockText 阻断文案、MapAlarmResult 责任映射、ComputeResumeDuration 剩余/跑超/回拨、ValidatePolicyCombination 矛盾锁、ParseValue 大小写/非法、PolicyKeys↔DeviceConfig↔下拉选项三处同步锁、DeviceConfig 缺省=现状锁（含身份口径RecordTime）、身份口径解析+ResolveEventIdentity五态（现值/定格/无快照回退/半快照/null转空，V1.76）、快照新字段缺省锁、ValidateValue 策略分支+点位、NormalizePolicyValue 脏值兜底、WrapTooltip 40字换行、ProjectProfile 非法名/重复/切换拒绝/路径分流、Policy.json 存取往返、热更往返12条(V1.72.10：切A/切B/切回指针路径缓存跟人走+finally恢复)、Default自愈3条(正主在删+补拷+重名不覆盖/正主不在整体改名)、DeviceConfig.CopyFrom引用不变全量拷脱钩、ClearProjectScopedState清指派+Pause/Resume不擅自启动、DeleteProfile删不存在空名被拒切入当前禁删切回删除列表干净指针不变(V1.72.11)、ApplyLoadedRecipes空null清空替换引用不变(V1.72.12)、ValidatePolicyCombination无阀分支+布尔键15项(V1.73)；V1.84 补齐：Delete/Switch 路径穿越拒绝+野目录不算项目（空backup过滤）、IsValidProfileName名单、原子写（临时文件无残留+内容完整）、密码迭代 DoS 防护（巨量超界判失败）；V1.84.1：策略缓存手改即生效（三元指纹）+破空阀碰撞纯函数5判（阀区/电区拦/预留/输入区放行/0不拦）+原子二次覆盖走Replace |
 | **DeviceManagerPolicy(V1.67)** | 治具责任端到端(装夹异常+CSV)、待判定完成+下料录入(收/跳过/null)+CSV明细、失压保持(不停机+边沿单条不刷屏)、续跑(快照阶段/上电时刻+剩余60s+重抽真空)、泄压(破空阀开+CSV+复位关阀不残留) |
@@ -105,7 +105,7 @@ agingtest-regression/
 | PowerReportV174(V1.74) | 缺省锁（不用电表/报表空/字典空/电流NaN/Clone带电流）、Mock电表（连接/72路0.05~0.60A/断开/释放）、真实桩（连不上/全NaN不断追溯/重连失败）、编排接线（开关管创建/未Start不连，反射验_powerMeter）、规则 current 变量（解析/求值/NaN恒false）、报表列（预设11列/身份事件列序/自定义保序/未知丢弃/空合法/脏拦截/全错兜底预设）、显示字典（预设8项/重复提醒/空清空过/规范写法/字典外拦报选项/无配置走预设/配置优先/遗留追加/ValidateValue三态）、三窗显示下拉（配方窗预设8项+工位/批量窗单选非空，DropDownList锁）、报表列弹窗（预设11行回写/自定义保序/生产路径弹出释放+弹窗格分发）、显示字典弹窗（预设8行回写/自定义保序/生产路径弹出释放+弹窗格分发）、维度开关（缺省关/真值显示/三窗收缩317/330/323与开态不变+隐藏恒空+布尔键17项）、电流行直显开关冒烟（V1.77：缺省关/置位关回） |
 | SoftActivation(V1.87 HJVision同源) | Encrypt标准向量pin算法（RFC1321空串/a前15字节hex）+公式关系式（设备ID码=ID+A/设备码=ID+1/30天码=设备码+30/永久码=设备码+ALL/永久标记=ID+ALL/30天起点=ID+0）+激活比对（先永久后30天，错码/空静默）+设备绑定（对上/错位/空=新设备）+计数格（0/767/839找到，840外/乱串找不到，768分界，0格30天/24格29天）+综合判定（新设备/永久/试用/768过期/找不到过期）+四档文案+ini隔离往返（双键/缺文件读空/推进一格）+激活窗构造（无参三框/设备码方程/状态行/错码静默，构造不Show直接调handler）+空模板（缺文件建出/两键读空/空=新设备/已有不覆盖） |
 | PolicyPresetV185(V1.85) | 预置3个试用顺序A/B/C、管辖12开关全是PolicyKeys成员+中文名齐、每预置完整12项、标题场景换挡文案非空、值全可解析+枚举值全在下拉选项、套用探测往返、缺省=自定义/改一项即自定义、未知与空参四不抛、取值副本隔离、三预置不泄压（无阀）不跳真空、A/B联停关C开+上限0拦60过+A零门槛过、存盘口径三态、UI预置行4件+下拉4项+无参回显自定义禁用/B配置回显选中B/管理员可用/场景说明（反射读Items/SelectedIndex，禁as原生类型见坑41）、下拉列表拉宽+悬停全文+关窗释放 |
-| PolicyNodeComboV1851(V1.85.1) | 节点选项框按预置下拉口径统一：全节点16下拉数=全部Bool/Enum key、下拉不比框窄、逐项独立实测无截断、悬停恒=选中全文、旧口径必截断反向验证（最长需389>270）、切节点旧提示清表、改选同步、关窗两提示皆释放；harness第二证据：最宽项真实点开展示截图无截断 |
+| PolicyNodeComboV1851(V1.85.1) | 节点选项框按预置下拉口径统一：全节点16下拉数=全部Bool/Enum key、下拉不比框窄、逐项独立实测无截断、悬停恒=选中全文、旧口径必截断反向验证（最长需389>270）、切节点旧提示清表、改选同步、关窗两提示皆释放；标题tooltip 5条（V1.88：key全有说明同源/换行每行≤40/缺key回空/UI层报警节点每项标题有换行提示/反射口径）；harness第二证据：最宽项真实点开展示截图无截断 |
 
 **不在覆盖范围**（明确边界）：真串口/真设备通讯（ModbusRtuBarometerReader /
 ScannerService / FanControllerClient / ModbusTcpIoController，靠现场联调）、

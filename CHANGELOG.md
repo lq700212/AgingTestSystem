@@ -3,6 +3,58 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md).
 
+## V1.88 — 策略窗标题 tooltip + 参数按钮无权限提示（2026-09-14，用户要求）
+
+### 改动范围
+
+- `ProcessPolicyForm` 右栏每项标题加 tooltip（与 V1.86.5 配方窗同口径）：
+  说明与系统设置表同源（`SettingsForm._descriptions` 转 static + 新增
+  `GetDescription` 唯一出口，不另写一份文案），超 40 字走
+  `SettingsForm.WrapTooltip` 换行（全仓唯一换行口）；标题行必挂，
+  文本/多行输入框同挂，下拉框保持"选中项全文"不动（说明在标题行看）；
+  复用 `_editorTip` 单例（切节点 `RemoveAll` 清表、关窗释放，不新增字段）。
+- `MainForm` 参数设置按钮常亮可点：以前操作员下 `Enabled=false`，
+  禁用按钮吞掉 Click，点了零反馈像卡死；现常亮（`UpdateButtonPermissionStates`
+  不再置灰），无权限点后弹"权限不够，参数设置需要技术员及以上权限，
+  请先在【用户权限】中切换"（`btnParameter_Click` 首行拦截，
+  弹窗走 `Sunny.UI.UIMessageBox` Orange 警告档，与通讯测试窗同口径）；
+  文案抽成 `GetParameterDeniedMessage` 纯函数可单测；
+  下拉内敏感项（项目切换仅管理员）各自二次校验，不因入口放行漏防。
+- 录入批号前的"扫码枪未连接"提示同步换 `Sunny.UI.UIMessageBox`（同 Orange 警告档，
+  文案不动；全仓扫过，扫码枪相关系统弹窗仅此一处）。
+- 操作区 7 按钮全部提示窗转 SunnyUI（`MainForm` 操作 handlers 内 12 处系统弹窗清零）：
+  单按钮提示按语义配色（成功 Green/警告 Orange/阻断失败 Red/中性说明 Blue）；
+  启动/停止/复位/急停 4 个"是/否"确认框走 `OKCancel`（确定=True 继续，
+  取消/X=False 返回，与原来 `!= DialogResult.Yes → return` 同语义）。
+  注意不用 `YesNoCancel`：本仓 SunnyUI 3.9.8 的该档只画出单个"确定"
+  （Gitee 官方 issue 同款 bug，真屏截图实证），确认框会丢"否"路；
+  返回值语义经 IL 实证（确定键置 `DialogResult.OK`，`Show` 以 `== OK` 转 bool）。
+- "连接中"提示窗 SunnyUI 化并屏幕居中：`ShowConnecting` 的手写原生 `Form+Label`
+  换成 `UIForm+UILabel`（蓝标题，`ControlBox=false` 照旧不可取消）；
+  定位 `CenterParent` 改 `CenterScreen`（主窗拖到副屏角落时提示框不再贴边）；
+  高度 80→115（UIForm 自绘标题占约 35px 客户区，加高后文字不顶标题，真屏截图验证）。
+- 修用例挂起：新增的"报警节点标题 tooltip"检查在"改选同步换"（故意改下拉置脏）之后
+  切节点，撞上"有未保存修改"模态确认框，无人值守下卡住（现场复现：停在
+  "说明缺key回空不抛"之后不动）；切节点前先反射复位 `_dirty`（只读悬停文本，不测脏提示）。
+- 回归 +8（`UiPureHelpers` 3 条：放行/含权限不够/指明用户权限；
+  `PolicyNodeComboV1851` 5 条：key 全有说明/换行每行≤40/缺 key 回空/
+  报警节点 UI 层每项标题有提示/反射口径）；`SettingsForm._descriptions`
+  转 static 后既有"分类键全有说明"用例改走 Static 反射。
+
+### 为什么这么改
+
+- 策略窗右栏标题全是 5~8 字简称（0时长策略/破空阀点位），现场不知道填什么、
+  填错什么后果；设置表里同一 key 的说明已经写清，复用即"所见即所得"，
+  且以后改说明只改 `_descriptions` 一处、两边自动同步不分叉。
+- 参数按钮禁用零反馈是"沉默失败"：现场操作员点了没反应，第一反应是程序卡死、
+  重启甚至断电；有明确"权限不够+去哪提权"的提示，一句话定位，
+  与项目切换无权限提示同口径。
+
+### 验证
+
+- 构建一次过（3 警告全是改动前既有）；`-Affected` 影响面回归全绿；
+  全量 `build_and_test.ps1` **1730 断言全绿**（V1.87 基线 1722 + 本次 8）。
+
 ## V1.87 — 授权改与 HJVision 同源（2026-09-14，用户要求）
 
 ### 改动范围
