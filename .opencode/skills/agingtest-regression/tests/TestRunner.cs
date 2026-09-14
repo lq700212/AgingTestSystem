@@ -4648,6 +4648,11 @@ namespace AgingTestSystem.Tests
                     Check("负坐标不命中", !hit(new Point(-5, -5)).Item1);
                     var center = hit(new Point(b1.Width / 2, b1.Height / 2));
                     Check("1号中心命中1", center.Item1 && center.Item2 == 1);
+                    // 【V1.88.15】面板间隙不命中（zoom=1/dpi=1：内容222x205，格227x225，
+                    // 行缝 y∈[207,225)、列缝 x∈[224,227)；点缝隙以前误翻上一个面板）。
+                    Check("行间隙不命中", !hit(new Point(b1.Width / 2, 220)).Item1);
+                    Check("列间隙不命中", !hit(new Point(226, 100)).Item1);
+                    Check("内容底边内仍命中", hit(new Point(100, 206)).Item1);
                     Func<DeviceStatus, Color> bc = st => (Color)backOf.Invoke(grid, new object[] { st });
                     var cFault = bc(DeviceStatus.Fault); var cTest = bc(DeviceStatus.Testing);
                     var cDone = bc(DeviceStatus.Completed); var cIdle = bc(DeviceStatus.Idle);
@@ -4776,6 +4781,24 @@ namespace AgingTestSystem.Tests
                         Check("小zoom下标题字号钳6pt", tf != null && tf.Size >= 6f);
                         zoomFld.SetValue(grid, 1f);
                         rebuildFonts.Invoke(grid, null);
+                    }
+                    // 无句柄挂载：MinSize 与画布 Size 恒一致（V1.88.15：值语义锁滚动范围，
+                    // 纵滑块拉不到底的病根；AutoScroll 位置无句柄测不了，只锁 MinSize+zoom）。
+                    var hostPanel = new System.Windows.Forms.Panel();
+                    try
+                    {
+                        hostPanel.ClientSize = new System.Drawing.Size(800, 600);
+                        hostPanel.Controls.Add(grid);
+                        float zh = zoomFld != null ? (float)zoomFld.GetValue(grid) : 0f;
+                        Check("挂载后zoom按宽算(799/1896)",
+                            zoomFld != null && Math.Abs(zh - 799.0 / 1896.0) < 0.002);
+                        Check("MinSize与画布Size恒一致",
+                            hostPanel.AutoScrollMinSize == grid.Size);
+                    }
+                    finally
+                    {
+                        try { hostPanel.Controls.Remove(grid); } catch { }
+                        try { hostPanel.Dispose(); } catch { }
                     }
                 }
             }

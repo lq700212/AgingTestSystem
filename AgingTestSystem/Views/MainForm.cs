@@ -1321,6 +1321,8 @@ namespace AgingTestSystem.Views
             scrollContainer.AutoScroll = true;          // 内容超出时显示滚动条
             // 【V1.88.14】只要纵向滚动条：网格 AutoFit 按宽顶满，横向永远不超宽，
             // 横向条出来（启动瞬间/取整抖动）看着很怪，直接禁掉；上下滑动看。
+            // 【V1.88.15】事后压制在网格 UpdateCanvasSize 里（BeginInvoke 布局完成后压，
+            // Layout 事件里压不住：布局引擎在事件之后还会覆盖，已实锤）。
             scrollContainer.HorizontalScroll.Enabled = false;
             scrollContainer.HorizontalScroll.Visible = false;
             // 【V1.50】滚动容器开启双缓冲，配合自绘网格消除滚动撕裂/闪烁
