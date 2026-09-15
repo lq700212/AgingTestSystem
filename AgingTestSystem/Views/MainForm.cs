@@ -446,7 +446,8 @@ namespace AgingTestSystem.Views
         /// 右侧区域宽 / 状态栏高。入口有二：
         /// - 程序启动（构造函数调用，读取 json 或默认值）；
         /// - "主页区域调整"编辑器保存后调用，让新布局立即生效。
-        /// 【V1.88.23】顶栏菜单并单行：第 0 行高 = HeaderHeight（默认 36）；
+        /// 【V1.88.23】顶栏菜单并单行：第 0 行高恒为固定值（【V1.88.28】锁死 30，不读文件：
+        /// 用户点名顶栏高度固定，文件里残留的旧值（34 等）直接作废）；
         /// 4 按钮 Dock=Fill 自动填满格子，不再需要按行高同步按钮高度
         /// （旧"MenuHeight-12"整段删除，留着就是死代码）。
         /// </summary>
@@ -455,7 +456,8 @@ namespace AgingTestSystem.Views
             var layout = HomeLayoutConfig.LoadOrDefault();
 
             // 顶栏高度（tableLayoutPanelMain 第 0 行；第 1 行是 splitContainerMain，用 Percent 自动占剩余）
-            tableLayoutPanelMain.RowStyles[0].Height = layout.HeaderHeight;
+            // 【V1.88.28】锁死 FixedHeaderHeight：编辑器已删顶栏输入行/拖动边，这里不认文件旧值。
+            tableLayoutPanelMain.RowStyles[0].Height = HomeLayoutConfig.FixedHeaderHeight;
             // 底部状态栏高度（第 2 行）
             tableLayoutPanelMain.RowStyles[2].Height = layout.StatusBarHeight;
 
@@ -493,14 +495,18 @@ namespace AgingTestSystem.Views
         /// 不使用 ContextMenuStrip（系统菜单项高度由系统绘制，无法和主按钮对齐），
         /// 改用无边框 Form + TableLayoutPanel + Button 列表方案：
         /// - 每个菜单项是一个独立的 Button
-        /// - 菜单项宽度 = 主按钮宽度
-        /// - 菜单项高度 = 主按钮高度
-        /// - 菜单项样式（背景色、文字色、字体）和主按钮完全一致
+        /// - 菜单项宽度 = max(主按钮宽度， 最长选项文本实测宽＋横向内边距)
+        /// - 菜单项高度 = max(主按钮高度，选项文本实测高＋纵向内边距)
+        ///   （【V1.88.28】等尺寸硬套会裁字：原生 Button chrome 比 Sunny 厚，
+        ///   18px 行装 9pt 字上下顶格，见 ComputePopupItemSize）
+        /// - 菜单项字体与主按钮同源（Font = hostButton.Font，字号一处调、两处跟，
+        ///   不许给弹窗另起字号）
+        /// - 菜单项样式（背景色、文字色）和主按钮完全一致
         /// - 点击任意菜单项后自动关闭弹出窗体
         /// - 失去焦点时自动关闭（点击窗体外任何地方）
         /// - 按 Esc 键关闭
         /// </summary>
-        /// <param name="hostButton">触发下拉的主按钮，菜单将显示在按钮下方</param>
+        /// <param name="hostButton">触发下拉的主按钮，菜单将显示在按钮下方（兼选项字体唯一来源）</param>
         /// <param name="items">菜单项数组，每项包含文本和点击处理程序</param>
         private void ShowDropdownPopup(Control hostButton, (string Text, EventHandler ClickHandler)[] items)
         {
@@ -524,9 +530,20 @@ namespace AgingTestSystem.Views
             };
 
             // ===== 2. 计算弹出窗体尺寸 =====
-            // 宽度 = 主按钮宽度，高度 = 主按钮高度 × 菜单项数量
-            int itemWidth = hostButton.Width;
-            int itemHeight = hostButton.Height;
+            // 【V1.88.28】选项格按文本实测撑开（ComputePopupItemSize）：主按钮尺寸只当下限——
+            // 选项字比主按钮字长是常态（"主页区域调整" vs "关于"），等尺寸硬套即裁字；
+            // 字体与主按钮同源（下面 Font = hostButton.Font），字号一处调、两处跟。
+            int maxTextW = 0;
+            int textH = 0;
+            foreach (var it in items)
+            {
+                Size need = TextRenderer.MeasureText(it.Text, hostButton.Font);
+                if (need.Width > maxTextW) maxTextW = need.Width;
+                if (need.Height > textH) textH = need.Height;
+            }
+            Size itemSize = ComputePopupItemSize(hostButton.Width, hostButton.Height, maxTextW, textH);
+            int itemWidth = itemSize.Width;
+            int itemHeight = itemSize.Height;
             popup.ClientSize = new Size(itemWidth, itemHeight * items.Length);
 
             // ===== 3. 创建 TableLayoutPanel 用于垂直排列菜单项按钮 =====
@@ -2618,8 +2635,11 @@ namespace AgingTestSystem.Views
         /// Designer 写死字号即与样式字号分叉（以后样式变了这边悄悄过期；且 VS 重写
         /// Designer 会把样式字号显式序列化进来，更不能信 Designer 的值）。
         /// 字族/风格一个不动（只换 size），粗细/颜色/主题都不受影响。
-        /// 下拉选项按钮自动同步：ShowDropdownPopup 里选项按钮 Font = hostButton.Font、
-        /// 尺寸 = hostButton 宽高（harness 锁"同尺寸同字号"，改这里弹窗跟着走，不用碰两处）。
+        /// 下拉选项按钮自动同步：ShowDropdownPopup 里选项按钮 Font = hostButton.Font（唯一字号源，
+        /// 【V1.88.28】用户点名"按钮和选项栏字体保持一致、要调一起调"：以后改字号只改
+        /// ApplyHeaderFonts 的 HeaderFontPt 一处，弹窗自动跟随，不许给弹窗另起字号）；
+        /// 尺寸按选项文本实测撑开（见 ComputePopupItemSize：主按钮尺寸只当下限）。
+        /// 用 SizeInPoints 比（pt 与 DPI 无关，同屏同视觉大小，不用管 96/120/144DPI）。
         /// 用 SizeInPoints 比（pt 与 DPI 无关，同屏同视觉大小，不用管 96/120/144DPI）。
         /// </summary>
         private void ApplyHeaderFonts()
@@ -2691,6 +2711,40 @@ namespace AgingTestSystem.Views
             int c2 = Math.Max(0, commLabelW + HeaderLabelPaintSlack * 2);
             int c3 = Math.Max(0, commValW + HeaderLabelPaintSlack * 2);
             return new int[] { c0, c1, c2, c3 };
+        }
+
+        /// <summary>下拉选项横向内边距（原生 Button 边框＋聚焦框＋左右留白经验值，harness 实测）</summary>
+        public const int PopupItemHPad = 16;
+
+        /// <summary>
+        /// 下拉选项纵向内边距（原生 Button 上下边框＋聚焦框经验值）。
+        /// 【为什么要 10】9pt 字文本实测高 12px，主按钮高 18px：18-12=6px 余量看似够，
+        /// 但原生 Button 自带约 4px 上下 chrome（边框＋聚焦内衬），字贴边即被裁
+        /// （V1.88.28 harness 6 倍放大实锤"主页区域调整"上下顶格）；12+10=22 行高才有呼吸感。
+        /// </summary>
+        public const int PopupItemVPad = 10;
+
+        /// <summary>
+        /// 按选项文本实测算下拉选项格尺寸（【V1.88.28】纯函数，回归可直接断言）。
+        ///
+        /// 【为什么不直接用主按钮尺寸】选项字普遍比主按钮字长（"主页区域调整"6 字 vs
+        /// "关于"2 字），且原生 Button 比 Sunny 自绘按钮多一圈 chrome：等尺寸硬套，
+        /// 高 18px 行装 9pt 字即上下顶格被裁。规则：主按钮尺寸只当下限，
+        /// 文本实测（调用方用主按钮字体逐项 MeasureText 取最大）＋内边距才是实际尺寸；
+        /// 字体仍与主按钮同源（调用方 Font = hostButton.Font），字号一处调、两处跟。
+        /// </summary>
+        /// <param name="hostW">主按钮宽（下限）</param>
+        /// <param name="hostH">主按钮高（下限）</param>
+        /// <param name="maxTextW">各选项文本实测最大宽（同字体 MeasureText）</param>
+        /// <param name="textH">选项文本实测高（单行，各项同高取最大）</param>
+        /// <returns>选项格尺寸（宽/高各 ≥1；调用方列宽＝W、行高＝H、窗高＝H×项数）</returns>
+        public static Size ComputePopupItemSize(int hostW, int hostH, int maxTextW, int textH)
+        {
+            int w = Math.Max(hostW, maxTextW + PopupItemHPad);
+            int h = Math.Max(hostH, textH + PopupItemVPad);
+            if (w < 1) w = 1;
+            if (h < 1) h = 1;
+            return new Size(w, h);
         }
 
         /// <summary>

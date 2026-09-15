@@ -1629,16 +1629,18 @@ namespace AgingTestSystem.Tests
             Check("RightPanelWidth 默认 240(V1.65比例时代的编辑器基准)", c.RightPanelWidth == 240);
             Check("StatusBarHeight 默认 30", c.StatusBarHeight == 30);
 
-            // 往返：改值保存 → 重新加载应读到新值
+            // 往返：顶栏锁死 30——存 44 读回仍是 30（【V1.88.28】用户点名固定，老值作废；
+            // Save 落盘前先归位，文件里永远 30）
             c.HeaderHeight = 44;
             c.Save();
             var reloaded = HomeLayoutConfig.LoadOrDefault();
-            Check("Save→Load 往返读到修改值 44", reloaded.HeaderHeight == 44);
+            Check("Save→Load顶栏锁死30（存44读回30）", reloaded.HeaderHeight == 30);
             if (File.Exists(cfgPath)) File.Delete(cfgPath); // 还原，避免影响后续用例
 
-            // 调整范围约束（编辑器钳制依据，与 HomeLayoutEditorForm 常量同步）
-            Check("顶栏范围28~100（V1.88.26：28=按钮22+上下边距）",
-                HomeLayoutConfig.HeaderRange.Min == 28 && HomeLayoutConfig.HeaderRange.Max == 100);
+            // 调整范围约束（编辑器钳制依据，与 HomeLayoutEditorForm 常量同步；
+            // 【V1.88.28】顶栏不再参与：只有 FixedHeaderHeight 一个值）
+            Check("顶栏锁死常量30（V1.88.28固定，不可调）",
+                HomeLayoutConfig.FixedHeaderHeight == 30);
             Check("右侧区范围180~600", HomeLayoutConfig.RightPanelRange.Min == 180 && HomeLayoutConfig.RightPanelRange.Max == 600);
             Check("状态栏范围15~60", HomeLayoutConfig.StatusBarRange.Min == 15 && HomeLayoutConfig.StatusBarRange.Max == 60);
 
@@ -1656,14 +1658,15 @@ namespace AgingTestSystem.Tests
                 if (File.Exists(cfgPath)) File.Delete(cfgPath);
             }
 
-            // 越界钳制（V1.88.17：手改 json 写 5000 高/负宽，进不了主窗，只变"不好看"）
+            // 越界钳制（V1.88.17：手改 json 写 5000 高/负宽，进不了主窗，只变"不好看"；
+            // 【V1.88.28】顶栏不再按范围钳：一律归固定 30）
             try
             {
                 File.WriteAllText(cfgPath,
                     "{\"HeaderHeight\":5000,\"RightPanelWidth\":-50,\"StatusBarHeight\":0}");
                 var clamped = HomeLayoutConfig.LoadOrDefault();
-                Check("越界文件按Range钳(100/180/15)",
-                    clamped.HeaderHeight == 100
+                Check("越界文件顶栏归30/右侧180/状态15",
+                    clamped.HeaderHeight == 30
                     && clamped.RightPanelWidth == 180 && clamped.StatusBarHeight == 15);
             }
             finally
@@ -1744,6 +1747,21 @@ namespace AgingTestSystem.Tests
             Check("项目列封顶320（长名再长不顶按钮）", hwCap[0] == 320);
             int[] hwNeg = MainForm.ComputeHeaderColumnWidths(-50, -50, -50, -50, -50, -50);
             Check("非法输入钳0", hwNeg[0] == 0 && hwNeg[1] == 0 && hwNeg[2] == 0 && hwNeg[3] == 0);
+            // 下拉选项尺寸（V1.88.28：按选项文本实测撑开，主按钮尺寸只当下限；
+            // 字体与主按钮同源（ShowDropdownPopup 里 Font = hostButton.Font），字号一处调两处跟，
+            // 本纯函数只锁尺寸，字号同步由真窗 harness 目检锁——MainForm 构造太重不进回归）
+            System.Drawing.Size pop1 = MainForm.ComputePopupItemSize(114, 18, 77, 12);
+            Check("常规项宽取主按钮下限、高按文本撑开(114×22)",
+                pop1.Width == 114 && pop1.Height == 22, "实际 " + pop1.ToString());
+            System.Drawing.Size pop2 = MainForm.ComputePopupItemSize(114, 18, 200, 12);
+            Check("长文本撑宽(200+16=216)", pop2.Width == 216 && pop2.Height == 22,
+                "实际 " + pop2.ToString());
+            System.Drawing.Size pop3 = MainForm.ComputePopupItemSize(200, 30, 40, 12);
+            Check("大主按钮当下限(200×30)", pop3.Width == 200 && pop3.Height == 30,
+                "实际 " + pop3.ToString());
+            System.Drawing.Size popNeg = MainForm.ComputePopupItemSize(-5, -5, -5, -5);
+            Check("非法输入不炸且≥1", popNeg.Width >= 1 && popNeg.Height >= 1,
+                "实际 " + popNeg.ToString());
         }
 
         // =====================================================================
@@ -5018,9 +5036,54 @@ namespace AgingTestSystem.Tests
                             Check("1280×1024下时间串装进延时框（不截断）", timeW <= delaySlot,
                                 "时间" + timeW + "px vs 框" + delaySlot + "px");
                         }
+                        // 行全选竖排（【V1.88.28】竖排大字＋正常间隙＋整块居中；
+                        // 字高/间隙布局态缓存，Paint 只读——回归锁纯函数与缺省）。
+                        Check("行全选字号倍率缺省2", new PanelLayoutConfig().RowSelectFontScale == 2f);
+                        System.Drawing.Font rsf = null;
+                        try
+                        {
+                            rsf = WorkstationGridView.BuildRowSelectFont(new PanelLayoutConfig(), 9f);
+                            Check("行全选字号=正文×倍率(9→18)",
+                                rsf != null && Math.Abs(rsf.Size - 18f) < 0.05f,
+                                rsf != null ? "实际 " + rsf.Size.ToString("F2") + "pt" : "字体为null");
+                            Check("行全选字体加粗", rsf != null && rsf.Bold);
+                            int chh = rsf != null ? WorkstationGridView.MeasureRowSelectCharH(rsf) : 0;
+                            Check("单字格高实测>0", chh > 0, "实际 " + chh + "px");
+                            int rgap = WorkstationGridView.RowSelectGapForCharH(chh);
+                            Check("字间隙正常(≥2px且≤字高一半)", rgap >= 2 && rgap <= chh / 2 + 1,
+                                "间隙" + rgap + "px vs 字高" + chh + "px");
+                            int total = 2 * chh + rgap;
+                            int y0 = WorkstationGridView.ComputeRowSelectStartY(2, 169, chh, rgap, 2);
+                            Check("两字整块垂直居中", y0 == 2 + (169 - total) / 2,
+                                "实际y0=" + y0 + "，块高" + total + "px");
+                            Check("块底不超按钮底", y0 + total <= 2 + 169);
+                            Check("零字回顶（空按钮不画）",
+                                WorkstationGridView.ComputeRowSelectStartY(2, 169, chh, rgap, 0) == 2);
+                            Check("间隙下限2px（0高不炸）", WorkstationGridView.RowSelectGapForCharH(0) == 2);
+                        }
+                        finally { if (rsf != null) { try { rsf.Dispose(); } catch { } } }
+                        System.Drawing.Font rsfMin = null;
+                        try
+                        {
+                            rsfMin = WorkstationGridView.BuildRowSelectFont(new PanelLayoutConfig(), 1f);
+                            Check("行全选字号下限4pt", rsfMin != null && rsfMin.Size >= 4f);
+                        }
+                        finally { if (rsfMin != null) { try { rsfMin.Dispose(); } catch { } } }
                         zoomXFld.SetValue(grid, 1f);
                         zoomYFld.SetValue(grid, 1f);
                         rebuildFonts.Invoke(grid, null);
+                        // 重建连带行全选字体＋度量（zoom=1：正文 9pt→行选 18pt，度量缓存就绪）。
+                        var rsFld = tg.GetField("_rowSelectFont", BindingFlags.NonPublic | BindingFlags.Instance);
+                        var rsGrid = rsFld != null ? rsFld.GetValue(grid) as System.Drawing.Font : null;
+                        Check("重建后行全选字体18pt加粗",
+                            rsGrid != null && Math.Abs(rsGrid.Size - 18f) < 0.15f && rsGrid.Bold,
+                            rsGrid != null ? "实际 " + rsGrid.Size.ToString("F2") + "pt" : "字体为null");
+                        var chFld = tg.GetField("_rowSelectCharH", BindingFlags.NonPublic | BindingFlags.Instance);
+                        var gpFld = tg.GetField("_rowSelectGap", BindingFlags.NonPublic | BindingFlags.Instance);
+                        int chv = chFld != null ? (int)chFld.GetValue(grid) : 0;
+                        int gpv = gpFld != null ? (int)gpFld.GetValue(grid) : 0;
+                        Check("行全选度量已缓存(字高>0且间隙≥2)", chv > 0 && gpv >= 2,
+                            "字高" + chv + "px 间隙" + gpv + "px");
                     }
                     // 无句柄挂载即铺满（【V1.88.24】缺省就是双向铺满，不用切模式；
                     // MinSize 同步/V1.88.15 事后校正随滚动删除，只锁 zoom+画布）。
@@ -6189,22 +6252,20 @@ namespace AgingTestSystem.Tests
             }
             finally { try { policyForm.Dispose(); } catch { } }
 
-            // —— ②③主页布局窗：量程字面值 + 越界赋值不炸 ——
+            // —— ②③主页布局窗：量程字面值 + 越界赋值不炸（【V1.88.28】顶栏行已删，锁死30） ——
             var layout = new HomeLayoutConfig();
             var homeForm = new HomeLayoutEditorForm(layout);
             try
             {
                 var t = typeof(HomeLayoutEditorForm);
-                var nudHeader = t.GetField("_nudHeader", Flags)?.GetValue(homeForm) as NumericUpDown;
                 var nudRight = t.GetField("_nudRight", Flags)?.GetValue(homeForm) as NumericUpDown;
                 var nudStatus = t.GetField("_nudStatus", Flags)?.GetValue(homeForm) as NumericUpDown;
-                Check("布局窗三个输入框全建好（V1.88.23 并单行）",
-                    nudHeader != null && nudRight != null && nudStatus != null);
-                if (nudHeader != null && nudRight != null && nudStatus != null)
+                Check("布局窗两个输入框建好（V1.88.28顶栏行已删）",
+                    nudRight != null && nudStatus != null);
+                Check("顶栏输入框已删（_nudHeader无字段，锁死30不可调）",
+                    t.GetField("_nudHeader", Flags) == null);
+                if (nudRight != null && nudStatus != null)
                 {
-                    Check("顶栏量程=Range字面值(28~100)",
-                        nudHeader.Minimum == HomeLayoutConfig.HeaderRange.Min
-                        && nudHeader.Maximum == HomeLayoutConfig.HeaderRange.Max);
                     Check("右侧量程=Range字面值(180~600)",
                         nudRight.Minimum == HomeLayoutConfig.RightPanelRange.Min
                         && nudRight.Maximum == HomeLayoutConfig.RightPanelRange.Max);
@@ -6241,10 +6302,10 @@ namespace AgingTestSystem.Tests
                     Check("反射找到ClampToRange", clampM != null);
                     if (clampM != null)
                     {
-                        Check("输入钳上(5000→顶栏上限100)",
-                            (int)clampM.Invoke(null, new object[] { 5000, HomeLayoutConfig.HeaderRange }) == 100);
-                        Check("输入钳下(-5→顶栏下限28)",
-                            (int)clampM.Invoke(null, new object[] { -5, HomeLayoutConfig.HeaderRange }) == 28);
+                        Check("输入钳上(5000→右侧上限600)",
+                            (int)clampM.Invoke(null, new object[] { 5000, HomeLayoutConfig.RightPanelRange }) == 600);
+                        Check("输入钳下(-5→右侧下限180)",
+                            (int)clampM.Invoke(null, new object[] { -5, HomeLayoutConfig.RightPanelRange }) == 180);
                     }
                 }
                 Check("布局窗AutoScale=None（Sunny canonical，预览不脏）",

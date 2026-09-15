@@ -84,13 +84,13 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Views/ProcessPolicyForm.cs` / `Views/PolicyGraph.cs` | 工艺策略窗（V1.70 建图为"流程驾驶舱"，V1.73 改名：固定拓扑画布，节点显示真实配置+实时台数，点节点改配置走同一条保存路；滚轮缩放/中键平移/节点拖拽；入口=参数设置下拉） |
 | `Services/Mock*.cs` | Mock 实现（免接线演示） |
 | `Views/MainForm.cs` | 主窗体：面板区（9×8）、菜单下拉、状态栏（"在线"全部离线标红，V1.24）、权限控制、扫码事件、操作区按钮；顶栏单行 36px（V1.88.23 起项目/权限/通讯＋4 按钮同行；V1.64 起深色切换从"关于"右侧收进关于下拉，仅 dev 可见） |
-| `Views/WorkstationGridView.cs` | 工位网格（自绘大画布，V1.51）：1 个 UserControl 画全部面板 + 行全选列，滚动零撕裂；文字绝对坐标绘制无模糊；布局外部化（程序目录 PanelLayout.json 可改坐标/颜色/字号/文字，无需重编译）；坐标命中实现单击选中/设置按钮/选中框/行全选/悬停提示（V1.88.14 起长按删除，点框或点空白即切换）；V1.88.24 起只留双向铺满一屏（FitWidth/FitMode/拖拽滚动全删；面板紧凑 204×170；选中框恒正方形跟面板走；zoom 并进 ScaledX/ScaledY + 字体取窄边下限 4pt（V1.88.21：1280×1024小屏跟随缩小不挤叠）+ 正文加粗（V1.88.25 小字清楚）；V1.60 起 SetDarkMode 跟随全局主题（语义状态色不动） |
+| `Views/WorkstationGridView.cs` | 工位网格（自绘大画布，V1.51）：1 个 UserControl 画全部面板 + 行全选列（V1.88.28 起竖排大字：字号＝正文×`RowSelectFontScale`，紧凑一竖块居中），滚动零撕裂；文字绝对坐标绘制无模糊；布局外部化（程序目录 PanelLayout.json 可改坐标/颜色/字号/文字，无需重编译）；坐标命中实现单击选中/设置按钮/选中框/行全选/悬停提示（V1.88.14 起长按删除，点框或点空白即切换）；V1.88.24 起只留双向铺满一屏（FitWidth/FitMode/拖拽滚动全删；面板紧凑 204×170；选中框恒正方形跟面板走；zoom 并进 ScaledX/ScaledY + 字体取窄边下限 4pt（V1.88.21：1280×1024小屏跟随缩小不挤叠）+ 正文加粗（V1.88.25 小字清楚）；V1.60 起 SetDarkMode 跟随全局主题（语义状态色不动） |
 | `Models/PanelLayoutConfig.cs` | 工位面板布局配置模型（V1.51）：面板网格尺寸/面板内各元素坐标/字体/颜色（"R,G,B"）/按钮与提示文字；`LoadOrDefault` 文件缺失或损坏回退内置默认；V1.58.13~1.58.19 起全部元素改为"锚定"解析（右缘/上缘/下缘/对齐/垂直居中，改面板宽高自动联动），字段全表见类头注释 |
 | `Dialogs/CommunicationTestForm.cs` | 通讯测试窗体（IO 耦合器 DO 输出测试，负压阀/载台上电两页 9×8 灯按钮 + V1.80 预留点位页（预留 DI 只读灯 + 预留 DO 可点灯，点位来自 IoMapBuilder）+ 一键遍历 + V1.81 通道右键端口映射（可视化连线页，保存走设置表同一条路即时生效）） |
 | `Dialogs/FanTestForm.cs` | 送风机测试窗体（定值启停 + 温湿度显示） |
 | `Dialogs/SettingsForm.cs` | 系统设置（管理员，按分类编辑 App.config 全部配置项 + V1.67“工艺策略”分类（策略存项目 Policy.json）；写回 exe.config/Policy.json 保存即生效，连接参数自动重连；仅设备数量/布局/模拟开关等结构型配置重启生效；说明悬停 tooltip 超 40 字换行） |
-| `Dialogs/HomeLayoutEditorForm.cs` | 主页区域调整编辑器（V1.58，管理员）：自绘预览 + 拖动三条边缘实时改顶栏/右侧区/状态栏尺寸，保存写 `HomeLayout.json` 即生效，无需重编译 |
-| `Models/HomeLayoutConfig.cs` | 主页布局配置模型（V1.58）：顶栏/右侧区/状态栏三个尺寸 + Range 约束，`LoadOrDefault` 缺文件或损坏回退内置默认；MainForm 启动与保存后据此应用布局 |
+| `Dialogs/HomeLayoutEditorForm.cs` | 主页区域调整编辑器（V1.58，管理员）：自绘预览 + 拖动两条边缘实时改右侧区/状态栏尺寸（V1.88.28 起顶栏锁死 30：输入行与拖动边已删），保存写 `HomeLayout.json` 即生效，无需重编译 |
+| `Models/HomeLayoutConfig.cs` | 主页布局配置模型（V1.58）：顶栏锁死 30（V1.88.28，不可调，老值加载归位）/右侧区/状态栏两个尺寸 + Range 约束，`LoadOrDefault` 缺文件或损坏回退内置默认；MainForm 启动与保存后据此应用布局 |
 | `Dialogs/StationSettingsForm.cs` | 工位设置（SN/配方/延时时间/烧屏时间/极限温度/负压阈值/显示模式 写入 StationInfo，V1.66 加后两项；配方名 V1.88.13 起下拉单选禁手输、库中已无则保存拦停；两时间三 NumericUpDown 冒号分隔，V1.28；保存=应用+缓存+存配方、加入对列=应用+存配方、下电=关闭载台上电） |
 | `Dialogs/RecipeManagerForm.cs` | 配方管理窗口（左侧列表可滚动 + 右侧可编辑输入，延时时间/烧屏时间冒号分隔三 NumericUpDown，V1.28；V1.66 加负压阈值/显示模式；添加/更新/删除操作即自动落盘 Recipes.json，V1.27 起无"保存设置"按钮） |
 | `Dialogs/BatchRecipeForm.cs` | 批量设置配方窗口（配方名称/延时时间/烧屏时间/极限温度/负压阈值/显示模式，V1.66 加后两项；配方名 V1.88.13 起下拉单选禁手输；两时间均三 NumericUpDown 冒号分隔，V1.28 删"延时时间2"，两个时间都写入配方；加入队列=保存配方+应用到选中工位，无选中先保存配方并提示选择） |
@@ -158,8 +158,8 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 > **72 站自适应（V1.88.24 起只剩双向铺满一屏，列数保持 8×9 不动）**：中间工位区多大、
 > 72 站就双向缩放到精确铺满（无任何滚动条；面板允许宽扁拉伸，字取窄边不变形；
 > 小到 4pt 不再小（V1.88.21：1280×1024小屏跟随缩小不挤叠），正文一律加粗保证小字清楚（V1.88.25）。
-> 顶栏 4 按钮 9pt（V1.88.25），下拉选项与主按钮同尺寸同字号；状态字同步 9pt 居中、
-> 列宽按内容实测（V1.88.26），顶栏默认 30px（范围 28~100）。
+> 顶栏 4 按钮 9pt（V1.88.25），下拉选项与主按钮字体同源（字号一处调两处跟）、格子按文本实测撑开防裁字（V1.88.28）；状态字同步 9pt 居中、
+> 列宽按内容实测（V1.88.26），顶栏锁死 30px 不可调（V1.88.28）；每行最右"全选"按钮竖排大字（字号＝正文×2，紧凑居中）。
 
 ## 5. 配置项速查（App.config + 项目 Policy.json，可在"关于→设置"管理员界面编辑；保存后大部分配置立即生效，连接参数自动重连，仅结构型配置重启生效；策略跟项目走 `Projects/<项目>/Policy.json`，切项目即换策略）
 

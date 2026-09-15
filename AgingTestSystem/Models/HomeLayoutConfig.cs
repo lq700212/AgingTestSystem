@@ -16,11 +16,14 @@ namespace AgingTestSystem.Models
     /// "关于 → 主页区域调整"可视化编辑器里拖动矩形块边缘，保存即写入
     /// 程序目录下的 HomeLayout.json，无需改代码、无需重新编译。
     ///
-    /// 【默认值说明（V1.58 调大，V1.88.23 顶栏菜单并单行，V1.88.26 顶栏再压到 30）】
+    /// 【默认值说明（V1.58 调大，V1.88.23 顶栏菜单并单行，V1.88.26 顶栏再压到 30，
+    /// V1.88.28 顶栏锁死 30 不可调）】
     /// 默认顶栏/状态栏高度（30/30）：V1.58 曾把标题栏/菜单栏调大到 40/50 好点按；
     /// V1.88.23 应"按钮太占位置"把两行并成一行（项目/权限/通讯＋4 按钮同行 36px，
     /// 省 34px 纵向还给工作站区），旧 TopBarHeight/MenuHeight 双键删除、单 HeaderHeight 替代。
     /// V1.88.26 顶栏字全收到 9pt（按钮＋状态），36px 行显空，再压到 30（按钮剩 24 高）。
+    /// V1.88.28 用户点名顶栏高度固定：HeaderHeight 锁死 <see cref="FixedHeaderHeight"/>（30），
+    /// 编辑器不再提供顶栏输入行/拖动边，老文件里存的 34 等旧值加载即归 30。
     /// 老 HomeLayout.json 里没有 HeaderHeight 键 → 反序列化保持类缺省 30，
     /// 直接生效，不写迁移分支（项目未上线，旧文件删了重导也行）。
     ///
@@ -52,9 +55,17 @@ namespace AgingTestSystem.Models
     public class HomeLayoutConfig
     {
         /// <summary>
-        /// 顶栏高度（【V1.88.23】单行：项目/权限/通讯＋4 按钮同行；【V1.88.26】默认 30）。
-        /// 旧 TopBarHeight/MenuHeight 双键已删（两行并一行，省 34px 纵向还给工作站区）；
-        /// 老文件无此键即 30，不迁移。
+        /// 顶栏高度固定值（【V1.88.28 用户点名锁死】顶栏不许自定义，永远 30；
+        /// 主窗 <c>ApplyHomeLayout</c>、本类加载/保存/钳制、预览画布全认这一个数，
+        /// 不读文件里的旧值——文件里残留的 HeaderHeight 只是历史兼容壳）。
+        /// </summary>
+        public const int FixedHeaderHeight = 30;
+
+        /// <summary>
+        /// 顶栏高度（历史兼容壳：老 HomeLayout.json 里可能存着 28~100 的旧值，
+        /// 反序列化不能删字段否则未知键倒无妨、缺字段回缺省；
+        /// 【V1.88.28】实际生效永远是 <see cref="FixedHeaderHeight"/>，
+        /// 加载/保存/钳制三处统一归位，编辑器也不再暴露它）。
         /// </summary>
         public int HeaderHeight { get; set; } = 30;
 
@@ -70,11 +81,7 @@ namespace AgingTestSystem.Models
         // 可视化编辑器拖动矩形块边缘时用这些上下限做钳制，
         // 防止把某个区域拖成 0 或超出合理范围导致主界面错乱。
         // 与 HomeLayoutEditorForm 中的范围常量保持同步。
-
-        /// <summary>顶栏高度最小/最大值（【V1.88.23】34=按钮28＋上下各3边距；
-        /// 【V1.88.26】字全 9pt 后压到 28=按钮22＋上下各3边距，再小裁按钮）</summary>
-        [JsonIgnore]
-        public static readonly (int Min, int Max) HeaderRange = (28, 100);
+        // 【V1.88.28】顶栏锁死后不再需要 HeaderRange（已删）：顶栏只有 FixedHeaderHeight 一个值。
 
         /// <summary>右侧状态按钮区宽度最小/最大值</summary>
         [JsonIgnore]
@@ -91,6 +98,8 @@ namespace AgingTestSystem.Models
         /// 【V1.88.17】读到的值一律按 Range 钳制后返回（手改 json 越界、上版本存的脏值，
         /// 进不了主窗：顶栏 5000 高这种不会再把工作站区挤没；纯函数 <see cref="ClampToRange"/>，
         /// 回归可直接断言）。
+        /// 【V1.88.28】顶栏锁死：读出后 HeaderHeight 一律归 <see cref="FixedHeaderHeight"/>，
+        /// 老文件存的 34/44 等旧值直接作废（用户点名固定，不迁移不提醒）。
         /// </summary>
         public static HomeLayoutConfig LoadOrDefault()
         {
@@ -118,10 +127,11 @@ namespace AgingTestSystem.Models
         /// RightPanelWidth 写 5000 → SplitterDistance 越界抛异常主窗起不来；
         /// HeaderHeight 写 5000 → 工作站区高度被挤成负数。钳制后坏文件最多变成"不好看"，
         /// 不会变成"起不来/看不见"，与"损坏回退默认"同属保命逻辑。
+        /// 【V1.88.28】顶栏不再按范围钳：一律归 <see cref="FixedHeaderHeight"/>（锁死，不读旧值）。
         /// </summary>
         public HomeLayoutConfig ClampToRange()
         {
-            HeaderHeight = Clamp(HeaderHeight, HeaderRange);
+            HeaderHeight = FixedHeaderHeight;
             RightPanelWidth = Clamp(RightPanelWidth, RightPanelRange);
             StatusBarHeight = Clamp(StatusBarHeight, StatusBarRange);
             return this;
@@ -136,11 +146,14 @@ namespace AgingTestSystem.Models
         /// <summary>
         /// 把当前配置写入程序目录的 HomeLayout.json。
         /// 写入失败不抛异常（界面调整是锦上添花，不应阻断主流程）。
+        /// 【V1.88.28】落盘前顶栏先归位 <see cref="FixedHeaderHeight"/>：文件里永远是 30，
+        /// 老版本存的旧值下次保存即洗掉（用户点名固定，不迁移不提醒）。
         /// </summary>
         public void Save()
         {
             try
             {
+                HeaderHeight = FixedHeaderHeight;
                 string path = GetConfigPath();
                 string json = JsonConvert.SerializeObject(this, Formatting.Indented);
                 File.WriteAllText(path, json, new System.Text.UTF8Encoding(false));
