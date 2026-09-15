@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using AgingTestSystem.Models;
+using AgingTestSystem.Services;
 using Newtonsoft.Json;
 
 namespace AgingTestSystem.Views
@@ -544,7 +545,8 @@ namespace AgingTestSystem.Views
                             file.nodes[kv.Key] = new int[] { kv.Value.X, kv.Value.Y };
                         }
                     }
-                    File.WriteAllText(Path(), JsonConvert.SerializeObject(file, Formatting.Indented));
+                    // 原子写：写半截断电下次 Load 回缺省只丢一次拖动，不断追溯链。
+                    AtomicFile.WriteAllText(Path(), JsonConvert.SerializeObject(file, Formatting.Indented));
                 }
                 catch (Exception ex)
                 {

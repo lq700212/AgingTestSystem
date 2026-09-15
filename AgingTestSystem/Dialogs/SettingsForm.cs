@@ -325,9 +325,9 @@ namespace AgingTestSystem.Dialogs
             { "MesEndpoint", "MES接收地址（完整URL，单入口；留空=不发，即使开了开关也只记日志）" },
             { "MesTimeoutMs", "HTTP超时（毫秒，后台线程发，不卡采集）" },
             { "MesAuthType", "鉴权方式（None=无 / Bearer=Token / Basic=用户名密码）" },
-            { "MesAuthToken", "Bearer token（明文，现场工控机物理隔离；客户要求加密再做DPAPI二期）" },
+            { "MesAuthToken", "Bearer token（保存自动DPAPI加密，界面显示解密值；内存明文、文件密文）" },
             { "MesAuthUser", "Basic用户名" },
-            { "MesAuthPassword", "Basic密码" },
+            { "MesAuthPassword", "Basic密码（保存自动DPAPI加密，界面显示解密值；内存明文、文件密文）" },
             { "MesRetryCount", "单条失败重试次数（0=只发一次；全灭进离线缓存，下次成功顺带补发）" },
             { "MesRetryIntervalMs", "重试间隔（毫秒）" },
             { "MesTriggers", "上报触发器（跟项目，逗号分隔：Start=启动/Complete=完成/Alarm=报警/UnloadJudge=下料判定；留空=四个全报）" },
@@ -1925,12 +1925,23 @@ namespace AgingTestSystem.Dialogs
         {
             error = null;
 
-            // 自由文本/列表类配置项（IP、端口映射表等），不强制校验
+            // 自由文本/列表类配置项（IP 候选运行时过滤，不强制校验）
             switch (key)
             {
                 case "FanIpCandidates":
-                case "IoBackupChannelMappings":
                     return true;
+            }
+
+            // 备用通道映射表：空=未启用合法；写了必须整段可解析，
+            // 脏项保存时拦并报出原因（解析器忽略脏项照用=带病保存，拦在保存时是最后一道门）。
+            if (key == "IoBackupChannelMappings")
+            {
+                if (string.IsNullOrWhiteSpace(value)) return true;
+                string mapErr;
+                Models.IoOutputChannelRemap.ParseAll(value.Trim(), out mapErr);
+                if (mapErr == null) return true;
+                error = "映射表格式错误：" + mapErr;
+                return false;
             }
 
             // 策略枚举（）：必须命中合法名单（大小写不敏感）。
@@ -2031,6 +2042,17 @@ namespace AgingTestSystem.Dialogs
 
             switch (key)
             {
+                // 停止位只认 1/15(=1.5)/2 三档（与 NormalizeStopBits/串口三端跨文件契约一致；
+                // 以前纯整数校验，"7" 也能存，运行时才被归一，脏值落盘看不见）。
+                case "StopBits":
+                case "ScannerStopBits":
+                    {
+                        string sv = (value ?? "").Trim();
+                        if (sv == "1" || sv == "15" || sv == "2") return true;
+                        error = "应为 1 / 15(=1.5) / 2 之一";
+                        return false;
+                    }
+
                 // 整数
                 case "TotalBarometers":
                 case "TotalInputs":
@@ -2040,7 +2062,6 @@ namespace AgingTestSystem.Dialogs
                 case "PanelRows":
                 case "BaudRate":
                 case "DataBits":
-                case "StopBits":
                 case "SerialReadTimeoutMs":
                 case "SerialWriteTimeoutMs":
                 case "TcpSendTimeoutMs":
@@ -2054,7 +2075,6 @@ namespace AgingTestSystem.Dialogs
                 case "MaxTestDurationSeconds":
                 case "ScannerBaudRate":
                 case "ScannerDataBits":
-                case "ScannerStopBits":
                     if (!int.TryParse(value, out _)) { error = "应为整数"; return false; }
                     return true;
 
@@ -2077,8 +2097,13 @@ namespace AgingTestSystem.Dialogs
                     if (!decimal.TryParse(value, out _)) { error = "应为数字"; return false; }
                     return true;
                 case "FanTempAlarmLimitC":
-                    if (!float.TryParse(value, out _)) { error = "应为数字"; return false; }
-                    return true;
+                    // 范围与输入格 _numericKeys (0~200) 同口径：手改文件绕过界面钳制时在这里拦。
+                    {
+                        float f;
+                        if (!float.TryParse(value, out f)) { error = "应为数字"; return false; }
+                        if (f < 0 || f > 200) { error = "应为 0~200（0=不启用）"; return false; }
+                        return true;
+                    }
 
                 // 布尔
                 case "UseMockCommunication":

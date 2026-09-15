@@ -66,6 +66,16 @@ namespace AgingTestSystem.Services
 
         public bool Connect(DeviceConfig config)
         {
+            // 空配置直接拒绝（与 MockIo/MockBaro/MockPower 同口径，
+            // 否则 ActiveIp 为 null 却显示已连接，掩盖"未连接启动"的真问题）。
+            // 注意不判 FanEnabled：使能决策归 DeviceManager 装配（禁用直接传 null 控制器，
+            // 显式注入优先于开关，见 DeviceManager 构造），Mock 只管连通，不管策略。
+            if (config == null)
+            {
+                _config = null;
+                _isConnected = false;
+                return false;
+            }
             _config = config;
             // 模拟连接耗时，让 UI 有"正在连接"的反馈
             Thread.Sleep(200);

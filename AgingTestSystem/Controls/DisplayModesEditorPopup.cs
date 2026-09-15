@@ -44,6 +44,10 @@ namespace AgingTestSystem.Controls
         /// <param name="currentValue">当前配置值（逗号分隔，如 "白场,红场"；空=显示缺省预设行）</param>
         public DisplayModesEditorPopup(string currentValue)
         {
+            // 高 DPI 三要素（纯代码窗）：设计基准 96DPI + 挂起布局，逐个 Add 不固化错误基准。
+            AutoScaleMode = AutoScaleMode.Font;
+            AutoScaleDimensions = new SizeF(6F, 12F);
+            SuspendLayout();
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
             ShowInTaskbar = false;
@@ -129,6 +133,7 @@ namespace AgingTestSystem.Controls
             Controls.Add(_btnOk);
 
             LoadValue(currentValue);
+            ResumeLayout(false);
         }
 
         /// <summary>创建 SunnyUI 风格的按钮（与 IP 列表弹窗同口径）</summary>

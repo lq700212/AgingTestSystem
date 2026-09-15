@@ -32,6 +32,10 @@ namespace AgingTestSystem.Controls
         /// <param name="currentValue">当前配置值（多行，一行一条规则）</param>
         public RuleListEditorPopup(string currentValue)
         {
+            // 高 DPI 三要素（纯代码窗）：设计基准 96DPI + 挂起布局，逐个 Add 不固化错误基准。
+            AutoScaleMode = AutoScaleMode.Font;
+            AutoScaleDimensions = new SizeF(6F, 12F);
+            SuspendLayout();
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
             ShowInTaskbar = false;
@@ -92,6 +96,7 @@ namespace AgingTestSystem.Controls
             Controls.Add(_btnOk);
 
             RefreshStatus();
+            ResumeLayout(false);
         }
 
         private static Sunny.UI.UIButton CreateButton(string text, Point location, Size size, Sunny.UI.UIStyle style)

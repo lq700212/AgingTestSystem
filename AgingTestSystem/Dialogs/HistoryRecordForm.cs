@@ -195,11 +195,15 @@ namespace AgingTestSystem.Dialogs
         {
             try
             {
-                // 用 StreamReader 逐行读取（文件可能较大）
+                // 用 StreamReader 逐行读取（文件可能较大）。
+                // 多行记录拼合：详情字段含换行时会被 CsvEscape 包进双引号、
+                // 物理上占多行；按"引号是否闭合"把后续行拼回同一条逻辑记录，
+                // 否则拆开的两截都因列不足被丢弃，追溯链断裂。
                 using (var reader = new StreamReader(filePath, Encoding.UTF8))
                 {
                     bool firstLine = true;
                     string line;
+                    string pending = null;
                     while ((line = reader.ReadLine()) != null)
                     {
                         if (firstLine)
@@ -208,6 +212,9 @@ namespace AgingTestSystem.Dialogs
                             firstLine = false;
                             continue;
                         }
+                        if (pending != null) line = pending + "\n" + line;
+                        if (IsQuoteUnbalanced(line)) { pending = line; continue; }
+                        pending = null;
                         if (string.IsNullOrWhiteSpace(line)) continue;
 
                         // 解析 CSV 行（支持带双引号的字段）
@@ -300,6 +307,23 @@ namespace AgingTestSystem.Dialogs
 
             fields.Add(current.ToString());
             return fields.ToArray();
+        }
+
+        /// <summary>
+        /// 引号是否未闭合（与 ParseCsvLine 同口径：" 进入引号，"" 是转义，落单 " 出引号）。
+        /// 逻辑记录拼合用：未闭合说明本物理行还没完，继续吃下一行。
+        /// </summary>
+        internal static bool IsQuoteUnbalanced(string line)
+        {
+            if (line == null) return false;
+            bool inQuotes = false;
+            for (int i = 0; i < line.Length; i++)
+            {
+                if (line[i] != '"') continue;
+                if (inQuotes && i + 1 < line.Length && line[i + 1] == '"') { i++; continue; }
+                inQuotes = !inQuotes;
+            }
+            return inQuotes;
         }
 
         /// <summary>

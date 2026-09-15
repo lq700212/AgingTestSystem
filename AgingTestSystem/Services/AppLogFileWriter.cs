@@ -29,7 +29,7 @@ namespace AgingTestSystem.Services
     /// - 用 lock 保证多线程（采集线程 / UI 线程）同时写文件不会互相覆盖；
     /// - StreamWriter 缓存复用：不用每条日志都打开/关闭文件，但每次写入后立即 Flush
     ///   强制落盘——万一程序崩溃/断电，已写的日志也不会丢；
-    /// - 写日志失败一律静默（catch 掉），日志系统绝不能拖垮业务主流程。
+    /// - 写日志失败不拖垮业务（catch 掉），但记 Debug + 失败计数留痕，不断追溯链。
     /// </summary>
     public static class AppLogFileWriter
     {
@@ -47,6 +47,9 @@ namespace AgingTestSystem.Services
         /// 当前日志文件的写入器（缓存复用，避免每条日志都 new StreamWriter）
         /// </summary>
         private static StreamWriter _writer;
+
+        /// <summary>累计写入失败次数（Debug 留痕用，现场排障可查"日志断过几行"）。</summary>
+        private static int _writeFailCount;
 
         /// <summary>
         /// 日志目录（程序运行目录下的 Logs 文件夹，不存在则自动创建）
@@ -92,10 +95,12 @@ namespace AgingTestSystem.Services
                     _writer.Flush();
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // 日志写入失败不能影响主流程（采集/UI），静默吞掉
-                // 常见原因：磁盘已满 / 目录无写权限 / 文件被占用
+                // 日志写入失败不能影响主流程（采集/UI），但必须留痕：
+                // 磁盘满/无权限时无声断链，现场排障会误判"没跑过"。Debug 输出 + 失败计数。
+                System.Diagnostics.Debug.WriteLine($"[AppLog] 写入失败: {ex.Message}");
+                System.Threading.Interlocked.Increment(ref _writeFailCount);
             }
         }
     }

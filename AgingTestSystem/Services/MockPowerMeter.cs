@@ -103,8 +103,8 @@ namespace AgingTestSystem.Services
 
         public void Dispose()
         {
-            // Mock 无非托管资源：断开即释放（与 MockFanController 同口径）
-            _isConnected = false;
+            // Mock 无非托管资源：断开即释放（走 Disconnect，清表不断追溯旧曲线）
+            Disconnect();
         }
     }
 }

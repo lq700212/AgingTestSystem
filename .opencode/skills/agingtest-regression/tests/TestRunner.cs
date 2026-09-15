@@ -126,8 +126,10 @@ namespace AgingTestSystem.Tests
         }
 
         // ────────────── 临时目录隔离工具 ──────────────
-        // UserManager / RecipeStorage 用相对路径读写 json，
-        // 必须切到一次性临时目录里测：用例之间互不污染，也不碰真实数据。
+        // 运行时文件已全部绝对路径化（BaseDirectory），CWD 切换只隔离"测试手写相对文件"；
+        // 走 BaseDirOverride 测试缝的类（TestSessionStore/MesReporter/UserManager）必须显式跟随，
+        // 否则用例读写散落在 run 目录。此处统一跟随 UserManager（用户文件跟机器），
+        // 其余两缝各模块按需自管（finally 复位，见既有写法）。
         private static readonly List<string> _tempDirs = new List<string>();
 
         private static string EnterCleanDir()
@@ -137,6 +139,13 @@ namespace AgingTestSystem.Tests
             Directory.CreateDirectory(dir);
             _tempDirs.Add(dir);
             Environment.CurrentDirectory = dir;
+            try
+            {
+                var f = typeof(UserManager).GetField("BaseDirOverride",
+                    BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                if (f != null) f.SetValue(null, dir);
+            }
+            catch { }
             return dir;
         }
 
@@ -596,6 +605,36 @@ namespace AgingTestSystem.Tests
                     Check("登录窗" + r + "光标默认进密码框", lf.ActiveControl == pwdBox);
                 }
                 finally { if (lf != null) { try { lf.Dispose(); } catch { } } }
+            }
+
+            // 用户文件跟程序目录不跟 CWD：快捷方式起始位置一变，裸相对路径会写散丢账号。
+            // 构造缝隔离目录 != 当前 CWD，文件必须落缝目录、CWD 必须干净。
+            string otherCwd = EnterCleanDir();
+            string userIso = Path.Combine(Path.GetTempPath(), "AgingTestSysUT",
+                "users_" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            Directory.CreateDirectory(userIso);
+            var fUserBase = typeof(UserManager).GetField("BaseDirOverride",
+                BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+            object savedBase = fUserBase != null ? fUserBase.GetValue(null) : null;
+            try
+            {
+                if (fUserBase != null) fUserBase.SetValue(null, userIso);
+                var umIso = new UserManager();
+                Check("用户文件落隔离缝目录", File.Exists(Path.Combine(userIso, "Users.json")));
+                Check("用户文件不跟CWD走", !File.Exists(Path.Combine(otherCwd, "Users.json")));
+                Check("隔离缝下默认账号可用", umIso.Login(UserRole.Administrator, "admin", "123456").Success);
+            }
+            finally
+            {
+                try { if (fUserBase != null) fUserBase.SetValue(null, savedBase); } catch { }
+                Environment.CurrentDirectory = otherCwd;
+                try
+                {
+                    var f2 = typeof(UserManager).GetField("BaseDirOverride",
+                        BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public);
+                    if (f2 != null) f2.SetValue(null, otherCwd);
+                }
+                catch { }
             }
         }
 
@@ -1092,6 +1131,32 @@ namespace AgingTestSystem.Tests
             Check("断开后重连=true", fan.ReconnectNow() == true && fan.IsConnected == true);
             fan.Dispose();
             Check("释放后断开", fan.IsConnected == false);
+            // 口径收敛：空配置拒绝；使能决策归 DeviceManager 装配，Mock 显式注入时照连
+            var fan2 = new MockFanController();
+            Check("风机Connect(null)拒绝", fan2.Connect(null) == false && fan2.IsConnected == false);
+            var cfgNoFan = new DeviceConfig(); cfgNoFan.FanEnabled = false;
+            Check("风机注入优先于开关(禁用配置照连)", fan2.Connect(cfgNoFan) == true && fan2.IsConnected == true);
+            Check("注入后启停读写正常",
+                fan2.StartFixedValue() == true && fan2.ReadStatus() != null && fan2.Stop() == true);
+            fan2.Disconnect();
+            // 取反口径与真实实现一致：存物理值、读回业务值，写读往返恒等
+            var cfgInv = new DeviceConfig();
+            cfgInv.TotalBarometers = 4; cfgInv.TotalInputs = 80; cfgInv.TotalOutputs = 160;
+            cfgInv.InvertOutputs = true; cfgInv.InvertInputs = true;
+            var ioInv = new MockIoController();
+            Check("取反配置Connect成功", ioInv.Connect(cfgInv) == true);
+            ioInv.WriteOutput(81, true);
+            var fOut = typeof(MockIoController).GetField("_outputStates",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            bool[] stored = fOut != null ? (bool[])fOut.GetValue(ioInv) : null;
+            Check("取反输出存物理反值", stored != null && stored.Length > 0 && stored[0] == false);
+            Check("取反输出读回业务值", ioInv.ReadOutput(81) == true);
+            Check("取反批量读回业务值", ioInv.ReadAllOutputs()[0] == true);
+            var fIn = typeof(MockIoController).GetField("_inputStates",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            bool r1 = ioInv.ReadInput(1);
+            bool rawAfter = fIn != null ? ((bool[])fIn.GetValue(ioInv))[0] : r1;
+            Check("取反输入读回反值", fIn != null && r1 == !rawAfter);
         }
 
         // =====================================================================
@@ -1129,6 +1194,15 @@ namespace AgingTestSystem.Tests
             Check("同号覆盖", StationSettingsCache.Get(1).SerialNumber == "SN-B002");
             ResetStationCache(); // 模拟重启：从 StationSettings.json 重载
             Check("重启后落盘可读", StationSettingsCache.Get(1) != null && StationSettingsCache.Get(1).SerialNumber == "SN-B002");
+
+            // 脏读指纹：同进程手改文件，不调 Reload 也即时生效（不读脏内存）
+            StationSettingsCache.Save(new StationCacheEntry { DeviceId = 7, SerialNumber = "SN-OLD" });
+            Check("指纹基线可读", StationSettingsCache.Get(7) != null && StationSettingsCache.Get(7).SerialNumber == "SN-OLD");
+            string cachePath = ProjectProfile.ResolveDataPath("StationSettings.json", true);
+            string rawCache = File.ReadAllText(cachePath, Encoding.UTF8);
+            File.WriteAllText(cachePath, rawCache.Replace("SN-OLD", "SN-NEW2"), Encoding.UTF8);
+            var handEdit = StationSettingsCache.Get(7);
+            Check("手改文件即生效（脏读指纹）", handEdit != null && handEdit.SerialNumber == "SN-NEW2");
 
             // 脏文件三态
             File.WriteAllText(ProjectProfile.ResolveDataPath("StationSettings.json", true), "{broken json");
@@ -2971,6 +3045,16 @@ namespace AgingTestSystem.Tests
             Check("超深连写!被拦(防栈溢出)", rerrs.Count == 1 && rerrs[0].Contains("嵌套"));
             RuleEngine.ParseRuleList("浅取反 | !!(1>0)", out defs, out rerrs);
             Check("浅取反正常过", rerrs.Count == 0 && defs.Count == 1);
+            // 节点预算：平坦长链（1+1+…）解析循环零消耗，求值左斜树递归深度=节点数，
+            // 无预算则长链 StackOverflow（不可捕获）。400 个节点上限，正常规则几十个。
+            var chain = new System.Text.StringBuilder("1");
+            for (int i = 0; i < 500; i++) chain.Append("+1");
+            RuleEngine.ParseRuleList("长链 | " + chain, out defs, out rerrs);
+            Check("超长平坦链被拦(防求值栈溢出)", rerrs.Count == 1 && rerrs[0].Contains("节点过多"));
+            var chainOk = new System.Text.StringBuilder("1");
+            for (int i = 0; i < 50; i++) chainOk.Append("+1");
+            RuleEngine.ParseRuleList("短链 | " + chainOk, out defs, out rerrs);
+            Check("短链正常过", rerrs.Count == 0 && defs.Count == 1);
             var many = new System.Text.StringBuilder();
             for (int i = 0; i < 25; i++) many.AppendLine("r" + i + " | 1>0");
             RuleEngine.ParseRuleList(many.ToString(), out defs, out rerrs);
@@ -3872,8 +3956,17 @@ namespace AgingTestSystem.Tests
                 Check("布尔大小写兼容", ok("UseMockCommunication", "True"));
                 Check("布尔YES拦截", !ok("UseMockCommunication", "YES"));
                 Check("文本端口不校验", ok("PortName", "COM9") && ok("PortName", ""));
-                Check("IP候选/映射表不强制校验",
-                    ok("FanIpCandidates", "xxx") && ok("IoBackupChannelMappings", "xxx"));
+                Check("IP候选不强制校验", ok("FanIpCandidates", "xxx"));
+                Check("映射表空合法", ok("IoBackupChannelMappings", "") && ok("IoBackupChannelMappings", null));
+                Check("映射表 canonical 合法",
+                    ok("IoBackupChannelMappings", "0x2000@0x00->0x2009@0x00"));
+                Check("映射表脏文本保存即拦", !ok("IoBackupChannelMappings", "xxx"));
+                Check("停止位三档合法",
+                    ok("StopBits", "1") && ok("StopBits", "15") && ok("StopBits", "2"));
+                Check("停止位7拦截", !ok("StopBits", "7") && !ok("ScannerStopBits", "3"));
+                Check("温度上限0~200合法", ok("FanTempAlarmLimitC", "0") && ok("FanTempAlarmLimitC", "200"));
+                Check("温度上限越界拦截",
+                    !ok("FanTempAlarmLimitC", "-1") && !ok("FanTempAlarmLimitC", "201"));
 
                 // _boolKeys 17 项逐项过校验（防"只加一边"的配置漂移；V1.68 +MesEnabled/MesMockEnabled；V1.69 +SkipVacuum；V1.73 +VentValveEnabled；V1.74 +UsePowerMeter；V1.75 +DisplayModeEnabled）
                 var boolKeys = (HashSet<string>)typeof(SettingsForm).GetField("_boolKeys",
@@ -4413,6 +4506,39 @@ namespace AgingTestSystem.Tests
                 Check("双引号翻倍还原", parse("\"a\"\"b\"")[0] == "a\"b");
                 Check("尾逗号出空尾段", parse("a,").Length == 2 && parse("a,")[1] == "");
                 Check("空行出1空段", parse("").Length == 1 && parse("")[0] == "");
+                // 多行记录拼合：详情含换行时物理占多行，按引号闭合拼回逻辑记录（否则两截都丢）
+                var qi = typeof(HistoryRecordForm).GetMethod("IsQuoteUnbalanced",
+                    BindingFlags.NonPublic | BindingFlags.Static);
+                Check("反射找到 IsQuoteUnbalanced", qi != null);
+                if (qi != null)
+                {
+                    Func<string, bool> unbalanced = v => (bool)qi.Invoke(null, new object[] { v });
+                    Check("平衡行不拼", !unbalanced("a,b,c") && !unbalanced("\"a,b\",c"));
+                    Check("未闭合引号要拼下一行", unbalanced("\"a,b"));
+                    Check("转义双引号不算未闭合", !unbalanced("\"a\"\"b\",c"));
+                    TestEventLogger.Write("ML", 6, "备注", "第一行\n第二行",
+                        null, null, null, "SN6", "配方M", "");
+                    string mlFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs",
+                        "TestLog_" + DateTime.Now.ToString("yyyyMMdd") + ".csv");
+                    string[] phys = ReadAllLinesShared(mlFile);
+                    var recs = new List<string>();
+                    string pend = null;
+                    foreach (string ln in phys)
+                    {
+                        string cur = pend != null ? pend + "\n" + ln : ln;
+                        if (unbalanced(cur)) { pend = cur; continue; }
+                        pend = null;
+                        recs.Add(cur);
+                    }
+                    if (pend != null) recs.Add(pend);
+                    string[] mf = parse(recs[recs.Count - 1]);
+                    Check("多行详情拼合11列", mf.Length == 11);
+                    if (mf.Length == 11)
+                    {
+                        Check("多行详情内容还原", mf[7] == "第一行\n第二行");
+                        Check("多行详情编号事件对", mf[4] == "6" && mf[5] == "备注");
+                    }
+                }
 
                 // 互逆：写入器转义 → 解析器还原（11 列对齐，详情含逗号引号）
                 EnterCleanDir();
@@ -6473,22 +6599,15 @@ namespace AgingTestSystem.Tests
             try { mock.Dispose(); } catch { }
             Check("Mock释放不抛", true);
 
-            // —— 真实桩：连不上、读全NaN但不断追溯 ——
+            // —— 真实桩：连不上、读null（=读失败，与接口注释一致，上层保留缓存不断追溯） ——
             var stub = new PowerMeterClient();
             bool stubErr = false;
             stub.OnError += (s, m) => { stubErr = true; };
             Check("桩连接失败", stub.Connect(new DeviceConfig()) == false && stub.IsConnected == false);
             Check("桩失败发一次错误事件", stubErr);
             float[] stubCur = stub.ReadAllCurrents(72);
-            bool stubNaN = stubCur != null && stubCur.Length == 72;
-            if (stubNaN)
-            {
-                foreach (float c in stubCur)
-                {
-                    if (!float.IsNaN(c)) { stubNaN = false; break; }
-                }
-            }
-            Check("桩读数全NaN不断追溯", stubNaN);
+            Check("桩未连接读null（接口口径）", stubCur == null);
+            Check("桩deviceCount<=0返空数组", stub.ReadAllCurrents(0) != null && stub.ReadAllCurrents(0).Length == 0);
             Check("桩重连仍失败", stub.ReconnectNow() == false);
             try { stub.Dispose(); stub.Disconnect(); } catch { }
             Check("桩释放断开不抛", true);

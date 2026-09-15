@@ -11,7 +11,7 @@ namespace AgingTestSystem.Services
     /// 没有协议写不出驱动。本桩的作用是"占住真实端的位置"，让 DeviceManager 的
     /// Mock/真实二选一接线现在就能写完、回归现在就能跑：
     /// - UseMockCommunication=true → MockPowerMeter（有数）；
-    /// - UseMockCommunication=false → 本桩（连不上、读数全 NaN，但绝不抛异常拖垮采集）。
+    /// - UseMockCommunication=false → 本桩（连不上、读 null，但绝不抛异常拖垮采集）。
     /// 【电表到货后怎么做】把本桩改成真驱动（参考 FanControllerClient 的写法）：
     /// Connect 里建连接、ReadAllCurrents 里按 deviceId 读电流填数组，
     /// 失败一路填 NaN（上层跳过，不断追溯链）。上层业务零改动。
@@ -52,9 +52,10 @@ namespace AgingTestSystem.Services
 
         public float[] ReadAllCurrents(int deviceCount)
         {
-            // 桩：没连上就没有数，返回全 NaN 数组（上层按"无数据"处理，不断追溯链）。
-            // 注意不返回 null：null 会让上层以为"通讯失败"，全 NaN 才是"设备不在"的语义。
+            // 桩：没连上就没有数，返回 null（= 读失败，与接口注释、MockPowerMeter 断开语义、
+            // DeviceManager"读失败填 NaN 追溯不断"三方一致；上层 null 安全，永不抛）。
             if (deviceCount <= 0) return new float[0];
+            if (!_isConnected) return null;
             var result = new float[deviceCount];
             for (int i = 0; i < deviceCount; i++) result[i] = float.NaN;
             return result;

@@ -15,6 +15,11 @@ namespace AgingTestSystem.Services
     /// 修复 M5：使用 lock 保护 Random，避免多线程访问导致内部状态损坏
     /// 修复 M6：ReadAllData 增加 _config 判空，避免未 Connect 时抛 NullReferenceException
     /// 修复 L9：ReadData 增加 deviceId 边界校验
+    /// 【与真实实现的区别（测试写用例前必读，防假绿）】
+    /// - Status 恒 Idle：状态机归 DeviceManager 写，Mock 只给压力（真实端按阈值判 Fault/Idle，
+    ///   报警语义走 DeviceManagerIntegration 端到端用例，不直接断言 Mock 状态）；
+    /// - SN/配方/延时/IO 列是演示填充（面板有字、流程能跑），阈值写入是空操作恒 true；
+    ///   真实施压阈值联动走"DeviceManager 回填覆盖"路径，用例断言 DeviceManager 行为。
     /// </summary>
     public class MockBarometerReader : IBarometerReader
     {

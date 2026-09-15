@@ -1180,6 +1180,24 @@ namespace AgingTestSystem.Views
                 config.DisplayModeEnabled = dmEnabled;
             }
 
+            // 自由文本策略的机器缺省（App.config 同名 key；项目 Policy.json 随后叠加覆盖——
+            // 以前这里没读，App.config 改这 7 项永不生效，与 DeviceConfig 注释矛盾，现补齐。
+            // 直写赋值不用反射：反射传字面量会被混淆改名静默打断（见部署诊断约定）。）
+            if (System.Configuration.ConfigurationManager.AppSettings["MesTriggers"] != null)
+                config.MesTriggers = System.Configuration.ConfigurationManager.AppSettings["MesTriggers"];
+            if (System.Configuration.ConfigurationManager.AppSettings["MesFieldMap"] != null)
+                config.MesFieldMap = System.Configuration.ConfigurationManager.AppSettings["MesFieldMap"];
+            if (System.Configuration.ConfigurationManager.AppSettings["MesStaticFields"] != null)
+                config.MesStaticFields = System.Configuration.ConfigurationManager.AppSettings["MesStaticFields"];
+            if (System.Configuration.ConfigurationManager.AppSettings["CustomAlarmRules"] != null)
+                config.CustomAlarmRules = System.Configuration.ConfigurationManager.AppSettings["CustomAlarmRules"];
+            if (System.Configuration.ConfigurationManager.AppSettings["CompleteExpression"] != null)
+                config.CompleteExpression = System.Configuration.ConfigurationManager.AppSettings["CompleteExpression"];
+            if (System.Configuration.ConfigurationManager.AppSettings["ReportColumns"] != null)
+                config.ReportColumns = System.Configuration.ConfigurationManager.AppSettings["ReportColumns"];
+            if (System.Configuration.ConfigurationManager.AppSettings["DisplayModes"] != null)
+                config.DisplayModes = System.Configuration.ConfigurationManager.AppSettings["DisplayModes"];
+
             // 项目策略叠加（Projects/<当前项目>/Policy.json 覆盖同名机器缺省）
             ProjectPolicyStore.ApplyOverlay(config);
 
@@ -3687,6 +3705,9 @@ namespace AgingTestSystem.Views
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
         {
             _mainClosing = true;
+            // 退出恰撞后台连接时，"连接中"提示窗靠 async finally 才关，会成孤儿泄漏：
+            // 这里先关（HideConnecting 已做空/释放判空，后台 finally 再调一次无害）。
+            HideConnecting();
             if (_deviceManager != null)
             {
                 _deviceManager.OnBatchDataUpdated -= DeviceManager_OnBatchDataUpdated;

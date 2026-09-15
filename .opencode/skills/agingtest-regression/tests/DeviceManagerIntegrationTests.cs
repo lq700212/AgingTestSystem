@@ -1615,6 +1615,10 @@ namespace AgingTestSystem.Tests
                 SweepVacuumInRangeFlag();
                 SweepZeroDelayPowerOnAtStart();
                 SweepFanStopRetry();
+                SweepResetWriteBeforeClear();
+                SweepCompleteWriteFailKeepsTesting();
+                SweepStopAllWriteFailKeepsState();
+                SweepSubSecondBurnInCeiling();
             }
             finally
             {
@@ -2127,10 +2131,120 @@ namespace AgingTestSystem.Tests
             }
         }
 
-        // ---------- S11 订阅异常隔离：坏订阅者不影响好订阅者与采集 ----------
-        private static void SweepSubscriberIsolation()
+        // ---------- S16 复位先写后清：写失败保持原态（可重试），不"假空闲" ----------
+        private static void SweepResetWriteBeforeClear()
         {
             FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+            DeviceManager dm = BuildTestManager(out reader, out io, out config);
+            try
+            {
+                dm.SetStationDelayTimes(1, TimeSpan.Zero, TimeSpan.FromSeconds(60));
+                dm.StartTesting(new[] { 1 });
+                Check("[大扫荡][复位] 启动后在测",
+                    WaitUntil(() => dm.GetTestingStates()[0], 2000));
+                int failBefore = CountCsvMarker("复位失败");
+                int okBefore = CountCsvMarker("人工复位");
+                io.SetThrowOnWrite(true);          // 耦合器恰在复位瞬间掉线
+                dm.ResetDevices(new[] { 1 });      // void：失败记事件，不抛不断批
+                Check("[大扫荡][复位] 写失败台保持原态（可重试）",
+                    dm.GetTestingStates()[0]);
+                Check("[大扫荡][复位] 记复位失败事件",
+                    CountCsvMarker("复位失败") > failBefore);
+                Check("[大扫荡][复位] 未记成功复位",
+                    CountCsvMarker("人工复位") == okBefore);
+                io.SetThrowOnWrite(false);
+                dm.ResetDevices(new[] { 1 });
+                Check("[大扫荡][复位] 恢复后复位干净",
+                    !dm.GetTestingStates()[0]
+                    && !io.ReadOutput(ValveOut(config, 1))
+                    && !io.ReadOutput(PowerOut(config, 1)));
+                Check("[大扫荡][复位] 恢复后记成功复位",
+                    CountCsvMarker("人工复位") > okBefore);
+            }
+            finally { try { io.SetThrowOnWrite(false); } catch { } try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
+        }
+
+        // ---------- S17 完成下发失败：保持在测（下轮重试），不"假完成" ----------
+        private static void SweepCompleteWriteFailKeepsTesting()
+        {
+            FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+            DeviceManager dm = BuildTestManager(out reader, out io, out config);
+            try
+            {
+                dm.SetStationDelayTimes(2, TimeSpan.Zero, TimeSpan.FromSeconds(4));
+                reader.SetPressure(2, -95m);
+                dm.StartTesting(new[] { 2 });
+                int pwr = PowerOut(config, 2);
+                Check("[大扫荡][完成保持] 启动即上电",
+                    WaitUntil(() => io.ReadOutput(pwr), 3000));
+                Thread.Sleep(2500);                // t≈2.5s：到时(4s)之前让耦合器掉线
+                int failBefore = CountCsvMarker("完成下发失败");
+                io.SetThrowOnWrite(true);          // 覆盖 t≈4s 的到时完成轮 + 后续重试
+                Thread.Sleep(2500);                // t≈5s：完成已尝试且全失败
+                Check("[大扫荡][完成保持] 写失败台仍在测（非假完成）",
+                    dm.GetTestingStates()[1]);
+                Check("[大扫荡][完成保持] 记完成下发失败事件",
+                    CountCsvMarker("完成下发失败") > failBefore);
+                io.SetThrowOnWrite(false);
+                Check("[大扫荡][完成保持] 恢复后正常完成",
+                    WaitUntil(() => !dm.GetTestingStates()[1], 8000));
+            }
+            finally { try { io.SetThrowOnWrite(false); } catch { } try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
+        }
+
+        // ---------- S18 急停写失败：状态不清、快照不删（看得见没停掉，可重试） ----------
+        private static void SweepStopAllWriteFailKeepsState()
+        {
+            FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+            DeviceManager dm = BuildTestManager(out reader, out io, out config);
+            try
+            {
+                dm.SetStationDelayTimes(3, TimeSpan.Zero, TimeSpan.FromSeconds(60));
+                dm.StartTesting(new[] { 3 });
+                Check("[大扫荡][急停保持] 开阀",
+                    WaitUntil(() => io.ReadOutput(ValveOut(config, 3)), 2000));
+                int failBefore = CountCsvMarker("急停失败");
+                int okBefore = CountCsvMarker("关闭所有阀与载台电");
+                io.SetThrowOnWrite(true);
+                bool threw = false;
+                try { dm.StopAll(); }
+                catch { threw = true; }
+                Check("[大扫荡][急停保持] 写失败抛给调用方", threw);
+                Check("[大扫荡][急停保持] 状态不清、台还显示在测",
+                    dm.GetTestingStates()[2]);
+                Check("[大扫荡][急停保持] 记急停失败事件",
+                    CountCsvMarker("急停失败") > failBefore);
+                Check("[大扫荡][急停保持] 未记成功急停",
+                    CountCsvMarker("关闭所有阀与载台电") == okBefore);
+                io.SetThrowOnWrite(false);
+                dm.StopAll();
+                Check("[大扫荡][急停保持] 恢复后急停干净",
+                    !dm.GetTestingStates()[2] && !io.ReadOutput(ValveOut(config, 3)));
+            }
+            finally { try { io.SetThrowOnWrite(false); } catch { } try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
+        }
+
+        // ---------- S19 亚秒烧屏Ceiling：0.5秒按1秒计时完成，不截成0=不限时长 ----------
+        private static void SweepSubSecondBurnInCeiling()
+        {
+            FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+            DeviceManager dm = BuildTestManager(out reader, out io, out config);
+            try
+            {
+                dm.SetStationDelayTimes(4, TimeSpan.Zero, TimeSpan.FromMilliseconds(500));
+                reader.SetPressure(4, -95m);
+                dm.StartTesting(new[] { 4 });
+                Check("[大扫荡][亚秒] 启动即上电",
+                    WaitUntil(() => io.ReadOutput(PowerOut(config, 4)), 3000));
+                Check("[大扫荡][亚秒] 0.5秒烧屏按1秒到时完成（非不限时长）",
+                    WaitUntil(() => !dm.GetTestingStates()[3], 8000));
+            }
+            finally { try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
+        }
+
+        // ---------- S11 订阅异常隔离：坏订阅者不影响好订阅者与采集 ----------
+        private static void SweepSubscriberIsolation()
+        {            FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
             DeviceManager dm = BuildTestManager(out reader, out io, out config);
             EventHandler<BarometerData[]> bad = (s, d) =>
             {
