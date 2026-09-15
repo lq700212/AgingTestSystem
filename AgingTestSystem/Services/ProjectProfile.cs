@@ -17,8 +17,9 @@ namespace AgingTestSystem.Services
     /// 【跟项目的 vs 跟机器的：为什么这样分】
     /// - 跟项目（进 Profile 目录）：配方、工位设置、主页布局、工艺策略——换客户就换这套。
     /// - 跟机器（留程序目录全局）：Users.json（账号全公司通用）、TestSession.json
-    ///   （本机中断快照）、PanelLayout.json（本机屏幕布局）、Logs/（本机日志）、
+    ///   （本机中断快照）、Logs/（本机日志）、
     ///   App.config 连接参数（COM 口/IP 是这台工控机的接线，不是工艺）。
+    ///   （工位面板布局是纯代码缺省，不跟文件，见 PanelLayoutConfig.CreateDefault）
     /// 当前是哪个项目，只是一个机器级指针（App.config 的 ActiveProject），
     /// 所以重装/换工控机要重新选一次项目，这是有意为之（防止指错项目跑错工艺）。
     /// </summary>
