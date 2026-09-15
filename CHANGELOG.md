@@ -3,6 +3,41 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md).
 
+## V1.99 — 工控机一键激活脚本（2026-09-15，用户：每次手动激活太麻烦）
+
+### 改动范围
+
+- **新增 `tools/auto_activate.py`（纯标准库，Python 3.6+ 免装依赖）**：拷到工控机程序目录双击即完成全部四步
+  （读 CPU 序列号→算设备码/激活码→备份并写入 `MainSetting.ini [RunHash]` 双键→回读重算状态校验），
+  默认永久激活，`--mode trial` 走 30 天试用，`--dry-run` 只算码不写盘。
+- **同步新增 PowerShell 版 `tools/auto_activate.ps1` + 双击入口 `tools/auto_activate.bat`**：
+  与 Python 版同逻辑（四码逐字一致，已交叉验证），只用 Windows 自带功能
+  （PS2.0 语法兼容，WMI 双路：`Get-CimInstance` 不存在时回退 `Get-WmiObject`），
+  工控机免装 Python 也能跑；双击 bat 即永久激活（`-Mode trial` 试用、`-DryRun` 试算，
+  参数经 `%*` 透传）。ps1 带 UTF-8 BOM（PS5.1 无 BOM 解析中文直接 ParserError）；
+  bat 例外用 GBK + CRLF 无 BOM（cmd 母语格式：UTF-8 bat 在 LF 下注释行会被拆散执行、
+  带 BOM 则首行 `@echo off` 报"不是内部命令"，GBK 是唯一干净解，改它必须保持该格式）。
+- 公式与 `Services/SoftwareActivation.Encrypt` 逐字节一致（MD5 前 15 字节 hex，30 字符），
+  写盘走 kernel32 INI API（与产品同一条路，不破坏 ini 其它段）；RunHash1（设备绑定）与 RunHash2 一次写齐，
+  新机不再需要出厂手写第一键。脚本随维护人员走，不发客户。
+
+### 为什么这么改
+
+- 原来每次激活要四步手工（授权窗抄设备ID/设备码→回办公室用《获取激活码》工具算码→
+  回工控机输入点激活→出厂手写 RunHash1），跑一台折腾一趟。公式是确定性的，
+  工控机本机自算自写即可，打印出的四码与《获取激活码》工具一字不差，可存档备查。
+
+### 验证
+
+- 24 项 Python 自检全绿（回归用例同字面 Encrypt 向量 `""`/`"a"`、公式关系式、
+  永久/试用/新设备/过期四状态、kernel32 与文本兜底两路 ini 往返且其它段保留）。
+- 本机端到端三轮全绿：`--dry-run` 只算不写、`--ini` 临时文件永久激活回读"永久使用"、
+  重跑幂等（自动备份 `.bak.时间戳`）、`--mode trial` 回读"试用中，剩余 30 天"。
+  PowerShell 版同样三轮全绿（永久/重跑备份/试用），且四码与 Python 版逐字一致；
+  bat 经 `cmd /c` 实测零报错零回显（修过两轮：LF 换行拆散注释行、BOM 顶掉 `@echo off`）。
+- `build_and_test.ps1 -Affected` 全绿：构建零 error + 真机冒烟存活 18 秒 +
+  影响面模块 DeployDiagV188_9（水印版本唯一受改动影响的模块）22 断言全过。
+
 ## V1.98 — 公共参数负压值悬停说明（2026-09-15，用户：小白能快速上手）
 
 ### 改动范围
