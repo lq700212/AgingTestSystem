@@ -61,15 +61,17 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 右侧区宽度占分隔容器总宽的比例（写死像素换台工控机就溢出/留白，所以按窗口实际宽等比；
-        /// 0.234 即现状比例，大小屏分别由 <see cref="RightPanelMinWidth"/>/<see cref="RightPanelMaxWidth"/> 钳住）。
+        /// 0.19（V1.93 起：原 0.234 下操作按钮 260 宽、文字实测仅 151px，右侧太空，
+        /// 同行工作站区被挤；19% 下按钮约 204 宽仍富余 50px，省出的全还给网格）；
+        /// 大小屏分别由 <see cref="RightPanelMinWidth"/>/<see cref="RightPanelMaxWidth"/> 钳住）。
         /// </summary>
-        public const double RightPanelRatio = 0.234;
+        public const double RightPanelRatio = 0.19;
 
         /// <summary>比例算出的右侧宽度下限：再窄操作按钮文字（"启动运行（选中台）"）放不下。与编辑器钳制下限对齐。</summary>
         public const int RightPanelMinWidth = 180;
 
-        /// <summary>比例算出的右侧宽度上限：大屏上按 23.4% 会算出 400+，右侧用不了那么多，省给左侧网格。</summary>
-        public const int RightPanelMaxWidth = 340;
+        /// <summary>比例算出的右侧宽度上限：大屏上按 19% 会算出 360+，右侧用不了那么多，省给左侧网格。</summary>
+        public const int RightPanelMaxWidth = 280;
 
         /// <summary>
         /// 工作站列表区最小宽度（像素）。右侧再宽也不能吃掉这 640px（否则 72 站被压成小方块没法看；
