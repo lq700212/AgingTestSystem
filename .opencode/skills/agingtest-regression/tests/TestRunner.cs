@@ -1,6 +1,5 @@
 ﻿// ============================================================================
 //  AgingTestSystem 全量回归测试 harness（无 UI、无需真设备，可离线自动运行）
-//
 //  【做什么】
 //  用最简单的自研断言框架（Check 计数），对项目里所有"纯逻辑"核心类做
 //  面面俱到的功能/边界/异常测试：
@@ -24,19 +23,15 @@
 //   12h. PolicyPresetV185          —— 预置策略 A/B/C（套用/探测纯函数 + 名单/口径/安全锁 + UI 预置行回显）
 //   12i. PolicyNodeComboV1851      —— 节点选项框按预置下拉口径统一（下拉实测拉宽 + 悬停全文 + 切节点清表）
 //   12j. DeployDiagV188_9           —— 调试部署诊断：启动版本水印纯函数 + 崩溃日志文件名/正文/落盘（含null/非Exception兜底）
-//
 //  【怎么跑】
 //  不直接运行本文件。用本 skill 目录 scripts\run_unit_tests.ps1：
 //    它把主程序产物拷到独立临时 run 目录 → csc 编译本文件引用主程序集 → 运行。
 //  这样 UserManager/RecipeStorage 写的 Users.json/Recipes.json、日志类写的
 //  Logs\ 全部落在临时目录，绝不污染仓库与 bin\Debug。
-//
 //  【怎么加用例】（约定：每次修 bug / 加功能后必须同步补用例，见 AGENTS.md）
 //  在对应 XxxTests 方法里加 Check("用例名", 条件) 即可；新增模块就写一个
 //  private static void XxxTests() 并在 Main 里挂上。改完必须重跑全部通过。
-//
 //  【退出码约定】0 = 全部通过；非 0 = 有失败（供 CI/脚本判断）。
-//
 //  【覆盖边界说明】涉及真串口/真设备（ModbusRtuBarometerReader、ScannerService、
 //  FanControllerClient、ModbusTcpIoController）与 UI 弹窗分支不在本 harness 范围，
 //  由现场联调与界面手工测试覆盖；后续可扩展虚拟串口/模拟器用例。
@@ -630,7 +625,7 @@ namespace AgingTestSystem.Tests
 
         // =====================================================================
         // 4. IoOutputChannelRemap.ParseAll —— IO 备用通道映射解析
-        // 【V1.62】通道合法范围收紧为 0x00~0x0F（一个寄存器 16 个 bit；
+        // 通道合法范围收紧为 0x00~0x0F（一个寄存器 16 个 bit；
         // 0x10+ 在执行侧静默失效，现解析直接拒绝，见 IoOutputChannelRemap 注释）。
         // =====================================================================
         private static void IoRemapTests()
@@ -1640,7 +1635,7 @@ namespace AgingTestSystem.Tests
             Check("RightPanelWidth 默认 240(V1.65比例时代的编辑器基准)", c.RightPanelWidth == 240);
             Check("StatusBarHeight 默认 30", c.StatusBarHeight == 30);
 
-            // 往返：顶栏锁死 30——存 44 读回仍是 30（【V1.88.28】用户点名固定，老值作废；
+            // 往返：顶栏锁死 30——存 44 读回仍是 30（用户点名固定，老值作废；
             // Save 落盘前先归位，文件里永远 30）
             c.HeaderHeight = 44;
             c.Save();
@@ -1649,7 +1644,7 @@ namespace AgingTestSystem.Tests
             if (File.Exists(cfgPath)) File.Delete(cfgPath); // 还原，避免影响后续用例
 
             // 调整范围约束（编辑器钳制依据，与 HomeLayoutEditorForm 常量同步；
-            // 【V1.88.28】顶栏不再参与：只有 FixedHeaderHeight 一个值）
+            // 顶栏不再参与：只有 FixedHeaderHeight 一个值）
             Check("顶栏锁死常量30（V1.88.28固定，不可调）",
                 HomeLayoutConfig.FixedHeaderHeight == 30);
             Check("右侧区范围180~600", HomeLayoutConfig.RightPanelRange.Min == 180 && HomeLayoutConfig.RightPanelRange.Max == 600);
@@ -1670,7 +1665,7 @@ namespace AgingTestSystem.Tests
             }
 
             // 越界钳制（V1.88.17：手改 json 写 5000 高/负宽，进不了主窗，只变"不好看"；
-            // 【V1.88.28】顶栏不再按范围钳：一律归固定 30）
+            // 顶栏不再按范围钳：一律归固定 30）
             try
             {
                 File.WriteAllText(cfgPath,
@@ -1926,7 +1921,7 @@ namespace AgingTestSystem.Tests
         // =====================================================================
         private static void AgingSequencerTests()
         {
-            // ── ShouldPowerOn：【V1.88.14】延时≤0=不要等待段，直接上电（启动阀电同开）；
+            // ── ShouldPowerOn：延时≤0=不要等待段，直接上电（启动阀电同开）；
             // 延时>0 才要求"压力到位 且 延时已到"两者缺一不可 ──
             Check("零延时不等真空直接上电(未到位也上电)",
                 AgingSequencer.ShouldPowerOn(false, TimeSpan.FromMinutes(10), 0));
@@ -2079,7 +2074,7 @@ namespace AgingTestSystem.Tests
                 AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffAndVent, 225, true) == null);
             Check("纯蜂鸣无点位放行(无硬件要求)",
                 AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffAndBeep, 0, false) == null);
-            // 【V1.73】破空阀开关：无阀时泄压组合直接拦（点位对了也没用，先开开关）
+            // 破空阀开关：无阀时泄压组合直接拦（点位对了也没用，先开开关）
             Check("无阀+泄压被拦（点位对了也没用）",
                 AgingSequencer.ValidatePolicyCombination(false, 0f, CompletionAction.PowerOffAndVent, 225, false) != null);
             Check("无阀+蜂鸣泄压被拦",
@@ -2269,7 +2264,7 @@ namespace AgingTestSystem.Tests
             try { Directory.Delete(System.IO.Path.Combine(ProjectProfile.ProjectsRoot, tmpName), true); }
             catch { }
             Check("临时项目已清理", !ProjectProfile.ListProfiles().Contains(tmpName));
-            // 【V1.72.9】缺省项目名=烧屏测试（harness 无 ActiveProject 配置，稳定回缺省）
+            // 缺省项目名=烧屏测试（harness 无 ActiveProject 配置，稳定回缺省）
             Check("缺省项目名=烧屏测试", ProjectProfile.ActiveProfileName == "烧屏测试");
 
             // ── V1.72.10 热更：切换指针往返 + 工位缓存跨项目隔离 ──
@@ -3097,7 +3092,7 @@ namespace AgingTestSystem.Tests
             }
             Check("边端点全是已知节点", edgesOk);
             // 每个节点至少挂1个 key（点谁都有东西可改）；unload 有 key 也有说明
-            //（【V1.83】下料节点收进事件口径/报表列，指引文案改页脚保留）。
+            //（下料节点收进事件口径/报表列，指引文案改页脚保留）。
             bool keysOk = true;
             foreach (var n in Views.PolicyGraph.Nodes)
             {
@@ -3183,7 +3178,7 @@ namespace AgingTestSystem.Tests
             dc.PowerLossPolicy = PowerLossPolicy.ResumeRemaining;
             Check("续跑边变文案",
                 Views.PolicyGraph.BuildEdgeLabel("e_recover_vacuum", dc).Contains("续跑"));
-            // 【V1.73】MES节点文本跟着配置变
+            // MES节点文本跟着配置变
             dc.MesEnabled = true;
             dc.MesTriggers = "Complete,Alarm";
             dc.MesFieldMap = "eqId=device;lotNo=lot";
@@ -4158,7 +4153,7 @@ namespace AgingTestSystem.Tests
                             BindingFlags.NonPublic | BindingFlags.Instance);
                         Check("反射找到 " + c.Method, mi != null);
                         if (mi == null) continue;
-                        // 【V1.88.20 加固】轮询＋重开找弹窗，不单次枚举：
+                        // 轮询＋重开找弹窗，不单次枚举：
                         // 五个编辑弹窗全带 OnDeactivate 失焦自杀守卫（生产正确行为，
                         // 点击外部即视为取消，动产品等于修对为错）。Show/Activate
                         // 间隙若被焦点切换抢占，弹窗即自杀，单次 DoEvents 后枚举
@@ -4201,7 +4196,7 @@ namespace AgingTestSystem.Tests
             }
         }
 
-        /// <summary>轮询找已打开的指定类型窗体（【V1.88.20】弹窗失焦自杀防误判）.
+        /// <summary>轮询找已打开的指定类型窗体（弹窗失焦自杀防误判）.
         /// 五个设置表编辑弹窗全带 OnDeactivate 失焦自杀守卫（生产正确行为）：
         /// Show/Activate 间隙若被焦点切换抢占，弹窗即自杀；单次 DoEvents 后枚举在
         /// 满负载全量跑时偶发撞上该时间窗（单跑必过是其特征，IO 映射弹窗实锤）。
@@ -4814,9 +4809,9 @@ namespace AgingTestSystem.Tests
                     Check("负坐标不命中", !hit(new Point(-5, -5)).Item1);
                     var center = hit(new Point(b1.Width / 2, b1.Height / 2));
                     Check("1号中心命中1", center.Item1 && center.Item2 == 1);
-                    // 【V1.88.15】面板间隙不命中（zoom=1/dpi=1：内容204x170，格209x182；
+                    // 面板间隙不命中（zoom=1/dpi=1：内容204x170，格209x182；
                     // 面板内容左上偏移+2：行缝 y∈[172,182)、列缝 x∈[206,209)；
-                    // 点缝隙以前误翻上一个面板。【V1.88.17】数字随紧凑布局更新。
+                    // 点缝隙以前误翻上一个面板。数字随紧凑布局更新。
                     Check("行间隙不命中", !hit(new Point(b1.Width / 2, 176)).Item1);
                     Check("列间隙不命中", !hit(new Point(207, 50)).Item1);
                     Check("内容底边内仍命中", hit(new Point(100, 171)).Item1);
@@ -4883,7 +4878,7 @@ namespace AgingTestSystem.Tests
                         Check("下电逻辑不变（载台无电=下电）", (string)gf("PowerText") == "下电");
                     }
 
-                    // —— 选中框常显 + 单击点选（【V1.88.14】长按整套删除：无门槛翻转） ——
+                    // —— 选中框常显 + 单击点选（长按整套删除：无门槛翻转） ——
                     var drawPanel = tg.GetMethod("DrawPanel", BindingFlags.NonPublic | BindingFlags.Instance);
                     Check("DrawPanel签名4参（g/item/left/top，无anySelected）",
                         drawPanel != null && drawPanel.GetParameters().Length == 4);
@@ -4911,9 +4906,9 @@ namespace AgingTestSystem.Tests
                             grid.GetSelectedDeviceIds().Length == 0);
                     }
 
-                    // —— 自适应缩放（【V1.88.24】只留双向精确铺满一屏：FitWidth/FitMode/
+                    // —— 自适应缩放（只留双向精确铺满一屏：FitWidth/FitMode/
                     // 单轴ComputeFitZoom/MinZoom钳制/拖拽滚动全删） ——
-                    // 内容 8×209+64=1736 宽、9×182=1638 高（紧凑布局关电流）。
+                    // 内容 8×209+48=1720 宽、9×182=1638 高（紧凑布局关电流）。
                     double bzx, bzy;
                     WorkstationGridView.ComputeFitZoom(1600, 800, 1736, 1638, out bzx, out bzy);
                     Check("ComputeFitZoom双向独立（1600/1736，800/1638）",
@@ -5008,7 +5003,7 @@ namespace AgingTestSystem.Tests
                         zoomXFld.SetValue(grid, 1f);
                         zoomYFld.SetValue(grid, 1f);
                     }
-                    // 字体下限：【V1.88.21】1280×1024小屏适配，6pt→4pt跟随缩小不挤叠。
+                    // 字体下限：1280×1024小屏适配，6pt→4pt跟随缩小不挤叠。
                     // 旧6pt在972×736可用区下把字卡大1.5倍（理想4.04pt→6pt），4字标签37px vs 槽31px溢出盖框。
                     var rebuildFonts = tg.GetMethod("RebuildFonts", BindingFlags.NonPublic | BindingFlags.Instance);
                     Check("反射找到RebuildFonts", rebuildFonts != null);
@@ -5024,7 +5019,7 @@ namespace AgingTestSystem.Tests
                         var tf = tfFld != null ? tfFld.GetValue(grid) as System.Drawing.Font : null;
                         Check("窄边小zoom下正文字号钳4pt", pf != null && pf.Size >= 4f);
                         Check("窄边小zoom下标题字号钳4pt", tf != null && tf.Size >= 4f);
-                        // 【V1.88.21 红→绿】1280×1024真实zoom（972×736可用区：zx≈0.56、zy≈0.45），
+                        // 1280×1024真实zoom（972×736可用区：zx≈0.56、zy≈0.45），
                         // 理想4.04pt必须跟随缩小、不再被卡到6pt（卡住即标签挤叠复现）。
                         zoomXFld.SetValue(grid, 0.5593f);
                         zoomYFld.SetValue(grid, 0.4487f);
@@ -5047,9 +5042,14 @@ namespace AgingTestSystem.Tests
                             Check("1280×1024下时间串装进延时框（不截断）", timeW <= delaySlot,
                                 "时间" + timeW + "px vs 框" + delaySlot + "px");
                         }
-                        // 行全选竖排（【V1.88.28】竖排大字＋正常间隙＋整块居中；
+                        // 行全选竖排（竖排大字＋正常间隙＋整块居中；
                         // 字高/间隙布局态缓存，Paint 只读——回归锁纯函数与缺省）。
                         Check("行全选字号倍率缺省2", new PanelLayoutConfig().RowSelectFontScale == 2f);
+                        // 去标题栏省纵向、全选列收窄省横向：缺省内容宽 8×209+48=1720（字号仍由窄边纵向定）。
+                        Check("行全选列宽缺省48", new PanelLayoutConfig().RowSelectButtonColumnWidth == 48);
+                        var defLayout = new PanelLayoutConfig();
+                        Check("缺省内容宽1720",
+                            8 * defLayout.PanelColumnWidth + defLayout.RowSelectButtonColumnWidth == 1720);
                         System.Drawing.Font rsf = null;
                         try
                         {
@@ -5095,7 +5095,7 @@ namespace AgingTestSystem.Tests
                         int gpv = gpFld != null ? (int)gpFld.GetValue(grid) : 0;
                         Check("行全选度量已缓存(字高>0且间隙≥2)", chv > 0 && gpv >= 2,
                             "字高" + chv + "px 间隙" + gpv + "px");
-                        // 设置按钮独立大字（【V1.88.29】绿底白字看不清：框50×42，12pt跟zoom走；
+                        // 设置按钮独立大字（绿底白字看不清：框50×42，12pt跟zoom走；
                         // 14pt实测50px顶满边框故取12，左右各留3px、上下各留10px；
                         // 标题12pt槽位（x=9到选中框181）168px，"NO.72"装得下）。
                         System.Drawing.Font sbf = null;
@@ -5136,9 +5136,9 @@ namespace AgingTestSystem.Tests
                             sbGrid != null && Math.Abs(sbGrid.Size - 12f) < 0.15f && sbGrid.Bold,
                             sbGrid != null ? "实际 " + sbGrid.Size.ToString("F2") + "pt" : "字体为null");
                     }
-                    // 无句柄挂载即铺满（【V1.88.24】缺省就是双向铺满，不用切模式；
+                    // 无句柄挂载即铺满（缺省就是双向铺满，不用切模式；
                     // MinSize 同步/V1.88.15 事后校正随滚动删除，只锁 zoom+画布）。
-                    // 800×600 宿主：可用区 800×600 精确（不再预扣 1px），内容 1736×1638。
+                    // 800×600 宿主：可用区 800×600 精确（不再预扣 1px），内容 1720×1638。
                     var hostPanel = new System.Windows.Forms.Panel();
                     try
                     {
@@ -5146,8 +5146,8 @@ namespace AgingTestSystem.Tests
                         hostPanel.Controls.Add(grid);
                         float zhx = zoomXFld != null ? (float)zoomXFld.GetValue(grid) : 0f;
                         float zhy = zoomYFld != null ? (float)zoomYFld.GetValue(grid) : 0f;
-                        Check("挂载后zoomX按宽算(800/1736)",
-                            zoomXFld != null && Math.Abs(zhx - 800.0 / 1736.0) < 0.002);
+                        Check("挂载后zoomX按宽算(800/1720)",
+                            zoomXFld != null && Math.Abs(zhx - 800.0 / 1720.0) < 0.002);
                         Check("挂载后zoomY按高算(600/1638)",
                             zoomYFld != null && Math.Abs(zhy - 600.0 / 1638.0) < 0.002);
                         Check("画布精确等于宿主客户区(±1px取整)",
@@ -5167,6 +5167,27 @@ namespace AgingTestSystem.Tests
                     {
                         try { hostPanel.Controls.Remove(grid); } catch { }
                         try { hostPanel.Dispose(); } catch { }
+                    }
+                    // 去标题栏收益锁：同宽下可用高 807→845（+38 全给工作站区），
+                    // zoomY=845/1638，正文 9×845/1638≈4.64pt（原来 4.43pt）。
+                    var hostTall = new System.Windows.Forms.Panel();
+                    try
+                    {
+                        hostTall.ClientSize = new System.Drawing.Size(976, 845);
+                        hostTall.Controls.Add(grid);
+                        float zty = zoomYFld != null ? (float)zoomYFld.GetValue(grid) : 0f;
+                        Check("去标题后zoomY按高算(845/1638)",
+                            zoomYFld != null && Math.Abs(zty - 845.0 / 1638.0) < 0.002);
+                        var pfTallFld = tg.GetField("_panelFont", BindingFlags.NonPublic | BindingFlags.Instance);
+                        var pfTall = pfTallFld != null ? pfTallFld.GetValue(grid) as System.Drawing.Font : null;
+                        Check("去标题后正文字号≈4.64pt",
+                            pfTall != null && Math.Abs(pfTall.Size - 9f * 845f / 1638f) < 0.05f,
+                            pfTall != null ? "实际 " + pfTall.Size.ToString("F2") + "pt" : "字体为null");
+                    }
+                    finally
+                    {
+                        try { hostTall.Controls.Remove(grid); } catch { }
+                        try { hostTall.Dispose(); } catch { }
                     }
                 }
             }
@@ -5348,7 +5369,6 @@ namespace AgingTestSystem.Tests
 
         // =====================================================================
         // 15. 深色/浅色主题 —— 解析/映射表往返/内存切换/整树着色冒烟（V1.60）
-        //
         // 【测什么】
         // ThemeManager 是纯静态主题服务：Parse 读配置、MapXxx 查双向映射表、
         // SetMode 切内存主题、ApplyTo 递归着色。文件读写（SaveToConfig）不测——
@@ -5827,6 +5847,20 @@ namespace AgingTestSystem.Tests
             }
             finally { try { judge.Dispose(); } catch { } }
 
+            // —— 顶栏窗口三按钮（去标题栏：标题藏掉，三键自绘进顶栏；只调纯静态，不 new 主窗） ——
+            Check("按钮穿透判定（原生/Sunny按钮自己吃点击，其余归拖动）",
+                MainForm.IsWindowChromePassthrough(new System.Windows.Forms.Button())
+                && MainForm.IsWindowChromePassthrough(new Sunny.UI.UIButton())
+                && !MainForm.IsWindowChromePassthrough(new System.Windows.Forms.Label())
+                && !MainForm.IsWindowChromePassthrough(null));
+            System.Drawing.Color chBk, chFr;
+            MainForm.GetWindowChromeColors(false, false, false, out chBk, out chFr);
+            Check("窗口键浅色常态底=Control",
+                chBk.ToArgb() == System.Drawing.SystemColors.Control.ToArgb());
+            MainForm.GetWindowChromeColors(true, true, true, out chBk, out chFr);
+            Check("窗口关闭悬停=红底白字",
+                chBk == System.Drawing.Color.FromArgb(232, 17, 35) && chFr == System.Drawing.Color.White);
+
             // —— ③关于弹窗 SunnyUI 风格（反射调 internal static，不 new 主窗） ——
             var buildMi = typeof(MainForm).GetMethod("BuildVersionInfoDialog", Flags);            Check("反射找到BuildVersionInfoDialog", buildMi != null);
             if (buildMi != null)
@@ -5851,7 +5885,7 @@ namespace AgingTestSystem.Tests
                         {
                             Check("关于内容从标题区下起排（Y>=35）", txt.Top >= 35);
                             Check("关于文本含版本号与版权",
-                                (txt.Text ?? "").Contains("V1.58.4")
+                                (txt.Text ?? "").Contains(BuildWatermark.ReleaseLabel)
                                 && (txt.Text ?? "").Contains("版权所有"));
                         }
                         var btnOk = dlg.Controls.Find("btnOk", true).FirstOrDefault()
@@ -6303,7 +6337,7 @@ namespace AgingTestSystem.Tests
             }
             finally { try { policyForm.Dispose(); } catch { } }
 
-            // —— ②③主页布局窗：量程字面值 + 越界赋值不炸（【V1.88.28】顶栏行已删，锁死30） ——
+            // —— ②③主页布局窗：量程字面值 + 越界赋值不炸（顶栏行已删，锁死30） ——
             var layout = new HomeLayoutConfig();
             var homeForm = new HomeLayoutEditorForm(layout);
             try
@@ -6916,7 +6950,6 @@ namespace AgingTestSystem.Tests
         }
 
         // 12i. PolicyNodeComboV1851 —— 节点选项框按预置下拉口径统一（V1.85.1 新增）
-        //
         // 【测什么】全部节点 Bool/Enum 下拉：下拉列表按最长选项实测拉宽（不再与框
         // 同宽 270，最长 22 字项旧口径下被拦腰截断）+ 悬停恒=选中项全文（闭合框
         // 270 放不下长中文时的第二路）+ 切节点清提示表（不清=已释放控件被钉住泄漏）。

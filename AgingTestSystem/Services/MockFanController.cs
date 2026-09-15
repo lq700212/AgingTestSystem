@@ -9,11 +9,9 @@ namespace AgingTestSystem.Services
     /// <summary>
     /// 冷却送风机模拟实现
     /// 用于开发和演示阶段（App.config 里 UseMockCommunication=true 时启用）
-    ///
     /// 【与真实实现的区别】
     /// - 真实实现 FanControllerClient：走 Modbus TCP，与厂商控制屏通讯
     /// - 本模拟实现：不连任何硬件，温度随机波动，命令直接生效
-    ///
     /// 【设计说明】（给新手看的）
     /// 有了 Mock，即使现场没有接线、没有送风机，也可以先跑通整套 UI 和业务流程：
     /// 点"送风机定值启动" → 状态变成"定值运行中" → 温度开始波动；
@@ -81,13 +79,13 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 按需重连（【V1.16.1 新增】接口成员）
+        /// 按需重连（接口成员）
         /// 模拟实现：直接返回"已连接"（Mock 没有真实掉线概念，重新 Connect 即恢复）。
         /// </summary>
         public bool ReconnectNow()
         {
             if (_isConnected) return true;
-            // 【V1.62】从未 Connect（_config 为 null）时不许"空连上"：
+            // 从未 Connect（_config 为 null）时不许"空连上"：
             // 否则 ActiveIp 为 null 却 IsConnected 为 true，掩盖"未连接启动"的真问题。
             if (_config == null) return false;
             Connect(_config);
@@ -136,7 +134,7 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 定值启动（模拟）：直接把运行标志置为 true
-        /// 【V1.62】未连接时返回 false 且不改状态（与 ReadStatus 未连接返 null 对齐；
+        /// 未连接时返回 false 且不改状态（与 ReadStatus 未连接返 null 对齐；
         /// 之前恒返 true，会掩盖"未连接启动"的真问题）。
         /// </summary>
         public bool StartFixedValue()

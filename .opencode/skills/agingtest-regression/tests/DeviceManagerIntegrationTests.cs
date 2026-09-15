@@ -1,11 +1,9 @@
 // ============================================================================
 //  DeviceManagerIntegrationTests.cs —— 设备编排端到端集成测试（V1.59 新增）
-//
 //  【做什么】
 //  用"可控 Fake 气压表 + 可记录 Fake IO 控制器"通过 DeviceManager 的依赖注入
 //  构造函数（V1.59 为可测性开放）直接驱动【真实的】三阶段老化状态机，
 //  以 30ms 采集间隔在数秒内跑完现场要几小时的生命周期：
-//
 //    场景1 正常全流程：启动只开阀不上电(安全铁律) → 压力到位+延时时间到自动上电
 //                     → 配方时长到自动完成 → Completed·待取料 + PASS + 阀电全关
 //    场景2 真空建立失败：宽限窗口内压力始终不到位 → 报警 FAIL，载台全程从未带电
@@ -16,10 +14,8 @@
 //    场景6 扫码重绑：完成态工位重新绑定 SN 自动复位回空闲
 //    场景7 配方阈值优先：压力在全局阈值(-5)下越限、配方阈值(-3)下正常 →
 //                    证明判定用的是配方值而非全局兜底
-//
 //  【怎么跑】由 run_unit_tests.ps1 与 TestRunner.cs 一起编译（partial class
 //  共享 Check/Module/EnterCleanDir），不单独运行。
-//
 //  【时间约定】采集间隔 30ms、确认超时 600ms、延时时间 0.5s、老化 1.5s——
 //  全套场景约 10s 跑完；WaitUntil 轮询等待条件成立，超时按 FAIL 记。
 // ============================================================================
@@ -46,7 +42,7 @@ namespace AgingTestSystem.Tests
             private readonly int _total;
             private readonly Dictionary<int, decimal> _pressures = new Dictionary<int, decimal>();
             private readonly HashSet<int> _failIds = new HashSet<int>();
-            // 【V1.62 扩展】错 id 上报（position→谎报的 DeviceId）与超长数组，
+            // 错 id 上报（position→谎报的 DeviceId）与超长数组，
             // 专测采集防火墙；默认关闭，原有场景行为不变。
             private readonly Dictionary<int, int> _spoofIds = new Dictionary<int, int>();
             private readonly List<BarometerData> _extraReads = new List<BarometerData>();
@@ -156,7 +152,7 @@ namespace AgingTestSystem.Tests
             private readonly object _lock = new object();
             private readonly bool[] _outputs;          // 索引 = outputId-1（含输入区占位）
             private readonly HashSet<int> _everOn = new HashSet<int>(); // 曾被置 ON 的输出点
-            // 【V1.62 扩展】输入覆写（DI 触点分支用；默认 null 走恒 false 老行为）
+            // 输入覆写（DI 触点分支用；默认 null 走恒 false 老行为）
             private bool[] _inputOverride;
             private bool _connected;
 
@@ -479,7 +475,7 @@ namespace AgingTestSystem.Tests
                     dm.GetBarometerData(1).LastTestResult == "");
 
                 // ---------- E4 中途改全局不影响在测台（定格隔离） ----------
-                // 【V1.88.14】延时改 0.5s（非零）：延时0的台启动即双开，不再走"只开阀"，
+                // 延时改 0.5s（非零）：延时0的台启动即双开，不再走"只开阀"，
                 // 定格隔离场景必须用延时>0 保持"启动只开阀→定格阈值判定上电"。
                 dm.SetStationRecipe(1, "RX", -3m, null);
                 dm.SetStationDelayTimes(1, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1.5));
@@ -867,7 +863,7 @@ namespace AgingTestSystem.Tests
                     !io.ReadOutput(PowerOut(config, 1)) && !io.ReadOutput(ValveOut(config, 1)));
 
                 // ================= 场景2：真空建立失败（工位2）=================
-                // 【V1.88.14】延时给 2s（>宽限600ms）：延时0的台启动即双开带电，
+                // 延时给 2s（>宽限600ms）：延时0的台启动即双开带电，
                 // "全程从未带电"超时路径必须用延时>0 保持"启动只开阀、超时永不带电"。
                 dm.SetStationDelayTimes(2, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(60));
                 dm.StartTesting(new[] { 2 });
@@ -906,7 +902,7 @@ namespace AgingTestSystem.Tests
                 dm.SetStationRecipe(2, "R2", -5m, null);
                 dm.SetStationDelayTimes(2, TimeSpan.Zero, TimeSpan.FromSeconds(60)); // 长老化
                 dm.StartTesting(new[] { 2 });
-                reader.SetPressure(2, -6m); // 【V1.88.14】延时0启动即阀电同开进入老化（不等到位）
+                reader.SetPressure(2, -6m); // 延时0启动即阀电同开进入老化（不等到位）
                 Check("[中止] 延时0启动即双开进入老化",
                     WaitUntil(() => io.ReadOutput(PowerOut(config, 2)), 2500));
                 dm.StopTesting(new[] { 2 });
@@ -947,7 +943,7 @@ namespace AgingTestSystem.Tests
                 {
                     dm2.RecoverSession(pending);
                     Thread.Sleep(150);
-                    // 【V1.88.14】4号快照延时=0：整台重测同样阀电同开直接计时（不再是阀开电不开）。
+                    // 4号快照延时=0：整台重测同样阀电同开直接计时（不再是阀开电不开）。
                     Check("[恢复] 延时0整台重测阀电同开直接计时",
                         io2.ReadOutput(ValveOut(config2, 4)) && io2.ReadOutput(PowerOut(config2, 4)));
                     Check("[恢复] 恢复后回到在测状态", dm2.GetTestingCount() == 1);
@@ -1074,7 +1070,7 @@ namespace AgingTestSystem.Tests
                 r3.SetPressure(1, -6m);
                 Check("[策略P3] 到位上电进入老化",
                     WaitUntil(() => io3.ReadOutput(PowerOut(c3, 1)), 2500));
-                // 【V1.88.20 加固】相位落定 Aging 才掉压：上电输出只是 IO 结果，
+                // 相位落定 Aging 才掉压：上电输出只是 IO 结果，
                 // 相位变量是采集侧结算的；掉压若撞上"输出已开、相位仍 Vacuuming"
                 // 的窗口即走真空建立失败 Fault（满负载偶发，单跑因周期快撞不上；
                 // 症状飘忽：有时边沿两条红，有时状态检查红）。快照在上电边沿带
@@ -1091,12 +1087,12 @@ namespace AgingTestSystem.Tests
                         }
                         catch { return false; }
                     }, 5000));
-                // 【V1.88.20 加固】掉压值必须用刺激后才出现的值：初始全 0、建压 -6，
+                // 掉压值必须用刺激后才出现的值：初始全 0、建压 -6，
                 // 若掉压仍用 0，"缓存==0"在刺激前即成立，等待瞬间通过，又退化成
                 // Sleep 赌博（首轮 600ms 零周期+初始缓存 Idle 即红过一次，血泪）。
                 // -1 同样越限（阈值 -5），且只可能是掉压后的周期写入，非空证明。
                 r3.SetPressure(1, -1m); // 老化中掉真空
-                // 【V1.88.20 加固】等"消费掉压的采集周期"先成立再断言：固定 Sleep
+                // 等"消费掉压的采集周期"先成立再断言：固定 Sleep
                 // 等于假设 30ms 周期准时跑，满负载定时器饿死时后面 2 秒也不够用。
                 // 轮询缓存压力（与边沿同一轮写入、无平滑滤波），周期跑起来才往下走；
                 // 15 秒上限，真饿死也报得明白。
@@ -1111,7 +1107,7 @@ namespace AgingTestSystem.Tests
                 // 状态断言放边沿之后：恒定 -1 下机器已收敛（保持运行恒 Testing，
                 // 报警则锁存 Fault），此时读是稳态读，不再是瞬态赌博。
                 var d3 = dm3.GetBarometerData(1);
-                // 【V1.88.20】失败才展开的快照（绿时只多一次缓存读＋一次反射，红时直接
+                // 失败才展开的快照（绿时只多一次缓存读＋一次反射，红时直接
                 // 定罪：满负载偶发飘移，复现靠运气，证据必须留在失败行里，免二次抓瞎）。
                 Func<string> diag3 = () =>
                 {
@@ -1200,7 +1196,7 @@ namespace AgingTestSystem.Tests
                     catch { }
                     Check("[策略P4] 续跑时长=剩余(100-40=60)",
                         resumed == 60);
-                    // 【V1.88.14】续跑快照延时=0：重抽真空后同样阀电同开（不再是阀开电不开）。
+                    // 续跑快照延时=0：重抽真空后同样阀电同开（不再是阀开电不开）。
                     Check("[策略P4] 延时0续跑阀电同开",
                         io4b.ReadOutput(ValveOut(c4b, 1)) && io4b.ReadOutput(PowerOut(c4b, 1)));
                     dm4b.DiscardSession(dm4b.LoadPendingSession());
@@ -1432,7 +1428,7 @@ namespace AgingTestSystem.Tests
             try
             {
                 dm4.SetStationDelayTimes(1, TimeSpan.Zero, TimeSpan.FromSeconds(60));
-                // 【V1.88.14】2号延时给 60s（非零）：延时0的台启动即双开进老化，
+                // 2号延时给 60s（非零）：延时0的台启动即双开进老化，
                 // "留抽真空"的对照台必须用延时>0。
                 dm4.SetStationDelayTimes(2, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
                 dm4.StartTesting(new[] { 1, 2 });
@@ -1654,7 +1650,7 @@ namespace AgingTestSystem.Tests
             DeviceManager dm = BuildTestManager(out reader, out io, out config);
             try
             {
-                // 【V1.88.14】延时给 1s（非零）：延时0的台启动即双开带电，
+                // 延时给 1s（非零）：延时0的台启动即双开带电，
                 // "上电写失败回滚重试"场景必须用延时>0 保持"启动只开阀→到位才尝试上电"。
                 // 1s 而非 60s：回滚后重试条件是 elapsed≥延时，60s 会让"恢复后补上电"等到超时。
                 dm.SetStationDelayTimes(1, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(60));

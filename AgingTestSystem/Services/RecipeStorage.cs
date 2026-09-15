@@ -8,12 +8,10 @@ namespace AgingTestSystem.Services
 {
     /// <summary>
     /// 配方持久化服务
-    ///
     /// 【功能说明】
     /// 将配方列表序列化为 JSON 文件（程序运行目录下的 Recipes.json），
     /// 供配方管理窗体保存设置时写入、主窗体启动时加载，
     /// 实现"配方修改后重启程序不丢失"。
-    ///
     /// 【存储说明】
     /// - 文件路径：程序运行目录下的 Recipes.json（与 Users.json 同级）
     /// - 序列化整个 List&lt;RecipeConfig&gt;，包含每个配方的全部字段
@@ -24,7 +22,7 @@ namespace AgingTestSystem.Services
     public static class RecipeStorage
     {
         /// <summary>
-        /// 配方数据文件路径（【V1.67】跟项目走：Projects/&lt;当前项目&gt;/Recipes.json，
+        /// 配方数据文件路径（跟项目走：Projects/&lt;当前项目&gt;/Recipes.json，
         /// 经 ProjectProfile 解析；切项目即换配方文件）。
         /// </summary>
         private static string RecipeDataFilePath
@@ -95,16 +93,13 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 保存单个配方到配方列表并落盘（无 UI：同名时按 overwrite 决定覆盖/拒绝）。
-        ///
         /// 【用途】批量设置配方窗体、工位设置窗体的"保存/加入队列"按钮共用：
         /// 调用方先用 <see cref="FindDuplicateIndex"/> 查同名、同名时自己弹窗问，
         /// 用户确认覆盖才传 overwrite=true（取消=直接返回，不调本方法）。
-        ///
         /// 【同名处理】
         /// - 无同名 → 新增（Id=Max+1，防删除塌号撞号）；
         /// - 有同名 + overwrite=true → 覆盖（保留原 Id，CreateTime 刷新）；
         /// - 有同名 + overwrite=false → 拒绝（列表不动，返回 false）。
-        ///
         /// 【失败回滚】先改内存再落盘，落盘失败则内存恢复原样（以前 Id 改了回不来，
         /// 列表与文件分叉）。空名配方直接拒绝（以前 null 名互判"同名"）。
         /// </summary>
@@ -134,7 +129,7 @@ namespace AgingTestSystem.Services
             else
             {
                 // 新增：分配一个不冲突的编号后加入列表
-                // 【V1.62】用 Max(Id)+1 而不是 Count+1：删除中间配方后 Count 会"塌"，
+                // 用 Max(Id)+1 而不是 Count+1：删除中间配方后 Count 会"塌"，
                 // 如剩 {Id=2} 时 Count+1 又得 2 造成撞号；Max+1 永不回退。
                 int nextId = 1;
                 foreach (RecipeConfig r in recipes)

@@ -2,7 +2,6 @@ namespace AgingTestSystem.Dialogs
 {
     /// <summary>
     /// 系统设置窗口 —— 设计器自动生成部分
-    ///
     /// 【界面布局】（单页展示，不用选项卡；所有分类合并为单个 UIDataGridView，表格自身滚动）
     /// ┌──────────────────────────────────────────────┐
     /// │ 顶部提示条（浅蓝底白条）                      │
@@ -87,10 +86,9 @@ namespace AgingTestSystem.Dialogs
             this.lblHint.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             //
             // pnlScroll
-            //
-            // 【V1.53】AutoScroll 关闭：滚动已交给内部填满的 UIDataGridView（虚拟化绘制，
+            // AutoScroll 关闭：滚动已交给内部填满的 UIDataGridView（虚拟化绘制，
             // 只重绘可见行），避免 8 个独立表格在滚动容器中整块移动重绘导致滚动卡顿。
-            // 【V1.54d】Padding=12,0,12,0：用户反馈表格左边缘离窗口左边缘太近、
+            // Padding=12,0,12,0：用户反馈表格左边缘离窗口左边缘太近、
             // 缺空隙；左右各 12px Padding 后，表格与窗口左右各留约 12px 空白带，
             // 视觉上表格"居中悬浮"在中部，与右侧对称。表格（_grid）仍 Dock=Fill，
             // 撑满 padding 之内；pnlScroll 自身 RectColor 仍可见作为表格外框。
@@ -147,7 +145,7 @@ namespace AgingTestSystem.Dialogs
             this.Controls.Add(this.pnlScroll);
             this.Controls.Add(this.pnlBottom);
             this.Controls.Add(this.pnlHint);
-            // 【V1.71】UIForm 自绘蓝标题：删 FormBorderStyle，Dock 布局加顶 Pad 避开标题区。
+            // UIForm 自绘蓝标题：删 FormBorderStyle，Dock 布局加顶 Pad 避开标题区。
             this.Padding = new System.Windows.Forms.Padding(2, 38, 2, 2);
             this.MinimumSize = new System.Drawing.Size(800, 500);
             this.Name = "SettingsForm";

@@ -5,22 +5,19 @@ namespace AgingTestSystem.Services
 {
     /// <summary>
     /// 老化时序决策器（V1.59 新增）——三阶段状态机的"纯判定"函数集
-    ///
     /// 【为什么单独抽这个类】
     /// DeviceManager 的阶段推进逻辑长在采集循环里，依赖定时器/IO/锁，没法自动化测试。
     /// 把"该不该上电 / 该不该完成 / 真空建立是否超时"这类纯时间-条件判断抽成
     /// 无副作用的静态函数后，回归 harness 可以直接构造边界用例覆盖
     /// （0 延时、延时未到、压力未到位、时长到点、不限时长……），
     /// DeviceManager 只负责"调用决策 + 执行 IO + 写日志"，逻辑与副作用分离。
-    ///
     /// 【三阶段时序总览】（与 DeviceManager.ProcessTestingProgress 配合阅读）
-    ///   启动(只开阀，记开阀时刻 t0；【V1.88.14】延时=0 的台启动时阀+电同时开，直接进 Aging)
+    ///   启动(只开阀，记开阀时刻 t0；延时=0 的台启动时阀+电同时开，直接进 Aging)
     ///     └─ Vacuuming：等「真空到位」且「now - t0 ≥ 延时时间」（两者取较晚；
     ///          延时=0 不等真空，ShouldPowerOn 直接 true，见下）
     ///          ├─ 到位前超过 VacuumConfirmTimeoutMs 仍未到位 → 报警(产品责任 FAIL)，永不带电
     ///          └─ 条件满足 → 载台上电 → Aging，老化计时起点 = 上电时刻
     ///     └─ Aging：now - 计时起点 ≥ 烧屏时间(配方) → 完成(下电+关阀+PASS·待取料)
-    /// 【V1.88.14 延时0语义（与客户确认，不兼容老口径）】
     ///   延时时间 = "保持载台电源断电、只让真空吸附"的等待段；
     ///   延时=0 = 不要这段等待：启动瞬间阀+电同时开、直接进 Aging 计时，老化全程阀电保持常开，
     ///   只在完成/停止/急停/报警时关闭。真空保护不丢：刚开阀压力还在常压，
@@ -30,13 +27,11 @@ namespace AgingTestSystem.Services
     public static class AgingSequencer
     {
         /// <summary>
-        /// 压力是否越限（【V1.62 新增】纯函数，回归可直接断言）。
-        ///
+        /// 压力是否越限（纯函数，回归可直接断言）。
         /// 【判定规则】（单位 kPa，与气压表读数一致）
         /// - alarmWhenHigher=true（默认）：压力 > 阈值 → 越限（真空变差：负数变"大"）；
         /// - false：压力 &lt; 阈值 → 越限（扩展方向）。
         /// - 压力恰等于阈值 → 不越限（边界语义，两边一致）。
-        ///
         /// 【为什么收拢到这里】原来 DeviceManager.PressureOutOfRange 与
         /// ModbusRtuBarometerReader.IsAlarm 各写了一份相同的 if/else，
         /// 两处一旦改了一处没改另一处就是灾难。现在两处都转调本函数，
@@ -61,12 +56,12 @@ namespace AgingTestSystem.Services
         /// <param name="pressureInRange">真空压力是否已到位（≤ 该台有效阈值）</param>
         /// <param name="elapsedSinceValveOpen">距开阀时刻经过的时间</param>
         /// <param name="delaySeconds">延时时间（秒）：开阀后至少等这么久才上电；
-        /// 【V1.88.14】≤0 = 不要等待段，直接上电（启动时阀电同开，不等真空到位；
+        /// ≤0 = 不要等待段，直接上电（启动时阀电同开，不等真空到位；
         /// 真空建立靠确认宽限+过程报警兜底，见类头）</param>
         /// <returns>true = 应立即给载台上电并进入 Aging 阶段</returns>
         public static bool ShouldPowerOn(bool pressureInRange, TimeSpan elapsedSinceValveOpen, int delaySeconds)
         {
-            // 【V1.88.14】延时≤0 = 无前置等待：不等真空是否到位，直接上电。
+            // 延时≤0 = 无前置等待：不等真空是否到位，直接上电。
             // （启动侧已阀电同开直接进 Aging，这里短路 true 主要覆盖"上电写失败回滚到
             // Vacuuming 后下轮重试"的路径，保证重试也是立即上电、语义与启动一致。）
             if (delaySeconds <= 0)
@@ -118,8 +113,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 启动前风险提示文案（【V1.66 新增】纯函数，烧屏场景专用）。
-        ///
+        /// 启动前风险提示文案（纯函数，烧屏场景专用）。
         /// 【为什么是"警告"不是"拦截"】0 时长（不限时长永不自动完成）和空 SN（追溯断链）
         /// 在烧屏工艺里都是高风险，但是否允许仍是现场工艺权——软件只负责把丑话说在前面，
         /// 不替现场做主。调用方（MainForm 启动确认框）把返回的文本直接拼进确认框，
@@ -145,7 +139,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 启动前硬拦截文案（【V1.67 新增】Q13 策略化：Warn 走 BuildStartWarningText，
+        /// 启动前硬拦截文案（Q13 策略化：Warn 走 BuildStartWarningText，
         /// Block 走本函数——含 0 时长/空 SN 工位时直接阻断，连确认框都不进）。
         /// </summary>
         /// <param name="zeroDurationIds">有效时长为 0 的工位号</param>
@@ -174,8 +168,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 报警结果映射（【V1.67 新增】Q19 策略化：真空失败记 FAIL 还是装夹异常）。
-        ///
+        /// 报警结果映射（Q19 策略化：真空失败记 FAIL 还是装夹异常）。
         /// 【映射表】
         /// - 设备异常（通讯失联，productRelated=false）→ "设备异常"（策略管不着，不判产品）；
         /// - 真空类报警（压力越限/真空建立失败）→ 策略决定：ProductFail="FAIL"，FixtureAlarm="装夹异常"；
@@ -192,8 +185,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 断电续跑的剩余时长（【V1.67 新增】Q21① 策略化，纯函数）。
-        ///
+        /// 断电续跑的剩余时长（Q21① 策略化，纯函数）。
         /// 【语义】remaining = duration - (savedAt - powerOn)：中断时刻已跑掉的不补，
         /// 断电期间（savedAt 之后）的不计入老化——补的是"欠的产能"，不是" wall clock"。
         /// - duration ≤ 0（不限时长）→ 返回 0（续跑仍不限时长）；
@@ -219,9 +211,8 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 策略组合校验（【V1.67 新增】防配出自相矛盾的组合；SettingsForm 保存时调用，
+        /// 策略组合校验（防配出自相矛盾的组合；SettingsForm 保存时调用，
         /// 回归同步用例——"配置即代码"，校验器与策略同等重要）。
-        ///
         /// 【目前锁定的矛盾组合】
         /// 1) 超温联停开了，但上限 ≤ 0（= 温度告警都没启用）→ 联停永远触发不了，
         ///    配了等于没配，必须先填 FanTempAlarmLimitC；
@@ -257,7 +248,6 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 破空阀点位碰撞校验（【复查补齐】纯函数：V1.67 约定"判定类分支先写纯函数"，
         /// 以前逻辑直接写在 SettingsForm.CheckPolicyCombination 里，单测够不着）。
-        ///
         /// 【为什么会撞】破空阀是全局单阀，走独立 DO 点；工位阀/载台电按
         /// TotalInputs+id / TotalInputs+TotalBarometers+id 编址。若破空阀点位配进
         /// 工位编号区间，启动该台"开阀后同一 ID 写关"→ 真空永不建立还极难排查。
@@ -282,8 +272,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 送风机超温是否应全线联停（【V1.66 新增】纯函数）。
-        ///
+        /// 送风机超温是否应全线联停（纯函数）。
         /// 【为什么是全线不是单台】全机只有一个温度探头（送风机控制屏 0x0002），
         /// 没有分工位温度，做不到单台联停。超温停单台还是全线（问题清单 Q16）等现场拍板，
         /// 在此之前只提供"全线联停"一种动作，且默认关闭（enabled=false=现状：只记日志）。

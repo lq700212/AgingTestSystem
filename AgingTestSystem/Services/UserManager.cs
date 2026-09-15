@@ -8,20 +8,17 @@ namespace AgingTestSystem.Services
 {
     /// <summary>
     /// 用户管理服务
-    ///
     /// 【功能说明】
     /// 1. 维护系统中所有用户账号（操作员/技术员/管理员）
     /// 2. 提供登录验证功能（校验用户名和密码）
     /// 3. 提供密码修改功能：任意角色可修改自己的密码（ChangeOwnPassword，验证旧密码）；管理员可修改操作员/技术员密码（UpdatePassword）
     /// 4. 提供用户名修改功能（仅管理员可调用）
     /// 5. 用户数据持久化到 JSON 文件（程序重启后数据不丢失）
-    ///
     /// 【默认账号】
     /// - 管理员: admin / 123456（仅一个业务管理员）
     /// - 技术员: technician / 123456（支持多账号）
     /// - 操作员: operator / 123456（支持多账号）
     /// - 最高权限: dev / dev123（V1.64，见下方【dev 最高权限账号】）
-    ///
     /// 【dev 最高权限账号（V1.64）】
     /// - dev 是真正的最高权限，归属 Administrator 角色：走"用户权限→管理员"登录框
     ///   输入 dev / dev123 即可登录，界面上没有任何入口提示（隐藏入口）。
@@ -37,14 +34,12 @@ namespace AgingTestSystem.Services
     /// - 用户数据变更时自动保存到文件
     /// - 文件不存在时使用默认账号并自动创建文件
     /// - 文件损坏或格式错误时使用默认账号并重建文件
-    ///
     /// 【密码安全（V1.58.22 起）】
     /// - 密码一律以 PBKDF2 哈希存储（见 PasswordHasher），Users.json 中不再出现明文密码。
     /// - 登录/改密/新增账号全流程走哈希（Hash 写入、Verify 比对）；项目尚未上线，
     ///   无需兼容旧版明文（存储串非哈希格式一律判定失败）。
     /// - "记住密码"功能（RememberedLogin.json）因需回填登录框，密码以 Base64 可逆形式保存，
     ///   该文件属运行时本地数据已被 gitignore，与 Users.json 的不可逆哈希是两条独立路径。
-    ///
     /// 【JSON 持久化方案选择】
     /// 选择 JSON 而非 XML 的原因：
     /// 1. JSON 文件体积更小，键值对结构简洁，无冗余标签
@@ -165,7 +160,7 @@ namespace AgingTestSystem.Services
             _users[UserRole.Operator].Add(new UserAccount("operator", PasswordHasher.Hash("123456"), UserRole.Operator));
             _users[UserRole.Technician].Add(new UserAccount("technician", PasswordHasher.Hash("123456"), UserRole.Technician));
             _users[UserRole.Administrator].Add(new UserAccount("admin", PasswordHasher.Hash("123456"), UserRole.Administrator));
-            // 【V1.64】种子 dev 最高权限账号（归属管理员角色，走管理员登录框进入）
+            // 种子 dev 最高权限账号（归属管理员角色，走管理员登录框进入）
             _users[UserRole.Administrator].Add(new UserAccount(DevUsername, PasswordHasher.Hash(DevDefaultPassword), UserRole.Administrator));
         }
 
@@ -298,7 +293,7 @@ namespace AgingTestSystem.Services
                 _users[UserRole.Administrator].Add(new UserAccount("admin", PasswordHasher.Hash("123456"), UserRole.Administrator));
             }
 
-            // 【V1.64】老文件自愈：管理员组里没有 dev 就补一个（默认密码 dev123）。
+            // 老文件自愈：管理员组里没有 dev 就补一个（默认密码 dev123）。
             // 只补缺席、不碰已存账号：老 admin 密码是什么还是什么，dev 自改过的密码也不会被重置。
             // （dev 在内存里不存在才会补；文件里有 dev 时上面分组已保留，走不到这里。）
             bool hasDev = false;
@@ -359,9 +354,7 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 登录验证
-        ///
         /// 根据目标角色查找对应账号，校验用户名和密码是否匹配。
-        ///
         /// 【设计说明】
         /// 此方法不仅校验用户名和密码，还会校验"该账号是否属于目标角色"。
         /// 例如：用户想切换为"管理员"权限，必须输入管理员角色的账号密码，
@@ -470,7 +463,7 @@ namespace AgingTestSystem.Services
                 return (false, "未找到目标账号");
             }
 
-            // 【V1.64】dev 账号不允许改名：改了名隐藏入口就对不上了，且自愈会再种一个 dev 出来造成混乱
+            // dev 账号不允许改名：改了名隐藏入口就对不上了，且自愈会再种一个 dev 出来造成混乱
             if (IsDevUsername(target.Username))
             {
                 return (false, "dev 账号不允许改名");
@@ -488,13 +481,13 @@ namespace AgingTestSystem.Services
                 return (false, "用户名至少需要2个字符");
             }
 
-            // 【V1.64】新名字不允许占用 dev（大小写变体也不行，防混淆）
+            // 新名字不允许占用 dev（大小写变体也不行，防混淆）
             if (IsDevUsername(trimmed))
             {
                 return (false, "该账号名不可用");
             }
 
-            // 【V1.64】业务管理员的改名只有 dev 能动：普通管理员管操作员/技术员，
+            // 业务管理员的改名只有 dev 能动：普通管理员管操作员/技术员，
             // 管理员组的人事权收归 dev（防管理员之间互相改名捣乱）
             if (target.Role == UserRole.Administrator && !IsDevLoggedIn)
             {
@@ -537,7 +530,6 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 修改当前登录用户自己的密码（操作员/技术员/管理员均可调用）
-        ///
         /// 【场景】
         /// 操作员/技术员/管理员修改自己的密码，必须验证旧密码，
         /// 防止他人在无人值守时篡改账号密码。
@@ -631,7 +623,7 @@ namespace AgingTestSystem.Services
                 return (false, "未找到目标账号");
             }
 
-            // 【V1.64】管理员组密码重置权收归 dev（含 dev 自身：普通管理员连 dev 的边都碰不到）
+            // 管理员组密码重置权收归 dev（含 dev 自身：普通管理员连 dev 的边都碰不到）
             if (target.Role == UserRole.Administrator && !IsDevLoggedIn)
             {
                 return (false, "只有 dev 最高权限可以修改管理员账号");
@@ -713,7 +705,7 @@ namespace AgingTestSystem.Services
                 return (false, "用户名至少需要2个字符");
             }
 
-            // 【V1.64】dev 名系统保留：注册/添加时直接提示不可用（大小写变体同样拦截）
+            // dev 名系统保留：注册/添加时直接提示不可用（大小写变体同样拦截）
             if (IsDevUsername(trimmedUsername))
             {
                 return (false, "该账号名不可用");
@@ -792,14 +784,14 @@ namespace AgingTestSystem.Services
                 return (false, "权限不足：只有管理员可以删除账号");
             }
 
-            // 【V1.64】dev 账号是最高权限入口，任何人（含 dev 自己）都不允许删除：
+            // dev 账号是最高权限入口，任何人（含 dev 自己）都不允许删除：
             // 删了就再也进不来，只能去服务器上改 Users.json 救火
             if (IsDevUsername(username))
             {
                 return (false, "dev 账号不允许删除");
             }
 
-            // 【V1.64】业务管理员的删除权收归 dev：普通管理员删不动管理员组，
+            // 业务管理员的删除权收归 dev：普通管理员删不动管理员组，
             // dev 可删业务管理员（如 admin 离职交接、密码丢失且自改通道失效时兜底）
             if (role == UserRole.Administrator && !IsDevLoggedIn)
             {
@@ -852,7 +844,6 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 检查当前用户是否拥有指定角色或更高权限
-        ///
         /// 【使用场景】
         /// 按钮权限控制：例如"通讯设置"按钮要求技术员或管理员才能操作，
         /// 可调用 HasPermission(UserRole.Technician) 判断。

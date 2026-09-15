@@ -5,7 +5,6 @@ namespace AgingTestSystem
 {
     /// <summary>
     /// 应用程序入口类
-    ///
     /// 【修复说明】
     /// 修复 L1：注册全局异常处理，避免未捕获异常导致程序静默崩溃
     ///   - Application.ThreadException：UI 线程异常
@@ -48,7 +47,7 @@ namespace AgingTestSystem
             // 若将来要临时关闭，注释掉下面一行即可，不影响其余 DPI 适配。
             Sunny.UI.UIStyles.DPIScale = true;
 
-            // 【V1.87】授权与 HJVision 同源：无启动闸（HJVision 亦无）。
+            // 授权与 HJVision 同源：无启动闸（HJVision 亦无）。
             // 新设备/过期由主窗 HashTimer 每小时提醒一次，不阻断启动与生产。
 
             // 运行主窗体
@@ -59,8 +58,7 @@ namespace AgingTestSystem
         /// UI 线程未捕获异常处理程序
         /// 当 WinForms 控件事件处理中抛出未捕获异常时触发
         /// 弹出错误对话框并记录日志，避免程序静默崩溃
-        ///
-        /// 【V1.88.9 调试部署】以前只弹窗，客户点掉就无据可查。现在多做两件事：
+        /// 以前只弹窗，客户点掉就无据可查。现在多做两件事：
         /// 1. 先把完整异常落盘到 Logs\Crash_*.log（CrashLogWriter.Write，内部全程兜底不抛）；
         /// 2. 再往 AppLog 追加一行摘要（崩溃时间+文件路径），只拷 AppLog 也能顺藤摸瓜。
         /// 弹框文本末尾带上 crash 文件路径，请客户把该文件发回排障。
@@ -107,8 +105,7 @@ namespace AgingTestSystem
         /// <summary>
         /// 非 UI 线程未捕获异常处理程序
         /// 当后台线程（如 System.Timers.Timer 回调）中抛出未捕获异常时触发
-        ///
-        /// 【V1.88.9 调试部署】与 UI 线程处理同口径：先落盘 Crash_*.log，再补 AppLog 摘要行，
+        /// 与 UI 线程处理同口径：先落盘 Crash_*.log，再补 AppLog 摘要行，
         /// 弹框带文件路径。注意 ex 可能为 null（ExceptionObject 装着非 Exception 对象甚至 null），
         /// 解析交给 CrashLogWriter.Write（它三种情况都吃得下），这里只做空安全拼接。
         /// </summary>

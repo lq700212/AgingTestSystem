@@ -30,13 +30,13 @@ namespace AgingTestSystem.Models
         public string RecipeName { get; set; }
 
         /// <summary>
-        /// 当前配方的显示模式（【V1.66 新增】烧屏画面记录，自由文本，可空）。
+        /// 当前配方的显示模式（烧屏画面记录，自由文本，可空）。
         /// 由 StationInfo.DisplayMode 经采集叠加写入；面板暂不显示，启动/报警日志携带追溯。
         /// </summary>
         public string DisplayMode { get; set; }
 
         /// <summary>
-        /// 载台电流（【V1.74 新增】Q2 通用骨架：每工位一路，单位 A）。
+        /// 载台电流（Q2 通用骨架：每工位一路，单位 A）。
         /// 由 DeviceManager 采集循环从 IPowerMeter 回填（与 InputStatus/OutputStatus 同位置）：
         /// - float.NaN = 无数据（电表未启用/未连接/该路无回采），面板悬停显示"--"，CSV 记空，
         ///   规则变量取 NaN（比较恒 false，不误报，与 temp 离线同语义）；
@@ -88,14 +88,14 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// IO输入状态列表（每个气压表对应1个IO输入）
-        /// 【V1.09 更新】依据IO分配表，每个气压表仅有1个输入: 真空负压表信号(NPN, X地址)
+        /// 依据IO分配表，每个气压表仅有1个输入: 真空负压表信号(NPN, X地址)
         /// 索引0对应 真空负压表输入点(X000 等)
         /// </summary>
         public bool[] InputStatus { get; set; } = new bool[1];
 
         /// <summary>
         /// IO输出状态列表（每个气压表对应2个IO输出）
-        /// 【V1.09 更新】依据IO分配表，每个气压表有2个输出(PNP, Y地址):
+        /// 依据IO分配表，每个气压表有2个输出(PNP, Y地址):
         /// 索引0对应 真空电磁阀输出点(Y000 等)
         /// 索引1对应 载台上电输出点(Y110 等)
         /// </summary>
@@ -164,7 +164,6 @@ namespace AgingTestSystem.Models
 
     /// <summary>
     /// 老化测试子阶段枚举（V1.59 新增，DeviceManager 内部状态机使用）
-    ///
     /// 【三阶段时序】（行业通识：未吸附固定不通电，老化讲究连续性）
     ///   启动(只开阀) ──► Vacuuming 抽真空 ──► 真空到位 且 延时时间到 ──► 上电
     ///                 （到位前超时 = 真空建立失败报警，永不带电）         │

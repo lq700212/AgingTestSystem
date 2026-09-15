@@ -10,24 +10,20 @@ using Newtonsoft.Json;
 namespace AgingTestSystem.Views
 {
     /// <summary>
-    /// 工艺策略（【V1.70 新增为"流程驾驶舱"，V1.73 改名】三期可视化：
+    /// 工艺策略（三期可视化：
     /// 老化业务流固定拓扑 + 点节点改配置）。
-    ///
     /// 【为什么叫工艺策略不叫流程驾驶舱】现场操作员看到"驾驶舱"不知道是干什么的；
     /// 这里改的正是"参数设置→工艺策略/规则流程/MES上报"同一批 key（存 Policy.json），
     /// 名字与设置分类同词，所见即所得：改工艺来这里。
-    ///
     /// 【为什么是固定拓扑而不是通用连线编辑器】
     /// 参考过 HJVision 的 mFormFlowEdit（串行站点流水线 ST1→ST2→…，每次部署拓扑都不同，
     /// 所以要拖节点+连线+生成代码）。我们的老化是并行时间状态机：72 台同时在
     /// 抽真空/老化，拓扑被物理锁死（不上真空不能上电，唯一拓扑开关就是 SkipVacuum）。
     /// 通用编辑器会让客户能删掉安全联锁（删个节点=删真空保护），违反"规则只能加严"家规。
     /// 所以这里拓扑画死、节点可拖（纯视图）、点谁改谁的真实配置，存 Policy.json。
-    ///
-    /// 【V1.72】静态边框 Designer 化：右栏空壳/状态条/窗体属性搬进
+    /// 静态边框 Designer 化：右栏空壳/状态条/窗体属性搬进
     /// ProcessPolicyForm.Designer.cs；自绘画布（要吃真实参数）+ 动态编辑器 +
     /// 定时器仍在代码里。无参构造只装边框（构造冒烟/以后 VS 可视编辑用）。
-    ///
     /// 【界面布局】（左列主链 + 右列分支 + 右下 MES 纯配置节点）
     /// ┌──────────────────────────────────────────────┬───────────────┐
     /// │ 画布（自绘，可缩放/平移/拖节点）               │ 右栏 320px    │
@@ -43,23 +39,19 @@ namespace AgingTestSystem.Views
     /// ├──────────────────────────────────────────────┴───────────────┤
     /// │ 状态条：项目名 | 选中节点 | 保存提示                           │
     /// └──────────────────────────────────────────────────────────────┘
-    ///
-    /// 【V1.85 预置行】右栏顶部（标题46/下拉+按钮68/说明100）：下拉选 A/B/C
+    /// 右栏顶部（标题46/下拉+按钮68/说明100）：下拉选 A/B/C
     /// （或"自定义"回显），"套用预置"一键整套生效（确认框列差异项 + 前置条件，
     /// 走 PersistChanges 同一条保存路）。只动 12 个行为开关（见 PolicyPresets），
     /// MES/规则/报表/点位/时长阈值不动；只读模式整行禁用。
-    ///
-    /// 【V1.85.1 节点选项框】全部节点 Bool/Enum 下拉按预置下拉口径统一：
+    /// 全部节点 Bool/Enum 下拉按预置下拉口径统一：
     /// 下拉列表按最长选项实测拉宽（SizeNodeCombo，最长 22 字项原来被截断）+
     /// 悬停看选中项全文（共享 _editorTip，切节点清表防钉住泄漏，随窗体释放）。
-    ///
     /// 【鼠标操作】（对标 mFormFlowEdit 手感）
     /// - 左键拖节点体 = 移动节点（位置存 PolicyLayout.json，下次打开接着用）；
     /// - 左键点节点/连线 = 选中（右栏切出该节点的编辑器；连线只读，显示条件来源）；
     /// - 左键点空白 = 取消选中；Esc 同样取消；
     /// - 滚轮 = 缩放（25%~400%，以鼠标为中心，不用先点画布抢焦点）；
     /// - 按住中键拖 = 平移画布；Del 键无动作（拓扑固定，不许删除）。
-    ///
     /// 【坐标】节点 X/Y 存 96DPI 逻辑像素；绘制/命中走 Scale()=DPI×zoom 一处；
     /// 缩放是纯视图态（不进存盘）；字体用 pt（自动随 DPI 放大）×zoom 缓存两档；
     /// 禁用 Graphics.ScaleTransform（TextRenderer/GDI 与变换矩阵行为不一致，家规）。
@@ -79,7 +71,7 @@ namespace AgingTestSystem.Views
         private readonly bool _canEdit;
         private Timer _timer;
 
-        // 【V1.85 预置行】静态布局（坐标/文本/事件挂接）在 Designer，VS 可预览；
+        // 静态布局（坐标/文本/事件挂接）在 Designer，VS 可预览；
         // 这里只留运行时态：选项填充（数据源 PolicyPresets.All）+ 悬停提示 +
         // 下拉联动自保护旗。预置控件随窗体释放（静态挂接，无动态重建，终结器安全）。
         // _presetTip 无容器托管（本窗 Designer 无 components 容器），随窗体 Dispose
@@ -88,7 +80,7 @@ namespace AgingTestSystem.Views
         // 下拉联动自保护：程序回显选中项时不触发"用户改选"分支（只套用按钮才真干活）。
         private bool _presetRefreshing;
 
-        // 【V1.85.1 节点选项框】与 _presetTip 同款的共享悬停提示（一个实例管全部
+        // 与 _presetTip 同款的共享悬停提示（一个实例管全部
         // 节点下拉，选中项全文随选随换）。不给每个下拉各建一个：提示按控件建表
         // 强引用，旧编辑器释放时不清表 = 已释放控件被提示钉住不回收（切节点一
         // 次漏几个，小而久的托管泄漏）。所以切节点时 DisposeEditorControls 先
@@ -149,7 +141,7 @@ namespace AgingTestSystem.Views
             _timer = new Timer { Interval = 1000 };
             _timer.Tick += (s, args) =>
             {
-                // 【V1.72.15】关窗竞态：释放后 Tick 丢弃（UI 定时器与关闭同线程串行，
+                // 关窗竞态：释放后 Tick 丢弃（UI 定时器与关闭同线程串行，
                 // 此查防 Dispose 后残留触发；RefreshCounts 内部另有 IsDisposed 自拦，双保险）。
                 try
                 {
@@ -174,10 +166,10 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 释放悬停提示（【V1.85】_presetTip 无容器托管（本窗 Designer 无 components
+        /// 释放悬停提示（_presetTip 无容器托管（本窗 Designer 无 components
         /// 容器），必须手写释放；R2 配对检查认方法体内真 Dispose。静态挂接随窗体走，
         /// _timer 照旧在 OnFormClosed 里停（同线程串行，双保险判空）。
-        /// 【V1.85.1】_editorTip 同款无容器托管，同处释放（两行一一对应，缺一行
+        /// _editorTip 同款无容器托管，同处释放（两行一一对应，缺一行
         /// 漏一个；回归锁"关窗后两字段皆 null"）。
         /// </summary>
         protected override void Dispose(bool disposing)
@@ -269,8 +261,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 摘掉右栏旧编辑器（【V1.72.12】先 Dispose 再 Clear；【V1.72.16】改走快照）。
-        ///
+        /// 摘掉右栏旧编辑器（先 Dispose 再 Clear；改走快照）。
         /// 【修什么崩溃】Controls.Clear() 只摘父子关系、不释放资源：
         /// 旧编辑器（含 Sunny UITextBox/UIComboBox，内部包着原生 TextBox）变成孤儿，
         /// GC 时走终结器线程 Dispose，Sunny 的 Dispose 路径里读了内部 TextBox.Handle，
@@ -278,14 +269,13 @@ namespace AgingTestSystem.Views
         /// 现场症状 = 点/拖节点后随机时刻弹"非 UI 线程"错（终结时机不定，
         /// 炸的时候用户正在干别的事，极具迷惑性；Name="" 是因为动态控件都没设 Name）。
         /// 主窗 CreateWorkstationPanels 早有同款处理（H5 先 Dispose 再 Clear），这里补齐。
-        ///
-        /// 【V1.72.16 为什么 V1.72.12 没修住】foreach 直接枚举 Controls 集合逐个 Dispose
+        /// foreach 直接枚举 Controls 集合逐个 Dispose
         /// 是错的：Control.Dispose() 会把自己从父集合摘除，释放第 0 个后其余前移，
         /// 枚举器下标 +1 正好跳过一个——被跳过的孩子没释放、又被随后的 Clear() 摘掉，
         /// 照样是孤儿，GC 时照样在终结器线程炸（拖业务框时炸的其实是早先某次切节点
         /// 漏掉的旧编辑器）。正确姿势是 ControlDisposeHelper：先 CopyTo 快照成数组
         /// 再逐个释放（枚举快照不怕原集合被改），最后 Clear。以后动态重建一律调它。
-        /// 【V1.85.1 加清表】ToolTip 内部按控件建表（强引用）：旧编辑器 Dispose 了，
+        /// ToolTip 内部按控件建表（强引用）：旧编辑器 Dispose 了，
         /// 表不清 = 已释放的下拉还被 _editorTip 钉着，GC 回收不了。切节点是高频动作
         /// （现场一个个点过去），不清表就是"切一次漏几个控件"的慢性泄漏。
         /// 所以快照释放前先 RemoveAll()（清表不碰控件），再走 helper 释放旧编辑器。
@@ -346,7 +336,7 @@ namespace AgingTestSystem.Views
 
             foreach (PolicyGraph.NodeKey key in def.Keys)
             {
-                // 【V1.73】无阀本机藏破空点位行：VentValveDoPoint 是"有阀才填"的通道号，
+                // 无阀本机藏破空点位行：VentValveDoPoint 是"有阀才填"的通道号，
                 // 无阀时露出来只会诱导人填，填了也写不出去（保存校验+执行双拦）。
                 // 开关本身（VentValveEnabled）照常显示——开阀门的总闸不能藏。
                 if (string.Equals(key.Key, "VentValveDoPoint", StringComparison.Ordinal)
@@ -380,7 +370,7 @@ namespace AgingTestSystem.Views
                 Control editor = CreateEditor(key.Key, key.Kind);
                 editor.Location = new Point(0, y);
                 editor.Width = 270;
-                // 【V1.85.1】选项框按预置下拉口径统一：下拉列表按最长选项实测拉宽 +
+                // 选项框按预置下拉口径统一：下拉列表按最长选项实测拉宽 +
                 // 悬停看选中项全文（见 SizeNodeCombo）。宽 270 定死后才能量（量的是
                 // 像素，基准就是这个 270），所以调口必须在 Width 赋值之后。
                 var nodeCmb = editor as Sunny.UI.UIComboBox;
@@ -429,7 +419,7 @@ namespace AgingTestSystem.Views
             }
             else if (!string.IsNullOrEmpty(def.Info))
             {
-                // 【V1.83】有 key 也有说明的节点（下料判定）：编辑器下面追加灰字指引。
+                // 有 key 也有说明的节点（下料判定）：编辑器下面追加灰字指引。
                 // 以前 Info 只在无 key 时显示；下料节点收进事件口径/报表列后有 key 了，
                 // "判定口径在完成下电改"的指引不能丢，改成页脚保留（不占编辑器名额）。
                 var foot = new Sunny.UI.UILabel
@@ -527,17 +517,15 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 节点选项框按预置下拉（_cboPreset）口径统一（【V1.85.1 新增】全节点生效）：
+        /// 节点选项框按预置下拉（_cboPreset）口径统一（全节点生效）：
         /// 下拉列表按最长选项实测拉宽（不再默认与框同宽 270，最长的
         /// "启动定格：该轮启动时的SN/配方，中途重绑不污染"原来在下拉里被拦腰截断），
         /// 悬停看选中项全文（闭合框 270 放不下长中文时，悬停补全文，与预置行同手感）。
-        ///
         /// 【为什么实测不定死 340】预置选项文案固定四条，写死 340 省事；节点是 9 组
         /// 枚举 + 布尔两类，文案长短差 4 倍（"false" 5 个字符 vs 最长 22 个汉字+英文）。
         /// 写死 340 会让布尔下拉虚胖、极端长项仍可能差几个像素。实测量一次全都有：
         /// 短的保持框宽（不虚胖），长的按需拉宽（不截断），480 封顶（超出看悬停，
         /// 不把下拉铺满屏）。EnumOptions 加新长文案时这里自动跟上，不用手改。
-        ///
         /// 【高 DPI 说明】量的是当前 DC 的设备像素，下拉宽与字同源，缩放一致；
         /// 万一哪台工控机字体渲染偏胖差几个像素，闭合框还有悬停全文兜底，
         /// 现场永远有路看到全文。
@@ -676,7 +664,7 @@ namespace AgingTestSystem.Views
 
             foreach (string k in presult.SavedKeys) SavedKeys.Add(k);
             _dirty = false;
-            // 【V1.83】破空阀总闸翻转后刷新右栏：VentValveDoPoint 行的显隐是按
+            // 破空阀总闸翻转后刷新右栏：VentValveDoPoint 行的显隐是按
             // _config.VentValveEnabled 即时判定的（见 RebuildEditors），刚保存完
             // 内存已热回写，这里重建一次右栏，点位行当场出现/消失，不用切节点才看到。
             if (presult.SavedKeys.Contains("VentValveEnabled")) RebuildEditors();
@@ -714,7 +702,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 预置行运行时初始化（【V1.85】布局在 Designer，这里只做 Designer 干不了的两样：
+        /// 预置行运行时初始化（布局在 Designer，这里只做 Designer 干不了的两样：
         /// ①下拉选项填充（数据源 PolicyPresets.All，循环写 InitializeComponent 会被
         /// VS 重写吞掉）；②悬停提示（全文显示，见 UpdatePresetDesc）。
         /// 无参构造也调——_config 为 null 时回显"自定义"、整行禁用，不抛，VS 可预览）。
@@ -785,7 +773,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 下拉当前项的一句话说明 + 悬停全文（【V1.85】下拉框窄看不全：
+        /// 下拉当前项的一句话说明 + 悬停全文（下拉框窄看不全：
         /// 下拉列表本身已拉宽到 340，闭合框的悬停提示在这里补全文——标题 +
         /// 场景 + 前置条件，与确认框同源，不另写一份文案）。
         /// </summary>
@@ -821,9 +809,8 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 套用预置（【V1.85】傻瓜入口：脏先问存 → 列差异确认 → 逐项校验 →
+        /// 套用预置（傻瓜入口：脏先问存 → 列差异确认 → 逐项校验 →
         /// PersistChanges 同一条保存路 → 刷新右栏编辑器 + 画布 + 预置回显）。
-        ///
         /// 【只动 12 个行为开关】MES/规则/报表/画面字典/破空点位/时长阈值等
         /// 自由文本与配方/机器参数一律不动——切预置不丢现场已填的东西。
         /// 【失败语义】校验拦/C 组合拦（超温上限为 0）都是"按住不动 + 中文告诉人

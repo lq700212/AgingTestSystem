@@ -2,7 +2,6 @@ namespace AgingTestSystem.Dialogs
 {
     /// <summary>
     /// 录入批号窗体 —— 设计器自动生成部分
-    /// 
     /// 【界面布局说明】
     /// 窗口样式参考用户提供的图片，包含：
     /// 1. 标题栏：录入批号窗口
@@ -91,14 +90,14 @@ namespace AgingTestSystem.Dialogs
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(385, 230);
-            // 【V1.71】绝对布局：禁缩小（MinimumSize=ClientSize），防缩坏布局；可放大。
+            // 绝对布局：禁缩小（MinimumSize=ClientSize），防缩坏布局；可放大。
             this.MinimumSize = new System.Drawing.Size(385, 230);
             this.Controls.Add(this.lblTitle);
             this.Controls.Add(this.lblLot);
             this.Controls.Add(this.txtLot);
             this.Controls.Add(this.btnOK);
             this.Controls.Add(this.btnCancel);
-            // 【V1.71】UIForm 自绘蓝标题：删 FormBorderStyle，内容整体下移 35px。
+            // UIForm 自绘蓝标题：删 FormBorderStyle，内容整体下移 35px。
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.Name = "InputLotForm";

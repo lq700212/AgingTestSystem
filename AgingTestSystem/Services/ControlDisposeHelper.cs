@@ -3,8 +3,7 @@ using System.Windows.Forms;
 namespace AgingTestSystem.Services
 {
     /// <summary>
-    /// 动态控件容器释放助手（【V1.72.16 新增】修"点/拖节点后随机时刻终结器跨线程崩溃"）。
-    ///
+    /// 动态控件容器释放助手（修"点/拖节点后随机时刻终结器跨线程崩溃"）。
     /// 【为什么不能 foreach 直接 Dispose】
     /// WinForms 里 Control.Dispose() 会把自己从父容器的 Controls 集合中摘除
     /// （先 Dispose 再 Clear 的本意是对的，但枚举器正指着这个集合）：
@@ -17,11 +16,9 @@ namespace AgingTestSystem.Services
     /// 现场症状极具迷惑性：炸的时机是 GC 时机（比如正在拖节点），不是泄漏的时机
     /// （早先某次切换节点）。V1.72.12 的 foreach 版"先 Dispose 再 Clear"只修对一半，
     /// 漏了"枚举中集合被改"这一层，流程驾驶舱拖业务框照样炸。
-    ///
     /// 【正确姿势】先 CopyTo 快照成数组（枚举的是快照，不怕原集合被改），
     /// 再逐个 Dispose，最后 Clear。两步缺一不可：只快照不 Clear 会留空引用；
     /// 只 Clear 不 Dispose 进终结器（V1.72.12 血泪）。
-    ///
     /// 【调用方】ProcessPolicyForm.DisposeEditorControls（右栏节点编辑器）、
     /// MainForm.CreateWorkstationPanels（左侧工位区重建）。以后凡是"动态重建容器"
     /// 一律调这里，不要手写 foreach。

@@ -8,9 +8,8 @@ using AgingTestSystem.Services;
 namespace AgingTestSystem.Dialogs
 {
     /// <summary>
-    /// 下料判定窗体（【V1.67 新增】Q22 PendingReview 配套）。
-    ///
-    /// 【界面布局】（【V1.71】UIForm 自绘蓝标题，内容整体下移 35px；【V1.72.14】标签具名可预览）
+    /// 下料判定窗体（Q22 PendingReview 配套）。
+    /// 【界面布局】（UIForm 自绘蓝标题，内容整体下移 35px；标签具名可预览）
     /// ┌──────────────────────────────────┐
     /// │ 下料判定（UIForm 蓝标题）          │
     /// │ _lblScope：送判 N 台可判 M 跳过 K  │ ← 灰字两行，构造回填
@@ -20,7 +19,6 @@ namespace AgingTestSystem.Dialogs
     /// │ [_btnExecute 执行判定] [_btnClose]  │ ← 蓝主操作 / 灰关闭(Cancel)
     /// │ _lblResult：已判定 M 台跳过 K 台    │ ← 蓝字，明细见 CSV
     /// └──────────────────────────────────┘
-    ///
     /// 【流程】执行 → DeviceManager.RecordUnloadJudge（只收 Completed 台 →
     /// 逐台写"下料判定"CSV 事件 → 回空闲）。判定结果以 CSV/历史查询为准，
     /// 面板回空闲后不再保留（既有追溯链，见 RecordUnloadJudge 注释）。
@@ -54,10 +52,10 @@ namespace AgingTestSystem.Dialogs
             _deviceIds = deviceIds ?? new int[0];
             _deviceManager = deviceManager;
 
-            // 【V1.72.12 Designer 化】静态边框搬进 UnloadJudgeForm.Designer.cs，
+            // 静态边框搬进 UnloadJudgeForm.Designer.cs，
             // 这里只回填"要吃构造参数"的那一项（范围文案依赖 deviceIds/deviceManager）。
             InitializeComponent();
-            // 【V1.72.16】处置下拉选项在这里填：Designer 里写 Items.AddRange(Dispositions)
+            // 处置下拉选项在这里填：Designer 里写 Items.AddRange(Dispositions)
             // 会引用本类的静态字段，设计器 CodeDom 反序列化认不出致预览加载失败，
             // 所以 Designer 只留空下拉，运行时由构造填（4 项=Dispositions，回归锁个数）。
             _cmbDisposition.Items.AddRange(Dispositions);
@@ -87,7 +85,7 @@ namespace AgingTestSystem.Dialogs
         /// </summary>
         private void BtnExecute_Click(object sender, EventArgs e)
         {
-            // 【V1.72.14】设计器无参构造下 manager 为 null（仅预览/构造冒烟），直接提示返回，不 NRE。
+            // 设计器无参构造下 manager 为 null（仅预览/构造冒烟），直接提示返回，不 NRE。
             if (_deviceManager == null)
             {
                 MessageBox.Show("设计预览模式，无设备管理器，不执行判定。", "提示",

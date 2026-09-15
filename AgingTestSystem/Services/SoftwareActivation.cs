@@ -8,12 +8,10 @@ using System.Text;
 namespace AgingTestSystem.Services
 {
     /// <summary>
-    /// 软件激活（【V1.87】与 HJVision 同源同口径，同一套《获取激活码》工具通用）。
-    ///
+    /// 软件激活（与 HJVision 同源同口径，同一套《获取激活码》工具通用）。
     /// 【出处】HJVision 的 GYZVision/MainForm.cs 的"软件激活"区（HashTimer_Tick /
     /// HuaJi_Button_Click / 激活_Click / Encrypt / GetCpuSerialNumber）+
     /// 《获取激活码》项目的 Form1.cs 的 Encrypt。公式逐字节照抄，改一字工具就对不上。
-    ///
     /// 【公式】
     /// - 设备ID = WMI Win32_Processor.ProcessorId 第一块（读不到=空串，不抛）。
     /// - Encrypt(s) = MD5(Encoding.Default) 取前 15 字节 hex（30 字符）。
@@ -29,15 +27,12 @@ namespace AgingTestSystem.Services
     ///   （768 小时约 32 天即"30天"），768..839 或找不到 = 过期；
     ///   Encrypt(设备ID + "ALL") = 永久（跳过计时）。
     /// - 计时：主窗 HashTimer 每小时推一格（i → i+1），软件开着才走，关机不耗。
-    ///
     /// 【存储】程序目录 MainSetting.ini [RunHash] RunHash1 / RunHash2，
     /// 与 HJVision 同名同结构（kernel32 INI API 读写，厂商闭眼操作）；
     /// 该文件是运行时数据，gitignore 绝不入库，出厂由厂商按设备ID手写两键。
-    ///
     /// 【语义】与 HJVision 一致：无密钥、无试用——新机无 ini 即"新设备"，
     /// 每小时提醒一次；不阻断启动、不拦生产（失败只置灰用户权限入口，
     /// 见 MainForm.HashTimer_Tick，HJVision 置灰的是它的口令按钮 button4）。
-    ///
     /// 【可测性】判定全是纯函数（只碰传入的字符串）：Encrypt 方程 / FindSlot /
     /// ClassifySlot / VerifyActivationCode / ComputeStatus；ini 读写走显式 path
     /// 参数重载（生产走程序目录，回归走隔离临时目录，不碰真实文件）。
@@ -253,7 +248,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 付费后是否应恢复用户权限入口（【V1.88.1 新增】纯函数，可单测）。
+        /// 付费后是否应恢复用户权限入口（纯函数，可单测）。
         /// <para>做什么：把“当前激活状态”翻译成“要不要把主窗用户权限按钮解灰”。</para>
         /// <para>为什么这么写：计时器置灰后本轮不再自动恢复（与 HJVision 一致），
         /// 付费成功必须有人显式解灰；规则收敛到这一处，激活窗与主窗共用，
@@ -275,7 +270,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 缺文件建空模板（【V1.87】首次运行/误删后自动补，厂商只填值）。
+        /// 缺文件建空模板（首次运行/误删后自动补，厂商只填值）。
         /// 只建不覆盖：文件已存在直接返回，绝不碰已有的激活（覆盖=把有效授权洗掉）。
         /// 模板里两键留空 + 中文注释写清填法（填法见 docs/内部开发人员说明.md 第十二节）；
         /// 空值读出来是空串，照样走"新设备"提醒（与文件缺席同语义），不改变任何判定。

@@ -9,7 +9,6 @@ namespace AgingTestSystem.Controls
 {
     /// <summary>
     /// 备用映射可视化连线控件（可复用的 UserControl：通讯测试窗、系统设置表共用）。
-    ///
     /// 【界面】（纯自绘，一套坐标，走 AutoScroll 滚动）
     /// ┌──────────────────────────────────────────────────────────────┐
     /// │ 源通道（待映射，n）              目标通道（备用，m）           │ ← 列头（随滚动条吸顶？不吸顶，随内容滚）
@@ -22,25 +21,22 @@ namespace AgingTestSystem.Controls
     /// │ 已映射源 = 浅橙底 + 右侧徽标"→0x2009@0x00"；被占目标 = 浅灰底  │
     /// │ + 徽标"已被Y000占用"；选中源 = 浅蓝底 + 蓝框；悬停 = 高亮框   │
     /// └──────────────────────────────────────────────────────────────┘
-    ///
     /// 【交互】（用户评审结论：点选连线，触屏可点；拖拽以后再加）
     ///   1. 左键点左侧源节点 → 选中（浅蓝），底部状态条提示"再点右侧目标完成连线"；
     ///   2. 选中源后再点右侧目标节点 → 触发 MappingProposed（校验+落盘由宿主窗做，
     ///      本控件不管配置只管画，方便以后嵌到别处）；
     ///   3. 左键点连线 → 选中该映射（变红），右键可"删除此映射"；
     ///   4. 点空白处 / 重复点已选中源 → 取消选择；
-    ///   5. 【V1.82】滚轮=以鼠标为中心缩放（0.5~2.5，宿主窗 IMessageFilter 预过滤，
+    ///   5. 滚轮=以鼠标为中心缩放（0.5~2.5，宿主窗 IMessageFilter 预过滤，
     ///      悬停即缩不用抢焦点；缩放并进布局基准，字与框同比例，命中自动跟）；
-    ///   6. 【V1.82】按住中键=拖动画布（AutoScroll 平移，松手复位光标）；
+    ///   6. 按住中键=拖动画布（AutoScroll 平移，松手复位光标）；
     ///      双击中键=复位视图（100% + 回顶）。
-    ///
     /// 【通用性设计】
     ///   - 数据全外置：SetData(源池, 目标池, 映射表) 灌入，池子由 IoRemapCatalog 按配置算，
     ///     本控件不认 0x2009、不认 72 路，改总数/换耦合器自动适应；
     ///   - 占用徽标由映射表现算（目标独占拦截是 Validator 的事，画出来是本控件的事）；
     ///   - 映射中"有一端被筛选掉"的线画不出（两端节点必须同时可见），宿主窗用映射列表
     ///     兜底展示，不丢数据（切池/切分组只是"没画"，映射还在）。
-    ///
     /// 【高 DPI】自绘坐标按 e.Graphics.DpiX / 96 缩放（字体用 pt 天然跟 DPI，不用手算；
     /// 矩形/行高/线宽手乘，见 WorkstationGridView 约定）；命中检测与绘制用同一套布局，
     /// 不会"看着对点着偏"。
@@ -86,8 +82,7 @@ namespace AgingTestSystem.Controls
 
         /// <summary>
         /// 自绘画布。
-        ///
-        /// 【V1.81.2 有意不用 DoubleBuffered】TextRenderer 走 GDI，在离屏缓冲上每处约 2.2ms
+        /// TextRenderer 走 GDI，在离屏缓冲上每处约 2.2ms
         /// （AGENTS 的 V1.57.3 血泪：离屏大图上 2247ms，屏幕 DC 上近 0ms）。
         /// 本画布可见区 ~25 行 × 2 处文字，双缓冲下每帧 100ms+，滚快了"字出不来"还拖影
         /// （看着像错位）。改直画屏幕 DC（近 0ms）+ OnPaint 自填白底（不闪）+ 可见区裁剪，
@@ -100,7 +95,7 @@ namespace AgingTestSystem.Controls
                 DoubleBuffered = false;
                 ResizeRedraw = true;
                 SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint, true);
-                // 【V1.82】双击中键复位视图：Panel 默认没有 StandardDoubleClick，
+                // 双击中键复位视图：Panel 默认没有 StandardDoubleClick，
                 // WM_MBUTTONDBLCLK 会走成 MouseDown（还会把 _panning 卡成 true），
                 // 必须显式打开，双击事件才出得来。
                 // 底色显式锁白（不跟随 Control 默认灰，节点白底+灰字在灰底上发闷；
@@ -125,7 +120,7 @@ namespace AgingTestSystem.Controls
         private readonly List<Row> _tgtRows = new List<Row>();
 
         /// <summary>
-        /// 布局所用 DPI 缩放（【V1.81.1】错位根因：以前 ComputeLayout 在 SetData 时按
+        /// 布局所用 DPI 缩放（错位根因：以前 ComputeLayout 在 SetData 时按
         /// "有无句柄"猜缩放（构造时常为 1.0），而 Paint 里 pt 字体按真实 DPI 放大，
         /// 两套基准打架 → 字比框大、加载即错位。现布局只在 Paint 里按 e.Graphics.DpiX
         /// 现算（EnsureLayout），Bounds 与字体永远同基准，不会再错位）。
@@ -136,7 +131,7 @@ namespace AgingTestSystem.Controls
         private bool _layoutDirty = true;
 
         /// <summary>
-        /// 缩放倍率（【V1.82】滚轮缩放 + 中键拖动画布，AutoCAD 手感，抄 FlowCanvas 口径）。
+        /// 缩放倍率（滚轮缩放 + 中键拖动画布，AutoCAD 手感，抄 FlowCanvas 口径）。
         /// 缩放直接并进布局基准（s = DPI × _zoom）：Metrics/行 Bounds/命中全是 s 的函数，
         /// 缩放=标脏重排，不碰 Graphics 变换矩阵（V1.81.3 红线）；字体按 zoom 重建
         /// （FlowCanvas 同款下限 6pt），量字与绘制同字体，口径一致。
@@ -441,7 +436,7 @@ namespace AgingTestSystem.Controls
         /// </summary>
         private void EnsureLayout(Graphics g)
         {
-            // 【V1.82】缩放并进布局基准：DPI 归一（<1 按 1）之后再乘 zoom，
+            // 缩放并进布局基准：DPI 归一（<1 按 1）之后再乘 zoom，
             // 缩小到 0.5 时 s=0.5 必须活下来（以前 s<1 一律按 1 会把缩小吃掉）。
             float d = (g != null) ? g.DpiX / 96f : 1f;
             if (d < 1f) d = 1f;
@@ -526,7 +521,7 @@ namespace AgingTestSystem.Controls
             totalH += m.Margin;
             try
             {
-                // 【V1.82】宽给完整虚宽（滚动范围 = 虚宽 − 可视宽，WinForms 自己算）：
+                // 宽给完整虚宽（滚动范围 = 虚宽 − 可视宽，WinForms 自己算）：
                 // zoom=1 时虚宽==可视宽，无横向条（原行为）；放大后虚宽超可视，
                 // 横向条自动出来，右列才滚得出来（给"超出量"是错的，横向永远出不来）。
                 var want = new Size(m.VirtualW, totalH);
@@ -633,7 +628,7 @@ namespace AgingTestSystem.Controls
             EnsureLayout(g);
             Metrics m = _metrics;
 
-            // 【V1.81.3】手工滚动偏移，不调 TranslateTransform：TextRenderer 走 GDI，
+            // 手工滚动偏移，不调 TranslateTransform：TextRenderer 走 GDI，
             // 对 Graphics 变换的响应在不同驱动/DC 下不一致（V1.51 在 Scale 上栽过，
             // 位移也不值得赌），全部画设备坐标；命中检测继续用虚拟坐标，
             // 两边经 Off（画）/ ToVirtual（鼠标/裁剪）换算，口径一致。

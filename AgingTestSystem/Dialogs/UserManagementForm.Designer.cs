@@ -2,10 +2,8 @@
 {
     /// <summary>
     /// 用户管理窗体 —— 设计器自动生成部分
-    ///
     /// 【说明】
     /// 仅供管理员使用，管理操作员和技术员的账号（支持多账号），管理员账号不允许在此管理。
-    ///
     /// 窗体布局：
     /// ┌──────────────────────────────────────────┐
     /// │           用户账号管理                    │
@@ -18,7 +16,6 @@
     /// ├──────────────────────────────────────────┤
     /// │ [添加账号][删除账号][应用修改][关闭]      │
     /// └──────────────────────────────────────────┘
-    ///
     /// 【用户名下拉框说明】
     /// cboUsername 是可编辑下拉框（DropDown 模式）：点击展开显示当前角色下已创建的全部账号，
     /// 供管理员选择要对哪个账号进行修改；也可直接输入新用户名（用于改用户名）。
@@ -243,9 +240,9 @@
             this.MinimizeBox = false;
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.ClientSize = new System.Drawing.Size(400, 335);
-            // 【V1.71】绝对布局：禁缩小（MinimumSize=ClientSize），防缩坏布局；可放大。
+            // 绝对布局：禁缩小（MinimumSize=ClientSize），防缩坏布局；可放大。
             this.MinimumSize = new System.Drawing.Size(400, 335);
-            // 【V1.71】UIForm 自绘蓝标题：删 FormBorderStyle，内容整体下移 35px。
+            // UIForm 自绘蓝标题：删 FormBorderStyle，内容整体下移 35px。
             this.Controls.Add(this.btnClose);
             this.Controls.Add(this.btnApply);
             this.Controls.Add(this.btnDeleteAccount);

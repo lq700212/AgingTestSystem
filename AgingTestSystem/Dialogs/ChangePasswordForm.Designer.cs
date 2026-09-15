@@ -2,10 +2,8 @@ namespace AgingTestSystem.Dialogs
 {
     /// <summary>
     /// 修改密码窗体 —— 设计器自动生成部分
-    ///
     /// 【说明】
     /// 任意已登录用户修改自己密码时弹出，需验证当前密码。
-    ///
     /// 窗体布局：
     /// ┌──────────────────────────────┐
     /// │        修改密码               │
@@ -177,9 +175,9 @@ namespace AgingTestSystem.Dialogs
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
-            // 【V1.71】UIForm 自绘蓝标题：删 FormBorderStyle，内容整体下移 35px；语义按钮走 Custom+FillColor。
+            // UIForm 自绘蓝标题：删 FormBorderStyle，内容整体下移 35px；语义按钮走 Custom+FillColor。
             this.ClientSize = new System.Drawing.Size(390, 295);
-            // 【V1.71】绝对布局：禁缩小（MinimumSize=ClientSize），防缩坏布局；可放大。
+            // 绝对布局：禁缩小（MinimumSize=ClientSize），防缩坏布局；可放大。
             this.MinimumSize = new System.Drawing.Size(390, 295);
             this.Controls.Add(this.btnCancel);
             this.Controls.Add(this.btnOK);

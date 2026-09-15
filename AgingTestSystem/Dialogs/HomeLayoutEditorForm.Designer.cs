@@ -4,18 +4,17 @@ using System.Windows.Forms;
 namespace AgingTestSystem.Dialogs
 {
     /// <summary>
-    /// 主页区域调整可视化编辑器 — 设计器部分（【V1.72.12 新增】纯代码拆分：静态边框进 Designer）。
+    /// 主页区域调整可视化编辑器 — 设计器部分（纯代码拆分：静态边框进 Designer）。
     /// 这里只装"静态边框"：窗体属性 + 预览占位 + 数值面板（2 标签 + 2 输入框）
     /// + 底部三按钮 + 顶部说明条。以下三样仍在 HomeLayoutEditorForm.cs 里用代码做：
     /// ①_preview 自绘预览控件的创建/Layout 赋值/事件挂接（吃构造传进的 layout 真参数，
-    /// Designer 给不了；【V1.72.16】_preview 的本体原先也在 Designer 里 new，
+    /// Designer 给不了；_preview 的本体原先也在 Designer 里 new，
     /// 但 HomeLayoutPreviewControl 是内部自定义控件（还 hide 了基类 Layout 事件），
     /// 设计器对它的实例化/事件绑定每次打开都标脏、存盘又零 diff，纯幽灵脏，
     /// 删 Layout=null 行也去不掉，只能整机搬出 Designer，留空 Panel 占位）；
     /// ②两个 nud 初值回填（同上，依赖 layout；范围 Minimum/Maximum 在这里按
     /// HomeLayoutConfig.Range 常量设，初值 Value 在代码里设）；
     /// ③自绘预览控件本体 HomeLayoutPreviewControl（GDI 自绘类，留 .cs 不进 Designer）。
-    /// 【V1.72.16 设计器稳定性三条军规（两次被 VS 重写后沉淀，违者预览即脏/运行即炸）】
     /// ①量程必须写字面值（如 180/600），禁止写 HomeLayoutConfig.RightPanelRange.Min 这类
     /// 元组成员表达式——设计器序列化器认不出，打开预览就标脏，存盘时整行删掉，
     /// 输入框变回 0~100，拖预览边缘给 240/340 直接 ArgumentOutOfRangeException，
@@ -27,7 +26,7 @@ namespace AgingTestSystem.Dialogs
     /// ③本窗的 .resx 是 VS 预览自动建的空模板（无真实资源），别手删，
     /// 删了下次预览重建 + csproj 加条目，反而更脏。
     /// 【布局】Dock 布局 + 顶 Pad 38 避开 UIForm 自绘蓝标题（V1.71 姿势）；
-    /// 数值面板 2 行 Percent 等分（高 DPI 行高自适应，【V1.88.28】顶栏行已删：顶栏锁死 30）；
+    /// 数值面板 2 行 Percent 等分（高 DPI 行高自适应，顶栏行已删：顶栏锁死 30）；
     /// 右下两按钮 Location 按 Panel 默认宽 200 算出（2,10)/(98,10)，Anchor=Right
     /// 运行时自动贴右——与原来构造时公式算出的值完全一致，别"优化"改坐标。
     /// </summary>

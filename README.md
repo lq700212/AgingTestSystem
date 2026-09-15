@@ -83,7 +83,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Controls/RuleListEditorPopup.cs` | 规则表编辑弹窗（V1.69：多行文本+实时校验+变量速查） |
 | `Views/ProcessPolicyForm.cs` / `Views/PolicyGraph.cs` | 工艺策略窗（V1.70 建图为"流程驾驶舱"，V1.73 改名：固定拓扑画布，节点显示真实配置+实时台数，点节点改配置走同一条保存路；滚轮缩放/中键平移/节点拖拽；入口=参数设置下拉） |
 | `Services/Mock*.cs` | Mock 实现（免接线演示） |
-| `Views/MainForm.cs` | 主窗体：面板区（9×8）、菜单下拉、状态栏（"在线"全部离线标红，V1.24）、权限控制、扫码事件、操作区按钮；顶栏单行 36px（V1.88.23 起项目/权限/通讯＋4 按钮同行；V1.64 起深色切换从"关于"右侧收进关于下拉，仅 dev 可见） |
+| `Views/MainForm.cs` | 主窗体：无系统标题栏（V1.89 起 Sunny 标题藏掉，最小化/最大化/关闭自绘进顶栏最右，顶栏拖动/双击/边缘缩放走 WndProc）；工位区 8×9 一屏铺满；顶栏单行 30px（项目/权限/通讯＋4 按钮）；状态栏（"在线"全部离线标红）；权限控制、扫码事件、操作区按钮；深色切换收进"关于"下拉，仅 dev 可见 |
 | `Views/WorkstationGridView.cs` | 工位网格（自绘大画布，V1.51）：1 个 UserControl 画全部面板 + 行全选列（V1.88.28 起竖排大字：字号＝正文×`RowSelectFontScale`，紧凑一竖块居中；V1.88.29 标题 12pt/设置按钮独立 12pt 大字＋深绿底），滚动零撕裂；文字绝对坐标绘制无模糊；布局外部化（程序目录 PanelLayout.json 可改坐标/颜色/字号/文字，无需重编译）；坐标命中实现单击选中/设置按钮/选中框/行全选/悬停提示（V1.88.14 起长按删除，点框或点空白即切换）；V1.88.24 起只留双向铺满一屏（FitWidth/FitMode/拖拽滚动全删；面板紧凑 204×170；选中框恒正方形跟面板走；zoom 并进 ScaledX/ScaledY + 字体取窄边下限 4pt（V1.88.21：1280×1024小屏跟随缩小不挤叠）+ 正文加粗（V1.88.25 小字清楚）；V1.60 起 SetDarkMode 跟随全局主题（语义状态色不动） |
 | `Models/PanelLayoutConfig.cs` | 工位面板布局配置模型（V1.51）：面板网格尺寸/面板内各元素坐标/字体/颜色（"R,G,B"）/按钮与提示文字；`LoadOrDefault` 文件缺失或损坏回退内置默认；V1.58.13~1.58.19 起全部元素改为"锚定"解析（右缘/上缘/下缘/对齐/垂直居中，改面板宽高自动联动），字段全表见类头注释 |
 | `Dialogs/CommunicationTestForm.cs` | 通讯测试窗体（IO 耦合器 DO 输出测试，负压阀/载台上电两页 9×8 灯按钮 + V1.80 预留点位页（预留 DI 只读灯 + 预留 DO 可点灯，点位来自 IoMapBuilder）+ 一键遍历 + V1.81 通道右键端口映射（可视化连线页，保存走设置表同一条路即时生效）） |
@@ -98,7 +98,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Models/` | BarometerData / FanData(+FanRunState) / IoStatus / DeviceConfig / RecipeConfig / StationInfo / PanelLayoutConfig / HomeLayoutConfig / PolicyEnums（V1.67 工艺策略枚举） / 用户模型 |
 | `Services/ProjectProfile.cs` / `Services/ProjectPolicyStore.cs` | 项目档案（V1.67）：`Projects/<项目>/` 路径解析/迁移/切换（配方/工位设置/主页布局/策略跟项目，用户/快照/日志跟机器）；策略分流读写 Policy.json（PolicyKeys 唯一名单） |
 | `Dialogs/UnloadJudgeForm.cs` / `Dialogs/ProjectSwitchForm.cs` | 下料判定窗（V1.67，Q22 待判定配套）/ 项目切换窗（V1.67，仅管理员；V1.72.12 起 Designer 化，静态边框进 Designer.cs） |
-| `.opencode/skills/agingtest-regression/` | 项目最终测试验证技能（V1.58.23）：一键"构建→冒烟→1160+ 条回归断言（V1.72）"，用例源码 `tests/TestRunner.cs`，新测试用例一律沉淀于此（用法见其 SKILL.md） |
+| `.opencode/skills/agingtest-regression/` | 项目最终测试验证技能：一键"构建→冒烟→1910 条回归断言"，用例源码 `tests/TestRunner.cs`，新测试用例一律沉淀于此（用法见其 SKILL.md） |
 
 > WinForms 视图均拆 `.cs` + `.Designer.cs` 两个 partial；**所有 .cs 必须 UTF-8 with BOM 编码**（否则设计器报"无法设计基类 System.Void"）。
 

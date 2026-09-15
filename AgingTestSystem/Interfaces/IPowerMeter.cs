@@ -5,22 +5,18 @@ using AgingTestSystem.Models;
 namespace AgingTestSystem.Interfaces
 {
     /// <summary>
-    /// 载台电流表接口（【V1.74 新增】Q2 通用骨架：电流回采预留）。
-    ///
+    /// 载台电流表接口（Q2 通用骨架：电流回采预留）。
     /// 【设计说明】（给新手看的）
     /// 与 IFanController 保持同一套设计风格：
     /// - 上层（DeviceManager）只依赖接口，不关心底层是"真实电表"还是"Mock 模拟"；
     /// - 电表选型确定后，只要实现本接口即可，不动上层业务代码。
-    ///
     /// 【业务说明】
     /// 当前项目不接电表（UsePowerMeter=false，零行为变化）；后续项目有回采要求时，
     /// 打开开关 + 实现真实驱动（把本接口的 ReadAllCurrents 接到电表协议上），
     /// 面板悬停/CSV/规则变量/MES 侧（以后）直接复用，无需再改业务。
-    ///
     /// 【数据模型】每工位一路（与 72 工位架构对齐，deviceId=1~N）：
     /// - 单位：安培（A），float；
     /// - float.NaN = 该路无数据（电表离线/未接），上层按"无数据"处理，绝不参与判定。
-    ///
     /// 【线程说明】
     /// 由 DeviceManager 采集线程每秒调用一次，实现类必须保证线程安全
     /// （一般用 lock 串行化对设备的访问，与 MockFanController 一致）。

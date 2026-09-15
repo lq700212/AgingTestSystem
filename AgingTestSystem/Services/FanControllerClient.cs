@@ -10,13 +10,11 @@ namespace AgingTestSystem.Services
 {
     /// <summary>
     /// 冷却送风机通讯实现（Modbus TCP）
-    ///
     /// 【来源】
     /// 移植自 ModbusTCPFanControllerTest Demo（该 Demo 已现场实测通过）。
     /// 与 Demo 的区别：Demo 用的是 async/await 异步方法，这里改成 NModbus 同步方法，
     /// 以与现有 ModbusTcpIoController / ModbusRtuBarometerReader 的同步风格保持一致，
     /// 也避免在采集定时器线程里出现 async/await 的复杂性。
-    ///
     /// 【寄存器映射】（实测，见 Demo 文档）
     ///   0x0000 组合状态（未使用，忽略）
     ///   0x0001 控制/状态（写：0x0003=定值启动，0x0002=定值停止；读回同值）
@@ -24,23 +22,19 @@ namespace AgingTestSystem.Services
     ///   0x0003 当前湿度（值/100 = %RH）
     ///   0x0004 温度设定值（值/100 = °C）
     ///   0x0005 湿度设定值（值/100 = %RH）
-    ///
     /// 【物理层】
     /// - 传输：TCP/IP（以太网）
     /// - 端口：默认 50000（非标准 502，来自 Demo 实测）
     /// - 从站地址（UnitId）：默认 1
-    ///
     /// 【线程安全】
     /// 与 ModbusTcpIoController 相同，用 _syncRoot 锁串行化对主站的所有访问。
     /// 采集线程（DeviceManager 定时器）和 UI 线程（按钮点击）可能并发调用本类，
     /// 锁保证同一时刻只有一个线程在发 Modbus 请求，避免帧交叉。
-    ///
     /// 【断线自愈（V1.16.2 心跳机制）】
     /// 送风机是"可选设备"，现场可能中途断电/断网。
     /// 本类采用"每次操作前检查连接，未连接则自动重连"的策略，后台静默持续重连；
     /// 用 10 秒重连节流，避免对已断电的设备频繁发起连接导致卡顿。
     /// 失败过程不刷日志，只由 DeviceManager 记"连上/断开"边沿（见 DeviceManager.PollFanData）。
-    ///
     /// 【工控机 IP 记忆（V1.16）】
     /// 自动识别连接成功后，会把"本工控机连上的控制器 IP"写入程序目录下的 FanLastIp.cache；
     /// 下次启动优先用缓存地址直接连，连不上再回落 FanIpAddress / FanIpCandidates 配置列表。
@@ -135,7 +129,6 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 连接送风机控制屏（实际执行部分）
         /// 必须在 _syncRoot 锁内调用（Connect / EnsureConnected 都会持有锁进入）
-        ///
         /// 【自动识别 IP（V1.12 新增）】
         /// 现场冷却送风机控制器的 IP 可能是 192.168.1.220 / .221 / .222 中的任意一个
         ///（换工作台、换控制器都会变）。为免去每次改配置，这里按顺序逐个尝试候选 IP，
@@ -218,7 +211,6 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 组装本次连接要尝试的候选 IP 列表（自动识别核心）
-        ///
         /// 顺序约定（越靠前越优先）：
         ///   1) 自动识别开启时：上次连接成功的 IP（_activeIp，程序重启后从磁盘缓存恢复）
         ///      ——这就是"工控机记忆"：每台工控机优先用自己上次连上的控制器地址，
@@ -346,8 +338,7 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 确保连接已建立；未连接则尝试（节流后）自动重连
         /// 必须在 _syncRoot 锁内调用
-        ///
-        /// 【V1.16.2 心跳自愈】不再设"重试上限"：后台静默持续重连（10 秒节流），
+        /// 不再设"重试上限"：后台静默持续重连（10 秒节流），
         /// 日志由 DeviceManager 只记"连上/断开"边沿，失败过程不刷日志。
         /// 需要送风机时上层可调用 <see cref="ReconnectNow"/> 立即重连。
         /// </summary>
@@ -374,7 +365,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 按需重连（【V1.16.1 新增】【V1.16.2 简化】）
+        /// 按需重连（）
         /// 用户点击"定值启动/定值停止"等需要送风机的操作时，由上层调用本方法立即重连一次
         /// （不等后台 10 秒节流，保证按钮响应及时）。
         /// </summary>
@@ -387,8 +378,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 6 个原始寄存器 → 送风机数据（纯函数，【V1.62 新增】回归可直接断言）。
-        ///
+        /// 6 个原始寄存器 → 送风机数据（纯函数，回归可直接断言）。
         /// 【寄存器映射】（实测定论，一次读 0x0000~0x0005）：
         /// values[0]=0x0000 组合状态（未使用，忽略）；[1]=0x0001 控制/状态；
         /// [2]=0x0002 当前温度 /100=°C；[3]=0x0003 当前湿度 /100=%RH；
@@ -441,7 +431,7 @@ namespace AgingTestSystem.Services
                     values = _master.ReadHoldingRegisters(_config.FanUnitId, 0x0000, 6);
                 }
 
-                // 【V1.62】解析收拢进 ParseFanRegisters 纯函数（行为逐字一致，
+                // 解析收拢进 ParseFanRegisters 纯函数（行为逐字一致，
                 // 映射说明见该函数注释）。
                 return ParseFanRegisters(values);
             }

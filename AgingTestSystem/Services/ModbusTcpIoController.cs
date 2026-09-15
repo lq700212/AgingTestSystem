@@ -8,11 +8,9 @@ namespace AgingTestSystem.Services
 {
     /// <summary>
     /// IO 控制器通讯实现（Modbus TCP）
-    /// 
     /// 适用场景：
     /// - GX-CL140 或类似的 Modbus TCP IO 耦合器
     /// - 上位机作为 Modbus TCP Client（主站），周期性读取 DI/DO，并按业务写 DO
-    /// 
     /// 对新手的关键说明：
     /// 1) Modbus TCP 是“请求-响应”模型：设备不会主动推送变化，上位机必须轮询读取。
     /// 2) 这里把 DI/DO 视为“16 点打包成 1 个寄存器”的常见实现：
@@ -41,12 +39,10 @@ namespace AgingTestSystem.Services
     {
         /// <summary>
         /// TCP/主站对象的互斥锁
-        /// 
         /// 为什么需要锁：
         /// - 采集线程会同时读取 DI/DO
         /// - 后续如果 UI 上增加“手动开阀/关阀”按钮，很可能会在 UI 线程触发写 DO
         /// - 这样就会出现多线程同时访问 _master 的风险
-        /// 
         /// 因此这里统一用 _syncRoot 保证对 _master 的访问串行化。
         /// </summary>
         private readonly object _syncRoot = new object();
@@ -76,7 +72,7 @@ namespace AgingTestSystem.Services
         public event EventHandler<string> OnError;
 
         /// <summary>
-        /// 连接层错误判定（【V1.16.1 新增】）
+        /// 连接层错误判定（）
         /// 读/写请求抛出"连接层异常"（Socket 异常 / IO 异常 / 超时）说明耦合器已断开
         /// （Modbus 异常响应不算断开——那说明设备在线、只是报功能码错误）。
         /// 一旦判定断开就把 _isConnected 置 false，让上层（DeviceManager.TryReconnectIo）
@@ -213,11 +209,9 @@ namespace AgingTestSystem.Services
                 // 用位运算取某一位：
                 // - (1 << bit) 生成掩码，例如 bit=0 => 0x0001，bit=15 => 0x8000
                 // - value & mask != 0 表示该 bit 为 1
-                //
                 // 【已现场确认（来自 ModbusTCPTest 实测）】
                 // - bit0 对应“第 1 路输入”，bit15 对应“第 16 路输入”
                 // - 因此 inputId=1 对应 reg=0x1000, bit=0
-                //
                 // InvertInputs 用于兼容少数现场“低有效/高有效”逻辑与寄存器 bit 值不一致的情况：
                 // - false：bit=1 认为输入 ON（默认）
                 // - true：逻辑取反（把 bit=0 当成 ON）
@@ -280,7 +274,6 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 【备用通道映射】把物理通道 (regAddress, bit) 重定向到备用通道。
-        ///
         /// 现场某个 DQ 通道烧毁 / 电压不足后，把该通道信号改写到备用通道。
         /// 业务侧输出点编号（outputId）完全不变，只是这里把"物理寄存器 + bit"换了位置。
         /// 总开关 IoBackupChannelMappingEnabled 关闭时，原样返回（多数工作台行为不变）。
@@ -297,7 +290,7 @@ namespace AgingTestSystem.Services
                 if (remap == null) continue;
                 if (remap.SourceRegister == regAddress && remap.SourceChannel == bit)
                 {
-                    // 【V1.62 防御】目标通道必须是寄存器内合法 bit（0~15）。
+                    // 目标通道必须是寄存器内合法 bit（0~15）。
                     // 解析层已拒绝 0x10+，这里兜底手写/旧配置残留的非法目标：
                     // 直接放弃本次映射（保持原通道读写，读回与写入一致），
                     // 绝不能把 bit 改成 16+（位掩码归零会导致读写恒错且静默）。
@@ -351,7 +344,6 @@ namespace AgingTestSystem.Services
                     // 写单寄存器（功能码 0x06）
                     // - 写入的是 16bit 的 newValue，其中只有一个 bit 被改变
                     // - 其它 bit 保持原状
-                    //
                     // 【已现场确认（来自 ModbusTCPTest 实测）】
                     // - GX-CL140 + DQ50P-S 输出模块：DO 区域可用 Holding Register 写入（0x06）控制指示灯/通道
                     // - 起始地址默认 0x2000，每个寄存器 16 路，bit0=第1路
@@ -502,7 +494,6 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 读取连续多个保持寄存器（功能码 0x03）—— 共享连接上的"原始寄存器读"
-        ///
         /// 【用途】供通讯测试窗体（CommunicationTestForm）复用主程序**同一条** Modbus TCP 连接
         /// 读写 DO 原始寄存器（0x2000~0x2009），不再自建第二条连接。
         /// 本方法内部用 <see cref="_syncRoot"/> 串行化，与采集线程（ReadAllInputs/ReadAllOutputs）、
@@ -536,7 +527,6 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 写单个保持寄存器（功能码 0x06）—— 共享连接上的"原始寄存器写"
-        ///
         /// 【用途】同 <see cref="ReadHoldingRegisters"/>，供通讯测试窗体复用主程序同一条连接
         /// 写 DO 原始寄存器（含读-改-写的最终结果），不再自建第二条连接。
         /// 内部用 <see cref="_syncRoot"/> 串行化，多线程并发安全。

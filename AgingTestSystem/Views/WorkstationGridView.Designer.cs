@@ -4,7 +4,7 @@ namespace AgingTestSystem.Views
     /// 工位网格（自绘大画布）—— 设计器自动生成部分
     /// 本控件完全自绘（OnPaint，见 WorkstationGridView.cs），不含任何子控件，
     /// 仅保留组件容器（托管 ToolTip）与默认尺寸。
-    /// 【V1.88.24】拖拽滚动合并计时器随滚动整套删除。
+    /// 拖拽滚动合并计时器随滚动整套删除。
     /// </summary>
     partial class WorkstationGridView
     {
@@ -48,7 +48,7 @@ namespace AgingTestSystem.Views
             this.components = new System.ComponentModel.Container();
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
             this.Name = "WorkstationGridView";
-            this.Size = new System.Drawing.Size(1736, 1638);
+            this.Size = new System.Drawing.Size(1720, 1638);
         }
 
         #endregion

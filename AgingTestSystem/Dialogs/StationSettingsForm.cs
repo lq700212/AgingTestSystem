@@ -9,12 +9,10 @@ namespace AgingTestSystem.Dialogs
 {
     /// <summary>
     /// 工位设置窗口（业务逻辑部分）—— V1.18 新增，V1.26 完善按钮业务，V1.28 延时/烧屏时间改 NumericUpDown
-    ///
     /// 【功能说明】
     /// 点击工位面板上的"设置"按钮（btnSet）后弹出本窗口，
     /// 用于查看 / 设置单个工位的测试相关参数：
     /// 状态、SN、配方、延时时间、烧屏时间、极限温度、负压阈值、显示模式。
-    ///
     /// 【界面布局】
     /// ┌────────────────────────────────────────────────┐
     /// │ 工位设置窗口 NO 1                                │  ← 标题（带工位编号）
@@ -29,7 +27,6 @@ namespace AgingTestSystem.Dialogs
     /// │  负压阈值:           [___]kPa │               │ ← V1.66
     /// │  显示模式:              [___] │               │ ← V1.66
     /// └────────────────────────────────┴───────────────┘
-    ///
     /// 【按钮语义（V1.26）】
     /// - 保存（btnSave）：把当前配置应用到本工位面板（写入 DeviceManager 工位静态信息）
     ///   + 缓存配置（下次打开该工位设置窗口自动回填）+ 保存配方到本地配方列表（有同名询问覆盖）；
@@ -38,7 +35,6 @@ namespace AgingTestSystem.Dialogs
     /// - 下电（btnPowerOff）：关闭本工位载台上电输出（下电）；
     /// - 破空（btnBreakVacuum）：业务暂未确认，保留 TODO；
     /// - 关闭窗口（btnClose）：直接关闭本窗体。
-    ///
     /// 【字段映射】
     /// - 延时时间 → 延时时间（DelayTime）
     /// - 烧屏时间 → 烧屏时间（BurnInTime）
@@ -46,12 +42,10 @@ namespace AgingTestSystem.Dialogs
     /// - 负压阈值 → 本工位真空工艺要求（V1.66；回填优先级 缓存 > 配方 > 全局，
     ///   下发=框里是什么就是什么，启动定格，存什么用什么）
     /// - 显示模式 → 配方 DisplayMode（V1.66；烧屏画面记录，只追溯不判定）
-    ///
     /// 【时间输入（V1.28）】
     /// 延时时间 / 烧屏时间各用三个 NumericUpDown（时:分:秒，冒号分隔，样式与 RecipeManagerForm 一致）：
     /// 时 0-99、分 0-59、秒 0-59，控件自带范围限制无需再校验；
     /// 读取时用 GetTimeSpan 组合三个框，回填时用 SetTimeInputs 拆分并钳制到控件范围。
-    ///
     /// 【数据来源】
     /// 构造时传入设备管理器与共享配方列表，从缓存（优先）或采集缓存读取当前工位数据回显；
     /// SN / 配方 / 延时来自工位静态信息叠加后的缓存（与工位面板一致）。
@@ -71,19 +65,19 @@ namespace AgingTestSystem.Dialogs
         private readonly int _deviceId;
 
         /// <summary>
-        /// 配方下拉回填守卫（【V1.88.13 新增】LoadStationData/FillRecipeCombo 设选中时会触发
+        /// 配方下拉回填守卫（LoadStationData/FillRecipeCombo 设选中时会触发
         /// SelectedIndexChanged；守卫期内 handler 直接返回，防库参数覆盖刚回填的缓存/下发值）
         /// </summary>
         private bool _fillingRecipeCombo;
 
         /// <summary>
-        /// 显示模式行是否显示（【V1.75 新增】构造时按开关定死，Fill/回填认它。
+        /// 显示模式行是否显示（构造时按开关定死，Fill/回填认它。
         /// 不读 cmb.Visible——窗体没 Show 时 Visible 读恒 false，读它下拉永远是空的）。
         /// </summary>
         private readonly bool _displayModeShown;
 
         /// <summary>
-        /// 悬停说明（【V1.73 新增】每个设置项+动作按钮都挂 tooltip，超 40 字走
+        /// 悬停说明（每个设置项+动作按钮都挂 tooltip，超 40 字走
         /// SettingsForm.WrapTooltip 换行，全仓统一口径；随 components 自动释放）。
         /// </summary>
         private ToolTip _tip;
@@ -105,7 +99,7 @@ namespace AgingTestSystem.Dialogs
             _recipes = recipes;
             _deviceId = deviceId;
 
-            // 【V1.73】本机没装破空阀（VentValveEnabled=false，现状）时手动"破空"按钮
+            // 本机没装破空阀（VentValveEnabled=false，现状）时手动"破空"按钮
             // 直接隐藏：点了也没硬件可写，留着只会让人误会功能可用。
             // 有阀项目打开开关后按钮出现（手动破空具体动作等现场确认后实现，见 btnBreakVacuum_Click）。
             btnBreakVacuum.Visible = ShouldShowBreakVacuum(_config);
@@ -113,7 +107,7 @@ namespace AgingTestSystem.Dialogs
             // 窗口标题带工位编号，如"工位设置窗口 NO 1"
             this.Text = $"工位设置窗口 NO {deviceId}";
 
-            // 【V1.75】显示模式行开关先定死（必须在 LoadStationData 之前：
+            // 显示模式行开关先定死（必须在 LoadStationData 之前：
             // Load 里的 FillDisplayModes 回填认 _displayModeShown；以前先 Load 后赋值，
             // 开态下开窗回填的显示模式会被守卫吞掉、点保存还会连带清空，V1.88.13 复查补救）。
             // 开关关时整行隐藏 + 布局收缩（显示行是左列末行 Y=326，
@@ -128,7 +122,7 @@ namespace AgingTestSystem.Dialogs
                 this.MinimumSize = this.ClientSize;
             }
 
-            // 【V1.88.13】配方下拉先填项（LoadStationData 里要选中回填值，必须先有选项；
+            // 配方下拉先填项（LoadStationData 里要选中回填值，必须先有选项；
             // 首项空串=不绑配方；选项=配方库全部名）
             FillRecipeCombo();
             cmbRecipe.SelectedIndexChanged += CmbRecipe_SelectedIndexChanged;
@@ -136,7 +130,7 @@ namespace AgingTestSystem.Dialogs
             // 从缓存 / 采集缓存读取当前工位数据并回显到输入框
             LoadStationData();
 
-            // 【V1.74】显示模式下拉补字典（LoadStationData 的回填分支会按需重填+选中；
+            // 显示模式下拉补字典（LoadStationData 的回填分支会按需重填+选中；
             // 无缓存无数据直接返回时靠这一行保证下拉不空；开关关时上面已置空，这里不再碰）。
             if (_displayModeShown && cmbDisplayMode.Items.Count == 0) FillDisplayModes(null);
 
@@ -144,7 +138,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 破空按钮是否显示（【V1.73 新增】纯函数：有阀才显示，回归可单测。
+        /// 破空按钮是否显示（纯函数：有阀才显示，回归可单测。
         /// 注：窗体没 Show 时 Control.Visible 读出来恒 false，所以用例测这个函数，
         /// 不直接读按钮 Visible——否则"有阀显示"永远红，见 V1.73 回归注释）。
         /// </summary>
@@ -210,7 +204,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 配方下拉填项（【V1.88.13 新增】构造时调一次：首项空串=不绑配方，
+        /// 配方下拉填项（构造时调一次：首项空串=不绑配方，
         /// 其后=配方库全部名；默认选中空项，LoadStationData 会按回填值重选）。
         /// </summary>
         private void FillRecipeCombo()
@@ -239,10 +233,10 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 按名选中配方下拉（【V1.88.13 新增】LoadStationData 回填用：
+        /// 按名选中配方下拉（LoadStationData 回填用：
         /// 空名选首项空；库中有选它；库中无（脏数据，如配方被删）追加显示，
         /// 看得见但保存时拦停——静默回全局的口子在这里堵死。
-        /// 【V1.88.13 复查补救】每次先清掉之前追加的脏项：脏项只为让脏值看得见，
+        /// 每次先清掉之前追加的脏项：脏项只为让脏值看得见，
         /// 切回正常值还留着它，用户一点就保存拦停，纯添堵）。
         /// </summary>
         /// <param name="recipeName">要选中的配方名（可空）</param>
@@ -278,7 +272,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 清掉配方下拉里不在配方库中的脏项（【V1.88.13 复查补救】SelectRecipe 每次程序选中前调：
+        /// 清掉配方下拉里不在配方库中的脏项（SelectRecipe 每次程序选中前调：
         /// 首项空串（不绑配方）保留；库为 null 时无法判定，全留不动。
         /// 调用方已置 _fillingRecipeCombo 守卫，删选中项触发的 SelectedIndexChanged 会被 handler 忽略）。
         /// </summary>
@@ -294,7 +288,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 配方下拉选择变化（【V1.88.13 新增】用户亲手选才回填参数；
+        /// 配方下拉选择变化（用户亲手选才回填参数；
         /// 程序回填期（守卫）直接返回；选中空项=不绑，不动其他框）。
         /// </summary>
         private void CmbRecipe_SelectedIndexChanged(object sender, EventArgs e)
@@ -338,20 +332,20 @@ namespace AgingTestSystem.Dialogs
             nudTemp.Value = Math.Max(nudTemp.Minimum,
                 Math.Min(nudTemp.Maximum, recipe.LimitTemperature));
 
-            // 【V1.66】回填负压阈值 + 显示模式（配方一定有实数，直接显示；显示模式 null→空串）
+            // 回填负压阈值 + 显示模式（配方一定有实数，直接显示；显示模式 null→空串）
             nudPressure.Value = Math.Max(nudPressure.Minimum,
                 Math.Min(nudPressure.Maximum, recipe.NegativePressure));
-            // 【V1.74】下拉回填（字典 + 遗留值追加）
+            // 下拉回填（字典 + 遗留值追加）
             FillDisplayModes(recipe.DisplayMode, true);
         }
 
         /// <summary>
-        /// 显示模式下拉填项（【V1.74 新增】字典驱动，字典走本窗生效配置。
+        /// 显示模式下拉填项（字典驱动，字典走本窗生效配置。
         /// selectIt=true 时选中给定值，遗留值追加末尾保证看得见）。
         /// </summary>
         private void FillDisplayModes(string selectedAfterFill, bool selectIt = false)
         {
-            // 【V1.75】隐藏态守卫：开关关时回填（选配方/缓存）不得写值，
+            // 隐藏态守卫：开关关时回填（选配方/缓存）不得写值，
             // 否则遗留值进框→保存校验拦→隐藏功能反而堵死保存。隐藏=恒空。
             // 认 _displayModeShown 字段（不读 Visible，见字段注释）。
             if (!_displayModeShown)
@@ -371,7 +365,6 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 回显当前工位数据
-        ///
         /// 【回填优先级（V1.26）】
         /// 1. 若该工位存在上次"保存"的配置缓存（StationSettingsCache）→ 全部从缓存回填
         ///    （下次点击该工位"设置"按钮自动回填上一次缓存的信息）；
@@ -399,10 +392,10 @@ namespace AgingTestSystem.Dialogs
                 SetTimeInputs(nudBurnInHours, nudBurnInMinutes, nudBurnInSeconds, cached.BurnInTime);
                 nudTemp.Value = Math.Max(nudTemp.Minimum,
                     Math.Min(nudTemp.Maximum, cached.LimitTemperature));
-                // 【V1.66】负压/显示模式回填优先级：缓存（非0/非空）> 配方（按缓存配方名命中）> 全局/空
+                // 负压/显示模式回填优先级：缓存（非0/非空）> 配方（按缓存配方名命中）> 全局/空
                 nudPressure.Value = Math.Max(nudPressure.Minimum,
                     Math.Min(nudPressure.Maximum, ResolveCachedPressure(cached)));
-                // 【V1.74】下拉回填（字典 + 遗留值追加）
+                // 下拉回填（字典 + 遗留值追加）
                 FillDisplayModes(ResolveCachedDisplayMode(cached), true);
                 return;
             }
@@ -414,19 +407,19 @@ namespace AgingTestSystem.Dialogs
             SelectRecipe(data.RecipeName);
             SetTimeInputs(nudDelayHours, nudDelayMinutes, nudDelaySeconds, data.DelayTime);
             SetTimeInputs(nudBurnInHours, nudBurnInMinutes, nudBurnInSeconds, data.BurnInTime);
-            // 【V1.66】无缓存时负压/显示模式按面板配方名找配方：命中用配方的，
+            // 无缓存时负压/显示模式按面板配方名找配方：命中用配方的，
             // 否则全局/空。避免框里留 Designer 默认 0 被下发成阈值 0（负压域里≈关保护）。
             RecipeConfig recipeHit = FindRecipe(data.RecipeName);
             decimal fallbackPressure = recipeHit != null ? recipeHit.NegativePressure
                 : (_config != null ? _config.AlarmPressureThresholdKPa : 0m);
             nudPressure.Value = Math.Max(nudPressure.Minimum,
                 Math.Min(nudPressure.Maximum, fallbackPressure));
-            // 【V1.74】下拉回填（字典 + 遗留值追加）
+            // 下拉回填（字典 + 遗留值追加）
             FillDisplayModes(recipeHit?.DisplayMode, true);
         }
 
         /// <summary>
-        /// 解析回填用负压阈值（【V1.66 新增】优先级：缓存非0 > 配方命中 > 全局）。
+        /// 解析回填用负压阈值（优先级：缓存非0 > 配方命中 > 全局）。
         /// 缓存是上次亲手存的值最可信；0 说明没存过（老缓存/从未保存），
         /// 此时按缓存里的配方名找配方，命中用配方的，都没有用全局——框里永远是实数。
         /// </summary>
@@ -439,7 +432,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 解析回填用显示模式（【V1.66 新增】优先级：缓存非空 > 配方命中 > 空串）。
+        /// 解析回填用显示模式（优先级：缓存非空 > 配方命中 > 空串）。
         /// </summary>
         private string ResolveCachedDisplayMode(StationCacheEntry cached)
         {
@@ -502,11 +495,9 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 下电按钮点击事件（V1.26 实现）
-        ///
         /// 【功能】关闭当前工位的载台上电输出（下电）。
         /// 载台上电输出内部编号 = TotalInputs + TotalBarometers + deviceId
         /// （IO 映射：每台 1 输入 + 2 输出：真空电磁阀 + 载台上电，见 IoMapBuilder）。
-        ///
         /// 【处理】
         /// - 当前为已上电 → 下发关闭命令，提示已下电；
         /// - 当前已处于下电状态 → 仅提示，不重复下发。
@@ -540,7 +531,6 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 保存按钮点击事件（V1.26 完善）
-        ///
         /// 【功能】
         /// 1. 把当前录入的 SN / 配方 / 延时时间 / 烧屏时间 写入设备管理器工位静态信息，
         ///    采集线程下次叠加后，工位面板（SN / 配方 / 延时显示）即同步更新；
@@ -548,7 +538,6 @@ namespace AgingTestSystem.Dialogs
         /// 3. 把当前配方（名称 / 延时 / 极限温度）保存到本地配方列表
         ///    （有同名询问是否覆盖更新，配方名称为空时跳过）；
         /// 4. 提示并关闭窗口。
-        ///
         /// 【说明】
         /// - SN / 配方：可空，空串视为清空。
         /// - 延时时间 / 烧屏时间：各用三个 NumericUpDown（时:分:秒，V1.28），
@@ -568,11 +557,9 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 加入对列按钮点击事件（V1.26 实现）
-        ///
         /// 【功能】把当前配置好的信息加载到对应工位的 WorkstationPanelView 上
         /// （与"保存"一致：写入设备管理器工位静态信息 → 采集叠加 → 工位面板更新），
         /// 并把当前配方保存到本地配方列表（有同名询问覆盖更新）。
-        ///
         /// 【与"保存"的区别】"保存"额外把配置写入工位配置缓存（下次打开自动回填）；
         /// 本按钮同样写入缓存，保证下次打开也能回填，两按钮提示文案不同。
         /// </summary>
@@ -589,7 +576,6 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 提交配置到当前工位（"保存"与"加入对列"共用）
-        ///
         /// 【流程】
         /// 1. 校验设备管理器就绪、组合延时时间 / 烧屏时间；
         /// 2. 写入设备管理器工位静态信息（SN / 配方 / 延时）→ 工位面板同步更新；
@@ -607,7 +593,7 @@ namespace AgingTestSystem.Dialogs
                 return false;
             }
 
-            // 【V1.74】显示模式字典校验（Q20：空=清空允许，字典内=存规范写法并回写框，
+            // 显示模式字典校验（Q20：空=清空允许，字典内=存规范写法并回写框，
             // 字典外拦；一次校验管住下面三处写入：下发/缓存/配方）。
             string canonicalMode, modeErr;
             if (!DisplayModeOptions.ValidateInput(cmbDisplayMode.Text,
@@ -620,7 +606,7 @@ namespace AgingTestSystem.Dialogs
             }
             cmbDisplayMode.Text = canonicalMode;
 
-            // 【V1.88.13】未知配方拦停：下拉正常选的值一定在库中；只有脏数据
+            // 未知配方拦停：下拉正常选的值一定在库中；只有脏数据
             // （回填名在库中已无，如配方被删）会走到这里——以前静默回全局，
             // 现在明示拦停，逼用户重选，串配方的口子彻底堵死。空=不绑，允许。
             string recipeText = cmbRecipe.Text.Trim();
@@ -643,7 +629,7 @@ namespace AgingTestSystem.Dialogs
             // ---- 2) 应用配置到当前工位（写入工位静态信息，采集叠加后工位面板更新） ----
             _deviceManager.SetStationSerialNumber(_deviceId, txtSN.Text);
 
-            // 【V1.66】下发=框里是什么就是什么：LoadStationData 回填已保证框里是实数
+            // 下发=框里是什么就是什么：LoadStationData 回填已保证框里是实数
             // （优先级 缓存 > 配方 > 全局），不再按配方名二次检索。空配方名=清空（含负压/显示模式）。
             // 启动测试时负压值定格为该工位的真空到位判定/报警阈值（配方优先、全局兜底指"没下发时"，
             // 下发了就以框值为准——框里永远有数，不存在"没下发"）。
@@ -670,7 +656,7 @@ namespace AgingTestSystem.Dialogs
             }
 
             // ---- 5) 提示 ----
-            // 【V1.74】定格护栏（Q18）：本工位在测时，本次下发仅对新启动生效——
+            // 定格护栏（Q18）：本工位在测时，本次下发仅对新启动生效——
             // 判定口径与项目切换禁切一致（GetTestingDeviceIds 含本工位）。
             string testingNote = "";
             try
@@ -743,7 +729,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 读取极限温度输入（【V1.63】txtTemp 文本框改为 nudTemp 数字框后恒合法：
+        /// 读取极限温度输入（txtTemp 文本框改为 nudTemp 数字框后恒合法：
         /// 控件已限 0~300/1 位小数，非法输入根本进不来，V1.62 的"非法存 0"问题
         /// 从输入端消除。本方法保留一层薄封装，使 CommitConfig/SaveCurrentRecipe
         /// 两处调用点不用动）。
@@ -777,7 +763,7 @@ namespace AgingTestSystem.Dialogs
         /// <param name="time">要回填的时间（如工位静态信息的延时时间 / 烧屏时间）</param>
         private static void SetTimeInputs(NumericUpDown hours, NumericUpDown minutes, NumericUpDown seconds, TimeSpan time)
         {
-            // 【V1.62】时必须用 TotalHours：time.Hours 是"小时分量"（0~23），
+            // 时必须用 TotalHours：time.Hours 是"小时分量"（0~23），
             // 25 小时会回填成 1（与 RecipeManagerForm 的 TotalHours 写法不一致，
             // 现对齐）。分/秒本就是分量（0~59），保持不动。
             hours.Value = Clamp(hours, (int)time.TotalHours);
@@ -803,7 +789,7 @@ namespace AgingTestSystem.Dialogs
         /// <returns>格式化的时间文本（如 01:10:20）</returns>
         private static string GetTimeText(TimeSpan time)
         {
-            // 【V1.62】与 SetTimeInputs 对齐用 TotalHours：25 小时显示 "25:00:00"
+            // 与 SetTimeInputs 对齐用 TotalHours：25 小时显示 "25:00:00"
             // 而不是截断的 "01:00:00"（成功提示文案与回填值一致，不再各说各话）。
             return string.Format(@"{0:00}:{1:00}:{2:00}", (int)time.TotalHours, time.Minutes, time.Seconds);
         }

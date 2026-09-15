@@ -8,13 +8,11 @@ using Newtonsoft.Json;
 namespace AgingTestSystem.Services
 {
     /// <summary>
-    /// 项目策略存储（【V1.67 新增】一期 L2 策略层的持久化）。
-    ///
+    /// 项目策略存储（一期 L2 策略层的持久化）。
     /// 【为什么策略不进 App.config】
     /// App.config 是跟机器的（COM 口/IP 是这台工控机的接线）；策略是跟项目的
     /// （客户 A 要拦截、客户 B 要放行）。所以策略住 `Projects/&lt;项目&gt;/Policy.json`，
     /// 一个项目一套策略，切换项目即切换策略——这正是"不等客户确认"的本体。
-    ///
     /// 【加载顺序】App.config（机器缺省，含策略 key 的默认值兜底）
     /// → Policy.json（项目覆盖，写了啥就听啥）→ DeviceConfig 内存。
     /// SettingsForm 保存时同理分流：策略 key 写 Policy.json，其余写 exe.config。
@@ -25,7 +23,7 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 策略配置项 key 名单（【唯一】新增策略只改这里，两边都认它）。
         /// 必须与 DeviceConfig 里的同名属性一一对应（少一个就存了用不上，多一个就读不到）。
-        /// 【V1.68】MES 触发器/字段映射/静态字段也是"跟项目"的配置，进本名单
+        /// MES 触发器/字段映射/静态字段也是"跟项目"的配置，进本名单
         /// （走 Policy.json + SettingsForm 分流；它们是字符串，没有下拉选项，
         /// 三处同步锁里按"字符串直通"对待，见测试）。
         /// </summary>
@@ -205,7 +203,7 @@ namespace AgingTestSystem.Services
         /// 按属性类型解析策略字符串（枚举/布尔/整数/字符串通用；非法返回 null）。
         /// SettingsForm 的热回写（ConvertConfigValue）也调这里，两边口径一致。
         /// 枚举大小写不敏感（"warn"/"Warn" 都认），手改文件少个大小写不翻车。
-        /// 【V1.68】字符串原样返回（MES 映射类配置是自由文本，校验在 SettingsForm
+        /// 字符串原样返回（MES 映射类配置是自由文本，校验在 SettingsForm
         /// ValidateValue 做，不在这里拦——解析层只管"转得过去"，不管"合不合法"）。
         /// </summary>
         public static object ParseValue(Type propType, string value)

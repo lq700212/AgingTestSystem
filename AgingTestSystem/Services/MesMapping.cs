@@ -4,12 +4,10 @@ using System.Collections.Generic;
 namespace AgingTestSystem.Services
 {
     /// <summary>
-    /// MES 映射表解析（【V1.68 新增】二期纯函数：触发器 / 字段映射 / 静态字段）。
-    ///
+    /// MES 映射表解析（二期纯函数：触发器 / 字段映射 / 静态字段）。
     /// 【为什么是纯函数】映射字符串是用户手填的，脏输入（中文标点/多余空格/未知字段）
     /// 必须在"解析层"就洗掉或报错，不能流到上报线程。SettingsForm 校验、MesReporter
     /// 组包、回归用例三方共用同一份 vocabulary，改 vocabulary 只改这里。
-    ///
     /// 【分隔符兼容】中英文逗号/分号都能做分隔（用户可能手输中文标点，见
     /// DeviceConfig.ParseFanIpCandidates 同思路）。
     /// </summary>
@@ -171,7 +169,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 解析自定义 HTTP 头（【V1.68 新增】"头名=头值"，如 "X-Line=L5;X-ApiVer=2"）。
+        /// 解析自定义 HTTP 头（"头名=头值"，如 "X-Line=L5;X-ApiVer=2"）。
         /// 头名规则比静态字段严一档：不许中文/空格（HTTP 头名必须是 token）。
         /// 头值是字面量（Base64 的 = 填充没关系，按第一个 = 切分）。
         /// </summary>
@@ -224,7 +222,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 解析按事件分地址（【V1.68 新增】"触发器=URL"，如 "Alarm=http://x/api/alarm"）。
+        /// 解析按事件分地址（"触发器=URL"，如 "Alarm=http://x/api/alarm"）。
         /// 触发器必须命中 vocabulary（大小写无所谓，存规范大小写）；
         /// URL 必须 http:// 或 https:// 开头（防手滑把字段映射串进来）。
         /// 同一触发器配两次 → 后者覆盖前者（记一条提醒）。
@@ -272,7 +270,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 按事件解析出实际地址（【V1.68 新增】）：命中分地址用分地址，否则回默认地址。
+        /// 按事件解析出实际地址（）：命中分地址用分地址，否则回默认地址。
         /// 脏组跳过（保存时已拦，这里是手改文件的兜底）。
         /// </summary>
         public static string ResolveEndpoint(string trigger, string defaultUrl, string endpointMapRaw)

@@ -12,23 +12,19 @@ namespace AgingTestSystem.Dialogs
 {
     /// <summary>
     /// 系统设置窗口 —— 业务逻辑部分
-    ///
     /// 【功能说明】
     /// 把 App.config 里分散的配置项按【业务分类】单页纵向展示（不使用选项卡），
     /// 所有分类合并到一个 UIDataGridView，分类标题用"分组标题行"（浅蓝底深蓝粗体）分隔：
     /// - 设置名称（配置项 key，只读）
     /// - 说明（每个配置项的中文含义，只读）
     /// - 设置值（可直接编辑输入）
-    ///
     /// 分类（见 _categories）：
     ///   基础配置 / 气压表串口通讯 / IO耦合器（Modbus TCP）/ 气压表寄存器 /
     ///   报警参数 / 冷却送风机 / 老化测试业务 / 工艺策略（V1.67）/ 扫码枪
-    ///
     /// 内容放在单个 UIDataGridView（填满 pnlScroll）里，表格自带垂直滚动条
     /// （DataGridView 虚拟化绘制，只重绘可见行），所有分类一眼看全，不用来回切页签，
     /// 滚动流畅不卡顿。
-    ///
-    /// 点击【保存设置】后分流写回（【V1.67】）：
+    /// 点击【保存设置】后分流写回（）：
     /// - 策略 key（ProjectPolicyStore.PolicyKeys，工艺策略分类）→
     ///   Projects/&lt;当前项目&gt;/Policy.json（跟项目走，切项目即换策略）；
     /// - 其余 → 程序运行目录下的 exe.config（跟机器走）；
@@ -36,11 +32,10 @@ namespace AgingTestSystem.Dialogs
     /// 各服务每次读写实时访问该实例，因此业务逻辑类配置（寄存器地址/IO 映射/取反/阈值等）
     /// 保存后立即生效；连接参数类由主窗体触发重连后生效；只有结构型配置
     /// （设备数量/布局/Mock/送风机启用）需重启程序才生效（保存时已提示）。
-    ///
     /// 【实现要点】
     /// - 分类与 key 顺序在 _categories 中集中维护；所有分类合并为 **1 个 UIDataGridView**，
     ///   分类标题用"分组标题行"（浅蓝底深蓝粗体，见 AddGroupRowStyle）呈现。
-    ///   【V1.53】不再使用 8 个独立表格 + 滚动容器——多表格在 AutoScroll 容器中物理移动、
+    ///   不再使用 8 个独立表格 + 滚动容器——多表格在 AutoScroll 容器中物理移动、
     ///   逐帧整块重绘是滚动卡顿的根源（与主视图 V1.50 把 72 面板合并为单画布同理）；
     ///   单表格由 DataGridView 自身滚动（虚拟化，只重绘可见行），滚动流畅。
     ///   新增配置项只需在 _descriptions 和 _categories 里各加一行，无需改界面布局
@@ -54,13 +49,12 @@ namespace AgingTestSystem.Dialogs
     /// - 使用 System.Configuration.ConfigurationManager.OpenExeConfiguration
     ///   读写 exe.config，配置值来源为运行时的 ConfigurationManager.AppSettings，
     ///   与程序启动加载的取值完全一致
-    ///
     /// 【界面布局】（单页纵向展示；分类标题 = 表格内分组标题行，表格自身滚动）
     /// ┌──────────────────────────────────────────────┐
     /// │ 顶部提示条（浅蓝底白字：修改后保存立即/重启生效提示）│
     /// ├──────────────────────────────────────────────┤
     /// │ ↓ pnlScroll（容器不滚动，仅承载下方内容）      │
-    /// │ [________________________] [✕]               │ ← pnlSearch（Dock=Top；【V1.54i】已去掉"搜索配置项："文字，输入框左边缘与分组标题文字左边缘严格对齐）
+    /// │ [________________________] [✕]               │ ← pnlSearch（Dock=Top；已去掉"搜索配置项："文字，输入框左边缘与分组标题文字左边缘严格对齐）
     /// │ ┌──────────────────────────────────────────┐ │ ← UIDataGridView（Dock=Fill，自带垂直滚动条）
     /// │ │ ▓ 基础配置（分组标题行，浅蓝底深蓝粗体）    │ │
     /// │ │ 设置名称(key) │ 说明       │ 设置值       │ │
@@ -83,7 +77,7 @@ namespace AgingTestSystem.Dialogs
         private readonly DeviceConfig _config;
 
         /// <summary>
-        /// 唯一一张配置表格（合并了所有分类）。【V1.53】不再为每个分类单独建表：
+        /// 唯一一张配置表格（合并了所有分类）。不再为每个分类单独建表：
         /// 8 个独立表格放在 AutoScroll 容器中滚动会逐帧整块重绘导致卡顿；
         /// 合并为单表格后由 DataGridView 自身滚动（虚拟化，只重绘可见行），滚动流畅。
         /// </summary>
@@ -209,14 +203,14 @@ namespace AgingTestSystem.Dialogs
         public HashSet<string> SavedKeys { get; private set; }
 
         /// <summary>
-        /// 【V1.58】是否在本次会话中修改了主页布局（在"主页区域"分类点击编辑器并保存后置 true）。
+        /// 是否在本次会话中修改了主页布局（在"主页区域"分类点击编辑器并保存后置 true）。
         /// 主页布局不写在 App.config，而是 HomeLayout.json；主窗体在设置窗口关闭后
         /// 读取该标记，为 true 则调用 ApplyHomeLayout() 让新布局立即生效。
         /// </summary>
         public bool HomeLayoutChanged { get; private set; }
 
         /// <summary>
-        /// 【V1.65】主窗体当前生效的右侧宽度（主窗体构造时传入：无 json 时为按窗口比例
+        /// 主窗体当前生效的右侧宽度（主窗体构造时传入：无 json 时为按窗口比例
         /// 算出的值，有 json 时为文件绝对值）。"主页区域"行的摘要显示与编辑器初始化
         /// 都以它为准，保证设置里看到的和主界面实际一致。为 null 时（理论上只有
         /// 将来别的调用方不传才出现）回退到 MainForm.DefaultRightPanelWidth。
@@ -262,7 +256,6 @@ namespace AgingTestSystem.Dialogs
         /// <summary>
         /// 配置项说明字典（key → 中文说明），显示在表格"说明"列
         /// 覆盖 App.config 全部配置项，key 必须与 _categories 中用到的 key 一致
-        ///
         /// 【为什么是 static】说明是纯数据、不随窗体实例变：工艺策略窗右栏标题
         /// tooltip 要复用同一份文案（与设置表同源，不另写一份），无实例也能取。
         /// 实例方法里直接用名访问即可（C# 允许实例方法读静态字段）。
@@ -387,7 +380,6 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 分类定义：页签标题 → 该分类下的配置项 key 列表（按显示顺序）
-        ///
         /// 分组逻辑（与 App.config 注释分组一致）：
         /// - 基础配置：设备数量 / 采集间隔 / 面板布局
         /// - 气压表串口通讯：串口参数 / 超时 / Mock 开关
@@ -397,7 +389,6 @@ namespace AgingTestSystem.Dialogs
         /// - 冷却送风机：启用 / IP 自动识别 / 端口 / 超时
         /// - 老化测试业务：真空确认 / 失联报警 / 最大时长 / DI 触点 / 温度告警
         /// - 扫码枪：启用 / 端口识别 / 串口参数 / 调试日志
-        ///
         /// 【新增配置项】只需：①在 _descriptions 加说明；②在本数组对应分类的 Keys 里加 key
         /// </summary>
         private readonly (string Title, string[] Keys)[] _categories = new (string Title, string[] Keys)[]
@@ -440,12 +431,12 @@ namespace AgingTestSystem.Dialogs
                 "MaxTestDurationSeconds", "UseDiAlarmContact", "FanTempAlarmLimitC",
                 "FanTempShutdownEnabled"
             }),
-            // 【V1.74】载台电流独立分类（Q2 骨架总开关，跟机器；显示在业务区后面，找得着）
+            // 载台电流独立分类（Q2 骨架总开关，跟机器；显示在业务区后面，找得着）
             ("载台电流", new string[]
             {
                 "UsePowerMeter"
             }),
-            // 【V1.67】工艺策略独立分类（7 个待确认点 + 完成动作 + 破空点位，共 10 项；
+            // 工艺策略独立分类（7 个待确认点 + 完成动作 + 破空点位，共 10 项；
             // FanTempShutdownEnabled 同时是策略，显示在老化测试业务里，这里不再重复列，
             // 但它进 Policy.json——名单以 ProjectPolicyStore.PolicyKeys 为准，不以分类为准）
             ("工艺策略", new string[]
@@ -456,12 +447,12 @@ namespace AgingTestSystem.Dialogs
                 "AgingPressureLossPolicy", "CompletionAction", "VentValveDoPoint", "VentValveEnabled",
                 "EventIdentityMode", "DisplayModeEnabled", "DisplayModes"
             }),
-            // 【V1.69】规则流程（表达式 + 阶段流，全部跟项目；同表编辑，保存按 PolicyKeys 分流）
+            // 规则流程（表达式 + 阶段流，全部跟项目；同表编辑，保存按 PolicyKeys 分流）
             ("规则流程", new string[]
             {
                 "SkipVacuum", "CompleteExpression", "CustomAlarmRules"
             }),
-            // 【V1.68】MES 对接（连接跟机器；触发器/映射/静态跟项目但同表编辑，
+            // MES 对接（连接跟机器；触发器/映射/静态跟项目但同表编辑，
             // 保存时按 PolicyKeys 分流——名单以 ProjectPolicyStore.PolicyKeys 为准）
             ("MES 对接", new string[]
             {
@@ -471,12 +462,12 @@ namespace AgingTestSystem.Dialogs
                 "MesTriggers", "MesFieldMap", "MesStaticFields",
                 "MesCustomHeaders", "MesEndpointMap"
             }),
-            // 【V1.74】报表导出独立分类（Q8 列可配，跟项目；与 MES 对接并列，找得着）
+            // 报表导出独立分类（Q8 列可配，跟项目；与 MES 对接并列，找得着）
             ("报表导出", new string[]
             {
                 "ReportColumns"
             }),
-            // 【V1.74】显示模式字典进工艺策略分类（Q20 记录层可配，跟项目；改画面选项来这里）
+            // 显示模式字典进工艺策略分类（Q20 记录层可配，跟项目；改画面选项来这里）
             // 注：工艺策略分类名单 ≠ PolicyKeys 名单（后者以 ProjectPolicyStore 为准），
             // 这里只是"显示位置"，分流/校验认 PolicyKeys（见 ValidateValue 与 PersistChanges）。
             ("扫码枪", new string[]
@@ -495,7 +486,7 @@ namespace AgingTestSystem.Dialogs
         /// 构造函数
         /// </summary>
         /// <param name="config">当前生效的设备配置（主窗体传入，用于取兜底值与类型校验）</param>
-        /// <param name="effectiveRightWidth">【V1.65】主窗体当前生效的右侧宽度（见 _effectiveRightWidth）</param>
+        /// <param name="effectiveRightWidth">主窗体当前生效的右侧宽度（见 _effectiveRightWidth）</param>
         public SettingsForm(DeviceConfig config, int? effectiveRightWidth = null)
         {
             InitializeComponent();
@@ -544,7 +535,7 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 创建唯一一张配置表格（UIDataGridView）填满 pnlScroll。
-        /// 【V1.53】分类不再各自建表：8 个独立表格放滚动容器里滚动会逐帧整块重绘导致卡顿，
+        /// 分类不再各自建表：8 个独立表格放滚动容器里滚动会逐帧整块重绘导致卡顿，
         /// 合并为单表格后由 DataGridView 自身滚动（虚拟化，只重绘可见行）；
         /// 分类标题用”分组标题行”（见 LoadSettings 的 AddGroupRowStyle）。
         /// </summary>
@@ -588,7 +579,7 @@ namespace AgingTestSystem.Dialogs
                 RowTemplate = { Height = 24 },
                 BackgroundColor = Color.White,
                 BorderStyle = BorderStyle.None,
-                // 【V1.53】单表格自带垂直滚动条（虚拟化绘制，只重绘可见行），
+                // 单表格自带垂直滚动条（虚拟化绘制，只重绘可见行），
                 // 不再靠外层 pnlScroll 滚动整页（8 个表格整块移动重绘会卡顿）。
                 ScrollBars = ScrollBars.Vertical
             };
@@ -644,7 +635,7 @@ namespace AgingTestSystem.Dialogs
             // 这里在 RowPostPaint 阶段主动用背景色覆盖这些线，最稳。
             grid.RowPostPaint += Grid_RowPostPaint;
 
-            // 【V1.54h】关闭表格自带垂直滚动条的"左侧竖线"。
+            // 关闭表格自带垂直滚动条的"左侧竖线"。
             // 之前用户反馈"分组标题行最右侧有表格的竖线"，真正的元凶不是 cell border：
             // SunnyUI UIDataGridView 内置一个 UIScrollBar 子控件覆盖在表格右边缘
             // （X = 最后一列右边界 ~ 表格右边界），它默认 ShowLeftLine = True，
@@ -656,7 +647,7 @@ namespace AgingTestSystem.Dialogs
             // 正解就是关闭该子控件的 ShowLeftLine：竖线彻底消失，
             // 分组标题色带一路延伸到滚动条处；数据行右侧也只留下滚动条轨道（浅蓝），观感更干净。
             // 该子控件在 UIDataGridView 创建时就已存在（无需等 HandleCreated），这里直接找出来关掉。
-            // 【V1.54j】但用户需要"数据行最右边缘有表格右边界竖线"（见 Grid_RowPostPaint），
+            // 但用户需要"数据行最右边缘有表格右边界竖线"（见 Grid_RowPostPaint），
             // 该竖线不能再靠 UIScrollBar 的 ShowLeftLine（会连分组标题行一起画），
             // 所以这里保存滚动条引用，由 RowPostPaint 用 Bounds.Left 定位并只给数据行补画。
             var uiScroll = grid.Controls.OfType<Sunny.UI.UIScrollBar>().FirstOrDefault();
@@ -697,7 +688,6 @@ namespace AgingTestSystem.Dialogs
         /// <summary>
         /// 分组标题行自绘：去掉表格分割线（水平/垂直边框），只保留浅蓝背景 + 深蓝粗体标题文字，
         /// 从视觉上让标题行看起来**不在表格内部**，更像一条独立的分类色带。
-        ///
         /// 原理：DataGridView 默认渲染每个单元格时都会画出边框（CellBorderStyle=Single），
         /// 分组标题行如果走默认绘制，三列之间会有垂直分割线、上下行之间有水平分割线，
         /// 看起来就是"表格里的一行"。
@@ -737,11 +727,11 @@ namespace AgingTestSystem.Dialogs
         ///   上边线：DataGridView 默认 cell border（与数据行统一，不另画避免叠色）
         ///   下边线：自画蓝色（与标题文字同色，色带延伸）
         ///   中间：列与列之间、_grid 右边缘都不再有垂直线
-        /// 【V1.54h】说明：之前"最右侧那条竖线"其实是表格自带滚动条 UIScrollBar 的
+        /// 说明：之前"最右侧那条竖线"其实是表格自带滚动条 UIScrollBar 的
         /// ShowLeftLine（见 CreateGrid 里 V1.54h 注释），由 CreateGrid 直接关闭；
         /// 这里 fill 的右边界仍取 _grid.Width + 1，保证覆盖到 RowPostPaint 能被绘制的
         /// 最大范围（Graphics 被裁剪在行显示矩形内，超出部分本来就画不上，不影响结果）。
-        /// 【V1.54j】补充：ShowLeftLine 关掉后，**数据行**最右边缘也失去了表格右边界竖线，
+        /// 补充：ShowLeftLine 关掉后，**数据行**最右边缘也失去了表格右边界竖线，
         /// 用户在设置窗口需要"最右边有一条竖线"来明确表格边界，于是这里对非分组行
         /// （即普通配置行）补画一条 1px 竖线，位置在滚动条子控件左边缘左侧 1px
         /// （= colValue 列右边界可视处），颜色用 _grid.GridColor（与默认 cell border 一致）。
@@ -757,9 +747,9 @@ namespace AgingTestSystem.Dialogs
             }
 
             Color groupBack = Color.FromArgb(237, 243, 253);   // 标题行浅蓝底
-            // 【V1.54d】下边线：与标题文字同色（深蓝 48,119,238），色带延伸
+            // 下边线：与标题文字同色（深蓝 48,119,238），色带延伸
             Color groupLine = Color.FromArgb(48, 119, 238);
-            // 【V1.54h】右边界覆盖范围：fill 到 _grid.Width + 1（Graphics 坐标系下）。
+            // 右边界覆盖范围：fill 到 _grid.Width + 1（Graphics 坐标系下）。
             // 实测 RowPostPaint 的 Graphics 被裁剪在行显示矩形内（最右像素 X=918 逻辑），
             // 即使填到 _grid.Width+1 也画不到 _grid.Right；但保留它没坏处，
             // 而"标题行最右侧竖线"的真正来源是滚动条 ShowLeftLine，已在 CreateGrid 关闭。
@@ -848,7 +838,7 @@ namespace AgingTestSystem.Dialogs
                     _grid.Rows[rowIdx].Cells["colDesc"].Value = desc ?? "";
                     _grid.Rows[rowIdx].Cells["colValue"] = CreateValueCell(key, GetEffectiveValue(key));
 
-                    // 【V1.67】说明 tooltip：悬停任一单元格都显示完整说明，
+                    // 说明 tooltip：悬停任一单元格都显示完整说明，
                     // 超过 40 字自动换行（WinForms ToolTip 不自动换行，靠 WrapTooltip 插换行符）。
                     string tip = WrapTooltip(desc ?? "");
                     if (!string.IsNullOrEmpty(tip))
@@ -954,7 +944,7 @@ namespace AgingTestSystem.Dialogs
                 BackColor = Color.FromArgb(245, 248, 255)
             };
 
-            // 【V1.54i】去掉"搜索配置项："文字标题（多余，直接看输入框占位符就明白用途），
+            // 去掉"搜索配置项："文字标题（多余，直接看输入框占位符就明白用途），
             // 并让搜索框左边缘与下面"基础配置"等分组标题文字左边缘**严格对齐**：
             //   分组标题文字左边缘在 pnlScroll 客户区 = pnlScroll.Padding.Left + 8
             //     （grid 填满 Padding 内区，Grid_CellPainting 给 colKey 文字留 8px 左内边距）
@@ -966,7 +956,7 @@ namespace AgingTestSystem.Dialogs
             {
                 Location = new Point(8, 5),
                 Size = new Size(442, 26),
-                // 【V1.54d】文本框字体 10F，与分组标题字号一致；保持表格内文字的视觉协调
+                // 文本框字体 10F，与分组标题字号一致；保持表格内文字的视觉协调
                 Font = new Font(this.Font.FontFamily, 10F),
                 Watermark = "输入关键字过滤配置项"
             };
@@ -1066,35 +1056,34 @@ namespace AgingTestSystem.Dialogs
             }
             else if (key == "CustomAlarmRules")
             {
-                // 【V1.69】自定义报警规则：多行文本弹窗编辑（实时校验），结果写回单元格
+                // 自定义报警规则：多行文本弹窗编辑（实时校验），结果写回单元格
                 string currentValue = grid.Rows[e.RowIndex].Cells["colValue"].Value?.ToString() ?? "";
                 ShowRuleListPopup(grid, e.RowIndex, currentValue);
             }
             else if (key == "ReportColumns")
             {
-                // 【V1.74】报表列：表格弹窗编辑（一行一列：显示名文本 + 字段下拉，
+                // 报表列：表格弹窗编辑（一行一列：显示名文本 + 字段下拉，
                 // 增删/上下移），结果写回单元格
                 string currentValue = grid.Rows[e.RowIndex].Cells["colValue"].Value?.ToString() ?? "";
                 ShowReportColumnsPopup(grid, e.RowIndex, currentValue);
             }
             else if (key == "DisplayModes")
             {
-                // 【V1.75】显示模式字典：列表弹窗编辑（一行一个选项，可改/增/删），
+                // 显示模式字典：列表弹窗编辑（一行一个选项，可改/增/删），
                 // 结果写回单元格（录入窗下拉读的就是这份名单）
                 string currentValue = grid.Rows[e.RowIndex].Cells["colValue"].Value?.ToString() ?? "";
                 ShowDisplayModesPopup(grid, e.RowIndex, currentValue);
             }
             else if (key == "HomeLayout")
             {
-                // 【V1.58】主页区域调整：弹出可视化编辑器，保存后刷新该行显示。
+                // 主页区域调整：弹出可视化编辑器，保存后刷新该行显示。
                 ShowHomeLayoutEditor(grid, e.RowIndex);
             }
         }
 
         /// <summary>
-        /// 【V1.58.1】获取"当前生效的主页布局"。
-        ///
-        /// 【V1.65】右侧宽度的取值语义跟随主窗体：无 HomeLayout.json 时主界面是按窗口
+        /// 获取"当前生效的主页布局"。
+        /// 右侧宽度的取值语义跟随主窗体：无 HomeLayout.json 时主界面是按窗口
         /// 比例算出的值（主窗体构造本窗体时经 effectiveRightWidth 传入），有 json 时
         /// 以文件为准。此方法统一"编辑器初始化 / 设置表摘要显示 / 点击编辑"三处的取值，
         /// 避免未配置时编辑器里显示固定值、主界面实际是另一套的偏差。
@@ -1110,7 +1099,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 【V1.58】弹出"主页区域调整"可视化编辑器（拖动矩形块边缘调整主界面各区域尺寸）。
+        /// 弹出"主页区域调整"可视化编辑器（拖动矩形块边缘调整主界面各区域尺寸）。
         /// 编辑结果直接写入 HomeLayout.json（HomeLayoutConfig.Save），保存后刷新本行摘要，
         /// 并置位 <see cref="HomeLayoutChanged"/> 供主窗体在设置关闭后重新应用布局。
         /// 注意：HomeLayout 不是 App.config 项，保存配置时会被跳过（见 btnSave_Click），
@@ -1121,7 +1110,7 @@ namespace AgingTestSystem.Dialogs
             var layout = GetEffectiveHomeLayout();
             using (var editor = new HomeLayoutEditorForm(layout))
             {
-                // 【V1.60.4】走窗体自己的 ApplyTheme：整窗着色 + 预览画布深色换纯黑底
+                // 走窗体自己的 ApplyTheme：整窗着色 + 预览画布深色换纯黑底
                 // （布局预览画布底由窗体显式指定，见 HomeLayoutEditorForm.ApplyTheme）
                 editor.ApplyTheme();
                 if (editor.ShowDialog(this) == DialogResult.OK)
@@ -1175,7 +1164,7 @@ namespace AgingTestSystem.Dialogs
 
             // 兜底：万一按住状态下气泡因表格鼠标捕获未成功渲染，松开后再弹一次；
             // 已显示过则 _pendingCopyTip 已为 null，此调用是空转（见 ShowPendingCopyTip）。
-            // 【V1.72.15】关窗竞态：关闭后 BeginInvoke 进已销毁句柄即炸，先查后包 try。
+            // 关窗竞态：关闭后 BeginInvoke 进已销毁句柄即炸，先查后包 try。
             try
             {
                 if (!_closed && !IsDisposed && !Disposing && IsHandleCreated)
@@ -1219,7 +1208,7 @@ namespace AgingTestSystem.Dialogs
             _pendingCopyTip = text;
 
             // 长按到点即弹提示（无需等松开鼠标）
-            // 【V1.72.15】同上，关后丢弃。
+            // 同上，关后丢弃。
             try
             {
                 if (!_closed && !IsDisposed && !Disposing && IsHandleCreated)
@@ -1324,14 +1313,14 @@ namespace AgingTestSystem.Dialogs
                 }
                 finally
                 {
-                    // 【V1.72.13】非模态关闭后必须释放：Close 不释放非模态窗体，
+                    // 非模态关闭后必须释放：Close 不释放非模态窗体，
                     // 弹窗里的 Sunny 输入框/表格成孤儿，GC 时走终结器线程 Dispose，
                     // 内部读原生 TextBox.Handle 即跨线程崩溃（与驾驶舱右栏同病根）。
                     popup.Dispose();
                 }
             };
 
-            // 【V1.60】IP 列表弹窗打开前按当前主题着色
+            // IP 列表弹窗打开前按当前主题着色
             AgingTestSystem.Services.ThemeManager.ApplyTo(popup);
             popup.Show(this);
             popup.Activate();
@@ -1377,12 +1366,12 @@ namespace AgingTestSystem.Dialogs
                 }
                 finally
                 {
-                    // 【V1.72.13】同上：非模态关闭后释放，防孤儿 Sunny 控件终结器跨线程崩溃。
+                    // 同上：非模态关闭后释放，防孤儿 Sunny 控件终结器跨线程崩溃。
                     popup.Dispose();
                 }
             };
 
-            // 【V1.60】IO 映射弹窗打开前按当前主题着色
+            // IO 映射弹窗打开前按当前主题着色
             AgingTestSystem.Services.ThemeManager.ApplyTo(popup);
             popup.Show(this);
             popup.Activate();
@@ -1428,12 +1417,12 @@ namespace AgingTestSystem.Dialogs
                 }
                 finally
                 {
-                    // 【V1.72.13】同上：非模态关闭后释放，防孤儿控件终结器跨线程崩溃。
+                    // 同上：非模态关闭后释放，防孤儿控件终结器跨线程崩溃。
                     popup.Dispose();
                 }
             };
 
-            // 【V1.60】弹窗打开前按当前主题着色（与 IP/IO 弹窗一致）
+            // 弹窗打开前按当前主题着色（与 IP/IO 弹窗一致）
             AgingTestSystem.Services.ThemeManager.ApplyTo(popup);
             popup.Show(this);
             popup.Activate();
@@ -1479,12 +1468,12 @@ namespace AgingTestSystem.Dialogs
                 }
                 finally
                 {
-                    // 【V1.72.13】同上：非模态关闭后释放，防孤儿控件终结器跨线程崩溃。
+                    // 同上：非模态关闭后释放，防孤儿控件终结器跨线程崩溃。
                     popup.Dispose();
                 }
             };
 
-            // 【V1.60】弹窗打开前按当前主题着色（与 IP/IO/规则弹窗一致）
+            // 弹窗打开前按当前主题着色（与 IP/IO/规则弹窗一致）
             AgingTestSystem.Services.ThemeManager.ApplyTo(popup);
             popup.Show(this);
             popup.Activate();
@@ -1530,12 +1519,12 @@ namespace AgingTestSystem.Dialogs
                 }
                 finally
                 {
-                    // 【V1.72.13】同上：非模态关闭后释放，防孤儿控件终结器跨线程崩溃。
+                    // 同上：非模态关闭后释放，防孤儿控件终结器跨线程崩溃。
                     popup.Dispose();
                 }
             };
 
-            // 【V1.60】弹窗打开前按当前主题着色（与 IP/IO/规则/报表列弹窗一致）
+            // 弹窗打开前按当前主题着色（与 IP/IO/规则/报表列弹窗一致）
             AgingTestSystem.Services.ThemeManager.ApplyTo(popup);
             popup.Show(this);
             popup.Activate();
@@ -1543,13 +1532,13 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 获取配置项的当前值
-        /// 【V1.67】取值优先级：项目策略文件 Policy.json（策略 key）→ AppSettings →
+        /// 取值优先级：项目策略文件 Policy.json（策略 key）→ AppSettings →
         /// 内存 DeviceConfig 属性兜底。策略 key 优先读项目文件，保证界面显示的是
         /// 当前项目真正生效的值（而不是 App.config 里的机器缺省）。
         /// </summary>
         private string GetEffectiveValue(string key)
         {
-            // 【V1.58】主页区域调整：HomeLayout 不是 App.config 配置项，而是 HomeLayout.json
+            // 主页区域调整：HomeLayout 不是 App.config 配置项，而是 HomeLayout.json
             // 里的布局参数。这里显示当前生效的尺寸摘要，方便用户在设置里一眼看到现状。
             if (key == "HomeLayout")
             {
@@ -1557,7 +1546,7 @@ namespace AgingTestSystem.Dialogs
                 return $"点击编辑：右侧区域 {layout.RightPanelWidth}px | 顶栏 {layout.HeaderHeight}px | 状态栏 {layout.StatusBarHeight}px";
             }
 
-            // 【V1.67】策略 key 优先读项目文件（当前项目生效值优先于机器缺省）
+            // 策略 key 优先读项目文件（当前项目生效值优先于机器缺省）
             if (ProjectPolicyStore.PolicyKeys.Contains(key))
             {
                 string policyRaw = ProjectPolicyStore.GetRaw(key);
@@ -1567,7 +1556,7 @@ namespace AgingTestSystem.Dialogs
             string raw = System.Configuration.ConfigurationManager.AppSettings[key];
             if (raw != null)
             {
-                // 【V1.68】密钥显示解密：文件里是 DPAPI 密文，界面给明文编辑；
+                // 密钥显示解密：文件里是 DPAPI 密文，界面给明文编辑；
                 // 非密文（手写明文/损坏）显示空，逼着重填——不明文兼容。
                 if (key == "MesAuthToken" || key == "MesAuthPassword")
                 {
@@ -1602,7 +1591,7 @@ namespace AgingTestSystem.Dialogs
                     value != null && value.Trim().Equals("true", StringComparison.OrdinalIgnoreCase) ? "true" : "false");
             }
 
-            // 【V1.67】工艺策略下拉：中文显示（随便改文案不影响已存配置）、英文名存储；
+            // 工艺策略下拉：中文显示（随便改文案不影响已存配置）、英文名存储；
             // 存值非法（手改文件写错）时 NormalizePolicyValue 兜底回缺省（= 现状行为），
             // 界面永远显示合法选项，已存的脏值在保存时被洗掉（所见即所得）。
             Tuple<string, string>[] policyOptions;
@@ -1632,7 +1621,7 @@ namespace AgingTestSystem.Dialogs
                 return cell;
             }
 
-            // 【V1.58】主页区域调整：只读单元格 + 点击弹出可视化编辑器（见 Grid_CellClick）
+            // 主页区域调整：只读单元格 + 点击弹出可视化编辑器（见 Grid_CellClick）
             if (key == "HomeLayout")
             {
                 var cell = new DataGridViewPopupEditCell();
@@ -1679,7 +1668,7 @@ namespace AgingTestSystem.Dialogs
                     NormalizeParity(value));
             }
 
-            // 【V1.68】MES 鉴权下拉：中文显示、存英文名（None/Bearer/Basic），
+            // MES 鉴权下拉：中文显示、存英文名（None/Bearer/Basic），
             // 脏值归一回 None（与校验位 NormalizeParity 同思路）
             if (key == "MesAuthType")
             {
@@ -1722,7 +1711,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 把策略配置值规整为合法存储值（【V1.67 新增】与 NormalizeParity 同思路）：
+        /// 把策略配置值规整为合法存储值（与 NormalizeParity 同思路）：
         /// 大小写不敏感匹配合法名单；非法/空一律回第一个选项（= 现状行为）。
         /// </summary>
         private static string NormalizePolicyValue(string key, string value)
@@ -1746,7 +1735,6 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 取配置项中文说明（【新增】供工艺策略窗右栏标题 tooltip 复用，与设置表同源）。
-        ///
         /// 【为什么要经这一口】_descriptions 是说明唯一出处：设置表"说明"列、
         /// 工艺策略窗标题悬停、保存提示里的中文名全从这里拿。新增配置项只改
         /// _descriptions 一处，两边自动同步，不会出现"设置表有说明、策略窗没说明"分叉。
@@ -1763,7 +1751,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// Tooltip 换行（【V1.67 新增】）：WinForms 的 ToolTip 不会自动换行，
+        /// Tooltip 换行（）：WinForms 的 ToolTip 不会自动换行，
         /// 超长说明会横向溢出屏幕。这里按字符每 40 字插入换行（中文 1 字 1 位；
         /// 换行点尽量落在标点后，不断英文单词——现场小屏也看得全）。
         /// </summary>
@@ -1809,7 +1797,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 把 MES 鉴权配置值规整为合法存储值（【V1.68 新增】None/Bearer/Basic，
+        /// 把 MES 鉴权配置值规整为合法存储值（None/Bearer/Basic，
         /// 大小写兼容；非法一律回 None——无鉴权是最安全的缺省）。
         /// </summary>
         private static string NormalizeMesAuthType(string value)
@@ -1984,7 +1972,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 校验 MES 映射类文本（【V1.68 新增】供 ValidateValue 调用；本体是
+        /// 校验 MES 映射类文本（供 ValidateValue 调用；本体是
         /// MesMapping 纯函数，回归可单测，这里只做分发）。
         /// </summary>
         /// <returns>错误描述列表；空=合法</returns>
@@ -2021,7 +2009,7 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 按配置项类型校验用户输入的值是否合法
-        /// 【V1.70】private → internal：工艺策略窗保存前复用同一套校验（落盘语义只有一份）。
+        /// private → internal：工艺策略窗保存前复用同一套校验（落盘语义只有一份）。
         /// </summary>
         /// <param name="key">配置项名称</param>
         /// <param name="value">用户输入值（已 Trim）</param>
@@ -2039,7 +2027,7 @@ namespace AgingTestSystem.Dialogs
                     return true;
             }
 
-            // 策略枚举（【V1.67】）：必须命中合法名单（大小写不敏感）。
+            // 策略枚举（）：必须命中合法名单（大小写不敏感）。
             // 界面下拉选出来的天然合法；这道校验防的是手改 Policy.json/App.config 写错，
             // 脏值在这里被拦截并报出合法选项，不会带着脏值保存。
             Tuple<string, string>[] enumOptions;
@@ -2059,7 +2047,7 @@ namespace AgingTestSystem.Dialogs
                 return false;
             }
 
-            // MES 映射类（【V1.68】）：鉴权白名单 + 触发器/映射/静态走 MesMapping 纯函数校验。
+            // MES 映射类（）：鉴权白名单 + 触发器/映射/静态走 MesMapping 纯函数校验。
             // 脏输入在这里拦截并报出具体哪一组错了，不带病保存（上报线程只跳过不报错，
             // 所以保存时拦是最后一道看得见的门）。
             if (key == "MesAuthType")
@@ -2083,7 +2071,7 @@ namespace AgingTestSystem.Dialogs
                 return false;
             }
 
-            // 报表列（【V1.74】）：脏组保存时拦并报出哪一组错了；导出时跳过脏列，
+            // 报表列（）：脏组保存时拦并报出哪一组错了；导出时跳过脏列，
             // 与 MES 映射"保存拦、上报跳"双保险同规矩。
             if (key == "ReportColumns")
             {
@@ -2095,7 +2083,7 @@ namespace AgingTestSystem.Dialogs
                 return false;
             }
 
-            // 显示模式字典（【V1.74】）：空=缺省预设合法；配了必须解析出 ≥1 个选项，
+            // 显示模式字典（）：空=缺省预设合法；配了必须解析出 ≥1 个选项，
             // 脏组（超长/重复/全空）保存时拦并报出原因。
             if (key == "DisplayModes")
             {
@@ -2113,7 +2101,7 @@ namespace AgingTestSystem.Dialogs
                 return false;
             }
 
-            // 规则流程（【V1.69】）：完成表达式单行语法校验（空=禁用合法）；
+            // 规则流程（）：完成表达式单行语法校验（空=禁用合法）；
             // 规则表逐行校验（错行带行号，报全不只报首条——保存拦截要一次看全）。
             if (key == "CompleteExpression")
             {
@@ -2276,10 +2264,10 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 策略组合校验（【V1.67 新增】供保存按钮调用；校验逻辑本体在
+        /// 策略组合校验（供保存按钮调用；校验逻辑本体在
         /// AgingSequencer.ValidatePolicyCombination（纯函数，回归可单测），
         /// 这里只负责拼出"内存现值 + 本次修改叠加后"的生效值）。
-        /// 【V1.70】改为静态（入参 config），供工艺策略窗复用同一条保存路。
+        /// 改为静态（入参 config），供工艺策略窗复用同一条保存路。
         /// </summary>
         /// <param name="config">内存中的设备配置（读现值用）</param>
         /// <param name="changes">本次收集到的全部修改（key → 界面值）；null=只验内存现值（热更告警用）</param>
@@ -2339,7 +2327,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 持久化结果（【V1.70 新增】PersistChanges 的输出，调用方按需提示/分发）。
+        /// 持久化结果（PersistChanges 的输出，调用方按需提示/分发）。
         /// </summary>
         public class PersistResult
         {
@@ -2352,7 +2340,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 保存配置统一入口（【V1.70 新增】从 btnSave_Click 抽出，工艺策略窗共用同一条路）：
+        /// 保存配置统一入口（从 btnSave_Click 抽出，工艺策略窗共用同一条路）：
         /// 组合校验 → MES 就绪校验 → 分流写文件（策略→Policy.json，其余→exe.config，
         /// 密钥加密落盘）→ 内存热回写。调用方只负责"收集 changes + 弹提示"，
         /// 落盘语义只有一份，改了这里两边一起变。
@@ -2472,14 +2460,13 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// "保存设置"按钮点击事件
-        ///
         /// 【流程】
         /// 1. 遍历全部分类表格，收集每行的 key / 值
         /// 2. 按类型校验每个值，不合法项整批拦截并列出（避免写坏配置文件）
-        /// 2.5 【V1.67】策略组合校验（联停开但上限0 / 泄压选但点位0 直接拦截并指明先填哪个）
+        /// 2.5 策略组合校验（联停开但上限0 / 泄压选但点位0 直接拦截并指明先填哪个）
         /// 3. 分流写回：策略 key → 项目 Policy.json；其余 → exe.config 的 appSettings
         /// 4. 刷新 appSettings 缓存，提示重启生效
-        /// 【V1.70】2.5 之后全收拢进 PersistChanges（工艺策略窗共用），这里只剩收集+提示。
+        /// 2.5 之后全收拢进 PersistChanges（工艺策略窗共用），这里只剩收集+提示。
         /// </summary>
         private void btnSave_Click(object sender, EventArgs e)
         {
@@ -2495,7 +2482,7 @@ namespace AgingTestSystem.Dialogs
                 string key = row.Cells["colKey"].Value?.ToString();
                 if (string.IsNullOrWhiteSpace(key)) continue;
 
-                // 【V1.58】HomeLayout 是 HomeLayout.json 里的布局配置（非 App.config 项），
+                // HomeLayout 是 HomeLayout.json 里的布局配置（非 App.config 项），
                 // 保存设置时跳过它——主页布局已由可视化编辑器直接写入 HomeLayout.json，
                 // 不该把"摘要文字"误写进 App.config。
                 if (key == "HomeLayout") continue;
@@ -2517,7 +2504,7 @@ namespace AgingTestSystem.Dialogs
                 return;
             }
 
-            // 【V1.70】落盘走统一入口（组合/MES校验 + 分流写文件 + 热回写全在里面）
+            // 落盘走统一入口（组合/MES校验 + 分流写文件 + 热回写全在里面）
             PersistResult presult;
             string perror;
             if (!PersistChanges(_config, changes, out presult, out perror))
@@ -2542,7 +2529,7 @@ namespace AgingTestSystem.Dialogs
             {
                 saveMessage = "设置已保存并即时生效。";
             }
-            // 【V1.68】密钥加密失败时明示（fallback 明文保存了，不能让用户以为已加密）
+            // 密钥加密失败时明示（fallback 明文保存了，不能让用户以为已加密）
             if (presult.SecretFallbackPlain)
             {
                 saveMessage += "\r\n\r\n注：MES 密钥加密失败，已按明文保存（上报不受影响），请检查后重新保存。";
@@ -2560,7 +2547,7 @@ namespace AgingTestSystem.Dialogs
         /// 回写后业务逻辑类配置（寄存器地址 / IO 映射 / 取反 / 小数位 / 阈值等）立即生效，
         /// 无需重启；连接参数类由主窗体另触发重连。
         /// 结构型配置（<see cref="StructuralKeys"/>）不回写，需重启后生效。
-        /// 【V1.70】改为静态（入参 config），供工艺策略窗复用。
+        /// 改为静态（入参 config），供工艺策略窗复用。
         /// </summary>
         private static void ApplyChangesToConfig(DeviceConfig config, Dictionary<string, string> changes)
         {
@@ -2595,7 +2582,7 @@ namespace AgingTestSystem.Dialogs
             if (propType == typeof(decimal)){ return decimal.TryParse(value, out decimal d) ? d : (object)null; }
             if (propType == typeof(float))  { return float.TryParse(value, out float f) ? f : (object)null; }
             if (propType == typeof(string)) { return value; }
-            // 【V1.67】策略枚举：走 ProjectPolicyStore.ParseValue（与启动叠加同口径）
+            // 策略枚举：走 ProjectPolicyStore.ParseValue（与启动叠加同口径）
             if (propType.IsEnum) { return ProjectPolicyStore.ParseValue(propType, value); }
             if (propType == typeof(List<IoOutputChannelRemap>)) { return IoOutputChannelRemap.ParseAll(value, out _); }
             if (propType == typeof(List<string>)) { return DeviceConfig.ParseFanIpCandidates(value); }

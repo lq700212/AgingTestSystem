@@ -11,11 +11,9 @@ namespace AgingTestSystem.Services
     /// 设备管理器
     /// 负责管理所有气压表、IO 设备、冷却送风机的连接、数据采集和业务状态更新。
     /// 是整个系统的核心服务类。
-    ///
-    /// 【V1.59 业务串联完善：三阶段状态机 + 结果判定 + 断电恢复】
     /// 1) 时序安全改造：启动只开真空阀，载台上电由采集循环在「真空到位 + 延时时间到」
     ///    时补发——落实"未吸附固定不通电"（旧版开阀+上电同时下发，与安全意图矛盾）；
-    ///    【V1.88.14】延时=0 的台例外：启动时阀+电同时开、直接进 Aging 计时并保持常开
+    ///    延时=0 的台例外：启动时阀+电同时开、直接进 Aging 计时并保持常开
     ///    （与客户确认：延时段就是"电源断电只吸附"的等待，不要等待=同时开；
     ///    真空保护不丢：确认宽限保留+超时/失压照常报警断电）；
     /// 2) 配方参数接入编排：老化时长 = 工位配方"烧屏时间(BurnInTime)"（回退全局
@@ -26,8 +24,7 @@ namespace AgingTestSystem.Services
     ///    （压力类=产品 FAIL / 通讯失联=设备异常）；手动停止=中止回空闲；
     /// 4) 断电恢复：在测任务快照持久化（TestSession.json），重启后询问
     ///    恢复（整台重测，参数用快照定格值）/ 放弃（安全关闭阀与电源）。
-    ///
-    /// 【V1.10 新增业务串联】（历史记录：以下3)/5)两条已被V1.59覆盖，看现行逻辑请看上面V1.59小节）
+    /// （历史记录：以下3)/5)两条已被V1.59覆盖，看现行逻辑请看上面V1.59小节）
     /// 在原有"采集 + 报警联动"基础上，把老化测试业务流程串起来：
     /// 1) 冷却送风机接入（接口化：真实 / Mock），独立定时器轮询，不阻塞 72 台气压表采集
     /// 2) 送风机生命周期全局化：送风机是 72 台共用的环境设备，
@@ -42,8 +39,6 @@ namespace AgingTestSystem.Services
     ///    到达 MaxTestDurationSeconds 自动停止该台（关阀+断电+记日志）
     /// 6) 人工复位：报警/故障台复位回到空闲，可重新启动（V1.59扩展：已完成·待取料同样走复位确认取件）
     /// 7) 事件落盘：启动/停止/报警/复位/急停等写入 CSV 日志，供历史记录与追溯
-    ///
-    /// 【V1.16 门禁解耦 + 自动恢复】
     /// 1) 启动门禁解耦：只要"气压表串口"连通就启动采集；IO 耦合器 / 送风机是可选设备，
     ///    断开不再拖垮整机（原实现要求气压表 + 耦合器全部成功，耦合器连不上会把
     ///    气压表和送风机一起回滚 → 整个界面无数据）。
@@ -53,8 +48,6 @@ namespace AgingTestSystem.Services
     ///    避免与批量写争抢串口总线导致写超时。
     /// 5) 启动诊断：每一步连接结果经 OnDiagnostic 上报，UI 写 LOG，现场一眼看到
     ///    "哪一步连不上"（含实际使用的串口/耦合器/送风机 IP）。
-    ///
-    /// 【V1.16.2 心跳机制（静默自愈）】
     /// 现场需求：连接后做心跳，中途断连状态能及时更新、及时提醒"哪个设备断了"；
     /// 同时希望自动重连，但"不要一直重试连接"（怕刷日志/占资源）——两者看似矛盾。
     /// 本版本的统一解法（三个原则）：
@@ -66,7 +59,6 @@ namespace AgingTestSystem.Services
     ///    设备插上/恢复后自动连回，全程不打扰操作员；用户操作需要某设备时
     ///    按需重连一次，仍连不上才弹窗"xxx未连接，请先连接"（兜底）。
     /// 所有重连都跑在后台线程，互不阻塞、不影响 72 台采集主链路（性能安全）。
-    ///
     /// 【线程安全说明】
     /// - System.Timers.Timer 的 Elapsed 在后台线程触发
     /// - _barometerDataCache / _fanDataCache 用 _cacheLock 保护
@@ -90,14 +82,13 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 冷却送风机控制器（接口）
-        /// 【V1.10 新增】
         /// - FanEnabled=true：真实实现 FanControllerClient 或 Mock 实现 MockFanController
         /// - FanEnabled=false：null（不启用送风机，所有送风机方法做 null 判空）
         /// </summary>
         private readonly IFanController _fanController;
 
         /// <summary>
-        /// 载台电流表（接口，【V1.74 新增】Q2 通用骨架）。
+        /// 载台电流表（接口，Q2 通用骨架）。
         /// - UsePowerMeter=true：Mock 实现 MockPowerMeter 或真实桩 PowerMeterClient
         ///   （电表到货后把桩换成真驱动，上层不动）；
         /// - UsePowerMeter=false：null（不接电表，所有读数方法做 null 判空，电流恒 NaN）。
@@ -135,7 +126,7 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// IO 耦合器自动重连节流间隔（毫秒）
-        /// 【V1.16 新增】门禁解耦后，耦合器断开不影响压力采集；但它每 5 秒尝试重连一次，
+        /// 门禁解耦后，耦合器断开不影响压力采集；但它每 5 秒尝试重连一次，
         /// 现场重启耦合器 / 插拔网线后，几秒内自动恢复"阀 / 载台电"控制，不用重启程序。
         /// </summary>
         private const int IoReconnectIntervalMs = 5000;
@@ -147,31 +138,31 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 上一次上报的 IO 耦合器连接状态（边沿检测）
-        /// 【V1.16.1】每次采集周期比对当前状态与上次上报值，只在"连上/断开"边沿
+        /// 每次采集周期比对当前状态与上次上报值，只在"连上/断开"边沿
         /// 触发一次 OnConnectionStatusChanged，避免每个周期重复刷 UI。
         /// 初始值为 false（构造函数里耦合器还没连接）。
         /// </summary>
         private bool _lastIoConnected;
 
         /// <summary>
-        /// 气压表串口自动重连节流间隔（毫秒，【V1.16.2 新增】）
+        /// 气压表串口自动重连节流间隔（毫秒，）
         /// 串口断开后至少间隔 5 秒重试一次，避免对已拔出的适配器频繁重连。
         /// </summary>
         private const int BarometerReconnectIntervalMs = 5000;
 
         /// <summary>
-        /// 上次尝试重连气压表串口的时间（【V1.16.2 新增】，用于节流）
+        /// 上次尝试重连气压表串口的时间（，用于节流）
         /// </summary>
         private DateTime _lastBarometerReconnectAttempt = DateTime.MinValue;
 
         /// <summary>
-        /// 上一次气压表串口连接状态（【V1.16.2 新增】，边沿检测）
+        /// 上一次气压表串口连接状态（，边沿检测）
         /// 由"已连接 → 未连接"时提示一次"气压表串口已断开"，避免每个采集周期刷日志。
         /// </summary>
         private bool _barometerWasConnected;
 
         /// <summary>
-        /// 上一次送风机连接状态（【V1.16.2 新增】，边沿检测）
+        /// 上一次送风机连接状态（，边沿检测）
         /// 由"已连接 → 未连接"时提示一次"送风机已断开"，避免每个轮询周期刷日志。
         /// </summary>
         private bool _lastFanConnected;
@@ -184,9 +175,8 @@ namespace AgingTestSystem.Services
         private readonly Dictionary<int, BarometerData> _barometerDataCache = new Dictionary<int, BarometerData>();
 
         /// <summary>
-        /// 工位静态信息存储（【V1.19.11 新增】）
+        /// 工位静态信息存储（）
         /// Key: 工位编号，Value: 该工位的 SN / 配方 / 延时配置。
-        ///
         /// 【用途】真实气压表只上报压力，SN / 配方 / 延时无法从设备读取，
         /// 需由上位机维护（ID 绑定扫码/手动录入 SN、工位设置窗口录入配方/延时），
         /// 再在每次采集时叠加到 BarometerData 上，让工位面板同步展示。
@@ -218,7 +208,7 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 测试状态锁对象
-        /// 【V1.10 新增】保护所有"测试状态数组"的并发访问。
+        /// 保护所有"测试状态数组"的并发访问。
         /// 为什么需要独立的锁：
         /// - 采集线程（定时器）会在 CollectData 里读写这些状态
         /// - UI 线程（启动运行/停止运行/复位按钮）也会写这些状态
@@ -233,30 +223,30 @@ namespace AgingTestSystem.Services
         private bool[] _lastAlarmStates;
 
         /// <summary>
-        /// 【V1.67】每台"失压保持运行"是否已记过事件（AgingPressureLossPolicy=KeepRunning 时用）。
+        /// 每台"失压保持运行"是否已记过事件（AgingPressureLossPolicy=KeepRunning 时用）。
         /// 只在"正常 → 失压"的边沿记一条日志，不每轮刷屏；回到正常/报警/复位/启动时清零。
         /// </summary>
         private bool[] _lossNoted;
 
         /// <summary>
-        /// MES 上报器（【V1.68 新增】二期；构造时建、Dispose 时释放；开关关闭时零开销）。
+        /// MES 上报器（二期；构造时建、Dispose 时释放；开关关闭时零开销）。
         /// </summary>
         private readonly MesReporter _mes;
 
         /// <summary>
-        /// 规则执行器（【V1.69 新增】三期；自定义报警 + 完成表达式；规则空=零开销）。
+        /// 规则执行器（三期；自定义报警 + 完成表达式；规则空=零开销）。
         /// </summary>
         private readonly RuleEngine _rules;
 
         /// <summary>
-        /// 【V1.69】上次已记日志的规则求值错误（边沿去重：同一错误只记一次，不刷屏；
+        /// 上次已记日志的规则求值错误（边沿去重：同一错误只记一次，不刷屏；
         /// 错误变化/消失重现时再记）。
         /// </summary>
         private string _lastRuleErrorLogged = "";
 
         /// <summary>
         /// 每台是否正在老化测试
-        /// 【V1.10 新增】由"启动运行/停止运行/报警/复位"控制
+        /// 由"启动运行/停止运行/报警/复位"控制
         /// </summary>
         private bool[] _testingStates;
 
@@ -279,7 +269,7 @@ namespace AgingTestSystem.Services
         private DateTime[] _vacuumConfirmTimes;
 
         // =====================================================================
-        // 【V1.59 新增】三阶段老化状态机 + 任务定格参数 + 断电恢复持久化
+        // 三阶段老化状态机 + 任务定格参数 + 断电恢复持久化
         // 时序：启动(只开阀) → Vacuuming(等真空到位+延时时间) → 上电 → Aging(配方时长)
         //       → 到时自动完成(PASS·待取料)。报警按责任分产品 FAIL / 设备异常。
         // =====================================================================
@@ -303,10 +293,10 @@ namespace AgingTestSystem.Services
         /// 【为什么要定格】测试跑几小时的中途操作员可能改配置/换配方，
         /// 进行中的任务必须用启动那一刻的参数跑完，否则同一批产品工艺不一致，
         /// 质量数据没法追溯。
-        /// 【V1.62 约定】无任务时三者恒为"清零态"（时长/延时=0、阈值=全局值）：
+        /// 无任务时三者恒为"清零态"（时长/延时=0、阈值=全局值）：
         /// 所有清理点（停止/复位/急停/完成/报警）清时长延时的同时必须把阈值同步回全局，
         /// 否则残留的旧阈值会让后人误以为"退出测试还有定格生效"。
-        /// 【V1.76】SN/配方快照同数组家族：启动采、五清理点同步清（空=无快照，
+        /// SN/配方快照同数组家族：启动采、五清理点同步清（空=无快照，
         /// ResolveEventIdentity 自动回退现值，复位/下料判定行天然走现值）。
         /// </summary>
         private int[] _sessionDurationSecs;
@@ -347,7 +337,7 @@ namespace AgingTestSystem.Services
         private DateTime _lastFanStartFailTime = DateTime.MinValue;
 
         /// <summary>
-        /// 送风机停止失败是否已记过事件（【V1.88.14】边沿标记：末台退出后停风机若下发失败，
+        /// 送风机停止失败是否已记过事件（边沿标记：末台退出后停风机若下发失败，
         /// _fanRunning 保持 true 下轮继续补停；事件只记一次，不刷屏，停成功后清标记）。
         /// </summary>
         private bool _fanStopNoted = false;
@@ -363,7 +353,7 @@ namespace AgingTestSystem.Services
         private volatile bool _disposed = false;
 
         // =====================================================================
-        // IO 触发后快速跟踪刷新（【V1.30 新增】）
+        // IO 触发后快速跟踪刷新（）
         // 触发 IO（开/关真空阀、上/断电、启动/停止测试）后，对目标工位启动
         // 独立高频补读定时器（250ms/次），压力变化 ≤0.5 秒可见，
         // 不拖慢 72 台全量轮询链路；跟踪窗口到期自动退出恢复正常轮询。
@@ -394,14 +384,14 @@ namespace AgingTestSystem.Services
         public event EventHandler<BarometerData[]> OnBatchDataUpdated;
 
         /// <summary>
-        /// 单台快速跟踪增量更新事件（【V1.30 新增】）
+        /// 单台快速跟踪增量更新事件（）
         /// IO 触发后高频补读指定工位，每读到一次触发一次（参数为该工位最新数据）。
         /// 【注意】在后台线程触发，UI 层需用 BeginInvoke 切到 UI 线程更新对应面板。
         /// </summary>
         public event EventHandler<BarometerData> OnQuickTrackDataUpdated;
 
         /// <summary>
-        /// 连接状态变更事件（【V1.16.1】语义 = IO 耦合器是否连接）
+        /// 连接状态变更事件（语义 = IO 耦合器是否连接）
         /// 顶部"通讯模块状态"只判断耦合器（阀 / 载台电控制）是否连通：
         /// - true = 耦合器已连上；false = 耦合器未连上（气压表 / 送风机状态不并入本事件）。
         /// 送风机是可选设备，其连接状态见 <see cref="OnFanDataUpdated"/>。
@@ -410,13 +400,13 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 送风机数据更新事件
-        /// 【V1.10 新增】送风机独立定时器轮询后触发，参数为最新 FanData（失败时为 null）
+        /// 送风机独立定时器轮询后触发，参数为最新 FanData（失败时为 null）
         /// 【注意】在后台线程触发，UI 层需用 BeginInvoke 切到 UI 线程
         /// </summary>
         public event EventHandler<FanData> OnFanDataUpdated;
 
         /// <summary>
-        /// 启动/连接诊断事件（【V1.16 新增】）
+        /// 启动/连接诊断事件（）
         /// 启动时逐步上报：实际使用的气压表串口、IO 耦合器连接结果、送风机连接结果、
         /// 耦合器自动重连成功等，UI 层把内容写进 LOG，让现场一眼看到"到底哪一步连不上"。
         /// 【注意】在后台线程触发，UI 层需用 BeginInvoke 切到 UI 线程写日志。
@@ -424,7 +414,7 @@ namespace AgingTestSystem.Services
         public event EventHandler<string> OnDiagnostic;
 
         /// <summary>
-        /// 上次启动失败的诊断信息（【V1.16 新增】）
+        /// 上次启动失败的诊断信息（）
         /// 供 MainForm 启动失败时把原因写到 LOG/提示，避免"只显示未连接却不知道原因"。
         /// </summary>
         public string LastStartupError { get; private set; } = "";
@@ -451,7 +441,7 @@ namespace AgingTestSystem.Services
         public DeviceConfig Config => _config;
 
         /// <summary>
-        /// IO 耦合器当前是否已连接（【V1.16.1 新增】）
+        /// IO 耦合器当前是否已连接（）
         /// 顶部"通讯模块状态"标签的数据源：只反映耦合器（阀 / 载台电控制）是否连通。
         /// 后台读/写失败时会自动置 false，TryReconnectIo 自动重连成功后置 true。
         /// </summary>
@@ -478,7 +468,7 @@ namespace AgingTestSystem.Services
                 _readFailCounts = new int[n];
                 _lastGoodTimes = new DateTime[n];
 
-                // 【V1.59】三阶段状态机数组（None=全部未在测试；定格参数先清零）
+                // 三阶段状态机数组（None=全部未在测试；定格参数先清零）
                 _testPhases = new AgingPhase[n];
                 _valveOpenTimes = new DateTime[n];
                 _sessionDurationSecs = new int[n];
@@ -526,8 +516,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 初始化设备管理器（【V1.59】依赖注入构造——回归集成测试专用）
-        ///
+        /// 初始化设备管理器（依赖注入构造——回归集成测试专用）
         /// 【为什么开放注入】三阶段老化状态机的行为验证需要"可控的压力序列 +
         /// 可记录的输出调用"（Fake 设备），而本类原来在构造函数里硬编码 new
         /// Mock/Real 实现，外部无法替身。开放此重载后：
@@ -592,7 +581,7 @@ namespace AgingTestSystem.Services
                 _fanController = _config.FanEnabled ? new FanControllerClient() : null;
             }
 
-            // 【V1.74】载台电流表（Q2 通用骨架）：只有启用回采时才创建；
+            // 载台电流表（Q2 通用骨架）：只有启用回采时才创建；
             // Mock 有数 / 真实端是占位桩（连不上、读 NaN，绝不拖垮采集）。
             // 测试注入：本构造不设 override（现状回归用 Mock 即可覆盖骨架；真驱动到货再补注入口）。
             if (_config.UsePowerMeter)
@@ -626,7 +615,7 @@ namespace AgingTestSystem.Services
             _collectTimer.Elapsed += CollectTimer_Elapsed;
             _collectTimer.AutoReset = true;
 
-            // IO 触发后快速跟踪定时器（【V1.30 新增】）
+            // IO 触发后快速跟踪定时器（）
             // 初始不启动，仅在 StartQuickTracking 加入工位后运行；集合空时自动停止。
             _quickTrackTimer = new System.Timers.Timer(QuickTrackIntervalMs);
             _quickTrackTimer.Elapsed += QuickTrackTimer_Elapsed;
@@ -640,11 +629,11 @@ namespace AgingTestSystem.Services
                 _fanTimer.AutoReset = true;
             }
 
-            // 【V1.68】MES 上报器（持 _config 引用读最新配置；MesEnabled=false 时
+            // MES 上报器（持 _config 引用读最新配置；MesEnabled=false 时
             // Report 直接返回、worker 懒建，零开销；Dispose 时释放后台线程）
             _mes = new MesReporter(_config);
 
-            // 【V1.69】规则执行器（编译缓存 + 持续计时；规则全空时 Eval 直接返回，零开销）
+            // 规则执行器（编译缓存 + 持续计时；规则全空时 Eval 直接返回，零开销）
             _rules = new RuleEngine(_config.TotalBarometers);
         }
 
@@ -665,7 +654,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 送风机错误回调（【V1.10 新增】）
+        /// 送风机错误回调（）
         /// </summary>
         private void FanController_OnError(object sender, string message)
         {
@@ -673,7 +662,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 电表错误回调（【V1.74 新增】Q2 骨架：只记 Debug，不弹框不记 CSV，
+        /// 电表错误回调（Q2 骨架：只记 Debug，不弹框不记 CSV，
         /// 电表是记录型外设，报错不能干扰老化主流程）。
         /// </summary>
         private void PowerMeter_OnError(object sender, string message)
@@ -684,11 +673,9 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 启动设备管理器
         /// 连接设备并开始数据采集
-        ///
-        /// 【V1.10 说明】送风机是可选设备：连接失败不影响整机启动，
+        /// 送风机是可选设备：连接失败不影响整机启动，
         /// 只记日志（送风机独立定时器会周期尝试自动重连）。
-        ///
-        /// 【V1.16 门禁解耦】只要求"气压表串口"连通；IO 耦合器/送风机是可选设备，
+        /// 只要求"气压表串口"连通；IO 耦合器/送风机是可选设备，
         /// 断开不影响压力采集。返回值 = 气压表是否连通。
         /// </summary>
         /// <returns>是否启动成功（成功 = 气压表串口已连接）</returns>
@@ -732,7 +719,7 @@ namespace AgingTestSystem.Services
                 // 尝试连接送风机（独立 try/catch 隔离，失败只记诊断）
                 TryConnectFan();
 
-                // 【V1.74】尝试连接电表（可选外设，与送风机同口径：失败只记诊断；
+                // 尝试连接电表（可选外设，与送风机同口径：失败只记诊断；
                 // Mock 秒连，真桩连不上——两种都不影响整机启动）
                 TryConnectPowerMeter();
 
@@ -761,13 +748,13 @@ namespace AgingTestSystem.Services
                 //（送风机是独立 TCP 设备，可以单独工作）
                 if (_fanTimer != null) _fanTimer.Start();
 
-                // 触发连接状态变更事件（【V1.16.1】语义：IO 耦合器是否连接）
+                // 触发连接状态变更事件（语义：IO 耦合器是否连接）
                 // 顶部"通讯模块状态"只判断耦合器（阀 / 载台电控制）是否连通，
                 // 不再用气压表串口状态冒充耦合器状态。
                 _lastIoConnected = ioConnected;
                 OnConnectionStatusChanged?.Invoke(this, ioConnected);
 
-                // 【V1.16.2 心跳】初始化边沿检测的"上一次"状态：
+                // 初始化边沿检测的"上一次"状态：
                 // 之后某个设备中途断开时，能正确识别"已连接 → 未连接"边沿并提示一次。
                 _barometerWasConnected = barometerConnected;
                 _lastFanConnected = _fanController != null && _fanController.IsConnected;
@@ -806,7 +793,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 尝试连接电表（【V1.74 新增】可选外设，与 TryConnectFan 同口径）。
+        /// 尝试连接电表（可选外设，与 TryConnectFan 同口径）。
         /// 独立 try/catch：连接失败只记诊断，不影响整机启动；采集循环里读数前
         /// 同样判 IsConnected（见 CollectData 3.6），中途掉线自动按 NaN 处理。
         /// </summary>
@@ -829,7 +816,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 上报诊断信息（【V1.16 新增】）
+        /// 上报诊断信息（）
         /// 触发 OnDiagnostic 事件 + 写 Debug 输出。
         /// 【注意】可能在后台线程调用，UI 层订阅后需用 BeginInvoke 切回 UI 线程。
         /// </summary>
@@ -841,8 +828,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// IO 耦合器心跳 + 自动重连（【V1.16 新增】【V1.16.2 心跳机制】）
-        ///
+        /// IO 耦合器心跳 + 自动重连（）
         /// 门禁解耦后，耦合器断开只影响"阀 / 载台电"控制，不影响压力采集。
         /// 本方法在每个采集周期调用：
         /// - 状态边沿检测：连上/断开各上报一次 OnConnectionStatusChanged（顶部标签实时更新），
@@ -862,7 +848,7 @@ namespace AgingTestSystem.Services
                 _lastIoConnected = ioConnectedNow;
                 OnConnectionStatusChanged?.Invoke(this, ioConnectedNow);
 
-                // 【V1.16.2 心跳】只在"已连接 → 断开"边沿提示一次"哪里断了"；
+                // 只在"已连接 → 断开"边沿提示一次"哪里断了"；
                 // 重连成功由下面 Connect 成功分支提示（避免每个采集周期刷日志）。
                 if (!ioConnectedNow)
                 {
@@ -896,7 +882,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// IO 耦合器按需连接（【V1.16.1 新增】）
+        /// IO 耦合器按需连接（）
         /// 用户操作需要耦合器时（上电/开阀/启动停止测试等）调用：
         /// 已连接直接返回 true；未连接则立即重连一次（即使自动重连已放弃），
         /// 连上则复位自动重连状态，连不上返回 false（由调用方弹窗提示"耦合器未连接，请先连接"）。
@@ -1000,7 +986,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 暂停主采集（【V1.72.10 热更】项目切换时调用；不碰连接不断硬件）。
+        /// 暂停主采集（项目切换时调用；不碰连接不断硬件）。
         /// 只停 _collectTimer（压力/IO 主链路），送风机独立定时器与重连节流不动——
         /// 它们读的是跟机器的配置，与项目无关，停了反而丢温度曲线。
         /// </summary>
@@ -1023,8 +1009,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 清掉跟项目走的内存状态（【V1.72.10 热更】项目切换时调用，切前必须无在测）。
-        ///
+        /// 清掉跟项目走的内存状态（项目切换时调用，切前必须无在测）。
         /// 【清什么、为什么】
         /// - _stationInfo（SN/配方/延时指派）：工位设置是跟项目的，旧项目的指派
         ///   带到新项目 = 张冠李戴（面板上挂着别家的 SN 跑新工艺）。必须清零，
@@ -1055,7 +1040,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 气压表串口心跳 + 后台自动重连（【V1.16.2 新增】）
+        /// 气压表串口心跳 + 后台自动重连（）
         /// 每个采集周期调用一次：
         /// - 状态边沿：气压表由"已连接 → 未连接"时，记一次"气压表串口已断开"日志，
         ///   明确提醒操作员哪个设备断了（ModbusRtuBarometerReader 检测到端口级故障
@@ -1151,7 +1136,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 获取指定工位的静态信息（SN / 配方 / 延时，【V1.19.11 新增】）
+        /// 获取指定工位的静态信息（SN / 配方 / 延时，）
         /// 用于工位设置窗口回显。返回副本，避免外部修改污染内部存储。
         /// </summary>
         /// <param name="deviceId">工位编号（1 ~ TotalBarometers）</param>
@@ -1166,8 +1151,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 设置指定工位的 SN（【V1.19.11 新增】）
-        ///
+        /// 设置指定工位的 SN（）
         /// 【调用方】ID 绑定（IdBindingForm 保存时，扫码枪扫码或手动输入的 SN）、
         /// 工位设置窗口（StationSettingsForm 保存按钮）。
         /// 写入后，采集线程在下次采集时把 SN 叠加到该工位的数据上，
@@ -1190,7 +1174,7 @@ namespace AgingTestSystem.Services
                 info.SerialNumber = sn;
             }
 
-            // 【V1.59】重新扫码绑定 = 新产品上料：若该台还处于"已完成·待取料"，
+            // 重新扫码绑定 = 新产品上料：若该台还处于"已完成·待取料"，
             // 自动复位回空闲，操作员不用再手动点复位（流水式作业少一步操作）。
             // 报警(Fault)态不自动清——漏气原因没确认前上新产品有风险，仍需人工复位。
             lock (_cacheLock)
@@ -1212,7 +1196,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 设置指定工位的配方名称（【V1.19.11 新增】）
+        /// 设置指定工位的配方名称（）
         /// 由工位设置窗口保存按钮调用。写入后采集叠加显示在工位面板配方标签上。
         /// </summary>
         /// <param name="deviceId">工位编号（1 ~ TotalBarometers）</param>
@@ -1223,13 +1207,12 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 设置指定工位的配方名称 + 负压值 + 显示模式（【V1.59 新增，V1.66 加显示模式】）
-        ///
+        /// 设置指定工位的配方名称 + 负压值 + 显示模式（）
         /// 【为什么要把负压值一起存】配方的 NegativePressure 是该产品的真空工艺要求，
         /// 启动测试时要用它做"到位判定/报警阈值"。原来只存配方名字符串，
         /// 编排层拿不到数值，导致配方参数与实际判定脱节。
         /// negativePressure 传 null = 不修改已有值（兼容只改名不改工艺的调用）。
-        /// 【V1.66】显示模式同理：配方 DisplayMode 是"这次烧什么画面"的追溯依据，
+        /// 显示模式同理：配方 DisplayMode 是"这次烧什么画面"的追溯依据，
         /// 与配方名同步下发、同步清空；displayMode 传 null = 不修改已有值。
         /// </summary>
         /// <param name="deviceId">工位编号（1 ~ TotalBarometers）</param>
@@ -1266,7 +1249,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 设置指定工位的延时时间（【V1.19.11 新增】）
+        /// 设置指定工位的延时时间（）
         /// 由工位设置窗口保存按钮调用。写入后采集叠加显示在工位面板延时标签上。
         /// </summary>
         /// <param name="deviceId">工位编号（1 ~ TotalBarometers）</param>
@@ -1331,7 +1314,7 @@ namespace AgingTestSystem.Services
                 }
             }
 
-            // 【V1.59】对"重绑的已完成台"逐台复位（与单台绑定行为一致）
+            // 对"重绑的已完成台"逐台复位（与单台绑定行为一致）
             if (completedIds.Count > 0)
             {
                 ResetDevices(completedIds.ToArray());
@@ -1343,15 +1326,13 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 把工位静态信息（SN / 配方 / 延时）叠加到采集数据上（【V1.19.11 新增】）
-        ///
+        /// 把工位静态信息（SN / 配方 / 延时）叠加到采集数据上（）
         /// 【为什么需要叠加】
         /// 真实气压表只上报压力，BarometerData 的 SerialNumber / RecipeName /
         /// DelayTime / BurnInTime 在采集层是空的。
         /// 工位面板（WorkstationPanelView）显示的 SN / 配方 / 延时正是读取这些字段，
         /// 所以必须在数据流出前把 _stationInfo 里维护的配置覆盖上去，
         /// 保证"有显示 SN/配方/延时 的地方都与绑定/设置关联一致"。
-        ///
         /// 【与 Mock 的关系】
         /// Mock 读取器生成的 SN / 配方 / 延时是模拟值；本方法只在工位静态信息
         /// 已配置（非空）时覆盖，未配置的工位保留原值（Mock 模拟值 / 空）。
@@ -1377,7 +1358,7 @@ namespace AgingTestSystem.Services
             {
                 data.RecipeName = info.RecipeName;
             }
-            // 【V1.66】显示模式与配方名同步叠加：配了才写，空=没配不过来
+            // 显示模式与配方名同步叠加：配了才写，空=没配不过来
             if (!string.IsNullOrEmpty(info.DisplayMode))
             {
                 data.DisplayMode = info.DisplayMode;
@@ -1394,7 +1375,6 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 写入单台气压表的设备阈值（透传 IBarometerReader.SetThreshold）
-        ///
         /// 【单位提醒】thresholdValue 是"设备单位"（与压力读数同单位同小数位），
         /// 不是软件报警阈值 AlarmPressureThresholdKPa（kPa）。写前务必确认设备单位。
         /// </summary>
@@ -1407,12 +1387,10 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 更新软件报警压力阈值（【V1.19.9 新增】）
-        ///
+        /// 更新软件报警压力阈值（）
         /// 公共参数窗口保存负压值（单位 kPa）时同步调用，把界面输入的负压值写入
         /// <see cref="DeviceConfig.AlarmPressureThresholdKPa"/>，让 DeviceManager 的压力
         /// 报警判定（IsAlarm / PressureOutOfRange）与气压表设备阈值保持一致。
-        ///
         /// 【单位】thresholdKPa 单位是 kPa（与气压表读数同单位，如 -5）。
         /// </summary>
         /// <param name="thresholdKPa">报警压力阈值（kPa，如 -5）</param>
@@ -1423,12 +1401,10 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 批量写入所有气压表的设备阈值（透传 IBarometerReader.SetAllThresholds）
-        ///
         /// 返回 deviceId → 是否成功，方便上层汇总"哪些台没写进去"。
         /// 【性能提示】72 台连写 + 坏设备会阻塞较久，调用方应在后台线程执行，
         /// 不要直接放在 UI 线程里（否则界面会卡住数十秒）。
-        ///
-        /// 【V1.16 修复】批量写期间【暂停主采集定时器】：
+        /// 批量写期间【暂停主采集定时器】：
         /// 原来批量写和 1s 采集定时器会争抢同一条 RS485 串口总线，导致写帧大量超时
         /// （现场表现为"保存失败 N 台"）。这里在批量写期间停掉采集，写完再恢复，
         /// 与 Demo 的 BatchSetThreshold（独占总线批量写）行为对齐。
@@ -1459,7 +1435,7 @@ namespace AgingTestSystem.Services
         {
             _ioController.WriteOutput(outputId, state);
 
-            // 【V1.30】IO 触发后快速跟踪：写输出成功即对目标工位高频补读，
+            // IO 触发后快速跟踪：写输出成功即对目标工位高频补读，
             // 压力变化 ≤0.5 秒内反映到面板（非阀/载台电输出点自动忽略）。
             if (TryGetDeviceIdFromOutput(outputId, out int deviceId))
             {
@@ -1468,7 +1444,7 @@ namespace AgingTestSystem.Services
         }
 
         // =====================================================================
-        // IO 触发后快速跟踪（【V1.30 新增】）
+        // IO 触发后快速跟踪（）
         // 触发 IO 后，目标工位进入快速跟踪集合，由独立高频定时器（250ms）
         // 只补读这几台压力 + IO 状态，并广播 OnQuickTrackDataUpdated 刷新对应面板。
         // 窗口到期（QuickTrackWindowMs）自动清空集合、停止定时器，恢复正常轮询。
@@ -1634,7 +1610,7 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 读取单个输出点状态（用于手动控制对话框实时回读）
-        /// 【V1.10 新增】透传 IIoController.ReadOutput
+        /// 透传 IIoController.ReadOutput
         /// </summary>
         public bool GetOutput(int outputId)
         {
@@ -1667,7 +1643,6 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 读取连续多个保持寄存器 —— 复用主程序**同一条** IO 耦合器连接（线程安全）
-        ///
         /// 【用途】通讯测试窗体（CommunicationTestForm）的原始寄存器读写（0x2000~0x2009）走这里，
         /// 与采集线程共用 <see cref="ModbusTcpIoController"/> 及它内部的锁，不再自建第二条 TCP 连接。
         /// Mock 模式（<see cref="MockIoController"/>）不支持原始寄存器访问，返回 null。
@@ -1683,7 +1658,6 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 写单个保持寄存器 —— 复用主程序**同一条** IO 耦合器连接（线程安全）
-        ///
         /// 【用途】同 <see cref="ReadHoldingRegisters"/>，供通讯测试窗体写入 DO 原始寄存器。
         /// Mock 模式（<see cref="MockIoController"/>）不支持原始寄存器访问，返回 false。
         /// </summary>
@@ -1697,7 +1671,7 @@ namespace AgingTestSystem.Services
         }
 
         // =====================================================================
-        // 送风机相关（【V1.10 新增】）
+        // 送风机相关（）
         // =====================================================================
 
         /// <summary>
@@ -1714,7 +1688,7 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 手动定值启动送风机
         /// 幂等：多次调用只下发一次命令（用 _fanRunning 做状态记忆）
-        /// 【V1.16.1】未连接时先按需重连一次，连不上返回 false（上层弹窗提示"送风机未连接"）。
+        /// 未连接时先按需重连一次，连不上返回 false（上层弹窗提示"送风机未连接"）。
         /// </summary>
         public bool StartFan()
         {
@@ -1731,7 +1705,7 @@ namespace AgingTestSystem.Services
         /// 手动定值停止送风机
         /// 【注意】如果有任何一台正在测试，下一次采集循环会自动重新启动送风机
         /// （送风机是环境设备，测试期间必须保持运行）。
-        /// 【V1.16.1】未连接时先按需重连一次，连不上返回 false（上层弹窗提示）。
+        /// 未连接时先按需重连一次，连不上返回 false（上层弹窗提示）。
         /// </summary>
         public bool StopFan()
         {
@@ -1745,19 +1719,19 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 送风机当前是否已连接（【V1.16.1 新增】）
+        /// 送风机当前是否已连接（）
         /// 供 UI 判断是否需要在启动测试前提示"送风机未连接"。
         /// </summary>
         public bool IsFanConnected => _fanController != null && _fanController.IsConnected;
 
         /// <summary>
-        /// 电表是否已连接（【V1.74 新增】Q2 骨架：供面板/诊断显示"电流有没有数"；
+        /// 电表是否已连接（Q2 骨架：供面板/诊断显示"电流有没有数"；
         /// false = 未启用或未连上，电流恒 NaN）。
         /// </summary>
         public bool IsPowerMeterConnected => _powerMeter != null && _powerMeter.IsConnected;
 
         /// <summary>
-        /// 送风机按需重连（【V1.16.1 新增】）
+        /// 送风机按需重连（）
         /// 用户操作需要送风机时调用：已连接直接返回 true，未连接立即重连一次。
         /// </summary>
         /// <returns>重连后是否已连接</returns>
@@ -1800,7 +1774,7 @@ namespace AgingTestSystem.Services
         {
             FanData data = _fanController.ReadStatus();
 
-            // 【V1.16.2 送风机心跳】连接状态边沿检测：只在"连上 / 断开"各提示一次，
+            // 连接状态边沿检测：只在"连上 / 断开"各提示一次，
             // 明确提醒操作员"哪个设备断了"；连续失败过程不刷日志。
             //（读失败时 FanControllerClient 已把 IsConnected 置 false，data 为 null）
             bool fanConnected = _fanController.IsConnected;
@@ -1829,12 +1803,10 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 送风机生命周期联动（首台启动 / 末台停止）
-        ///
         /// 【为什么必须这样设计】
         /// 送风机是 72 台共用的"环境设备"。如果按"选中组"启停送风机，
         /// 会出现"第一组启动（风机开）→ 第二组启动（风机已开）→ 第一组停止（风机被停）"
         /// 的交叉场景，导致仍在老化的设备失去温控。
-        ///
         /// 正确策略（设计评审结论）：
         /// - 有任何一台在测试 → 送风机必须运行（保持温控）
         /// - 没有任何一台在测试 → 送风机可以停止
@@ -1863,7 +1835,7 @@ namespace AgingTestSystem.Services
                 {
                     _fanRunning = false;
                     _lastFanStartFailTime = DateTime.Now;
-                    // 【V1.16.2 心跳】送风机未连上：明确告知操作员（安全提示：
+                    // 送风机未连上：明确告知操作员（安全提示：
                     // 测试期间没有环境温控，后台会静默重连，恢复后送风机自动重新启动）
                     Diagnostic("送风机未连接，无法启动环境温控，正在后台自动重连（测试期间温度不受控！）");
                 }
@@ -1871,7 +1843,7 @@ namespace AgingTestSystem.Services
             else if (!anyTesting && _fanRunning)
             {
                 // 最后一台退出测试：停止送风机（完成/停止/报警/急停外，退出即走这里）。
-                // 【V1.88.14】停失败不丢：以前 _fanRunning 先置 false，停命令丢了就再也不补
+                // 停失败不丢：以前 _fanRunning 先置 false，停命令丢了就再也不补
                 // （风机一直转，费电）。现在失败保持 _fanRunning=true，下轮继续补停；
                 // 事件只记一次（_fanStopNoted 边沿），停成功后清标记。
                 bool stopped = false;
@@ -1900,19 +1872,17 @@ namespace AgingTestSystem.Services
         }
 
         // =====================================================================
-        // 老化测试业务流程（【V1.10 新增】）
+        // 老化测试业务流程（）
         // =====================================================================
 
         /// <summary>
-        /// 启动老化测试（批量）【V1.59 时序安全改造】
-        ///
+        /// 启动老化测试（批量）
         /// 【与旧版的区别】旧版"开阀 + 载台上电"同时下发——真空还没建立产品就带电了，
         /// 与配置注释里"避免产品在未吸附固定的情况下通电老化"的安全意图矛盾。
-        /// 新版启动时【只开真空阀】（【V1.88.14】延时=0 的台例外：阀+电同时开，直接计时），
+        /// 新版启动时【只开真空阀】（延时=0 的台例外：阀+电同时开，直接计时），
         /// 载台上电由采集循环在
         /// 「真空压力到位 且 延时时间到」时补发（见 ProcessTestingProgress）；
         /// 真空建立失败（宽限窗口内压力始终不到位）则报警切断，全程不带电。
-        ///
         /// 【参数定格】启动瞬间从工位配方抄写本次任务的时长/延时/报警阈值，
         /// 中途改配方不影响已在跑的测试（同批产品工艺一致性）。
         /// </summary>
@@ -1959,7 +1929,6 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 单台启动测试的核心动作（StartTesting 循环体 / 断电恢复共用）
-        ///
         /// 【动作】开真空阀（载台保持断电）→ 进入 Vacuuming 阶段 → 定格任务参数 → 快照落盘。
         /// 【overrideDurationSecs】断电恢复时传快照里定格的时长（此时工位配方可能已被改动，
         /// 以快照为准保证"重测参数 = 中断前参数"）；正常启动传 null（现场定格）。
@@ -1995,7 +1964,7 @@ namespace AgingTestSystem.Services
             }
             // 报警/到位阈值：配方负压值优先（null=没下发，如手输配方名未命中），
             // 否则回退全局 AlarmPressureThresholdKPa。
-            // 【V1.66】不做"0=回全局"魔法：项目未上线、无老配方包袱，三个录入窗现在必填实数
+            // 不做"0=回全局"魔法：项目未上线、无老配方包袱，三个录入窗现在必填实数
             // （新建默认=全局值），存什么用什么，所见即所得。
             decimal thresholdKPa = recipePressure ?? _config.AlarmPressureThresholdKPa;
 
@@ -2010,25 +1979,25 @@ namespace AgingTestSystem.Services
             }
 
             // ---- 2) 开阀（延时>0 只开阀！上电由采集循环在真空到位+延时时间到后补发；
-            // 【V1.88.14】延时=0 在下面第 3) 步直接进 Aging 并阀电同开） ----
+            // 延时=0 在下面第 3) 步直接进 Aging 并阀电同开） ----
             // 【大扫荡】写失败直接抛给调用方（批量循环单台隔离；恢复路径同理）：
             // 以前写丢了（耦合器离线静默丢失）状态机照进，真空超时后报假性"真空建立失败"。
             // 调用方必须 try/catch（见 StartTesting），失败的台不进测试态。
             _ioController.WriteOutput(_config.TotalInputs + deviceId, true);
-            // 【V1.67】新任务开始：失压标记清零（破空阀关闭已提至批量入口调一次，见 StartTesting）
+            // 新任务开始：失压标记清零（破空阀关闭已提至批量入口调一次，见 StartTesting）
 
             // ---- 3) 状态进入 Vacuuming，定格参数 ----
-            // 【V1.69】SkipVacuum=true（机械夹具、无真空管路）→ 直接进 Aging 并立即上电，
+            // SkipVacuum=true（机械夹具、无真空管路）→ 直接进 Aging 并立即上电，
             // 不等真空到位+延时。开之前必须确认产品已机械固定（配错=真空保护全丢，
             // 压力报警同步豁免，见 ClassifyAlarm）。
-            // 【V1.88.14】延时=0 → 同样直接进 Aging 并阀电同开（与客户确认的新口径，
+            // 延时=0 → 同样直接进 Aging 并阀电同开（与客户确认的新口径，
             // 不兼容老"延时0=到位即上电"）：延时段的本意就是"电源断电、只让真空吸附"的等待，
             // 不要这段等待 = 启动瞬间阀+电同时开、直接进老化计时，全程保持常开。
             // 与 SkipVacuum 的区别：真空保护不豁免——确认宽限照常保留（刚开阀压力还在常压，
             // 无宽限则首轮采集即报越限断电，"同开保持常开"落空），宽限内到位后由
             // ProcessTestingProgress 的 Aging 分支关闭宽限，后续失压按老化正常报警断电。
             bool skipVacuum = _config.SkipVacuum;
-            // 【V1.88.14】秒级口径统一 Ceiling：定格 _sessionDelaySecs 同样 Ceiling 存秒，
+            // 秒级口径统一 Ceiling：定格 _sessionDelaySecs 同样 Ceiling 存秒，
             // Round(0.5s)=0 会把 0.5s 误判成延时0（银行家舍入），Ceiling 不足1秒按1秒等，
             // 现场整数秒不受影响（Ceiling(30)=30），启动与执行两侧口径永远一致。
             bool zeroDelay = !skipVacuum && (int)Math.Ceiling(delayTime.TotalSeconds) <= 0;
@@ -2045,27 +2014,27 @@ namespace AgingTestSystem.Services
                 _testStartTimes[deviceId - 1] = powerOnAtStart
                     ? now : DateTime.MinValue;                       // 启动即上电=计时起点即此刻
                 _sessionDurationSecs[deviceId - 1] = durationSecs;
-                // 【V1.88.14】Ceiling 存秒（见上 zeroDelay 口径注释）：不足1秒按1秒等，
+                // Ceiling 存秒（见上 zeroDelay 口径注释）：不足1秒按1秒等，
                 // 与启动侧判定同口径，0.5s 不会误判成延时0直接双开。
                 _sessionDelaySecs[deviceId - 1] = (int)Math.Ceiling(delayTime.TotalSeconds);
                 _sessionThresholdKPa[deviceId - 1] = thresholdKPa;
-                // 【V1.76】SN/配方启动定格：sn/recipeName 已含断电恢复覆盖（overrideParams），
+                // SN/配方启动定格：sn/recipeName 已含断电恢复覆盖（overrideParams），
                 // 存谁=这轮任务归属谁；中途重绑只改 StationInfo 不动这里（现值/定格分叉点）。
                 _sessionSn[deviceId - 1] = sn ?? "";
                 _sessionRecipe[deviceId - 1] = recipeName ?? "";
                 // 【大扫荡】SkipVacuum 启动定格（进行中的任务不受运行中翻开关/切项目影响）。
                 _sessionSkipVacuum[deviceId - 1] = skipVacuum;
                 _lastAlarmStates[deviceId - 1] = false;              // 清报警边沿，允许重新报警
-                _lossNoted[deviceId - 1] = false;                    // 【V1.67】清失压保持标记
+                _lossNoted[deviceId - 1] = false;                    // 清失压保持标记
                 _readFailCounts[deviceId - 1] = 0;                   // 清通讯失败计数
             }
-            _rules.ResetStation(deviceId);   // 【V1.69】清规则持续计时（旧任务不带到新任务）
+            _rules.ResetStation(deviceId);   // 清规则持续计时（旧任务不带到新任务）
 
             if (skipVacuum || zeroDelay)
             {
                 // 启动即上电：阀照开（管路阀动作保持一致），载台立即上电。
                 // 【大扫荡】写失败清状态再抛（调用方隔离记事件；不清理会"阀没开但已进 Aging 计时"）。
-                // 【V1.88.14】延时0回滚到 Vacuuming 后，下轮 ShouldPowerOn 短路 true（delay≤0 不等真空），
+                // 延时0回滚到 Vacuuming 后，下轮 ShouldPowerOn 短路 true（delay≤0 不等真空），
                 // 立即重试上电，语义与启动双开一致。
                 try
                 {
@@ -2107,7 +2076,7 @@ namespace AgingTestSystem.Services
                 (string.IsNullOrEmpty(displayMode) ? "" : $" 显示模式:{displayMode}"),
                 sn: sn, recipe: recipeName, result: "");
 
-            // 【V1.68】MES 上报：启动事件（触发器 Start；字段按 MesFieldMap 改名；
+            // MES 上报：启动事件（触发器 Start；字段按 MesFieldMap 改名；
             // 开关关闭/触发器未命中时 Report 内部直接返回，零开销）
             try
             {
@@ -2174,7 +2143,7 @@ namespace AgingTestSystem.Services
                     _sessionRecipe[deviceId - 1] = "";
                     _sessionSkipVacuum[deviceId - 1] = false;   // 【大扫荡】SkipVacuum 定格同步清
                 }
-                _rules.ResetStation(deviceId);   // 【V1.69】清规则持续计时
+                _rules.ResetStation(deviceId);   // 清规则持续计时
 
                 string stopSn, stopRecipe;
                 GetEventIdentity(deviceId, out stopSn, out stopRecipe);
@@ -2182,7 +2151,7 @@ namespace AgingTestSystem.Services
                     sn: stopSn, recipe: stopRecipe, result: "");
             }
 
-            // 【V1.30】停止测试后快速跟踪压力回落
+            // 停止测试后快速跟踪压力回落
             StartQuickTracking(deviceIds);
 
             // 送风机生命周期联动（如果是最后一台，这里会停止送风机）
@@ -2196,7 +2165,7 @@ namespace AgingTestSystem.Services
         /// 人工复位（报警/故障/已完成·待取料台复位回到空闲）
         /// 【动作】清除该台的报警边沿 / 测试状态 / 通讯失败计数，
         /// 并确保输出处于安全关闭状态（阀、载台电都 OFF），可重新启动测试。
-        /// 【V1.59】Completed（已完成·待取料）也由本方法复位——语义即"确认取件完毕"。
+        /// Completed（已完成·待取料）也由本方法复位——语义即"确认取件完毕"。
         /// 【设计说明】报警后不自动恢复（真空失效原因未确认前自动重启有风险），
         /// 必须由操作员人工确认复位（设计评审结论）。
         /// </summary>
@@ -2223,9 +2192,9 @@ namespace AgingTestSystem.Services
                     _sessionSkipVacuum[deviceId - 1] = false;   // 【大扫荡】SkipVacuum 定格同步清
                     _readFailCounts[deviceId - 1] = 0;
                     _lastAlarmStates[deviceId - 1] = false;
-                    _lossNoted[deviceId - 1] = false;   // 【V1.67】清失压保持标记
+                    _lossNoted[deviceId - 1] = false;   // 清失压保持标记
                 }
-                _rules.ResetStation(deviceId);   // 【V1.69】清规则持续计时
+                _rules.ResetStation(deviceId);   // 清规则持续计时
 
                 // 复位后保证输出处于安全关闭状态
                 // 【大扫荡】写失败记事件（以前抛异常中断整批复位，后面的台全没复位）。
@@ -2270,7 +2239,7 @@ namespace AgingTestSystem.Services
                     }
                 }
             }
-            // 【V1.67】破空阀同关（完成泄压后阀还开着，复位=确认取件，不残留输出）
+            // 破空阀同关（完成泄压后阀还开着，复位=确认取件，不残留输出）
             if (!otherCompleted) TurnOffVentValve();
 
             // 把缓存里这些台的状态改为空闲，并清掉上次测试结果标记
@@ -2302,7 +2271,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// MES 通用字段（【V1.68 新增】time/lot/device/project；各事件再加自己的字段）。
+        /// MES 通用字段（time/lot/device/project；各事件再加自己的字段）。
         /// </summary>
         private Dictionary<string, string> MesCommonFields(int deviceId)
         {
@@ -2315,7 +2284,7 @@ namespace AgingTestSystem.Services
             };
         }
         /// <summary>
-        /// 组装规则变量表（【V1.69 新增】三期：一次快照，多处复用——自定义报警 + 完成表达式）。
+        /// 组装规则变量表（三期：一次快照，多处复用——自定义报警 + 完成表达式）。
         /// 传感器不可用 → NaN（表达式里含它的比较恒 false，不误报，见 RuleExpr 注释）；
         /// 未上电 → agesecs=0；数组越界防御（防火墙同思路）。
         /// </summary>
@@ -2373,13 +2342,13 @@ namespace AgingTestSystem.Services
                 { "threshold", threshold },
                 { "di0", di0 },
                 { "hour", (double)now.Hour },
-                // 【V1.74】current=本工位载台电流A（无表=NaN，比较恒 false，不误报）
+                // current=本工位载台电流A（无表=NaN，比较恒 false，不误报）
                 { "current", (data != null && !float.IsNaN(data.LoadCurrentA)) ? (double)data.LoadCurrentA : double.NaN }
             };
         }
 
         /// <summary>
-        /// 读工位 SN/配方（【V1.68 新增】MES 上报用；无则空串，不抛异常）。
+        /// 读工位 SN/配方（MES 上报用；无则空串，不抛异常）。
         /// </summary>
         private void GetStationSnRecipe(int deviceId, out string sn, out string recipe)
         {
@@ -2401,8 +2370,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 事件行 SN/配方口径决策（【V1.76 新增】纯函数：CSV/报表/MES 三处统一走它）。
-        ///
+        /// 事件行 SN/配方口径决策（纯函数：CSV/报表/MES 三处统一走它）。
         /// 【为什么要抽纯函数】"定格还是现值"是个分支，不抽出来就散落在 20 个调用点，
         /// 改一次口径要改 20 处（家规：判定类分支先写纯函数，DeviceManager 只做执行）。
         /// - RecordTime（现状）：永远取现值（事件瞬间绑定的 SN/配方）；
@@ -2437,7 +2405,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 取某工位事件行的 SN/配方（【V1.76 新增】执行侧：快照读 + 现值读 + 纯函数决策三步）。
+        /// 取某工位事件行的 SN/配方（执行侧：快照读 + 现值读 + 纯函数决策三步）。
         /// 锁顺序与 SaveSessionSnapshot 一致（先 _stateLock 后 _stationInfoLock），不死锁。
         /// </summary>
         private void GetEventIdentity(int deviceId, out string sn, out string recipe)
@@ -2459,7 +2427,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 关闭破空阀（【V1.67 新增】完成泄压是"开着保持"，复位/启动/急停时统一关闭，
+        /// 关闭破空阀（完成泄压是"开着保持"，复位/启动/急停时统一关闭，
         /// 不残留输出。点位未配置（=0）直接跳过，绝不写未知通道）。
         /// </summary>
         private void TurnOffVentValve()
@@ -2476,9 +2444,8 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 下料判定（【V1.67 新增】Q22 PendingReview 配套：到时标"待判定"的台，
+        /// 下料判定（Q22 PendingReview 配套：到时标"待判定"的台，
         /// 下料时人工录 PASS/FAIL + 不良代码 + 处置）。
-        ///
         /// 【流程】只收"已完成·待取料(Completed)"的台 → 逐台写"下料判定"事件
         /// （判定结果/不良代码/处置/SN 全进 CSV，追溯靠历史查询）→ 调 ResetDevices
         /// 回空闲（= 确认取件，面板清掉待判定）。
@@ -2529,14 +2496,14 @@ namespace AgingTestSystem.Services
                         continue;
                     }
                     string result = pass ? "PASS" : "FAIL";
-                    // 【V1.76】快照在完成时已清，这里天然回退现值（产品还在台上，值一致）；
+                    // 快照在完成时已清，这里天然回退现值（产品还在台上，值一致）；
                     // 详情里的 SN 字串摘除（SN 列已结构化，详情只留判定三要素）。
                     string ujSn, ujRecipe;
                     GetEventIdentity(deviceId, out ujSn, out ujRecipe);
                     TestEventLogger.Write(_currentLotNumber, deviceId, "下料判定",
                         $"判定={result} 不良代码:{defectCode} 处置:{disposition}",
                         sn: ujSn, recipe: ujRecipe, result: result);
-                    // 【V1.68】MES 上报：下料判定事件（触发器 UnloadJudge）
+                    // MES 上报：下料判定事件（触发器 UnloadJudge）
                     try
                     {
                         var ujFields = MesCommonFields(deviceId);
@@ -2602,8 +2569,8 @@ namespace AgingTestSystem.Services
                     _sessionRecipe[i] = "";
                     _sessionSkipVacuum[i] = false;   // 【大扫荡】SkipVacuum 定格同步清
                     _lastAlarmStates[i] = false;
-                    _lossNoted[i] = false;   // 【V1.67】清失压保持标记
-                    _rules.ResetStation(i + 1);   // 【V1.69】清规则持续计时
+                    _lossNoted[i] = false;   // 清失压保持标记
+                    _rules.ResetStation(i + 1);   // 清规则持续计时
                 }
             }
 
@@ -2668,8 +2635,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 获取当前正在测试的工位号列表（【V1.66 新增】超温全线联停用）。
-        ///
+        /// 获取当前正在测试的工位号列表（超温全线联停用）。
         /// 【为什么单开一个方法】调用方（MainForm 超温联停）要的是"id 列表"而不是
         /// bool 向量，用 GetTestingStates 再自己转一遍也行，但"在测 id"是个稳定业务概念，
         /// 值得一个名字。返回副本，调用方随便改不影响内部状态。
@@ -2690,7 +2656,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 各阶段实时台数（【V1.70 新增】工艺策略窗节点计数用）。
+        /// 各阶段实时台数（工艺策略窗节点计数用）。
         /// 在测按子阶段拆抽真空/老化计时；完成/故障/空闲读缓存状态（与面板显示一致口径）。
         /// 两把锁分开取（先状态后缓存），1 秒级刷新 wink 一下不同步无所谓，不持双锁防死锁。
         /// </summary>
@@ -2762,12 +2728,11 @@ namespace AgingTestSystem.Services
         private const int OnlineFreshnessSeconds = 10;
 
         // =====================================================================
-        // 【V1.59 新增】断电恢复：快照落盘 / 恢复重测 / 放弃恢复
+        // 断电恢复：快照落盘 / 恢复重测 / 放弃恢复
         // =====================================================================
 
         /// <summary>
         /// 把"当前所有在测任务"快照到 TestSession.json（内部各状态变化点调用）
-        ///
         /// 【实现说明】在测清单为空时等价于 Clear（删除文件），调用方无需区分。
         /// 写文件失败静默（存储类异常不能拖垮采集/编排主链路）。
         /// </summary>
@@ -2801,7 +2766,7 @@ namespace AgingTestSystem.Services
                             DurationSeconds = _sessionDurationSecs[i],
                             DelaySeconds = _sessionDelaySecs[i],
                             AlarmThresholdKPa = _sessionThresholdKPa[i],
-                            // 【V1.67】续跑需要：中断时的子阶段 + 上电时刻（锁内读，与定格参数同一快照）
+                            // 续跑需要：中断时的子阶段 + 上电时刻（锁内读，与定格参数同一快照）
                             Phase = (int)_testPhases[i],
                             PowerOnTime = _testStartTimes[i]
                         });
@@ -2838,10 +2803,9 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 断电恢复：把快照里的在测工位重新投入测试（用户选定的策略）
-        ///
-        /// 【V1.59 整台重测】断电期间载台已断电、产品状态未知，老化数据不连续
+        /// 断电期间载台已断电、产品状态未知，老化数据不连续
         /// （行业通识 + 设计评审结论）。参数用快照里定格的值，批号一并写回保证追溯连贯。
-        /// 【V1.67 续跑】PowerLossPolicy=ResumeRemaining 时：Aging 阶段中断的台
+        /// PowerLossPolicy=ResumeRemaining 时：Aging 阶段中断的台
         /// 按"中断时刻的剩余时长"补足（断电期间不计入老化）；但真空必须重抽
         /// （断电后管路已泄压，不重抽就上电=安全事故，所以一律重新开阀走 Vacuuming）。
         /// Vacuuming 阶段中断 / 老快照无阶段字段 → 整段重跑（安全回退）。
@@ -2893,7 +2857,7 @@ namespace AgingTestSystem.Services
                     else
                     {
                         // 用快照参数重新走完整启动流程（开阀→抽真空→延时→上电→满时长老化；
-                        // 【V1.88.14】快照延时=0 的台同样阀电同开直接计时，与正常启动一致）
+                        // 快照延时=0 的台同样阀电同开直接计时，与正常启动一致）
                         StartSingleTestCore(station.DeviceId, station);
                     }
                     recoveredCount++;
@@ -2912,7 +2876,7 @@ namespace AgingTestSystem.Services
                     catch { }
                 }
             }
-            // 【V1.62】脏快照里可能混着 null 台（上轮循环已跳过 null）：
+            // 脏快照里可能混着 null 台（上轮循环已跳过 null）：
             // ConvertAll 直接取 s.DeviceId 会空引用，这里只收有效台的编号
             // （StartQuickTracking 本身也会忽略非法编号，双保险）。
             var validIds = new List<int>();
@@ -2970,7 +2934,7 @@ namespace AgingTestSystem.Services
             {
                 _ioController.WriteOutputs(outputIds.ToArray(), states.ToArray());
             }
-            // 【V1.67】破空阀同关（放弃恢复不残留任何输出）
+            // 破空阀同关（放弃恢复不残留任何输出）
             // 【大扫荡】移出 if：以前包在"有输出可写"里，脏快照全非法→阀不关。
             TurnOffVentValve();
 
@@ -3008,8 +2972,6 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 执行数据采集（主循环）
-        ///
-        /// 【V1.10 改动】
         /// 1) 通讯失败不再简单 continue：连续失败达到阈值 → 触发"通讯故障报警"
         /// 2) 报警判定增强：压力越限 / 真空建立超时 / （可选）DI 报警触点
         /// 3) 测试中且未报警的台 → 状态置"测试中"
@@ -3042,16 +3004,16 @@ namespace AgingTestSystem.Services
 
                 DateTime now = DateTime.Now;
 
-                // 【V1.69】规则配置同步（两次字符串比较，配置没变零开销；变了自动重编+清计时）
+                // 规则配置同步（两次字符串比较，配置没变零开销；变了自动重编+清计时）
                 _rules.UpdateRules(_config.CustomAlarmRules, _config.CompleteExpression);
 
-                // 【V1.62 防火墙】只处理前 TotalBarometers 个位置：
+                // 只处理前 TotalBarometers 个位置：
                 // 内置读取器返回数组长度恒等于总数；若某个读取器实现返回更长的数组，
                 // 超出的位置会先把 _readFailCounts[i] 等状态数组索引越界（越界检查在后）。
                 // 【大扫荡】循环按总数走：短数组尾部视同通讯失败（失败计数照涨，
                 // 以前尾部既不成功也不失败，缓存永久 stale，失联报警也出不来）。
                 int laneCount = _config.TotalBarometers;
-                // ===== 3.6) 回填载台电流（【V1.74 新增】Q2 通用骨架） =====
+                // ===== 3.6) 回填载台电流（Q2 通用骨架） =====
                 // 与 2)/3) 同位置：真实气压表不上报电流，由上位机电表回填。
                 // - 未启用/未连接/读失败 → NaN（无数据，不参与任何判定，追溯不断）；
                 // - 越界防御：电表实现返回短数组时只填能对上的路（防火墙同思路）。
@@ -3070,7 +3032,7 @@ namespace AgingTestSystem.Services
                     // 短数组：位置 i 无数据，视同该台本轮读取失败。
                     BarometerData data = i < allData.Length ? allData[i] : null;
 
-                    // 【V1.62 防火墙】上报 id 必须与轮询位置一致（内置实现恒一致）。
+                    // 上报 id 必须与轮询位置一致（内置实现恒一致）。
                     // 不一致说明读取器实现有 bug：IsAlarm 用上报 id 查状态数组、
                     // 缓存却按位置 id 读写，会状态分裂甚至越界。本轮跳过该台
                     // （缓存保留上轮值），不计通讯失败（不是通讯问题）。
@@ -3106,7 +3068,7 @@ namespace AgingTestSystem.Services
                             {
                                 // 测试中的台失联：关阀 + 断电 + 标故障
                                 //（失压未知，安全起见断电；面板显示报警色）
-                                // 【V1.59】设备责任：不判产品 FAIL，结果记"设备异常"
+                                // 设备责任：不判产品 FAIL，结果记"设备异常"
                                 HandleAlarm(deviceId, "通讯故障（连续读取失败）", productRelated: false, vacuumCause: false);
                                 lock (_cacheLock)
                                 {
@@ -3169,7 +3131,7 @@ namespace AgingTestSystem.Services
                         data.LoadCurrentA = float.NaN;
                     }
 
-                    // ===== 3.5) 叠加工位静态信息（【V1.19.11 新增】） =====
+                    // ===== 3.5) 叠加工位静态信息（） =====
                     // 真实气压表只上报压力，SN / 配方 / 延时需由上位机维护
                     // （ID 绑定扫码/手动录入 SN、工位设置窗口录入配方/延时）。
                     // 这里把 _stationInfo 里存的静态信息覆盖到采集数据上，
@@ -3214,7 +3176,7 @@ namespace AgingTestSystem.Services
                     // 原因：未测试的台（阀关着）压力是常压（接近 0kPa），
                     // 按"压力 > 阈值"判定必然越限，但这是正常状态，不是报警。
                     // 报警联动（关阀+断电）只对测试中的台有意义。
-                    // 【V1.59】提前读取上一轮缓存中需要延续的标记（在状态分支之前）：
+                    // 提前读取上一轮缓存中需要延续的标记（在状态分支之前）：
                     // - Completed（已完成·待取料）/ Fault（报警）：保留到人工复位/重新扫码；
                     // - LastTestResult（PASS/FAIL/设备异常）：保留到复位。
                     // 每个采集周期的 data 都是读取器新建的对象，不主动延续的话
@@ -3235,11 +3197,11 @@ namespace AgingTestSystem.Services
                     bool isAlarm = false;
                     if (isTesting)
                     {
-                        // 【V1.67】带原因的分类（Q19 责任策略与 Q11 失压策略的前置输入）
+                        // 带原因的分类（Q19 责任策略与 Q11 失压策略的前置输入）
                         AlarmClassification classified = ClassifyAlarm(data);
                         isAlarm = classified.IsAlarm;
 
-                        // 【V1.67】老化中失压 KeepRunning：Aging 阶段的真空类报警只记事件、不停机
+                        // 老化中失压 KeepRunning：Aging 阶段的真空类报警只记事件、不停机
                         // （抽真空阶段的真空建立失败不在此列：phase==Vacuuming 照常报警，
                         // 否则阀开了永不上电、无限空等，操作员还被蒙在鼓里）。
                         // 当轮按"正常测试中"走：状态 Testing、计时继续推进。
@@ -3255,7 +3217,7 @@ namespace AgingTestSystem.Services
                         if (inAgingPhase)
                         {
                             isAlarm = false;
-                            // 【V1.76】身份先拍照再进锁（GetEventIdentity 自己取 _stateLock，
+                            // 身份先拍照再进锁（GetEventIdentity 自己取 _stateLock，
                             // 锁内调虽不会死锁（同线程可重入），但先拍更干净）。
                             string lossSn, lossRecipe;
                             GetEventIdentity(deviceId, out lossSn, out lossRecipe);
@@ -3279,7 +3241,7 @@ namespace AgingTestSystem.Services
                                 _lossNoted[deviceId - 1] = false;
                             }
 
-                            // 【V1.69】自定义报警规则（只在内置没报警时评估；触发→产品 FAIL 联动，
+                            // 自定义报警规则（只在内置没报警时评估；触发→产品 FAIL 联动，
                             // 与内置走同一个边沿（_lastAlarmStates 共用，进一次出一次，不重复下发）。
                             // 规则求值错 → 按不触发 + 边沿记一条日志（LastError 去重，不刷屏）。
                             string customRule = null;
@@ -3313,9 +3275,9 @@ namespace AgingTestSystem.Services
                                     // 写 CSV + 快照落盘全顶在状态锁上）：锁可重入不死锁，
                                     // 但一次报警卡住全部状态访问，72 台齐报时串行放大。
                                     // （失联分支一直是锁外调，两处现已一致。）
-                                    // 【V1.59】压力类报警（越限/真空建立失败）= 产品责任
-                                    // 【V1.67】Q19：真空类按 VacuumFailKind 记 FAIL/装夹异常
-                                    // 【V1.69】自定义规则 = 产品相关但非真空类 → 永远 FAIL
+                                    // 压力类报警（越限/真空建立失败）= 产品责任
+                                    // Q19：真空类按 VacuumFailKind 记 FAIL/装夹异常
+                                    // 自定义规则 = 产品相关但非真空类 → 永远 FAIL
                                     // （HandleAlarm 内部会退出测试态并把结果写入缓存；
                                     //   这里同步给本轮广播数据，面板当轮就能显示）
                                     _lastAlarmStates[deviceId - 1] = true;
@@ -3356,7 +3318,7 @@ namespace AgingTestSystem.Services
                     {
                         // 非测试的台：延续完成态/故障态标记；其余情况覆盖读取器对常压
                         // （接近 0kPa）的"压力越限"误判，恢复为空闲。
-                        // 【V1.59】Fault 也延续（prev.Status==Fault 只有报警/失联写过）：
+                        // Fault 也延续（prev.Status==Fault 只有报警/失联写过）：
                         // 否则报警台退出测试后下一轮就被冲成 Idle，面板上故障
                         // "闪一帧"即逝，操作员根本看不到（V1.10 以来的既有瑕疵）。
                         // Fault/Completed/结果标记都持续到人工复位或重新扫码才清除。
@@ -3384,7 +3346,7 @@ namespace AgingTestSystem.Services
                 {
                     foreach (var data in allData)
                     {
-                        // 【V1.62 防火墙】只收合法编号的数据进缓存（与逐台循环的 id 一致性
+                        // 只收合法编号的数据进缓存（与逐台循环的 id 一致性
                         // 检查呼应）：上报 id 非法的脏数据不许污染缓存，避免按位置读缓存
                         // 的面板/快照拿到错台数据。
                         if (data != null && data.DeviceId >= 1 && data.DeviceId <= _config.TotalBarometers)
@@ -3448,16 +3410,15 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 处理测试中的进度（【V1.59】三阶段状态机：抽真空 → 上电老化计时 → 到时完成）
+        /// 处理测试中的进度（三阶段状态机：抽真空 → 上电老化计时 → 到时完成）
         /// 仅在"测试中且未报警"时由采集循环调用。
-        ///
         /// 【阶段推进逻辑】（判定函数在 <see cref="AgingSequencer"/>，本方法只负责执行）
         /// - Vacuuming：等「压力到位」且「距开阀 ≥ 延时时间」（两者自然取较晚；
-        ///   【V1.88.14】延时≤0 的台 ShouldPowerOn 短路 true，首轮即上电——正常启动走不到这里，
+        ///   延时≤0 的台 ShouldPowerOn 短路 true，首轮即上电——正常启动走不到这里，
         ///   只覆盖"启动上电写失败回滚后重试"的路径）；
         ///   压力首次到位时记"真空建立"事件；到位前超时由 IsAlarm 判真空建立失败报警；
         ///   条件满足 → 载台上电 → Aging，老化计时起点 = 此刻。
-        /// - Aging：【V1.88.14】延时=0 的台启动即进 Aging 且确认宽限仍开着，
+        /// - Aging：延时=0 的台启动即进 Aging 且确认宽限仍开着，
         ///   压力首次到位时关闭宽限并记"真空建立"事件（之后失压按老化正常报警）；
         ///   到配方定格时长 → 自动完成（下电+关阀+PASS·待取料）。
         /// </summary>
@@ -3475,7 +3436,7 @@ namespace AgingTestSystem.Services
 
             bool powerOnNow = false;   // 锁内决策、锁外执行 IO
             bool completeNow = false;
-            bool completeByRule = false;   // 【V1.69】完成表达式触发（与时长到取或，只能提前）
+            bool completeByRule = false;   // 完成表达式触发（与时长到取或，只能提前）
 
             lock (_stateLock)
             {
@@ -3510,7 +3471,7 @@ namespace AgingTestSystem.Services
 
                     case AgingPhase.Aging:
                     {
-                        // ---- 【V1.88.14】延时=0 启动即进 Aging，确认宽限还开着：
+                        // ---- 延时=0 启动即进 Aging，确认宽限还开着：
                         // 压力首次到位 = 真空已建立，关闭宽限并记事件，之后失压按老化正常报警。
                         // （延时>0 / SkipVacuum 的台到这里时宽限早已是 MinValue，此分支恒跳过。）
                         if (_vacuumConfirmTimes[idx] != DateTime.MinValue && inRange)
@@ -3538,7 +3499,7 @@ namespace AgingTestSystem.Services
                 }
             }
 
-            // 【V1.69】完成表达式 OR（锁外求值：BuildRuleVars 自己取锁，不持锁调）：
+            // 完成表达式 OR（锁外求值：BuildRuleVars 自己取锁，不持锁调）：
             // 未配置/求值错 → false（按内置时长走）；成立 → 提前完成。
             // 只能提前不能拖后——烧屏架少点亮比多点亮安全（过老化+火灾风险），方向是加严。
             if (!completeNow)
@@ -3598,14 +3559,14 @@ namespace AgingTestSystem.Services
                 string pwSn, pwRecipe;
                 GetEventIdentity(deviceId, out pwSn, out pwRecipe);
                 TestEventLogger.Write(_currentLotNumber, deviceId, "上电",
-                    // 【V1.88.14】延时=0 的台走不到启动双开才到这里——只有"启动上电写失败回滚后重试"
+                    // 延时=0 的台走不到启动双开才到这里——只有"启动上电写失败回滚后重试"
                     // 这一种（ShouldPowerOn 短路 true），文案区分开，免得日志里"真空确认"对不上。
                     (_sessionDelaySecs[idx] <= 0
                         ? $"延时=0 直接上电（重试成功），载台上电开始老化（时长 {durationText}）"
                         : $"真空确认+延时时间到，载台上电开始老化（时长 {durationText}）"),
                     currentA: float.IsNaN(data.LoadCurrentA) ? (float?)null : data.LoadCurrentA,
                     sn: pwSn, recipe: pwRecipe, result: "");
-                // 【V1.67】上电=计时起点落定：快照一次（含 Phase=Aging + 上电时刻，
+                // 上电=计时起点落定：快照一次（含 Phase=Aging + 上电时刻，
                 // 断电续跑就靠这份快照算剩余时长；边沿一次，非每轮写盘）
                 SaveSessionSnapshot();
             }
@@ -3615,7 +3576,7 @@ namespace AgingTestSystem.Services
                 CompleteDeviceInternal(deviceId,
                     completeByRule ? "自定义完成条件触发" : "老化时长到");
 
-                // 【V1.59 关键】同步修正本轮广播数据：状态分支在本轮早于完成动作执行，
+                // 同步修正本轮广播数据：状态分支在本轮早于完成动作执行，
                 // data.Status 还是 Testing；若不改回来，本轮末尾"批量更新缓存"会用
                 // Testing 覆盖 CompleteDeviceInternal 刚写入缓存的 Completed/判定结果，
                 // 导致"已完成·待取料"只存活不到一个采集周期就被冲掉（面板闪一下即逝）。
@@ -3625,7 +3586,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 完成单台老化（内部方法，供老化到时自动完成调用）【V1.59 新增语义】
+        /// 完成单台老化（内部方法，供老化到时自动完成调用）
         /// 【动作】断载台电 + 关真空阀 → 状态置"已完成·待取料(Completed)" +
         /// 结果标 PASS（全程无报警才会走到这里）→ 记日志 → 快照落盘。
         /// 【为什么不回空闲】操作员需要一眼区分"没投料"和"测完该取件"，
@@ -3637,8 +3598,8 @@ namespace AgingTestSystem.Services
         /// <param name="reason">完成原因描述</param>
         private void CompleteDeviceInternal(int deviceId, string reason)
         {
-            // 【V1.68】MES 上报先拍照：时长定格值在下面被清零；
-            // 【V1.76】SN/配方同口径拍照（GetEventIdentity：定格/现值由开关定），CSV 与 MES 共用。
+            // MES 上报先拍照：时长定格值在下面被清零；
+            // SN/配方同口径拍照（GetEventIdentity：定格/现值由开关定），CSV 与 MES 共用。
             int doneDuration = 0;
             string doneSn, doneRecipe;
             lock (_stateLock) { doneDuration = _sessionDurationSecs[deviceId - 1]; }
@@ -3664,7 +3625,7 @@ namespace AgingTestSystem.Services
                     _sessionSkipVacuum[deviceId - 1] = false;   // 【大扫荡】SkipVacuum 定格同步清
             }
 
-            // 记录完成事件（【V1.67】Q22 策略化：AutoPass=标PASS（现状）；
+            // 记录完成事件（Q22 策略化：AutoPass=标PASS（现状）；
             // PendingReview=标"待判定"，下料时人工录 PASS/FAIL+不良代码+处置）
             string judgeResult = GetCompletionJudgeResult();
             TestEventLogger.Write(_currentLotNumber, deviceId, "完成",
@@ -3682,7 +3643,7 @@ namespace AgingTestSystem.Services
                 }
             }
 
-            // 【V1.68】MES 上报：完成事件（触发器 Complete）
+            // MES 上报：完成事件（触发器 Complete）
             try
             {
                 var doneFields = MesCommonFields(deviceId);
@@ -3696,7 +3657,7 @@ namespace AgingTestSystem.Services
             }
             catch { /* 上报永不阻断完成 */ }
 
-            // 【V1.67】完成动作策略（Q6/Q15）：蜂鸣提醒 / 破空泄压
+            // 完成动作策略（Q6/Q15）：蜂鸣提醒 / 破空泄压
             // - Beep：PC 蜂鸣一声（无硬件要求；无音频设备时静默跳过，不抛异常）；
             // - Vent：开破空阀泄压（关阀≠泄压，残压还在徒手可能拿不下）。
             //   点位未配置（VentValveDoPoint=0）只记日志跳过——绝不写坏未知通道。
@@ -3709,7 +3670,7 @@ namespace AgingTestSystem.Services
                     try { Console.Beep(880, 400); }
                     catch { /* 无音频设备时静默跳过 */ }
                 }
-            // 【V1.73】开关未开（VentValveEnabled=false，本机无阀）同样只记日志跳过：
+            // 开关未开（VentValveEnabled=false，本机无阀）同样只记日志跳过：
             // 保存时校验已拦泄压组合，这里是纵深防御（老 Policy.json 残留泄压动作也不写 DO）。
                 if (action == CompletionAction.PowerOffAndVent
                     || action == CompletionAction.PowerOffVentAndBeep)
@@ -3739,7 +3700,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 本次完成的判定结果（【V1.67 新增】Q22 策略）：
+        /// 本次完成的判定结果（Q22 策略）：
         /// AutoPass → "PASS"（现状）；PendingReview → "待判定"（下料人工录）。
         /// </summary>
         private string GetCompletionJudgeResult()
@@ -3753,7 +3714,7 @@ namespace AgingTestSystem.Services
         /// 【设计说明】
         /// - 只在进入报警的边沿触发一次（调用方保证）
         /// - 报警后不自动恢复，需要人工复位（ResetDevices）后再重新测试
-        /// 【V1.59 责任分类】productRelated 决定结果口径：
+        /// productRelated 决定结果口径：
         /// - true  = 产品相关（压力越限/真空建立失败/DI 触点）→ LastTestResult="FAIL"；
         /// - false = 设备异常（气压表通讯失联）→ LastTestResult="设备异常"，不判产品不合格，
         ///   避免设备问题拉低产品直通率、冤枉良品。
@@ -3790,7 +3751,7 @@ namespace AgingTestSystem.Services
                     sn: "", recipe: "", result: "");
             }
 
-            // 【V1.76】身份先拍照：下面清掉快照，CSV 与 MES 共用同一份（定格/现值由开关定）
+            // 身份先拍照：下面清掉快照，CSV 与 MES 共用同一份（定格/现值由开关定）
             string almSn, almRecipe;
             GetEventIdentity(deviceId, out almSn, out almRecipe);
 
@@ -3810,7 +3771,7 @@ namespace AgingTestSystem.Services
                     _sessionSkipVacuum[deviceId - 1] = false;   // 【大扫荡】SkipVacuum 定格同步清
             }
 
-            // 结果标记（【V1.67】Q19 策略化：真空类报警按 VacuumFailKind 记 FAIL/装夹异常；
+            // 结果标记（Q19 策略化：真空类报警按 VacuumFailKind 记 FAIL/装夹异常；
             // 缺省 ProductFail 时与原来逐字一致；DI 与失联口径不受策略影响）
             string result = AgingSequencer.MapAlarmResult(
                 productRelated, vacuumCause, _config.VacuumFailKind);
@@ -3835,7 +3796,7 @@ namespace AgingTestSystem.Services
                 }
             }
 
-            // 【V1.68】MES 上报：报警事件（触发器 Alarm；含压力值供 MES 侧漏气分析）
+            // MES 上报：报警事件（触发器 Alarm；含压力值供 MES 侧漏气分析）
             try
             {
                 var almFields = MesCommonFields(deviceId);
@@ -3871,7 +3832,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 获取某台最近一次的电流值（【V1.74 新增】用于报警/完成日志；无缓存或无数据返回 null，
+        /// 获取某台最近一次的电流值（用于报警/完成日志；无缓存或无数据返回 null，
         /// CSV 记空。NaN 在这里转 null——CSV 里不写"NaN"字样，见 TestEventLogger 注释）。
         /// </summary>
         private float? GetDeviceLastCurrent(int deviceId)
@@ -3889,24 +3850,23 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 压力是否越限（失压 / 超抽）
-        ///
         /// 【判定规则】（单位 kPa，与气压表读数一致，V1.19.9 由 Pa 改为 kPa）
         /// - AlarmWhenPressureHigherThanThreshold=true（默认）：压力 > 阈值 → 报警
         ///   真空压力为负，数值越大（越接近 0）真空越差，触发失压报警
         /// - false：压力 &lt; 阈值 → 报警（扩展用）
-        /// 【V1.59】阈值由调用方传入：测试中的台用"定格的本次任务阈值"
+        /// 阈值由调用方传入：测试中的台用"定格的本次任务阈值"
         /// （配方负压值优先、全局兜底），使不同产品可按各自工艺要求判定。
         /// </summary>
         private bool PressureOutOfRange(decimal pressureKPa, decimal thresholdKPa)
         {
-            // 【V1.62】判定口径收拢进 AgingSequencer.IsPressureOutOfRange，
+            // 判定口径收拢进 AgingSequencer.IsPressureOutOfRange，
             // 本方法只剩"取配置方向后转调"（行为与原来逐字一致）。
             return AgingSequencer.IsPressureOutOfRange(
                 pressureKPa, thresholdKPa, _config.AlarmWhenPressureHigherThanThreshold);
         }
 
         /// <summary>
-        /// 报警分类结果（【V1.67 新增】Q19/Q11 策略化的前置：先分清"真空类"还是"设备类"，
+        /// 报警分类结果（Q19/Q11 策略化的前置：先分清"真空类"还是"设备类"，
         /// 策略才知道该不该插手）。
         /// - 真空类（压力越限 / 真空建立失败）→ Q19 责任策略、Q11 失压策略可干预；
         /// - 非真空类（通讯失联 / DI 触点）→ 策略不碰：失联永远"设备异常"，
@@ -3925,7 +3885,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 综合报警分类（【V1.67 新增】IsAlarm 的"带原因版"；IsAlarm 转调本方法，
+        /// 综合报警分类（IsAlarm 的"带原因版"；IsAlarm 转调本方法，
         /// 判定口径只有一份，行为与原来逐字一致）。
         /// </summary>
         private AlarmClassification ClassifyAlarm(BarometerData data)
@@ -3967,7 +3927,7 @@ namespace AgingTestSystem.Services
             // 压力越限判断（按该台的有效阈值）
             bool pressureAlarm = PressureOutOfRange(data.VacuumPressure, threshold);
 
-            // 【V1.69】跳过抽真空 = 无真空治具（机械夹具）：没真空就没压力信号，
+            // 跳过抽真空 = 无真空治具（机械夹具）：没真空就没压力信号，
             // 压力越限恒为"误报"，直接豁免（DI 触点/失联不受影响，照常报警）。
             // 配错在真空架上开本开关 = 真空保护全丢，启动日志已大写警告，责任在配置不在代码。
             if (skipVacuum) pressureAlarm = false;
@@ -4023,19 +3983,16 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 综合报警判定（【V1.10 增强】【V1.59 责任分类】）
-        ///
+        /// 综合报警判定（）
         /// 报警来源与责任归属（决定 LastTestResult 的 FAIL 口径）：
         /// 1) 压力越限（失压 / 超抽）——【产品相关】漏气/没放好 → FAIL
         /// 2) 真空建立超时：抽真空阶段宽限窗口内压力始终未到位——【产品相关】→ FAIL
         /// 3) （可选，配置 UseDiAlarmContact）气压表硬件报警触点——【产品相关】→ FAIL
         /// （通讯失联报警在 CollectData 的 data==null 分支处理，属【设备异常】不判产品 FAIL）
-        ///
         /// 【真空确认宽限说明】
         /// 刚开阀时压力还接近常压，处于"越限"状态是正常的（真空需要时间建立）。
         /// 所以在确认窗口内不按压力报警；超时还没建立才报警。
-        ///
-        /// 【V1.67】本方法只剩"转调 ClassifyAlarm 取是否报警"（行为逐字一致）；
+        /// 本方法只剩"转调 ClassifyAlarm 取是否报警"（行为逐字一致）；
         /// 需要原因的调用方（CollectData 边沿/失压策略）直接调 ClassifyAlarm。
         /// </summary>
         private bool IsAlarm(BarometerData data)
@@ -4045,7 +4002,7 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 生成报警原因描述（用于日志 / 显示）
-        /// 【V1.59】阈值取该台的定格值（配方优先），与实际判定一致便于现场对数
+        /// 阈值取该台的定格值（配方优先），与实际判定一致便于现场对数
         /// </summary>
         private string GetAlarmReason(BarometerData data)
         {
@@ -4074,7 +4031,7 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 释放资源的实际实现
-        /// 【V1.10】补上送风机的退订 / 断开 / 定时器释放（均 null 判空）
+        /// 补上送风机的退订 / 断开 / 定时器释放（均 null 判空）
         /// </summary>
         protected virtual void Dispose(bool disposing)
         {
@@ -4127,7 +4084,7 @@ namespace AgingTestSystem.Services
                     _quickTrackTimer?.Stop();
                     _quickTrackTimer?.Dispose();
 
-                    // 【V1.68】停 MES 后台发送线程（最多等2秒，不拖退出）
+                    // 停 MES 后台发送线程（最多等2秒，不拖退出）
                     if (_mes != null) { try { _mes.Dispose(); } catch { } }
                 }
             }

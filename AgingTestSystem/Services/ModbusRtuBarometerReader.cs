@@ -11,11 +11,9 @@ namespace AgingTestSystem.Services
 {
     /// <summary>
     /// 气压表通讯实现（Modbus RTU / RS485）
-    /// 
     /// 适用场景：
     /// - 气压表通过 RS485 转 USB 接入工控机
     /// - 上位机作为 Modbus 主站，定时轮询 1~N 个从站地址读取压力值
-    /// 
     /// 设计要点（给新手看的）：
     /// 1) SerialPort 不是线程安全的：同一时刻只允许一个线程读/写串口。
     ///    因此这里用 _syncRoot 做互斥锁，保证 Modbus 请求不会并发。
@@ -30,12 +28,10 @@ namespace AgingTestSystem.Services
     {
         /// <summary>
         /// 串口/主站对象的互斥锁
-        /// 
         /// 为什么需要锁：
         /// - SerialPort 不是线程安全的
         /// - NModbus 的 Master 也不应该在多线程同时发请求
         /// - 如果并发读写，会导致帧交叉，出现 CRC 错误、超时、甚至串口假死
-        /// 
         /// 本项目里，采集是在 DeviceManager 的定时器线程里进行，
         /// 正常情况下不会有并发；但保留锁可以防止后续扩展（比如手动读某一路）造成并发问题。
         /// </summary>
@@ -202,7 +198,6 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 组装本次连接要尝试的候选端口列表（端口识别核心）
-        ///
         /// 顺序约定（越靠前越优先）：
         ///   1) 上次连接成功的端口（_cachedPort，程序重启后从磁盘缓存 BarometerPort.cache 恢复）
         ///      ——这就是"工控机记忆"：每台工控机优先用自己上次连上的端口，连不上再回落下面的搜索，
@@ -254,7 +249,6 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 读取磁盘缓存的上次连接成功的气压表串口
         /// 缓存文件位置：程序 exe 所在目录下的 <see cref="PortCacheFileName"/>（内容 = 一行端口文本）。
-        ///
         /// 【失效判定（"缓存端口连接失败 → 重新找"）】
         /// 缓存端口必须"当前系统里仍然存在"才有效：
         /// 设备被拔掉 / 换了 USB 插口 / 换了电脑导致 COM 号变化 → 缓存端口已不在系统串口列表里
@@ -366,7 +360,7 @@ namespace AgingTestSystem.Services
 
                 // 4) 寄存器值到压力值的转换（以 Demo 为准）
                 //    - 压力原始值按有符号 short 解释（0xFFFE → -2，支持负压）
-                //    - 【V1.16.1 修复】小数位固定用配置默认值（BarometerDefaultDecimalPlaces=1），
+                //    - 小数位固定用配置默认值（BarometerDefaultDecimalPlaces=1），
                 //      不再读设备 0x0002 —— 现场实测该寄存器不可靠（72 台中 46 台返回 0，
                 //      但仪表实际按 1 位小数显示），按 0 位小数换算会把压力显示错 10 倍
                 //      （如仪表显示 -5.0 = 寄存器 -50，程序会显示 -50）。
@@ -374,7 +368,7 @@ namespace AgingTestSystem.Services
                 //    - 实际压力 = 有符号原始值 / 10^小数位，再乘以可选缩放系数 BarometerPressureScale
                 short rawSigned = (short)registers[0];
                 int decimalPos = _config.BarometerDefaultDecimalPlaces;
-                // 【V1.62】换算收拢进 ConvertRawToPressureKPa 纯函数（行为逐字一致）。
+                // 换算收拢进 ConvertRawToPressureKPa 纯函数（行为逐字一致）。
                 decimal pressureKPa = ConvertRawToPressureKPa(
                     rawSigned, decimalPos, _config.BarometerPressureScale);
 
@@ -396,7 +390,7 @@ namespace AgingTestSystem.Services
                 // 读失败不抛异常，继续让其它设备有机会读取
                 OnError?.Invoke(this, $"设备{deviceId}读取失败: {ex.Message}");
 
-                // 【V1.16.2 串口心跳】若异常是"端口级"故障（RS485 适配器被拔出 /
+                // 若异常是"端口级"故障（RS485 适配器被拔出 /
                 // 端口被占用 / 端口已关闭等），说明整条串口已断开：
                 // 把 _isConnected 置 false，让上层（DeviceManager）感知并提示
                 // "气压表串口已断开"+ 后台自动重连。
@@ -411,13 +405,11 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 判断异常是否为"串口级"故障（【V1.16.2 新增】）
-        ///
+        /// 判断异常是否为"串口级"故障（）
         /// 串口心跳的核心：要把"单台设备无响应"（正常，设备离线/换表）和
         /// "整条串口断开"（RS485 适配器被拔出 / USB 口被拔 / 端口被占用）区分开：
         /// - 单台无响应 → NModbus 抛超时类异常，串口本身健康，不能标记断开；
         /// - 串口级故障 → 访问被拒绝 / 对象已释放 / IO 关闭类异常，整条总线不可用。
-        ///
         /// 判定依据（覆盖 .NET SerialPort / NModbus 在设备拔出时的常见异常）：
         /// 1) UnauthorizedAccessException：端口访问被拒绝（典型：设备被拔后驱动失效）
         /// 2) ObjectDisposedException：串口对象已被释放/关闭
@@ -462,7 +454,7 @@ namespace AgingTestSystem.Services
 
             if (!_isConnected)
             {
-                // 【V1.16.2 串口心跳】串口断开时返回"全 null 数组"而不是空数组：
+                // 串口断开时返回"全 null 数组"而不是空数组：
                 // 让 DeviceManager 的逐台循环仍然能累加失败次数、触发"通讯故障"联动
                 // （关阀 + 断电）的安全兜底——避免整条串口掉线时测试中的设备
                 // 无人监管、阀门/载台电保持原状。
@@ -480,8 +472,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 寄存器原始值 → 压力 kPa（纯函数，【V1.62 新增】回归可直接断言）。
-        ///
+        /// 寄存器原始值 → 压力 kPa（纯函数，回归可直接断言）。
         /// 【换算口径】(short)强转按有符号解释（0xFFFE→-2，支持负压）→ 除 10^小数位 →
         /// 再乘缩放系数。与 Demo 实测一致；小数位固定用配置（不读设备 0x0002）。
         /// 【血泪】V1.16.1 曾因小数位取错把压力显示错 10 倍，本函数把换算锁成用例，
@@ -498,8 +489,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 阈值浮点 → 寄存器整数值（纯函数，【V1.62 新增】回归可直接断言）。
-        ///
+        /// 阈值浮点 → 寄存器整数值（纯函数，回归可直接断言）。
         /// 【换算口径】round(阈值 × 10^小数位)，与 Demo 一致；负值调用方按补码写入
         /// （设备按有符号 short 解释）。short 越界检查留在使用方（SetThreshold），
         /// 本函数只做数学换算不做决策。
@@ -515,18 +505,14 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 写入单台气压表的设备阈值（Holding Register 0x0010，功能码 0x06）
-        ///
         /// 【与 Demo 保持一致】ModbusRtuBarometerTest 的 SetThreshold 逻辑：
         ///   1. 小数位 = 固定用配置 BarometerDefaultDecimalPlaces（默认 1，与 Demo 硬编码 1 一致）
         ///   2. 寄存器值 = round(thresholdValue × 10^小数位)，负数按补码写（设备按有符号 short 解释）
         ///   3. 写 WriteSingleRegister(slaveId=deviceId, 0x0010, 寄存器值)
-        ///
-        /// 【V1.16.1 修复：为什么小数位固定、不再读设备 0x0002】
         /// 现场实测：0x0002 寄存器不可靠（很多台返回 0，但仪表实际按 1 位小数显示）。
         /// 原来按设备返回值换算，对返回 0 的台把 -5 写成寄存器 -5（应为 -50），
         /// 仪表显示就成了 -0.5（差 10 倍）。Demo 注释也注明"0x0002 可能无效"，
         /// 所以 Demo 写阈值一直硬编码 1 位小数 —— 这里改为与 Demo 一致。
-        ///
         /// 【单位提醒】thresholdValue 是"设备单位"（与压力读数同单位同小数位），
         /// 不是软件报警阈值 AlarmPressureThresholdKPa（kPa）。写前务必确认设备单位。
         /// </summary>
@@ -551,7 +537,7 @@ namespace AgingTestSystem.Services
             {
                 lock (_syncRoot)
                 {
-                    // 【V1.16.1 修复】小数位固定用配置默认值（BarometerDefaultDecimalPlaces=1），
+                    // 小数位固定用配置默认值（BarometerDefaultDecimalPlaces=1），
                     // 不再读设备 0x0002 —— 该寄存器现场实测不可靠（很多台返回 0，仪表实际是 1 位小数），
                     // 会算出错误寄存器值（-5 → 仪表显示 -0.5）。与 Demo 硬编码 1 位小数保持一致。
                     int decimalPos = _config.BarometerDefaultDecimalPlaces;
@@ -579,17 +565,14 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 批量写入所有气压表的设备阈值
-        ///
         /// 逐台调用 <see cref="SetThreshold"/>，单台失败不影响其它台；
         /// 返回 deviceId → 是否成功，方便上层汇总"哪些台没写进去"。
         /// 【性能提示】72 台连写 + 坏设备会阻塞较久（每台坏设备约一个读超时），
         /// 调用方应在后台线程执行，不要直接放在 UI 线程里。
-        ///
         /// 【未连接时的约定（V1.16）】
         /// 如果串口没连上，直接返回"空字典"而不是 72 台全失败——
         /// 这样上层（公共参数窗口）能给出"未连接任何气压表，请先检查通讯连接"
         /// 的明确提示，而不是弹一串"失败 72 台"让人误以为设备全坏了。
-        ///
         /// 【与 Demo 对齐（V1.16）】
         /// 每写一台后延时 50ms（参考 ModbusRtuBarometerTest 的 BatchSetThreshold
         /// writeDelayMs=50），让 RS485 总线安静一下，避免 72 台连写帧间隔过密丢帧。
@@ -605,7 +588,7 @@ namespace AgingTestSystem.Services
                 return result;
             }
 
-            // 【V1.16.1 按需重连】串口未连接时，用户从公共参数窗口保存 → 先尝试重连一次；
+            // 串口未连接时，用户从公共参数窗口保存 → 先尝试重连一次；
             // 再连不上才返回空字典，由上层弹窗提示"气压表未连接，请先连接"。
             // （本方法由 DeviceManager.SetAllBarometerThresholds 调用，批量写期间已暂停采集定时器，
             //   不会与采集线程并发访问串口。）
@@ -633,7 +616,7 @@ namespace AgingTestSystem.Services
 
         private bool IsAlarm(decimal pressureKPa)
         {
-            // 【V1.62】判定口径收拢进 AgingSequencer.IsPressureOutOfRange，
+            // 判定口径收拢进 AgingSequencer.IsPressureOutOfRange，
             // 本方法只剩"取配置阈值与方向后转调"（行为与原来逐字一致）。
             return AgingSequencer.IsPressureOutOfRange(
                 pressureKPa, _config.AlarmPressureThresholdKPa, _config.AlarmWhenPressureHigherThanThreshold);

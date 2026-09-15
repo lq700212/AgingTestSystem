@@ -10,21 +10,18 @@ namespace AgingTestSystem.Dialogs
     /// <summary>
     /// 公共参数窗口（设置所有气压表负压阈值）—— 业务逻辑部分
     /// 界面标题为"公共参数窗口"，其唯一功能是设置所有气压表的负压阈值。
-    ///
     /// 【功能说明】
     /// 设置所有气压表的"负压阈值"（设备阈值），一次性批量写入全部气压表。
     /// 逻辑参考 ModbusRtuBarometerTest Demo 的 BatchSetThreshold 方法：
     /// 把用户输入的负压值（单位 kPa），逐台写入气压表 Holding Register 0x0010（功能码 0x06），
     /// 该寄存器驱动气压表内部的硬件报警触点（压力到达阈值时触点动作）。
-    /// 【V1.19.9 新增】保存时同步更新软件报警阈值（DeviceConfig.AlarmPressureThresholdKPa），
+    /// 保存时同步更新软件报警阈值（DeviceConfig.AlarmPressureThresholdKPa），
     /// 使 DeviceManager 的压力报警判定与界面输入的负压值（kPa）保持一致。
-    ///
     /// 【界面布局】（所有控件居中显示）
     /// ┌───────────────────────────────┐
     /// │  负压值设定(kPa)：[  -5.0  ]  │ ← Label + 数值框（支持正负数）
     /// │         [  保存设置   ]         │ ← 保存按钮
     /// └───────────────────────────────┘
-    ///
     /// 【工作流程】
     /// 1. 用户在数值框设置负压值（默认 -5，支持正负数，单位 kPa，与气压表读数一致）
     /// 2. 点击"保存设置"按钮
@@ -33,13 +30,11 @@ namespace AgingTestSystem.Dialogs
     /// 5. 写入完成，切回 UI 线程汇总显示成功/失败台数：
     ///    - 全部成功：提示后关闭窗口
     ///    - 部分失败：列出失败台号，窗口保持打开便于现场排查后重试
-    ///
     /// 【线程说明】（为什么写入要放后台线程）
     /// 批量写 72 台 + 坏设备（断电/掉线/地址拨错）时，每台坏设备约阻塞一个读超时
     /// （默认 1000ms，NModbus 还会重试），整体可能卡住 UI 几十秒。
     /// 所以用 Task 放后台线程执行（DeviceManager.SetAllBarometerThresholds 内部
     /// 已有互斥锁，串行化串口请求，线程安全），写完后用 BeginInvoke 切回 UI 线程。
-    ///
     /// 【与旧版的区别】
     /// 旧版误做成"采集间隔 + 软件报警阈值"的通用参数设置；新版按现场实际需求简化为
     /// 只设置所有气压表的负压阈值（写设备 0x0010），并同步简化界面。
@@ -74,7 +69,7 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 打开后调一次：整窗按当前主题着色。
-        /// 【V1.71】保存按钮已是主按钮蓝（两边都清晰），V1.60.4 的 DimGray 特例已删除。
+        /// 保存按钮已是主按钮蓝（两边都清晰），V1.60.4 的 DimGray 特例已删除。
         /// （窗体每次 new 的新实例，无需恢复。）
         /// </summary>
         public void ApplyTheme()
@@ -84,13 +79,11 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 把控件组在窗体里居中显示
-        ///
         /// 【为什么需要手工居中】
         /// 窗体是 FixedDialog（不可缩放），设计器里按固定位置摆好之后，
         /// 再根据窗体的 ClientSize 动态算一次位置，保证任何分辨率下都水平居中。
         /// 输入框和标签是"一组"（标签在左、输入框在右），这组整体水平居中；
         /// 保存按钮单独水平居中。
-        ///
         /// 【所见即所得约定（V1.72.1）】
         /// UIForm 自绘蓝标题占 35px 客户区，设计器里看到的 Y（lbl 65 / nud 62 / btn 110）
         /// 就是运行时的 Y——这里只调 X（水平居中），不动 Y。
@@ -126,7 +119,6 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// "保存设置"按钮点击事件
-        ///
         /// 【流程】
         /// 1. 读取数值框的值（NumericUpDown 保证为有效数字，含正负数）
         /// 2. 保存期间禁用按钮、把文字改成"保存中..."，防止重复点击
@@ -166,7 +158,7 @@ namespace AgingTestSystem.Dialogs
                 }
 
                 // ===== 4) 切回 UI 线程显示结果 =====
-                // 【V1.72.15】旧版只查 IsHandleCreated 且无 try：关闭瞬间仍能 BeginInvoke 进已销毁句柄
+                // 旧版只查 IsHandleCreated 且无 try：关闭瞬间仍能 BeginInvoke 进已销毁句柄
                 // （与通讯/风扇窗同病根）；现关窗/释放/句柄三查 + try 包，关后完成回调直接丢弃。
                 try
                 {
@@ -190,7 +182,6 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 批量写入完成后的 UI 汇总（在 UI 线程执行）
-        ///
         /// 【结果处理规则】（参考 Demo 的 ShowBatchWriteSummary）
         /// - result 为 null：通讯异常，提示检查连接
         /// - result 为空字典：没有连上任何气压表，提示检查连接
@@ -201,7 +192,7 @@ namespace AgingTestSystem.Dialogs
         /// <param name="result">写入结果字典（deviceId → 是否成功），异常时为 null</param>
         private void OnBatchWriteCompleted(decimal thresholdValue, Dictionary<int, bool> result)
         {
-            // 【V1.72.15】排队期间关窗即丢弃：BeginInvoke 已投递的回调仍会在关后执行，
+            // 排队期间关窗即丢弃：BeginInvoke 已投递的回调仍会在关后执行，
             // 直碰 btnSave/MessageBox 即炸，故先拦（与通讯窗 SetConnected 同因）。
             if (_closed || IsDisposed || Disposing) return;
             try

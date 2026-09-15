@@ -4,11 +4,9 @@ namespace AgingTestSystem.Dialogs
 {
     /// <summary>
     /// 批量设置配方窗口 —— 设计器自动生成部分
-    ///
     /// 【界面说明】
     /// 本窗口用于批量设置配方参数，支持将配置好的配方参数加入队列，
     /// 以便后续批量应用到多个选中的气压表面板。
-    ///
     /// 【控件布局（V1.28）】
     /// ┌─────────────────────────────────────────────┐
     /// │ 批量设置设置配方窗口                         │  ← 标题栏
@@ -633,17 +631,17 @@ namespace AgingTestSystem.Dialogs
         private Sunny.UI.UITextBox txtLimitTemp;
         /// <summary>温度单位标签（°C）</summary>
         private Sunny.UI.UILabel lblTempUnit;
-        /// <summary>"负压阈值"标签（【V1.66】配方真空工艺要求，kPa）</summary>
+        /// <summary>"负压阈值"标签（配方真空工艺要求，kPa）</summary>
         private Sunny.UI.UILabel lblNegativePressureLabel;
         /// <summary>负压阈值输入布局（数值 + 单位）</summary>
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelPressure;
-        /// <summary>负压阈值输入框（【V1.66】文本解析，范围±9999，新建默认=全局阈值）</summary>
+        /// <summary>负压阈值输入框（文本解析，范围±9999，新建默认=全局阈值）</summary>
         private Sunny.UI.UITextBox txtNegativePressure;
         /// <summary>负压单位标签（kPa）</summary>
         private Sunny.UI.UILabel lblPressureUnit;
-        /// <summary>"显示模式"标签（【V1.66】烧屏画面记录）</summary>
+        /// <summary>"显示模式"标签（烧屏画面记录）</summary>
         private Sunny.UI.UILabel lblDisplayModeLabel;
-        /// <summary>显示模式输入框（【V1.66】自由文本，最长50）</summary>
+        /// <summary>显示模式输入框（自由文本，最长50）</summary>
         private Sunny.UI.UIComboBox cmbDisplayMode;
         /// <summary>底部按钮面板（2个按钮：加入队列/关闭窗口）</summary>
         private System.Windows.Forms.Panel panelButtons;

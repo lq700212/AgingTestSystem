@@ -8,26 +8,22 @@ namespace AgingTestSystem.Services
 {
     /// <summary>
     /// 应用主题模式（浅色 / 深色）
-    ///
     /// 【做什么】
     /// - Light（浅色）：就是软件现在设计好的样子，所有颜色保持设计原样；
     /// - Dark（深色）：容器底变深灰、文字变浅色，方便晚上/暗光车间长时间盯屏。
-    ///
     /// 【怎么用（给新手的三句话）】
     /// 1. 程序启动时调一次 <see cref="LoadFromConfig"/> 读出上次保存的主题；
     /// 2. 每次打开一个窗体前调一次 <see cref="ApplyTo(Control)"/>，窗体就按当前主题着色；
     /// 3. 点"深色模式"按钮调 <see cref="Toggle"/>，会自动保存 + 把所有已打开的窗体重着色。
-    ///
     /// 【为什么不用"记住原色"方案】
     /// 有些控件的颜色是运行时动态改的（比如通讯状态红/绿、权限角色名红/蓝/绿），
     /// 如果"浅色=恢复快照"，一切回浅色时会把这些运行时状态色也洗掉。
     /// 所以本类用"双向映射表"：只映射设计稿里的浅色，运行时状态色（红/绿/蓝/橙…）
     /// 两边都不在表里，切来切去永远不动。这就是"语义色保留"原则。
-    ///
     /// 【配色约定】
     /// - 按钮一律不动：全项目的按钮都是语义色（绿=确认/启动、蓝=动作、红=急停/删除、
     ///   灰=取消/关闭），深浅色下都清晰可辨，动了反而丢业务含义；
-    ///   【V1.71】SunnyUI 的 UIButton 不是原生 Button 的子类（自绘控件），
+    ///   SunnyUI 的 UIButton 不是原生 Button 的子类（自绘控件），
     ///   `is Button` 认不出它——这里按类型名单独走同一条"不动"分支；
     ///   语义色经 ApplyButtonColors 写入（原生走 BackColor，Sunny 走 Style=Custom+FillColor）。
     /// - 自绘控件不动：WorkstationGridView（工位大画布）、CircleButton（圆形灯）、
@@ -46,7 +42,6 @@ namespace AgingTestSystem.Services
 
     /// <summary>
     /// 全局主题管理器（静态单例）。
-    ///
     /// 【线程说明】所有方法都应在 UI 线程调用（着色本质是改控件属性，跨线程会抛异常；
     /// 唯一例外是纯查表函数 Parse/MapXxx，可在测试里随便调）。
     /// </summary>
@@ -450,7 +445,7 @@ namespace AgingTestSystem.Services
 
             try
             {
-                // 【V1.71】SunnyUI 自绘控件的类型判定（它们大多不是原生控件的子类，
+                // SunnyUI 自绘控件的类型判定（它们大多不是原生控件的子类，
                 // `is Button/TextBox` 认不出，必须按类型名走分支，否则会被容器表误染）：
                 // - Sunny.UI.UIButton：自绘按钮，走"按钮不动"分支（语义色保护）；
                 // - Sunny.UI.UITextBox / Sunny.UI.UIComboBox：自绘输入框，走输入分支；
@@ -704,7 +699,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 给按钮写语义色（【V1.71 新增】SunnyUI 换肤配套）：
+        /// 给按钮写语义色（SunnyUI 换肤配套）：
         /// 原生 Button 走 BackColor/ForeColor；SunnyUI UIButton 是自绘的，
         /// BackColor 画不出来，必须 Style=Custom + FillColor/RectColor/ForeColor。
         /// </summary>
@@ -746,7 +741,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 读按钮的"实际显示色"（【V1.71 新增】下拉菜单项继承宿主颜色用）：
+        /// 读按钮的"实际显示色"（下拉菜单项继承宿主颜色用）：
         /// 原生 Button 读 BackColor/ForeColor；SunnyUI UIButton 是自绘的，
         /// BackColor 只是底衬，真实显示色在 FillColor/ForeColor。
         /// </summary>

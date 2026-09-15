@@ -10,18 +10,15 @@ using Newtonsoft.Json;
 namespace AgingTestSystem.Services
 {
     /// <summary>
-    /// MES 上报器（【V1.68 新增】二期传输层：HTTP POST JSON + 后台队列 + 重试 + 离线缓存）。
-    ///
+    /// MES 上报器（二期传输层：HTTP POST JSON + 后台队列 + 重试 + 离线缓存）。
     /// 【设计边界】（评审结论，见 DeviceConfig MES 注释）
     /// - 可配的是"报什么/何时报/字段叫什么/往哪几个地址报/带什么头"
     ///   （MesTriggers/MesFieldMap/MesStaticFields/MesEndpointMap/MesCustomHeaders）；
     /// - 传输是代码：POST JSON、鉴权 None/Bearer/Basic、失败重试 N 次、
     ///   最终失败进离线缓存（MesQueue.json），下次成功时顺带补发。
-    ///
     /// 【线程模型】Report 只做"组包+入队"，毫秒级返回，绝不阻塞采集/UI；
     /// 真正的 HTTP 在后台线程串行发送（MES 侧按接收顺序处理，不并发打乱）。
     /// 总开关 MesEnabled=false 时 Report 直接返回，worker 线程都不建，零开销。
-    ///
     /// 【失败语义】上报失败不影响生产（只记日志 + 进缓存），MES 对接永远不能成为
     /// 停线的原因——这是二期的底线。
     /// </summary>
@@ -217,7 +214,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 请求头（【V1.68】自定义头 + 鉴权头合并：自定义先铺底，鉴权后覆盖——
+        /// 请求头（自定义头 + 鉴权头合并：自定义先铺底，鉴权后覆盖——
         /// Authorization 永远按 MesAuthType 生成，配错自定义头也顶不掉鉴权）。
         /// </summary>
         private Dictionary<string, string> BuildHeaders()

@@ -6,16 +6,13 @@ namespace AgingTestSystem.Services
 {
     /// <summary>
     /// 串口识别辅助类（CH340 自动识别）
-    ///
     /// 【为什么需要它】
     /// 气压表通过 RS485 转 USB（CH340 芯片）接入工控机，Windows 会把它识别成一个
     /// "COM 口"，但具体是 COM 几不确定（COM3 / COM5 / COM10 ... 取决于 USB 插口和
     /// 历史驱动分配）。如果程序里写死 COM1，现场换一台电脑/换一个 USB 口就连不上。
-    ///
     /// 参考 ModbusRtuBarometerTest Demo 的 SerialPortHelper + 本项目 ScannerService
     /// 的 WMI 写法，用系统 WMI 查询出"名字里带 CH340"的串口，从而自动找到气压表
     /// 实际插在哪个 COM 口，现场不用改配置。
-    ///
     /// 【双重校验】
     /// CH340 芯片的 USB VID/PID 是固定的：VID_1A86（WCH/沁恒）+ PID_7523（CH340）。
     /// 同时校验"设备描述含 CH340" + "硬件 ID 含 VID_1A86/PID_7523"，避免误认别的串口。
@@ -24,9 +21,8 @@ namespace AgingTestSystem.Services
     {
         /// <summary>
         /// 判断一对（设备描述，硬件ID）是否为 CH340 串口（纯函数，回归可直接断言）。
-        ///
         /// 【匹配规则】描述含 CH340（大小写不敏感）且硬件 ID 同时含 VID_1A86/PID_7523。
-        /// 【V1.62】描述匹配由大小写敏感的 Contains 改为忽略大小写：
+        /// 描述匹配由大小写敏感的 Contains 改为忽略大小写：
         /// 个别机器的设备描述是小写 ch340，旧写法会识别不到串口。
         /// </summary>
         /// <param name="caption">WMI Win32_PnPEntity.Caption（如 "USB-SERIAL CH340 (COM3)"）</param>
@@ -102,7 +98,6 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 钳制数据位到串口合法范围（纯函数，回归可直接断言）。
-        ///
         /// 【为什么需要】System.IO.Ports.SerialPort 的 DataBits 只认 5~8，
         /// 配成 9/4/0 会在 Connect 打开串口时抛异常，被上层的 try/catch 吃掉后
         /// 表现成"连不上"，操作员会按串口故障去查线，排查方向全错。

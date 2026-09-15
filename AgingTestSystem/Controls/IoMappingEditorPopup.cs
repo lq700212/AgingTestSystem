@@ -12,11 +12,10 @@ namespace AgingTestSystem.Controls
     ///   原寄存器 0x2000 | 原通道 0x00 → 新寄存器 0x2009 | 新通道 0x00
     /// 寄存器地址（0x0000~0xFFFF）与通道号（0x00~0x0F）均为十六进制，可微调。
     /// 支持直接修改、添加新行、选中删除。
-    ///
     /// 【与配置格式的对应】配置里存的即是"寄存器@通道"（如 0x2000@0x00->0x2009@0x00），
     /// 与界面显示完全一致（所见即所得），无需换算；十六进制通道由 IoOutputChannelRemap
     /// 在解析时统一转成十进制位号（0~15）供位运算使用。
-    /// 【V1.62】通道上限由 0x1F 收紧到 0x0F：一个寄存器只有 16 个 bit，0x10+ 在执行侧
+    /// 通道上限由 0x1F 收紧到 0x0F：一个寄存器只有 16 个 bit，0x10+ 在执行侧
     /// 静默失效（见 IoOutputChannelRemap 类注释），输入框最大值同步收紧，非法值进不来。
     /// </summary>
     public class IoMappingEditorPopup : Form
@@ -29,7 +28,7 @@ namespace AgingTestSystem.Controls
         private bool _closing;
 
         /// <summary>
-        /// 可视化连线页打开中（【V1.81.1】防 OnDeactivate 误杀）：
+        /// 可视化连线页打开中（防 OnDeactivate 误杀）：
         /// OpenVisual 用 ShowDialog(this) 打开模态连线页，模态窗激活瞬间本弹窗失焦，
         /// 若按老逻辑走 OnDeactivate→CloseAsCancel，本弹窗关闭会连带 owned 的模态窗一起被销毁，
         /// 现象就是"点了可视化连线…却进不去"。此旗置位期间失焦不关，关模态窗后复位。
@@ -67,7 +66,7 @@ namespace AgingTestSystem.Controls
             StartPosition = FormStartPosition.Manual;
             ShowInTaskbar = false;
             BackColor = Color.White;
-            // 弹窗整体尺寸：【V1.54b】从 560×268 调到 640×268——
+            // 弹窗整体尺寸：从 560×268 调到 640×268——
             // 原 560 时表格 5 列总宽 148+92+56+148+92=536 等于 dgv.Width，最右侧列微调按钮
             // 被裁切。现列宽 172+104+60+172+104=612，表格宽 616（多 4px 余量保证不裁切），
             // 弹窗宽 640（=616+左右各 12 边距）。
@@ -126,7 +125,7 @@ namespace AgingTestSystem.Controls
             _dgv.Columns["colSrcCh"].CellTemplate = new DataGridViewHexNumericUpDownCell { Maximum = 0x0F, ShowPrefix = true };
             _dgv.Columns["colDstCh"].CellTemplate = new DataGridViewHexNumericUpDownCell { Maximum = 0x0F, ShowPrefix = true };
 
-            // 列宽分配：【V1.54b】整体放大——寄存器列 148→172、通道列 92→104、箭头列 56→60，
+            // 列宽分配：整体放大——寄存器列 148→172、通道列 92→104、箭头列 56→60，
             // 总宽 172+104+60+172+104=612，表格宽 616（多 4px 余量保证不裁切）。
             // 放大原因：十六进制微调框右侧有上下调按钮，最右侧一列"新通道"内容（0x00~0x0F）
             // 在原列宽下被部分遮挡、调节按钮也按不到。
@@ -185,13 +184,13 @@ namespace AgingTestSystem.Controls
             _btnDelete.Click += (s, e) => DeleteSelected();
             Controls.Add(_btnDelete);
 
-            // 【V1.81】可视化连线：打开与通讯测试窗同一张连线页（草稿模式：只改映射，
+            // 可视化连线：打开与通讯测试窗同一张连线页（草稿模式：只改映射，
             // 开关归设置表另一行管，确定后写回本表格，等用户按"保存设置"统一落盘）
             var btnVisual = CreateButton("可视化连线…", new Point(214, 198), new Size(130, 30), Sunny.UI.UIStyle.Blue);
             btnVisual.Click += (s, e) => OpenVisual();
             Controls.Add(btnVisual);
 
-            // 取消 / 确定（【V1.54b】弹窗宽 640，按钮靠右：取消 X=640-12-152=476，确定 X=640-12-82=546）
+            // 取消 / 确定（弹窗宽 640，按钮靠右：取消 X=640-12-152=476，确定 X=640-12-82=546）
             _btnCancel = CreateButton("取消", new Point(476, 198), new Size(62, 30), Sunny.UI.UIStyle.Gray);
             _btnCancel.Click += (s, e) => CloseAsCancel();
             Controls.Add(_btnCancel);
@@ -360,14 +359,14 @@ namespace AgingTestSystem.Controls
         /// 打开可视化连线页（草稿模式：与通讯测试窗同一张页，只改映射不碰开关；
         /// 确定后写回本表格，再点本弹窗"确定"进单元格，最后由设置表"保存设置"落盘）。
         /// 进页前把表格里"正在改还没确定"的值灌进去，出来后再整表装回，不丢行。
-        /// 【V1.81.1】_visualOpen 守卫见字段注释：否则模态窗激活即触发 OnDeactivate 自杀。
+        /// _visualOpen 守卫见字段注释：否则模态窗激活即触发 OnDeactivate 自杀。
         /// </summary>
         private void OpenVisual()
         {
             DeviceConfig cfg = _config ?? new DeviceConfig();
             using (var form = new Dialogs.IoRemapVisualForm(cfg))
             {
-                // 【V1.60】弹窗打开前按当前主题着色（与本弹窗 Show 前 ApplyTo 同规矩）
+                // 弹窗打开前按当前主题着色（与本弹窗 Show 前 ApplyTo 同规矩）
                 Services.ThemeManager.ApplyTo(form);
                 form.ShowEnableSwitch = false;
                 form.SaveButtonText = "确定";

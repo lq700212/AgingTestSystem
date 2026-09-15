@@ -6,15 +6,13 @@ using AgingTestSystem.Services;
 namespace AgingTestSystem.Dialogs
 {
     /// <summary>
-    /// 软件激活窗（【V1.87】与 HJVision 的 SoftActivation 同布局同流程，
+    /// 软件激活窗（与 HJVision 的 SoftActivation 同布局同流程，
     /// 同一套《获取激活码》工具通用）。
-    ///
     /// 【流程】打开显示设备ID/设备码/激活状态 → 用户找厂商拿激活码
     /// （厂商用《获取激活码》工具：设备码→30天码/永久码）→ 输入点激活：
     /// 对上永久码写 RunHash2=Encrypt(设备ID+"ALL")；对上30天码写
     /// RunHash2=Encrypt(设备ID+"0")；对不上静默无操作（与 HJVision 一致）。
     /// 设备绑定（RunHash1）出厂手写进 MainSetting.ini，本窗不写（与 HJVision 一致）。
-    ///
     /// 界面布局（ClientSize 409x433；HJVision 原版 409x398，UIForm 自绘蓝标题
     /// 占 35px，整体下移 35px + 窗体加高，V1.71 口径）：
     /// ┌──────────────────────────────────────┐
@@ -32,7 +30,7 @@ namespace AgingTestSystem.Dialogs
     public partial class SoftActivation : Sunny.UI.UIForm
     {
         /// <summary>
-        /// 本次打开是否激活成功过（【V1.88.1 新增】付费即恢复用）。
+        /// 本次打开是否激活成功过（付费即恢复用）。
         /// <para>做什么：记住“用户这次有没有输对过一次码”。</para>
         /// <para>为什么这么写：主窗要在弹窗关闭后决定“要不要重查状态解灰”，
         /// 不能只看弹窗关没关——用户打开看看就关、输错码关，都不该触发重查；

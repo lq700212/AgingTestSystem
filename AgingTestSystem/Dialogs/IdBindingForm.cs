@@ -12,12 +12,10 @@ namespace AgingTestSystem.Dialogs
 {
     /// <summary>
     /// ID绑定窗体（业务逻辑部分）
-    ///
     /// 【功能说明】
     /// 本窗口用于将工位编号和产品SN与批号进行绑定，实现生产追溯功能。
     /// 用户先输入/扫描工位编号，再输入/扫描产品SN，系统将两者关联并显示在产品列表中，
     /// 点击保存按钮完成绑定操作。
-    ///
     /// 【界面布局】
     /// ┌─────────────────────────────────────────────────────────────┐
     /// │ ID绑定                                                     │ ← 标题栏
@@ -34,26 +32,22 @@ namespace AgingTestSystem.Dialogs
     /// │ │ 绑定顺序说明        │        │                           │
     /// │ └─────────────────────┘        │          [保存]           │
     /// └─────────────────────────────────────────────────────────────┘
-    ///
     /// 【绑定顺序】
     /// 1. 扫码枪扫"工位号"（恰好 2 位数字，如 01~72，自动识别为工位号）
     /// 2. 扫码枪扫"产品SN"（一般不止 2 位，自动识别为SN）
     /// 3. 工位号和SN 都扫齐后，自动将两者移入产品列表（不要求固定先后顺序）
     /// 4. 移入前检查是否有重复的工位，如果有进行覆盖确认操作
     /// 5. 移入后清除输入栏的工位编号和SN
-    ///
     /// 【防错机制（V1.16 更新）】
     /// 扫码枪扫出的条码通过格式自动区分是"工位号"还是"产品SN"：
     /// 恰好 2 位数字 → 工位号；其他内容 → 产品SN。
     /// 因此即使工人没按"先工位号、后SN"的顺序扫，系统也能正确配对录入。
-    ///
     /// 【数据流转】
     /// 1. 录入批号窗口确定后弹出此窗口，批号自动填充
     /// 2. 扫码枪扫码 → 自动识别工位号/SN → 填入对应输入框
     /// 3. 两条都齐后系统自动验证输入并添加到产品列表
     /// 4. 用户可继续添加更多产品，或点击保存完成绑定
     /// 5. 触发 OnBindingCompleted 事件，通知主窗体绑定完成
-    ///
     /// 【输入校验规则】
     /// - 批号：自动从录入批号窗口传入，不可编辑
     /// - 工位编号：扫码枪自动识别（恰好 2 位数字）或手动输入，不能为空
@@ -101,9 +95,9 @@ namespace AgingTestSystem.Dialogs
         public event EventHandler<Tuple<string, List<ProductBinding>>> OnBindingCompleted;
 
         /// <summary>
-        /// 【V1.16 新增】扫码枪服务引用
+        /// 扫码枪服务引用
         /// 由录入批号窗体（InputLotForm）传入。
-        /// 【V1.16 更新】扫码枪扫到条码时自动识别是"工位号"还是"产品SN"并填入对应输入框：
+        /// 扫码枪扫到条码时自动识别是"工位号"还是"产品SN"并填入对应输入框：
         /// - 恰好 2 位数字（如 01~72）→ 判断为工位号 → 填入"工位编号"输入框
         /// - 其他内容（产品SN一般不止 2 位）→ 判断为产品SN → 填入"SN"输入框
         /// 工位号和 SN 都填齐后自动加入产品列表（等效按回车）。
@@ -113,7 +107,7 @@ namespace AgingTestSystem.Dialogs
         private readonly ScannerService _scanner;
 
         /// <summary>
-        /// 【V1.19.11 新增】设备管理器引用
+        /// 设备管理器引用
         /// 由录入批号窗体（InputLotForm）传入（可能为 null）。
         /// 【用途】绑定保存时，把每个"工位 → SN"的对应关系写入设备管理器
         /// 的工位静态信息，使工位面板的 SN 显示与绑定结果关联一致。
@@ -145,9 +139,9 @@ namespace AgingTestSystem.Dialogs
             txtLot.Text = lotNumber;
             txtLot.ReadOnly = true;
             txtLot.BackColor = System.Drawing.Color.LightGray;
-            txtLot.FillColor = System.Drawing.Color.LightGray;   // 【V1.71】Sunny 框渲染走 FillColor，同步设灰（深色下走主题映射回深灰）
+            txtLot.FillColor = System.Drawing.Color.LightGray;   // Sunny 框渲染走 FillColor，同步设灰（深色下走主题映射回深灰）
 
-            // 【V1.16】启用扫码枪时订阅扫码完成事件，实现 SN 自动填充
+            // 启用扫码枪时订阅扫码完成事件，实现 SN 自动填充
             // 注意：扫码事件已在 UI 线程触发（ScannerService 内部已封送），可直接更新控件
             _scanner = scanner;
             if (_scanner != null)
@@ -155,7 +149,7 @@ namespace AgingTestSystem.Dialogs
                 _scanner.OnBarcodeScanned += Scanner_OnBarcodeScanned;
             }
 
-            // 【V1.19.11】保存设备管理器引用（绑定完成后把 SN 关联到对应工位）
+            // 保存设备管理器引用（绑定完成后把 SN 关联到对应工位）
             _deviceManager = deviceManager;
         }
 
@@ -262,25 +256,22 @@ namespace AgingTestSystem.Dialogs
         /// <param name="barcode">扫到的条码内容</param>
         private void Scanner_OnBarcodeScanned(object sender, string barcode)
         {
-            // 【V1.72.15】排队回调关后丢弃（退订拦不住已 Post 的委托，与通讯窗排队回调同因）。
+            // 排队回调关后丢弃（退订拦不住已 Post 的委托，与通讯窗排队回调同因）。
             if (_closed || IsDisposed || Disposing) return;
             HandleScannedBarcode(barcode);
         }
 
         /// <summary>
         /// 处理扫码结果（自动区分工位号 / 产品SN，两条都齐后自动加入产品列表）
-        ///
         /// 【条码识别规则】（V1.16 防错机制）
         /// 扫码枪扫到的条码可能是"工位号"或"产品SN"，通过格式自动区分：
         /// - 恰好 2 位数字（现场实测 01~72）→ 判断为工位号 → 填入"工位编号"输入框
         /// - 其他内容（产品SN一般不止 2 位）→ 判断为产品SN → 填入"SN"输入框
-        ///
         /// 【防错效果】
         /// 规范顺序是"先扫工位号、再扫产品SN"，但工人可能没按顺序扫。
         /// 由于工位号/SN 能按"恰好 2 位数字"自动区分，无论先扫哪一条：
         /// 两条都齐后，自动把工位号和产品SN 一起移入产品列表（等效按回车），
         /// 中间不需要人工判断当前扫的是哪一类，实现"乱序也能正常录入"。
-        ///
         /// 【处理流程】
         /// 1. 扫码 → 判断是工位号还是产品SN → 填入对应输入框
         /// 2. 工位号和 SN 都齐了 → 自动调用 AddToProductList()
@@ -290,7 +281,7 @@ namespace AgingTestSystem.Dialogs
         /// <param name="barcode">扫到的条码内容</param>
         private void HandleScannedBarcode(string barcode)
         {
-            // 【V1.72.15】关后二次拦截（直接调 Handle 的路径同样安全）。
+            // 关后二次拦截（直接调 Handle 的路径同样安全）。
             if (_closed || IsDisposed || Disposing) return;
             // 空条码直接忽略（理论上不会发生，防御性判断）
             if (string.IsNullOrWhiteSpace(barcode)) return;
@@ -323,7 +314,6 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 判断条码是否为工位号
-        ///
         /// 【规则】恰好 2 位且都是数字（如 "01"~"72"）→ 工位号
         /// 产品SN一般不止 2 位，因此可用"恰好 2 位数字"作为判别依据。
         /// </summary>
@@ -362,7 +352,7 @@ namespace AgingTestSystem.Dialogs
         /// <summary>
         /// 保存按钮点击事件
         /// 验证绑定数据、生成Excel文档、触发完成事件
-        /// 【V1.19.11】保存时把"工位 → SN"写入设备管理器工位静态信息，
+        /// 保存时把"工位 → SN"写入设备管理器工位静态信息，
         /// 使工位面板的 SN 显示与绑定关联一致（扫码枪扫码或手动输入均可）。
         /// </summary>
         private void btnSave_Click(object sender, EventArgs e)
@@ -375,7 +365,7 @@ namespace AgingTestSystem.Dialogs
                 return;
             }
 
-            // 【V1.19.11】把绑定的 SN 关联到对应工位
+            // 把绑定的 SN 关联到对应工位
             // 纯手动输入（未启用扫码枪）同样生效：工位编号 + SN 已录入列表即可。
             // 未传设备管理器（null）时跳过，不影响 Excel 导出。
             ApplyBindingsToStations();
@@ -407,8 +397,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 把已绑定的"工位 → SN"写入设备管理器工位静态信息（【V1.19.11 新增】）
-        ///
+        /// 把已绑定的"工位 → SN"写入设备管理器工位静态信息（）
         /// 【说明】
         /// - 遍历产品绑定列表，把每个工位编号对应的 SN 通过 DeviceManager 保存，
         ///   采集线程下次叠加后，工位面板的 SN 标签即显示绑定后的 SN。
@@ -435,11 +424,9 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 生成Excel文档
-        /// 
         /// 【文档命名规则】
         /// 格式：批号_日期_时间.xlsx
         /// 示例：KKNVLVLK_20260724_143025.xlsx
-        /// 
         /// 【文档内容格式】
         /// ┌──────┬──────┬──────────────┬──────────┬──────────┬──────────┐
         /// │ 批号 │ 工位号│ SN           │ 配方名称 │ 延时时间 │ 烧屏时间 │
@@ -447,7 +434,6 @@ namespace AgingTestSystem.Dialogs
         /// │ KKNV │ 1    │ VFJVIJVVEVVW │ ABCDEFGH │ 1:10:20  │ 2:10:30  │
         /// │ KKNV │ 2    │ DFGTRGEWWW   │ ABCDEFGH │ 1:10:20  │ 2:10:30  │
         /// └──────┴──────┴──────────────┴──────────┴──────────┴──────────┘
-        /// 
         /// 【返回值】
         /// 返回生成的Excel文件路径，如果用户取消保存则返回null
         /// </summary>
@@ -558,7 +544,6 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 创建样式表（表头加粗居中换行，数据行普通样式）
-        ///
         /// 【修复说明】原实现只建了 1 个"加粗"格式并返回 Count()=1，导致：
         /// - 表头行引用样式索引 1（实际只有索引 0，索引 1 不存在）
         /// - 数据行不指定样式 → 默认命中索引 0，恰好是那个"加粗"格式
@@ -784,13 +769,13 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 窗体已关闭事件（重写）
-        /// 【V1.16】窗体确定关闭时退订扫码事件，避免窗体销毁后扫码事件
+        /// 窗体确定关闭时退订扫码事件，避免窗体销毁后扫码事件
         /// 还回调到已释放的控件（使用 FormClosed 而非 FormClosing：
         /// FormClosing 可能被用户"取消"而退订过早，导致窗体还在但收不到扫码）。
         /// </summary>
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
-            // 【V1.72.15】先置位再调基类：基类触发外部 FormClosed 订阅者时 _closed 已可见，
+            // 先置位再调基类：基类触发外部 FormClosed 订阅者时 _closed 已可见，
             // 随后退订扫码事件（退订拦不住已排队 Post，靠入口 _closed 拦）。
             _closed = true;
             base.OnFormClosed(e);

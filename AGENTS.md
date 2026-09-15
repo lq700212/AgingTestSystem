@@ -24,7 +24,7 @@
 2. **不提交运行时数据与机密**：`Users.json`（密码为 PBKDF2 哈希，明文不落盘，见 `PasswordHasher.cs`）、`Recipes.json`、`StationSettings.json` 等程序运行生成的 json 一律 gitignore，绝不入库。
 3. **改动后必须构建验证**，禁止提交编译不过的代码。
 4. **不主动 commit/push**，除非用户明确要求；提交前先 `git status` + `git diff` 确认只包含预期改动。
-5. **代码注释要详细，让小白能看懂学会**：关键方法/流程/边界条件/配置依赖必须写清"做什么 + 为什么这么写 + 怎么改"，杜绝只写变量名的废话注释（如 `i++ // 自增`）。允许的详细注释样式参考 `WorkstationGridView.cs` / `RecipeManagerForm.cs` 头部与关键方法。
+5. **代码注释精简但把话说全（V1.89 用户原则）**：关键方法/流程/边界条件/配置依赖写清"做什么 + 为什么这么写 + 怎么改"，让小白能看懂学会；**禁止写版本流水账**（`【V1.xx …】`标签、"原来…现在…"、"血泪/实锤"叙事一律不进代码，历史包袱只留 `CHANGELOG.md`）。允许的一句话出处（如"Sunny 标签缺省 AutoSize=false"）保留，杜绝只写变量名的废话注释（如 `i++ // 自增`）。参考 `WorkstationGridView.cs` / `RecipeManagerForm.cs` 头部与关键方法。
 
 ## 代码约定
 
@@ -143,6 +143,16 @@
   - UIForm 自绘标题占 35px 客户区：绝对布局整体下移 35px + 窗体加高 + MinimumSize
     锁缩小；Dock 布局加顶 Pad(38)；Dock 窗内容高度不够时窗体加高（ID 绑定血泪：
     保存按钮被挤出）。Y&lt;35 的控件 Add 时被静默搬到 35（harness 实测）。
+  - 去系统标题栏套路（V1.89 主窗先例，其它项目复用照抄）：基类保持 UIForm，只加
+    `ShowTitle=false`（Dock 内容不再被顶 35px、Y&lt;35 不再搬家，harness 实锤），Padding 顶清零，
+    `Resizable=false` 维持；三按钮（最小化/最大化/关闭）用原生 Button 进顶栏最右，
+    GDI 线条自绘字形（禁 emoji/Unicode 符号，老工控机字体回退显示方块），悬停底自管
+    （ThemeManager 跳过按钮类，换肤后手动 Invalidate）；`WndProc` 先调 base 再改写
+    `WM_NCHITTEST`（Normal 下边缘 6px 回缩放码、顶栏非按钮区回 `HTCAPTION`，
+    按钮经类型判定放行保可点），`WM_NCLBUTTONDBLCLK` 必须拦在 base 之前切完返回
+    （DefWindowProc 也会切一次，两次抵消，harness 实锤）；任务栏标题带版本号走
+    `BuildWatermark.ReleaseLabel`（禁 Designer 写死旧版本）。验证走真窗 Show＋PrintWindow＋
+    NCHITTEST 探针（边缘/顶栏/按钮各一）＋三按钮点击真实路径，缺一不可。
   - UIGroupBox 内容首控件 Y≥34：Sunny 组框标题约占顶部 30px，首按钮 Y=18 会上半
     压进标题区（V1.72 用户目检：主窗操作组整列下移 16px 解决，间距/分组不动）。
   - Sunny 控件默认 Style=Inherited，吃样式字体：名/值两套标签要么都不写 Font
@@ -503,6 +513,7 @@ else 分支已做叠加——改采集/状态显示时勿破坏此机制）。�
 - **`README.md`**：若改动了目录结构、新增/删除文件、核心业务流、构建方式，同步更新对应章节（如"目录结构表"、`WorkstationGridView` 等条目），保持与实际代码一致。
 - **`docs/通讯接入.md`**：寄存器/寄存器地址/Modbus 协议/串口参数/IO 映射等通讯类改动，必须同步到该文档，并写明对应版本号。
 - **`AGENTS.md` 自身**：若本次工作中发现了新的约定、红线、套路（如"界面注释要画 ASCII 图"、"坐标要外部化到配置"），立刻沉淀进本文件，让下次任务自动遵守。
-- **代码注释**：改动处的代码注释要详细到小白能看懂（做什么 + 为什么 + 怎么改），样式参考 `WorkstationGridView.cs` / `RecipeManagerForm.cs`；新文件/新方法尤其要写清头部说明。
+- **代码注释**：改动处的代码注释精简但把话说全（做什么 + 为什么 + 怎么改，小白能看懂；
+  禁版本流水账，见铁律 5），样式参考 `WorkstationGridView.cs` / `RecipeManagerForm.cs`；新文件/新方法尤其要写清头部说明。
 - 注释里的中文请保持 UTF-8，写完后自查编码：`[IO.File]::ReadAllText(path, UTF8).Contains("预期中文")` 能命中。
 - **提交前自检**：`git status` + `git diff` 确认改动范围与文档同步都完成后再交付；用户不要求 commit 时只留工作区改动即可。

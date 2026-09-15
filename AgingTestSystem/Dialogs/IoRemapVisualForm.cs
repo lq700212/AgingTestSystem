@@ -11,7 +11,6 @@ namespace AgingTestSystem.Dialogs
 {
     /// <summary>
     /// 端口映射可视化配置窗（备用通道映射的连线版配置页，SunnyUI 界面）。
-    ///
     /// 【界面】
     /// ┌──────────────────────────────────────────────────────────┐
     /// │ 端口映射配置（UIForm 标题栏）                              │
@@ -26,7 +25,6 @@ namespace AgingTestSystem.Dialogs
     /// │ lstMaps（原生 ListBox，h=96：Y000…→Y220…，与画布选择同步） │
     /// │ [删除选中][清空全部]        [保存并生效][取消]             │
     /// └──────────────────────────────────────────────────────────┘
-    ///
     /// 【两种用法（同一张页，两种提交，见类头"通用性"说明）】
     ///   A. 实时模式（通讯测试窗右键/菜单进来）：保存后调用方拿 ResultMappings +
     ///      ResultEnabled 走 SettingsForm.PersistChanges 写 App.config，即时生效；
@@ -34,10 +32,8 @@ namespace AgingTestSystem.Dialogs
     ///      ShowEnableSwitch=false（开关是设置表另一行的事，这里只改映射），保存后
     ///      调用方把 ResultMappings 写回单元格，等用户按设置表"保存设置"统一落盘。
     /// 本窗体自己永远不碰 App.config：落盘语义只有调用方那一份，不会两处打架。
-    ///
     /// 【纯代码窗三要素】AutoScaleDimensions(6,12) + SuspendLayout 包裹 + 无参构造
     /// （设计器预览用，空快照占位；保存键加 null 守卫，见 OnSave）。
-    ///
     /// 【滚轮缩放】本窗实现 IMessageFilter（抄 ProcessPolicyForm 口径）：
     /// OnShown 注册、OnFormClosed 摘除；光标悬停在画布上时滚轮=缩放并吞掉消息
     /// （不用先点画布抢焦点，顶栏改下拉时悬停回来照样缩；清单/下拉上的滚轮不受影响）。
@@ -138,7 +134,7 @@ namespace AgingTestSystem.Dialogs
 
             Text = "端口映射配置（可视化连线）";
             ShowTitle = true;
-            // 【V1.81.2】一律屏幕居中：调用方有主窗（通讯测试窗）也有小弹窗（设置表映射格），
+            // 一律屏幕居中：调用方有主窗（通讯测试窗）也有小弹窗（设置表映射格），
             // CenterParent 会跟着小弹窗跑偏甚至出屏；用户要求不管谁打开都在屏幕正中。
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(1020, 720);
@@ -148,7 +144,7 @@ namespace AgingTestSystem.Dialogs
             BuildGraph();
             BuildBottom();
 
-            // 【V1.82 Dock 铁律】WinForms 按 z 序从后往前布局 Dock：
+            // WinForms 按 z 序从后往前布局 Dock：
             // 后面的先占边（Top/Bottom），Fill 必须在最前、最后布局，吃剩余区。
             // Controls.Add 插到最前（新加的最靠前），所以 Fill 必须最后 Add；
             // 这里三段分开建（Bottom 在 Graph 之后），显式把 _graph 挪到最前兜底——
@@ -427,7 +423,7 @@ namespace AgingTestSystem.Dialogs
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
-            // 【V1.81.3】窗体限工作区：1020×720 在 100% 下刚好，125%/150% 下 AutoScale 放大后
+            // 窗体限工作区：1020×720 在 100% 下刚好，125%/150% 下 AutoScale 放大后
             // 可能超出小屏工控机（1366×768），按钮够不着、画布被压扁——看着也像"布局坏了"。
             // 画布内部自带滚动，窗体缩了不丢内容，只收客户区。
             try

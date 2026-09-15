@@ -9,7 +9,6 @@ namespace AgingTestSystem.Dialogs
 {
     /// <summary>
     /// 配方管理窗体（业务逻辑部分）
-    ///
     /// 【功能说明】
     /// 管理老化测试配方，包括：
     /// - 查看配方列表（左侧DataGridView表格，只显示序号和配方名称）
@@ -18,12 +17,10 @@ namespace AgingTestSystem.Dialogs
     /// - 添加配方：名称与已有配方重名时询问是否更新已有配方
     /// - 更新配方：按当前配方名称找到列表中对应配方并更新其设置
     /// - 删除配方：按当前配方名称找到列表中对应配方并确认删除
-    ///
     /// 【持久化（V1.27 起）】
     /// 添加 / 更新 / 删除 三个按钮在每次操作成功后都会自动把整个配方列表
     /// 持久化到本地 Recipes.json（见 <see cref="RecipeStorage.Save"/>），
     /// 因此不再需要独立的"保存设置"按钮（V1.27 已移除）。
-    ///
     /// 【界面布局】
     /// ┌─────────────────────────────────────────────────────────────┐
     /// │ 配方管理窗口                                               │ ← 标题栏
@@ -44,12 +41,10 @@ namespace AgingTestSystem.Dialogs
     /// │ └─────────────────────────┘  │ └─────────────────────┘ │   │
     /// │ └─────────────────────────┘                                │
     /// └─────────────────────────────────────────────────────────────┘
-    ///
     /// 【数据流转】
     /// 1. 窗体初始化时把传入的配方列表加载到左侧表格
     /// 2. 用户点击左侧表格某行，右侧输入框同步显示对应配方的设置内容
     /// 3. 用户在右侧输入框编辑后点击 添加/更新/删除，操作配方数据并自动落盘
-    ///
     /// 【配方字段】
     /// - 序号：行号（从1开始）
     /// - 配方名称：配方的名称标识
@@ -58,7 +53,6 @@ namespace AgingTestSystem.Dialogs
     /// - 极限温度：测试极限温度（单位：℃）
     /// - 负压阈值：配方真空工艺要求（单位：kPa，V1.66；新建默认=全局阈值）
     /// - 显示模式：烧屏画面记录（自由文本，V1.66；只追溯不判定）
-    ///
     /// 【持久化】
     /// 添加/更新/删除每次操作成功后自动通过 <see cref="RecipeStorage"/> 把整个配方列表
     /// 写入程序运行目录下的 Recipes.json；主窗体启动时加载该文件（见 MainForm.LoadRecipes）。
@@ -71,19 +65,19 @@ namespace AgingTestSystem.Dialogs
         private readonly List<RecipeConfig> _recipes;
 
         /// <summary>
-        /// 新建配方时负压阈值输入框的默认值（【V1.66】= 全局 AlarmPressureThresholdKPa）。
+        /// 新建配方时负压阈值输入框的默认值（= 全局 AlarmPressureThresholdKPa）。
         /// 项目未上线、无老配方包袱：新建所见即所得，不搞"0=用全局"魔法值。
         /// </summary>
         private readonly decimal _defaultNegativePressureKPa;
 
         /// <summary>
-        /// 生效配置（【V1.75 新增】显示模式字典与开关走它；可为 null，
+        /// 生效配置（显示模式字典与开关走它；可为 null，
         /// null 时 Resolve 读当前项目文件——主窗体传 _config，测试传参即定）。
         /// </summary>
         private readonly DeviceConfig _displayConfig;
 
         /// <summary>
-        /// 显示模式行是否显示（【V1.75 新增】构造时按开关定死，Fill/回填认它。
+        /// 显示模式行是否显示（构造时按开关定死，Fill/回填认它。
         /// 不读 cmb.Visible——窗体没 Show 时 Visible 读恒 false（V1.73 血泪），
         /// 读它 Fill 永远进隐藏分支，下拉永远是空的）。
         /// </summary>
@@ -121,9 +115,9 @@ namespace AgingTestSystem.Dialogs
                 UpdateRecipeSettings(_recipes[0]);
             }
 
-            // 【V1.74】显示模式下拉填项（字典选项代码填，R8a 禁 Designer 写 AddRange）：
+            // 显示模式下拉填项（字典选项代码填，R8a 禁 Designer 写 AddRange）：
             // 字典改了重开本窗即换（窗体短命，不做热更）。
-            // 【V1.75】开关关时整行隐藏 + 布局收缩（显示行是末行：按钮上移 38 + 窗高缩 38）。
+            // 开关关时整行隐藏 + 布局收缩（显示行是末行：按钮上移 38 + 窗高缩 38）。
             _displayModeShown = DisplayModeOptions.ShouldShowDisplayMode(_displayConfig);
             lblDisplayMode.Visible = _displayModeShown;
             cmbDisplayMode.Visible = _displayModeShown;
@@ -147,20 +141,20 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 显示模式行高（【V1.75 新增】隐藏时布局收缩量 = 该行高 38px：
+        /// 显示模式行高（隐藏时布局收缩量 = 该行高 38px：
         /// 显示行 combo Y=241 高 29 → 底 270，按钮 Y=280（10px 间隙），
         /// 收缩后按钮 Y=242，窗高同步缩 38，行隙/边距原样保留）。
         /// </summary>
         private const int DisplayModeRowHeight = 38;
 
         /// <summary>
-        /// 显示模式下拉填项（【V1.74 新增】字典驱动；遗留值参数供回填时带上旧值）。
+        /// 显示模式下拉填项（字典驱动；遗留值参数供回填时带上旧值）。
         /// selectedAfterFill 为 null = 不动当前选择（构造时用）；非 null = 填完选中它
         /// （回填时用，遗留值不在字典则追加末尾，保证看得见）。
         /// </summary>
         private void FillDisplayModes(string selectedAfterFill, bool selectIt = false)
         {
-            // 【V1.75】隐藏态守卫（同工位窗）：隐藏=恒空，防遗留值堵死保存。
+            // 隐藏态守卫（同工位窗）：隐藏=恒空，防遗留值堵死保存。
             // 认 _displayModeShown 字段，不读 Visible（未 Show 恒 false，见字段注释）。
             if (!_displayModeShown)
             {
@@ -262,9 +256,9 @@ namespace AgingTestSystem.Dialogs
                 nudBurnInMinutes.Value = nudBurnInMinutes.Minimum;
                 nudBurnInSeconds.Value = nudBurnInSeconds.Minimum;
                 nudLimitTemp.Value = nudLimitTemp.Minimum;
-                // 【V1.66】清空时负压回到新建默认值（全局阈值），显示模式清空
+                // 清空时负压回到新建默认值（全局阈值），显示模式清空
                 nudNegativePressure.Value = ClampPressure(_defaultNegativePressureKPa);
-                // 【V1.74】下拉清空=选空（Text="" 即 SelectedIndex=-1）；顺手重填字典，
+                // 下拉清空=选空（Text="" 即 SelectedIndex=-1）；顺手重填字典，
                 // 把之前回填追加的遗留值清掉（下拉选项永远等于干净字典）。
                 FillDisplayModes(null);
                 cmbDisplayMode.Text = "";
@@ -283,14 +277,14 @@ namespace AgingTestSystem.Dialogs
             nudLimitTemp.Value = Math.Max(nudLimitTemp.Minimum,
                 Math.Min(nudLimitTemp.Maximum, recipe.LimitTemperature));
 
-            // 【V1.66】负压阈值 + 显示模式（超出范围钳制；显示模式 null→空串）
+            // 负压阈值 + 显示模式（超出范围钳制；显示模式 null→空串）
             nudNegativePressure.Value = ClampPressure(recipe.NegativePressure);
-            // 【V1.74】下拉回填：字典选项 + 遗留值追加（老配方字典外文本看得见，存时拦整改）
+            // 下拉回填：字典选项 + 遗留值追加（老配方字典外文本看得见，存时拦整改）
             FillDisplayModes(recipe.DisplayMode, true);
         }
 
         /// <summary>
-        /// 负压阈值钳制到输入框范围（【V1.66】±9999，超出时取边界，避免设 Value 越界抛异常）
+        /// 负压阈值钳制到输入框范围（±9999，超出时取边界，避免设 Value 越界抛异常）
         /// </summary>
         private decimal ClampPressure(decimal value)
         {
@@ -336,10 +330,10 @@ namespace AgingTestSystem.Dialogs
             recipe.BurnInTime = new TimeSpan(
                 (int)nudBurnInHours.Value, (int)nudBurnInMinutes.Value, (int)nudBurnInSeconds.Value);
             recipe.LimitTemperature = nudLimitTemp.Value;
-            // 【V1.66】负压阈值与显示模式一并写入：以前这里漏写 NegativePressure，
+            // 负压阈值与显示模式一并写入：以前这里漏写 NegativePressure，
             // 新建配方该值恒 0，下发后真空保护≈关闭。现在存什么定格什么。
             recipe.NegativePressure = nudNegativePressure.Value;
-            // 【V1.74】显示模式字典校验（Q20：空=清空允许，字典内=存规范写法，
+            // 显示模式字典校验（Q20：空=清空允许，字典内=存规范写法，
             // 字典外拦并报出全部选项；本窗无配置对象，读项目文件字典）
             string canonicalMode, modeErr;
             if (!DisplayModeOptions.ValidateInput(cmbDisplayMode.Text,
@@ -392,7 +386,6 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 添加按钮点击事件
-        ///
         /// 【重名处理】
         /// 如果当前输入的配方名称已存在于列表中，弹窗询问"是否更新该配方"：
         /// - 确定 → 走与"更新"相同的逻辑（把输入内容覆盖到已有配方）
@@ -502,7 +495,7 @@ namespace AgingTestSystem.Dialogs
             PersistRecipes();
             LoadRecipesToGrid();
             SelectRecipeRow(index);
-            // 【V1.74】定格说明（Q18）：配方库更新只影响新启动，在测按旧参数跑完——
+            // 定格说明（Q18）：配方库更新只影响新启动，在测按旧参数跑完——
             // 本窗无 deviceManager 查不了在测，写死静态说明（不弹窗分支、不打扰）。
             MessageBox.Show($"配方 \"{draft.Name}\" 已更新\r\n（在测工位按启动时定格参数跑完，仅对新启动生效）", "提示",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -510,7 +503,6 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 删除按钮点击事件
-        ///
         /// 【删除条件】
         /// 按当前输入的配方名称判断（不论手动输入还是自动读取）：
         /// - 名称为空 → 提示先输入或选择配方

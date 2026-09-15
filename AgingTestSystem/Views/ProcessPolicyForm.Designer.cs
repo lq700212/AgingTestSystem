@@ -4,8 +4,8 @@ using System.Windows.Forms;
 namespace AgingTestSystem.Views
 {
     /// <summary>
-    /// 工艺策略 — 设计器部分（【V1.72 新增】纯代码拆分：静态边框进 Designer；
-    /// 【V1.73】由流程驾驶舱改名，类/文件名全量同步）。
+    /// 工艺策略 — 设计器部分（纯代码拆分：静态边框进 Designer；
+    /// 由流程驾驶舱改名，类/文件名全量同步）。
     /// 这里只装"静态边框"：窗体属性 + 右栏空壳（标题/编辑器容器/保存/复位/关闭）
     /// + 底部状态条。以下三样仍在 ProcessPolicyForm.cs 里用代码建：
     /// ①自绘画布 FlowCanvas（构造要吃 DeviceConfig/DeviceManager 真参数，
@@ -16,7 +16,7 @@ namespace AgingTestSystem.Views
     /// 画布 Dock=Fill 最后加（代码里加）——顺序错画布会盖住右栏。
     /// 【尺寸】1160×980：画布内容 730×885（8 节点，MES 在最下）默认整窗可见；
     /// MinimumSize 只锁到 950×700（小屏走双滚动条，画布/编辑器都带 AutoScroll）。
-    /// 【V1.85】右栏顶部加预置行（标题46/下拉68/说明100，共占约90px）：
+    /// 右栏顶部加预置行（标题46/下拉68/说明100，共占约90px）：
     /// 编辑器下移到146、高642，底部按钮顺延（保存794/复位关闭830）。
     /// 静态布局（坐标/文本/事件挂接）全在这里，VS 可预览；
     /// 下拉选项填充在 ProcessPolicyForm.cs 里代码做（数据源 PolicyPresets.All，
