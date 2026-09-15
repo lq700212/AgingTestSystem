@@ -55,6 +55,15 @@ namespace AgingTestSystem.Dialogs
         private volatile bool _closed;
 
         /// <summary>
+        /// 悬停说明（与设置表同源：取 SettingsForm._descriptions 的负压阈值说明，
+        /// 超 40 字走 WrapTooltip 换行；标签+数值框双挂，长说明停留 15 秒，小白一看即懂）。
+        /// 本窗 Designer 的 components 恒为 null（无托管组件），不用 new ToolTip(components)
+        /// （空容器抛 ArgumentNullException，回归红过）；走无容器 + Disposed 事件释放
+        /// （Show 关窗/构造即弃两条路都覆盖，Dispose(bool) 在 Designer 已定义，.cs 不重复 override）。
+        /// </summary>
+        private System.Windows.Forms.ToolTip _tip;
+
+        /// <summary>
         /// 构造函数
         /// </summary>
         /// <param name="deviceManager">设备管理器（主窗体传入，负责批量写阈值）</param>
@@ -65,6 +74,18 @@ namespace AgingTestSystem.Dialogs
 
             // 界面控件居中显示（标签+输入框一组居中，按钮居中）
             CenterControls();
+
+            // 负压值悬停说明（标签+输入框双挂，与设置表同源，禁各写一份文案）
+            _tip = new System.Windows.Forms.ToolTip();
+            _tip.AutoPopDelay = 15000;
+            this.Disposed += (s, e) => { if (_tip != null) { _tip.Dispose(); _tip = null; } };
+            string tip = SettingsForm.WrapTooltip(
+                SettingsForm.GetDescription("AlarmPressureThresholdKPa"));
+            if (!string.IsNullOrEmpty(tip))
+            {
+                _tip.SetToolTip(lblThreshold, tip);
+                _tip.SetToolTip(nudThreshold, tip);
+            }
         }
 
         /// <summary>

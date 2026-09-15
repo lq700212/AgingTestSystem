@@ -283,7 +283,7 @@ namespace AgingTestSystem.Dialogs
             { "BarometerPressureScale", "压力缩放系数（读数 × 该值）" },
 
             // ===== 报警参数 =====
-            { "AlarmPressureThresholdKPa", "报警压力阈值（kPa，如 -5）" },
+            { "AlarmPressureThresholdKPa", "全局真空阈值（kPa，72台共用，缺省-5）：保存时同时写入气压表硬件（寄存器0x0010）与软件报警判定。方向：压力值大于阈值报警——阈值-5时-3报警（没吸住），-7到位（已吸住），越接近0真空越差。配方单独设了负压的台按配方来，没设的回退到这里。" },
             { "AlarmWhenPressureHigherThanThreshold", "报警方向（true=压力高于阈值时报警）" },
 
             // ===== 冷却送风机 =====
