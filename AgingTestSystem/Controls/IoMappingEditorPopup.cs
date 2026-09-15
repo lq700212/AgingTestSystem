@@ -61,6 +61,10 @@ namespace AgingTestSystem.Controls
         /// <param name="config">设备配置（可为 null，null 则用缺省值建池）</param>
         public IoMappingEditorPopup(string currentValue, DeviceConfig config)
         {
+            // 高 DPI 三要素（纯代码窗）：设计基准 96DPI + 挂起布局，逐个 Add 不固化错误基准。
+            AutoScaleMode = AutoScaleMode.Font;
+            AutoScaleDimensions = new SizeF(6F, 12F);
+            SuspendLayout();
             _config = config;
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
@@ -200,6 +204,7 @@ namespace AgingTestSystem.Controls
             Controls.Add(_btnOk);
 
             LoadValue(currentValue);
+            ResumeLayout(false);
         }
 
         /// <summary>创建 SunnyUI 风格的按钮（按样式区分主色）</summary>

@@ -72,6 +72,14 @@ namespace AgingTestSystem.Services
         private static readonly object _lock = new object();
 
         /// <summary>
+        /// 脏读指纹（与 ProjectPolicyStore 同口径）：路径 + 长度 + 写时间。
+        /// 路径键缓存只比路径=手改文件读脏；Save 后刷新指纹，手改文件即失效重载。
+        /// </summary>
+        private static string _loadedPath;
+        private static long _loadedLen = -2;
+        private static DateTime _loadedUtc = DateTime.MinValue;
+
+        /// <summary>
         /// 静态构造函数：首次访问时尝试从文件加载缓存
         /// </summary>
         static StationSettingsCache()
@@ -132,7 +140,8 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 确保内存缓存已加载（防止 Get/Save 被调用时静态构造函数未执行的极端情况）
+        /// 确保内存缓存已加载（防止 Get/Save 被调用时静态构造函数未执行的极端情况）。
+        /// 附带脏读检查：同进程手改文件后指纹变化即重载（手改即生效是老行为，缓存不能丢）。
         /// </summary>
         private static void EnsureLoaded()
         {
@@ -140,6 +149,49 @@ namespace AgingTestSystem.Services
             {
                 LoadFromFile();
             }
+            else if (!CacheStillFresh())
+            {
+                LoadFromFile();
+            }
+        }
+
+        /// <summary>当前文件指纹与加载时是否一致（路径/长度/写时间三元）。</summary>
+        private static bool CacheStillFresh()
+        {
+            try
+            {
+                string path = CacheFilePath;
+                if (!string.Equals(path, _loadedPath, StringComparison.OrdinalIgnoreCase)) return false;
+                var fi = new FileInfo(path);
+                if (!fi.Exists) return _loadedLen < 0;
+                return fi.Length == _loadedLen && fi.LastWriteTimeUtc == _loadedUtc;
+            }
+            catch
+            {
+                return true;   // 拿不到指纹按新鲜处理（不因探针失败丢内存）
+            }
+        }
+
+        /// <summary>刷新脏读指纹（Load/Write 后调用）。</summary>
+        private static void StampCache()
+        {
+            try
+            {
+                string path = CacheFilePath;
+                _loadedPath = path;
+                var fi = new FileInfo(path);
+                if (fi.Exists)
+                {
+                    _loadedLen = fi.Length;
+                    _loadedUtc = fi.LastWriteTimeUtc;
+                }
+                else
+                {
+                    _loadedLen = -1;
+                    _loadedUtc = DateTime.MinValue;
+                }
+            }
+            catch { /* 指纹失败不影响业务 */ }
         }
 
         /// <summary>
@@ -173,6 +225,7 @@ namespace AgingTestSystem.Services
             {
                 System.Diagnostics.Debug.WriteLine($"[工位缓存] 加载缓存失败: {ex.Message}");
             }
+            StampCache();
         }
 
         /// <summary>
@@ -185,6 +238,7 @@ namespace AgingTestSystem.Services
                 string jsonContent =
                     JsonConvert.SerializeObject(new List<StationCacheEntry>(_cache.Values), Formatting.Indented);
                 AtomicFile.WriteAllText(CacheFilePath, jsonContent);
+                StampCache();   // 自己写完即新鲜，防下次 Get 误判外改多读一次盘
             }
             catch (Exception ex)
             {

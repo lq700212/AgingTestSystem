@@ -50,16 +50,34 @@ namespace AgingTestSystem.Services
     /// </summary>
     public class UserManager
     {
-        /// <summary>
-        /// 用户数据文件路径（程序运行目录下的 Users.json）
-        /// </summary>
-        private const string UserDataFilePath = "Users.json";
+        /// <summary>目录覆盖测试缝（回归隔离用，生产恒 null；用例赋值后 try/finally 复位）。</summary>
+        internal static string BaseDirOverride;
+
+        private static string BaseDir
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(BaseDirOverride)) return BaseDirOverride;
+                try { return AppDomain.CurrentDomain.BaseDirectory; }
+                catch { return "."; }
+            }
+        }
 
         /// <summary>
-        /// 记住的登录信息文件路径（程序运行目录下的 RememberedLogin.json）
+        /// 用户数据文件路径（程序运行目录下的 Users.json，绝对路径——
+        /// 裸相对文件名跟 CWD 走，快捷方式起始位置一变即读写散、重启丢账号）。
+        /// </summary>
+        private static string UserDataFilePath { get { return Path.Combine(BaseDir, UserDataFileName); } }
+
+        private const string UserDataFileName = "Users.json";
+
+        /// <summary>
+        /// 记住的登录信息文件路径（程序运行目录下的 RememberedLogin.json，绝对路径，同上）
         /// 属于运行时用户数据（含密码），已被 gitignore，不入库
         /// </summary>
-        private const string RememberedLoginFilePath = "RememberedLogin.json";
+        private static string RememberedLoginFilePath { get { return Path.Combine(BaseDir, RememberedLoginFileName); } }
+
+        private const string RememberedLoginFileName = "RememberedLogin.json";
 
         /// <summary>
         /// 用户列表（按角色索引方便查找）

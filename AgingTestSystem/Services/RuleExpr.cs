@@ -157,6 +157,10 @@ namespace AgingTestSystem.Services
         /// 防 5000 层括号或 2000 连写 !/- 递归 StackOverflow 杀进程，不可捕获）。</summary>
         public const int MaxNestingDepth = 32;
 
+        /// <summary>表达式节点总数上限（防"1+1+…"平坦长链：解析器循环零消耗通过，
+        /// 但求值左斜树递归深度 = 节点数，StackOverflow 同样不可捕获。正常规则几十节点。）</summary>
+        public const int MaxNodeCount = 400;
+
         /// <summary>
         /// 解析表达式（空/空白 → error"表达式为空"，空=禁用由调用方判断，这里只管语法）。
         /// </summary>
@@ -236,6 +240,7 @@ namespace AgingTestSystem.Services
             private readonly string _s;
             private readonly bool _strictVars;
             private int _depth;
+            private int _nodes;
             public int Pos;
             public Parser(string s, bool strictVars) { _s = s; _strictVars = strictVars; Pos = 0; }
             public bool AtEnd() { return Pos >= _s.Length; }
@@ -264,6 +269,27 @@ namespace AgingTestSystem.Services
                 return Pos < _s.Length ? _s[Pos] : '\0';
             }
 
+            // 【节点预算】每次建二元/一元节点顺手计数（平坦长链循环体内同样消耗，
+            // 与只计真递归的深度预算互补），超限直接报错，求值递归深度恒 ≤ 节点数。
+            private Node CountBinary(string op, Node l, Node r, ref string error)
+            {
+                if (++_nodes > MaxNodeCount)
+                {
+                    error = "表达式节点过多（上限 " + MaxNodeCount + " 个，请拆简规则）";
+                    return null;
+                }
+                return new BinaryNode(op, l, r);
+            }
+            private Node CountUnary(char op, Node e, ref string error)
+            {
+                if (++_nodes > MaxNodeCount)
+                {
+                    error = "表达式节点过多（上限 " + MaxNodeCount + " 个，请拆简规则）";
+                    return null;
+                }
+                return new UnaryNode(op, e);
+            }
+
             // 【深度计数口径】只在"真递归"处 +1：括号分支（见 ParsePrimary）与
             // 连写一元符分支（见 ParseUnary）；ParseOr 本体不计数（顶层调一次，
             // 平坦长表达式零消耗，预算全留给真嵌套）。
@@ -273,7 +299,7 @@ namespace AgingTestSystem.Services
                 if (error != null) return null;
                 while (true)
                 {
-                    if (Match("||")) { Node r = ParseAnd(ref error); if (error != null) return null; l = new BinaryNode("||", l, r); }
+                    if (Match("||")) { Node r = ParseAnd(ref error); if (error != null) return null; l = CountBinary("||", l, r, ref error); if (error != null) return null; }
                     else if (Peek() == '|') { error = "第" + (Pos + 1) + "字符：单 | 非法，请用 ||"; return null; }
                     else break;
                 }
@@ -286,7 +312,7 @@ namespace AgingTestSystem.Services
                 if (error != null) return null;
                 while (true)
                 {
-                    if (Match("&&")) { Node r = ParseEquality(ref error); if (error != null) return null; l = new BinaryNode("&&", l, r); }
+                    if (Match("&&")) { Node r = ParseEquality(ref error); if (error != null) return null; l = CountBinary("&&", l, r, ref error); if (error != null) return null; }
                     else if (Peek() == '&') { error = "第" + (Pos + 1) + "字符：单 & 非法，请用 &&"; return null; }
                     else break;
                 }
@@ -299,8 +325,8 @@ namespace AgingTestSystem.Services
                 if (error != null) return null;
                 while (true)
                 {
-                    if (Match("==")) { Node r = ParseComparison(ref error); if (error != null) return null; l = new BinaryNode("==", l, r); }
-                    else if (Match("!=")) { Node r = ParseComparison(ref error); if (error != null) return null; l = new BinaryNode("!=", l, r); }
+                    if (Match("==")) { Node r = ParseComparison(ref error); if (error != null) return null; l = CountBinary("==", l, r, ref error); if (error != null) return null; }
+                    else if (Match("!=")) { Node r = ParseComparison(ref error); if (error != null) return null; l = CountBinary("!=", l, r, ref error); if (error != null) return null; }
                     else break;
                 }
                 return l;
@@ -312,10 +338,10 @@ namespace AgingTestSystem.Services
                 if (error != null) return null;
                 while (true)
                 {
-                    if (Match(">=")) { Node r = ParseAdd(ref error); if (error != null) return null; l = new BinaryNode(">=", l, r); }
-                    else if (Match("<=")) { Node r = ParseAdd(ref error); if (error != null) return null; l = new BinaryNode("<=", l, r); }
-                    else if (Match(">")) { Node r = ParseAdd(ref error); if (error != null) return null; l = new BinaryNode(">", l, r); }
-                    else if (Match("<")) { Node r = ParseAdd(ref error); if (error != null) return null; l = new BinaryNode("<", l, r); }
+                    if (Match(">=")) { Node r = ParseAdd(ref error); if (error != null) return null; l = CountBinary(">=", l, r, ref error); if (error != null) return null; }
+                    else if (Match("<=")) { Node r = ParseAdd(ref error); if (error != null) return null; l = CountBinary("<=", l, r, ref error); if (error != null) return null; }
+                    else if (Match(">")) { Node r = ParseAdd(ref error); if (error != null) return null; l = CountBinary(">", l, r, ref error); if (error != null) return null; }
+                    else if (Match("<")) { Node r = ParseAdd(ref error); if (error != null) return null; l = CountBinary("<", l, r, ref error); if (error != null) return null; }
                     else break;
                 }
                 return l;
@@ -327,8 +353,8 @@ namespace AgingTestSystem.Services
                 if (error != null) return null;
                 while (true)
                 {
-                    if (Match("+")) { Node r = ParseMul(ref error); if (error != null) return null; l = new BinaryNode("+", l, r); }
-                    else if (Match("-")) { Node r = ParseMul(ref error); if (error != null) return null; l = new BinaryNode("-", l, r); }
+                    if (Match("+")) { Node r = ParseMul(ref error); if (error != null) return null; l = CountBinary("+", l, r, ref error); if (error != null) return null; }
+                    else if (Match("-")) { Node r = ParseMul(ref error); if (error != null) return null; l = CountBinary("-", l, r, ref error); if (error != null) return null; }
                     else break;
                 }
                 return l;
@@ -340,9 +366,9 @@ namespace AgingTestSystem.Services
                 if (error != null) return null;
                 while (true)
                 {
-                    if (Match("*")) { Node r = ParseUnary(ref error); if (error != null) return null; l = new BinaryNode("*", l, r); }
-                    else if (Match("/")) { Node r = ParseUnary(ref error); if (error != null) return null; l = new BinaryNode("/", l, r); }
-                    else if (Match("%")) { Node r = ParseUnary(ref error); if (error != null) return null; l = new BinaryNode("%", l, r); }
+                    if (Match("*")) { Node r = ParseUnary(ref error); if (error != null) return null; l = CountBinary("*", l, r, ref error); if (error != null) return null; }
+                    else if (Match("/")) { Node r = ParseUnary(ref error); if (error != null) return null; l = CountBinary("/", l, r, ref error); if (error != null) return null; }
+                    else if (Match("%")) { Node r = ParseUnary(ref error); if (error != null) return null; l = CountBinary("%", l, r, ref error); if (error != null) return null; }
                     else break;
                 }
                 return l;
@@ -370,8 +396,8 @@ namespace AgingTestSystem.Services
 
             private Node ParseUnaryOp(ref string error)
             {
-                if (Match("!")) { Node e = ParseUnary(ref error); if (error != null) return null; return new UnaryNode('!', e); }
-                if (Match("-")) { Node e = ParseUnary(ref error); if (error != null) return null; return new UnaryNode('-', e); }
+                if (Match("!")) { Node e = ParseUnary(ref error); if (error != null) return null; return CountUnary('!', e, ref error); }
+                if (Match("-")) { Node e = ParseUnary(ref error); if (error != null) return null; return CountUnary('-', e, ref error); }
                 return ParsePrimary(ref error);
             }
 

@@ -20,11 +20,20 @@ namespace AgingTestSystem.Services
     /// 【修复说明】
     /// 修复 M5：使用 lock 保护 Random，避免多线程访问导致内部状态损坏
     /// 修复 M7：将硬编码的 73/216 替换为基于 _config.TotalInputs/TotalOutputs 的动态计算
+    /// 【与真实实现的口径】
+    /// - InvertInputs/InvertOutputs：与真实 ModbusTcpIoController 同语义实现
+    ///   （输入读回取反、输出存物理取反值，写读往返恒等于写入值）；
+    /// - 备用通道映射（IoBackupChannelMappingEnabled）：Mock 不模拟物理寄存器重定向，
+    ///   读写仍按输出点编号直存直取。映射逻辑由 IoOutputChannelRemap 解析用例 +
+    ///   真实端读-改-写保位用例覆盖，需要端到端验证映射时走真机联调。
     /// </summary>
     public class MockIoController : IIoController
     {
         /// <summary>连接状态标志</summary>
         private bool _isConnected;
+
+        /// <summary>状态数组锁（输入/输出数组多线程读写串行化，与真实实现 _syncRoot 同职责）</summary>
+        private readonly object _stateLock = new object();
 
         /// <summary>设备配置（由 Connect 方法赋值）</summary>
         private DeviceConfig _config;
@@ -109,16 +118,21 @@ namespace AgingTestSystem.Services
                 return false;
             }
 
-            // 模拟输入状态变化（5% 概率翻转）
-            lock (_randomLock)
+            // 模拟输入状态变化（5% 概率翻转，翻的是物理原始值）
+            bool raw;
+            lock (_stateLock)
             {
-                if (_random.Next(0, 100) < 5)
+                lock (_randomLock)
                 {
-                    _inputStates[inputId - 1] = !_inputStates[inputId - 1];
+                    if (_random.Next(0, 100) < 5)
+                    {
+                        _inputStates[inputId - 1] = !_inputStates[inputId - 1];
+                    }
                 }
+                raw = _inputStates[inputId - 1];
             }
-
-            return _inputStates[inputId - 1];
+            // 取反口径与真实实现一致：物理值 → 业务值
+            return _config.InvertInputs ? !raw : raw;
         }
 
         /// <summary>
@@ -132,20 +146,29 @@ namespace AgingTestSystem.Services
                 return new bool[0];
             }
 
-            // 更新所有输入状态（模拟实时变化，3% 概率翻转）
-            lock (_randomLock)
+            // 更新所有输入状态（模拟实时变化，3% 概率翻转，翻的是物理原始值）
+            bool[] snapshot;
+            lock (_stateLock)
             {
-                for (int i = 0; i < _inputStates.Length; i++)
+                lock (_randomLock)
                 {
-                    if (_random.Next(0, 100) < 3)
+                    for (int i = 0; i < _inputStates.Length; i++)
                     {
-                        _inputStates[i] = !_inputStates[i];
+                        if (_random.Next(0, 100) < 3)
+                        {
+                            _inputStates[i] = !_inputStates[i];
+                        }
                     }
                 }
+                // 返回副本，避免外部修改内部状态
+                snapshot = (bool[])_inputStates.Clone();
             }
-
-            // 返回副本，避免外部修改内部状态
-            return (bool[])_inputStates.Clone();
+            // 取反口径与真实实现一致
+            if (_config.InvertInputs)
+            {
+                for (int i = 0; i < snapshot.Length; i++) snapshot[i] = !snapshot[i];
+            }
+            return snapshot;
         }
 
         /// <summary>
@@ -174,8 +197,12 @@ namespace AgingTestSystem.Services
                 return;
             }
 
-            // 数组索引 = 编号 - 起始编号
-            _outputStates[outputId - outputStart] = state;
+            // 取反口径与真实实现一致：存的是物理值（业务 true → 物理 !true），
+            // 读回时再取反，写读往返恒等于写入值。
+            lock (_stateLock)
+            {
+                _outputStates[outputId - outputStart] = _config.InvertOutputs ? !state : state;
+            }
         }
 
         /// <summary>
@@ -230,7 +257,12 @@ namespace AgingTestSystem.Services
                 return false;
             }
 
-            return _outputStates[outputId - outputStart];
+            bool raw;
+            lock (_stateLock)
+            {
+                raw = _outputStates[outputId - outputStart];
+            }
+            return _config.InvertOutputs ? !raw : raw;
         }
 
         /// <summary>
@@ -244,8 +276,17 @@ namespace AgingTestSystem.Services
                 return new bool[0];
             }
 
-            // 返回副本，避免外部修改内部状态
-            return (bool[])_outputStates.Clone();
+            // 返回副本，避免外部修改内部状态（读回值按取反口径换算，与真实实现一致）
+            bool[] snapshot;
+            lock (_stateLock)
+            {
+                snapshot = (bool[])_outputStates.Clone();
+            }
+            if (_config.InvertOutputs)
+            {
+                for (int i = 0; i < snapshot.Length; i++) snapshot[i] = !snapshot[i];
+            }
+            return snapshot;
         }
     }
 }
