@@ -1482,7 +1482,7 @@ namespace AgingTestSystem.Views
 
             _gridView = new WorkstationGridView();
             _gridView.Configure(_config.PanelColumns, _config.PanelRows, _config.TotalBarometers);
-            // 电流行开关（UsePowerMeter；改后重启生效）：开=面板加"电流："行（170→188），关=原布局
+            // 电流行开关（UsePowerMeter；改后重启生效）：开=面板加"电流："行（128→144），关=原布局
             _gridView.ShowCurrentRow = _config.UsePowerMeter;
 
             // 画布跟随主题（语义状态色两边不动，见 SetDarkMode）

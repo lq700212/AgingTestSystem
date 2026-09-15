@@ -56,13 +56,18 @@
   显示区再小也照算（`MinZoom` 钳制与滚动条兜底同步删除，72 站永远一屏）。
   外层容器 `AutoScroll=false`（V1.88.15 的 MinSize/比例恢复/BeginInvoke 校正三件套已作废，
   `UpdateCanvasSize` 只设 `Size`；以后谁再加滚动条，先读 V1.88.24 删除清单再动手）。
-  面板尺寸是缩放比的杠杆：值框/按钮能省则省（148→130、60×50→50×42），省出的每像素都换成字号；
+  面板尺寸是缩放比的杠杆：值框/按钮能省则省（148→130、60×50→50×42；V1.90 再压 170→128：
+  标题并入第一行＋状态块 20→18＋值框 18→16＋按钮 42→36＋正文 9→10pt，纵向缩放 0.526→0.703；
+  V1.91 标签列 56→65 装四字长标签、值列右移 65→74、按钮 50→46 保"设置"完整显示），
+  省出的每像素都换成字号；值框能缩则缩（SN 序列号最长保持最宽一档，压力/配方/时间串短，
+  缩了给标签列让位）；SN 之外的长文本一律走省略号，不撑布局。
   选中框边长取缩放后较小边（恒正方形，`GetSelectBoxRect`/`GetSelectBoxLocalRect` 绘制命中同源）。
   显示区最小保护三处：`HomeLayoutConfig.LoadOrDefault` 按 Range 钳（防手改 json 越界）、
   编辑器输入写入前再钳、`MainForm.ClampRightPanelWidthForWorkstation` 保 Panel1≥640
   （右侧 600 在小屏上压回来）＋`SplitterDistance` try/catch。
-  项目未上线：旧尺寸 `PanelLayout.json` 直接删文件重导，不写迁移分支
-  （`LoadOrDefault` 保持读-解-回缺省三段，禁加指纹删除/字段自愈分支，改干净）。
+  工位面板布局是纯代码缺省（V1.91 起删掉 `PanelLayout.json` 文件自定义：项目未上线，
+  改布局直接改 `PanelLayoutConfig` 缺省值重编译，不留"文件覆盖代码"的第二套口径；
+  也不写任何迁移分支，改干净）。
   - **自绘命中按内容 bounds 判交，禁止"整除即命中"（V1.88.15 血泪）**：行列整除会把面板
   之间的缝隙算进上一格，点缝隙误翻选上一个面板（触摸屏 fat-finger 更易中招）。
   `TryHitPanel` 类命中函数返回前必须验 local 落在内容矩形内，缝隙一律不命中（悬停同步消失）；
@@ -235,8 +240,8 @@
   运行时数据，gitignore 绝不入库（已有红线，dev 不例外）。
 - **深色/浅色主题约定（V1.60 起，V1.64 改入口）**：主题状态只认 `Services/ThemeManager`（App.config 存 `AppTheme`=Light/Dark，大小写兼容、写错兜底浅色）。新增窗体/弹窗必须在打开前调一次 `ThemeManager.ApplyTo(form)`（打开点与窗体构造解耦，动态内容在 Show 时已建完才刷得全）；切换入口只有"关于"下拉内的深浅项（`MenuThemeToggle_Click`+`ApplyToAllOpenForms`），**仅 dev 登录可见**。**按钮颜色一律不动**（全是业务语义色）；自绘控件自己管换肤（如 `WorkstationGridView.SetDarkMode`），禁止在 ThemeManager 里硬改自绘颜色；运行时状态色（红/绿/蓝）靠"双向映射表查不到就保留"自动豁免，不要另写白名单。**例外（用户指定的深灰底白字）**：主窗体"停止运行/报警复位/下料判定"（V1.60.1，`MainForm.GetOperationButtonThemeColors`，V1.71 走 Sunny Gray 档 + `ApplyButtonColors`）、版本说明"确定"——浅色无语义默认灰的按钮深色才动；布局预览画布深色走纯黑（V1.60.4，`HomeLayoutEditorForm.GetPreviewBackColor`，色块自带底所以安全）；系统 `MessageBox` 跟不了主题，要换肤必须换自定义窗（V1.60.4 版本说明先例）。
 - **界面文件头注释必须带 ASCII 布局图**：所有 View/Dialog（`Views/*.cs`、`Dialogs/*.cs`）的类 XML 注释里都要有一段用 `┌─┐│└┘` 画出的界面布局图（参考 `RecipeManagerForm.cs` / `WorkstationGridView.cs` 头部注释），框内标注控件名与关键交互点。AI 无法看图，改界面全靠这段文本图，故**每次新增/修改界面文件都补画或同步更新该图**，且要和实际控件布局一致（坐标、控件名、按钮文字都对上）。
-- **自绘控件（WorkstationGridView 等）的坐标类常量一律外部化**：不写死像素常量，放到布局配置模型（如 `Models/PanelLayoutConfig.cs`，可被 `PanelLayout.json` 覆盖），并把坐标标注进头部注释的 ASCII 图里，便于现场改配置微调间距/颜色/字号。
-- **自绘控件坐标一律用锚定，禁止"孤岛绝对坐标"（V1.58.13~1.58.17 沉淀）**：面板内元素通过锚定字段声明与"面板边缘"或"其他元素"的相对关系，加载时统一解析，改面板尺寸/基准元素时自动联动，不用手改一串坐标。字段：矩形 `RightMargin/TopMargin/RightAlignTo/VerticalAlignTo/LeftAlignTo/RightToLeftAlignTo`（双端锚定=LeftAlignTo+RightToLeftAlignTo 自动定宽）、标签 `LeftMargin/TopMargin/Width/RightToLeftAlignTo/LeftAlignTo`。**三步解析顺序铁律**（`ResolveAnchors`）：①面板边缘锚定 → ②元素间锚定（设置按钮→右对齐组→压力框→下电）→ ③标签锚定，顺序错会取到目标旧值致错位。**全表/依赖链/调整指南/坑（标签 Width 依赖字体、字段互斥、json 与代码默认一致）都在 `PanelLayoutConfig.cs` 类头注释**，改坐标前必读；改完同步 `bin/Debug/PanelLayout.json` 与 WorkstationGridView 头部 ASCII 图。
+- **自绘控件（WorkstationGridView 等）的坐标类常量一律外部化**：不写死像素常量，放到布局配置模型（如 `Models/PanelLayoutConfig.cs` 纯代码缺省，V1.91 起不走文件），并把坐标标注进头部注释的 ASCII 图里，便于改缺省值微调间距/颜色/字号。
+- **自绘控件坐标一律用锚定，禁止"孤岛绝对坐标"（V1.58.13~1.58.17 沉淀）**：面板内元素通过锚定字段声明与"面板边缘"或"其他元素"的相对关系，加载时统一解析，改面板尺寸/基准元素时自动联动，不用手改一串坐标。字段：矩形 `RightMargin/TopMargin/RightAlignTo/VerticalAlignTo/LeftAlignTo/RightToLeftAlignTo`（双端锚定=LeftAlignTo+RightToLeftAlignTo 自动定宽）、标签 `LeftMargin/TopMargin/Width/RightToLeftAlignTo/LeftAlignTo`。**三步解析顺序铁律**（`ResolveAnchors`）：①面板边缘锚定 → ②元素间锚定（设置按钮→右对齐组→压力框→下电）→ ③标签锚定，顺序错会取到目标旧值致错位。**全表/依赖链/调整指南/坑（标签 Width 依赖字体、字段互斥）都在 `PanelLayoutConfig.cs` 类头注释**，改坐标前必读；改完同步 WorkstationGridView 头部 ASCII 图与回归用例。
 - **高 DPI 适配约定（V1.55 起）**：
   - 标准控件窗体用 `AutoScaleMode.Font`，WinForms 自动缩放，前提是 `app.manifest` 声明 `PerMonitorV2` **且** `App.config` 配 `Switch.System.Windows.Forms.DpiAwareness=PerMonitorV2`（两个缺一不可）。
   - **纯代码窗体（无 Designer）的高 DPI 三要素**（V1.58.4 实测血泪）：
@@ -258,8 +263,7 @@
   主窗批量按钮、四个窗的保存类绿按钮）一律 `ForestGreen`（亮绿＋白字对比度仅 2:1，小字 wash 到看不清，
   深绿约 4.6:1，仍是绿色语义）。Designer 只能写字面值（`Color.ForestGreen`，禁成员表达式是 R8b 红线），
   配置写 `"34,139,34"`（同一色，改一边必须对另一边）；缺显式白字的绿按钮钉死 `ForeColor=White`。
-  改颜色/字号缺省后，已有 json（`PanelLayout.json`）会覆盖新缺省——验证前删 bin 文件、现场删程序目录文件
-  （项目未上线，不写迁移分支，老规矩）。
+  改颜色/字号缺省后重编译即生效（布局无文件覆盖，不用删 bin 文件；项目未上线，不写迁移分支）。
 - **动态控件重建必须先 Dispose 再 Clear（V1.72.12 血泪）**：`Controls.Clear()` 只摘父子关系，
   孤儿 Sunny 控件（UITextBox/UIComboBox，内部包原生 TextBox）进终结器线程 Dispose，
   内部读 Handle 即跨线程崩溃（堆栈终点 `ResetAutoComplete←Dispose←Finalize`，Name 全空、

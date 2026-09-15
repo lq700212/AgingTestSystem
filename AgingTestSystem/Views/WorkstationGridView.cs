@@ -37,11 +37,11 @@ namespace AgingTestSystem.Views
     /// │ │ ...  │ ...  │ ...  │ ...  │ ...  │ ... │ │ [选]     │   字号=正文×RowSelectFontScale；
     /// │ └──────┴──────┴──────┴──────┴──────┴───  │ ├──────────┤
     /// │ 8列（列宽209，每格内容204+左右边距各2）      │ 行内全部   │
-    /// │ × 9行（行高182，每格内容170+上下缝12）      │ 选中→[取消]│
+    /// │ × 9行（行高136，每格内容128+上下缝8）       │ 选中→[取消]│
     /// │ （竖排：[取]/[消]上下两格）                  │          │
     /// └───────────────────────────────────────────┴──────────┘
-    /// （保持 8×9=72；内容总宽 8×209＋行全选列 48＝1720，总高 9×182＝1638）
-    /// 行全选按钮高 = 面板内容高-1(=169)，含边框后上下边缘与工作站显示框(170)完全对齐；
+    /// （保持 8×9=72；内容总宽 8×209＋行全选列 48＝1720，总高 9×136＝1224）
+    /// 行全选按钮高 = 面板内容高-1(=127)，含边框后上下边缘与工作站显示框(128)完全对齐；
     /// 按钮矩形 = (列右缘+2, 行顶+2, 列宽-4, PanelInnerHeight-1)；-1 修正边框底凸出1px
     /// 网格占满全部 72 台设备。
     /// AutoFit=true 即双向精确铺满一屏（FitWidth/FitMode 双模式开关已删，
@@ -53,52 +53,54 @@ namespace AgingTestSystem.Views
     /// 字保 MinFontSize 可读。关掉 AutoFit 回原尺寸（超出部分直接裁掉、无滚动条）。
     /// 实现见 ComputeFitZoom/UpdateAutoFit/RebuildFonts/UpdateCanvasSize
     /// （zoomX/zoomY 并进 ScaledX/ScaledY）。
-    /// 二、单个面板内容（204×170，坐标均为"相对面板左上角"；
-    /// 工作状态块已删，真空块搬去第一行；本版紧凑：状态块 60×23→56×20、
-    /// 值框 148×21→130×18、延时框 80→66、设置按钮 60×50→50×42、选中框 23→18）：
+    /// 二、单个面板内容（204×128，坐标均为"相对面板左上角"；紧凑布局：
+    /// 标题/选中框并入第一行与上下电/真空同行，纵向省 42px 换缩放比；
+    /// 状态块 56×20→54×18、值框 130×18→121×16、延时框 66→72、
+    /// 设置按钮 50×42→46×36、选中框 18→16；正文 9→10pt、标题 12→11pt，
+    /// 物理字号反而 4.7→7.0pt 更清；标签列 56→65 装四字长标签）：
     /// ┌──────────────────────────────────────────────┐
-    /// │ NO.1（标题，左上角）            ┌────────────┐│
-    /// │ ┌──────────┐  ┌──────────┐     │ 选中指示框  ││ ← 右上角 23×23
-    /// │ │ 上电/下电 │  │ 真空开/关 │     │ (绿底白✓)  ││    选中框常显
-    /// │ └──────────┘  └──────────┘     └────────────┘│
-    /// │                                              │
-    /// │ 真空压力 ┌────────────────────────────────┐  │
-    /// │          │  78 kPa                        │  │
-    /// │          └────────────────────────────────┘  │
-    /// │ SN:    ┌────────────────────────┐             │
-    /// │ 配方:  ┌────────────────────────┐             │
-    /// │        └────────────────────────┘             │
-    /// │ 延时时间 ┌────────────┐   ┌─────────────────┐ │
-    /// │          │ 00:00:00   │   │      设置       │ │ ← 绿底白字
-    /// │ 烧屏时间 ┌────────────┘   └─────────────────┘ │
+    /// │ NO.1 ┌────────┐ ┌────────┐        ┌────────┐  │ ← 第一行同行四件套
+    /// │ (6,6)│ 上电/下电│ │ 真空开/关│        │选中框✓ │  │    编号11pt＋两状态块54×18＋选中框16×16
+    /// │      └────────┘ └────────┘        └────────┘  │
+    /// │ 真空压力 ┌──────────────────────────────┐    │
+    /// │          │  78 kPa                      │    │
+    /// │          └──────────────────────────────┘    │
+    /// │ SN:    ┌────────────────────────┐           │
+    /// │ 配方:  ┌────────────────────────┐           │
+    /// │        └────────────────────────┘           │
+    /// │ 延时时间 ┌──────────────┐ ┌───────────────┐ │
+    /// │          │ 00:00:00     │ │      设置     │ │ ← 绿底白字
+    /// │ 烧屏时间 ┌──────────────┘ └───────────────┘ │
     /// │          │ 00:00:00  │                        │
-    /// │          └───────────┘                        │
+    /// │          └────────────┘                        │
     /// └──────────────────────────────────────────────┘
-    /// 标注说明（括号内为锚定关系，紧凑值）：
-    /// - 行1：上电/下电块(65,26,56,20；Y/H 对齐真空块） + 真空开/关块(139,26,56,20；
-    ///   右缘对齐设置按钮＋TopMargin=26） + 选中框（右上：边长取 18 缩放后较小边，
-    ///   恒正方形跟面板走，1080p 下约 10×10，见 SelectBoxSide）
-    /// - 行2：真空压力值框(65,54,130,18；左缘对齐 SN 框＋右缘对齐设置按钮，宽 130；
-    ///   Y 吊真空块下方 TopToBottomGap=8，Y=26+20+8=54)
-    ///   + 电流值框 RcCurrentValue(65,74,71,18；左缘 SN/右缘贴真空关左缘-3，
-    ///   Y 吊压力框下方 Gap=2；ShowCurrentRow 关=整行不画；开=面板 170→188、SN 76→94、
-    ///   配方 98→116、延时 121/143→139/161、按钮 120→138，间距全都不变，见下方"V1.77 开态几何")
-    /// - 行3：SN 值框(65,76,130,18；改吊电流行下方 TopToBottomGap=2：
-    ///   关电流电流行高按 0，Y=74+0+2=76；开时 Y=74+18+2=94)
-    /// - 行4：配方值框(65,98,130,18；下缘贴设置按钮上缘、Gap=4)
-    /// - 行5：延时时间值框(65,121,66,18；以设置按钮中心为基准、CenterOffsetY=-11) +
-    ///   设置按钮(145,120,50,42；下缘距面板底 BottomMargin=8) + 烧屏时间值框(65,143,66,18；CenterOffsetY=11)
-    /// - 编号：NO.1(9,4)（LeftMargin=9 + TopMargin=4）
-    /// - 标签列：真空压力(9,56)/SN:(9,78)/配方:(9,100)/延时时间(9,123)/烧屏时间(9,145)
-    ///   （X=9 为右缘贴合压力框左缘推导 65-56=9；Y 以各自框中心为基准、VerticalCenterOffset=-1）
-    /// - 编号/标签列左缘 LeftMargin=9，设置按钮右缘贴右
-    ///   （RightMargin=9），左留白 9 = 右留白 9 → 面板内内容整体水平居中
-    ///   （V1.58.20 时右缘=213/宽 222；现右缘=195/宽 204，对称关系不变）；
-    ///   选中框 TopMargin 4→2（Y=2，底缘 25 与真空块上缘 29 间距由 2px 加大到 4px）。
+    /// 标注说明（括号内为锚定关系）：
+    /// - 行1（Y=4,H=18）：编号 NO.1(6,6；LeftMargin=6+TopMargin=6) + 上电/下电块(67,4,54,18；
+    ///   右缘贴真空关左缘 Gap=4＋Y/H 对齐真空块） + 真空开/关块(125,4,54,18；
+    ///   右缘贴选中框左缘 Gap=4＋TopMargin=4） + 选中框(183,5,16,16；RightMargin=5+TopMargin=5，
+    ///   边长取缩放后较小边恒正方形，缩放比变大后物理反而 9.5→11.3px 更大更好点，见 SelectBoxSide）
+    /// - 行2：压力值框(74,26,121,16；左缘对齐 SN 框＋右缘对齐设置按钮，宽 121；
+    ///   Y 吊真空块下方 TopToBottomGap=4，Y=4+18+4=26)
+    ///   + 电流值框 RcCurrentValue(74,44,121,16；与压力同界；
+    ///   Y 吊压力框下方 Gap=2；ShowCurrentRow 关=整行不画；开=面板 128→144、SN 46→62、
+    ///   配方 65→81、延时 86/104→102/120、按钮 85→101，间距全都不变，见下方"V1.77 开态几何")
+    /// - 行3：SN 值框(74,46,121,16；吊电流行下方 TopToBottomGap=2：
+    ///   关电流电流行高按 0，Y=44+0+2=46；开时 Y=44+16+2=62；SN 序列号最长，值框保持最宽一档)
+    /// - 行4：配方值框(74,65,121,16；下缘贴设置按钮上缘、Gap=4)
+    /// - 行5：延时时间值框(74,86,72,16；以设置按钮中心为基准、CenterOffsetY=-9) +
+    ///   设置按钮(149,85,46,36；下缘距面板底 BottomMargin=7) + 烧屏时间值框(74,104,72,16；CenterOffsetY=9)
+    /// - 编号：NO.1(6,6)（LeftMargin=6 + TopMargin=6，与第一行同行）
+    /// - 标签列：真空压力(9,26)/SN:(9,46)/配方:(9,65)/延时时间(9,86)/烧屏时间(9,104)
+    ///   （X=9 为右缘贴合压力框左缘推导 74-65=9；Y 以各自框中心为基准、VerticalCenterOffset=-1；
+    ///   标签列宽 65：四字 10pt 实测 65px 零余量装得下，"00:00:00"实测 71px 装进 72 框）
+    /// - 标签列左缘 X=9，设置按钮右缘贴右（RightMargin=9，右缘 195），
+    ///   左留白 9 = 右留白 9 → 面板内内容整体水平居中（右缘 195/宽 204 对称不变）；
+    ///   编号 X=6 比标签列多探 3px（给 11pt 标题留槽）；选中框 TopMargin=5（Y=5，
+    ///   与第一行 4~22 同行居中，框 16 上下各留 1px）。
     /// - 值框文字左内边距：ValueTextLeftPadding=6px（V1.52，文字不贴值框左边框，值框坐标不变）
-    /// - 状态块配色见下方"状态块配色"；颜色值均可由 PanelLayout.json 覆盖
+    /// - 状态块配色见下方"状态块配色"；颜色值收敛在 PanelLayoutConfig，改代码生效
     /// - 延时时间/烧屏时间两行中心与设置按钮中心垂直居中对齐
-    ///   （V1.58.6 时 (157.5+182.5)/2=170=(145+25)；现 (130+152)/2=141=(120+21)）；
+    ///   （现 (94+112)/2=103=(85+18)，偏移 ±9 精确对称）；
     ///   V1.58.19 起改为 VerticalCenterAlignTo 锚定自动保持居中。
     /// - 空闲/真空关/SN框/配方框/设置按钮五者右边缘统一 = 205：
     ///   工作状态块右移 X=153、真空关宽调成与空闲一致(48→52)并右移 X=153、
@@ -122,26 +124,25 @@ namespace AgingTestSystem.Views
     /// - 真空压力框 LeftAlignTo="SNValue"（左缘对齐 SN 框左缘）+
     ///   RightToLeftAlignTo="VacuumOpen"（右缘贴合真空关左缘），宽度自动=145-57=88；
     ///   下电 LeftAlignTo="PressureValue"（左边缘与压力框左边缘对齐）。
-    /// - "真空压力"标签 Width=56 固定文字宽 + RightToLeftAlignTo="PressureValue"
-    ///   （右缘贴合压力框左缘，X=57-56=1）；SN:/配方:/延时时间/烧屏时间 四标签 LeftAlignTo="LabelPressure"
-    ///   （左缘对齐"真空压力"标签）。
-    /// - 编号 TitlePosition 左上角锚定（LeftMargin=3 + TopMargin=4）；
-    ///   选中框右上角锚定（RightMargin=5 + TopMargin=4）；延时时间/烧屏时间值框补左缘锚定
+    /// - "压力"标签 Width=56 固定文字宽 + RightToLeftAlignTo="PressureValue"
+    ///   （右缘贴合压力框左缘，X=65-56=9）；SN:/配方:/延时/烧屏 四标签 LeftAlignTo="LabelPressure"
+    ///   （左缘对齐"压力"标签）。
+    /// - 编号 TitlePosition 第一行锚定（LeftMargin=6 + TopMargin=6）；
+    ///   选中框右上锚定（RightMargin=5 + TopMargin=5）；延时/烧屏值框补左缘锚定
     ///   LeftAlignTo="SNValue"（跟随值框列）。至此全部元素均已锚定，改面板宽/高基本布局不变。
-    /// - 压力/真空关/SN 改走自上而下链 TopToBottom，位置零变化；
-    ///   SN→配方之间改为两链交接缝，缺省高度下间距仍 4px，详见 PanelLayoutConfig 类头"完整锚定链（V1.77）"）】
-    ///   保持位置零变化（现值：按钮 BottomMargin=8；配方 Gap=4；
-    ///   压力 Gap=8；SN Gap=2，关电流 Y=76。V1.58.19 时为 10/6/15/3，见 PanelLayoutConfig 类头）；
-    ///   延时两行 VerticalCenterAlignTo="SetButton"+CenterOffsetY=-12/+13(以按钮中心为基准对称)；
+    /// - 压力/真空关/SN 走自上而下链 TopToBottom；SN→配方为两链交接缝，
+    ///   缺省高度下间距 3px，详见 PanelLayoutConfig 类头"完整锚定链"；
+    ///   现值：按钮 BottomMargin=7；配方 Gap=4；压力 Gap=4；SN Gap=2，关电流 Y=46；
+    ///   延时两行 VerticalCenterAlignTo="SetButton"+CenterOffsetY=-9/+9(以按钮中心为基准对称)；
     ///   各标签 VerticalCenterAlignTo 各自框+offset=-1。改 PanelInnerHeight 时下链自动联动，
-    ///   上链（真空块及以上+压力/电流/SN）不动，差值由交接缝吸收。
+    ///   上链（第一行+压力/电流/SN）不动，差值由交接缝吸收。
     /// - ShowCurrentRow=true（UsePowerMeter 开）时单面板内容
-    ///   204×188（行高 182→200），压力行(54)及以上逐像素不动，新增电流行(74,高18)+标签"电流："，
-    ///   SN(94)/配方(116)/延时(139/161)/按钮(138)整体下移 18，间距全都不变；
+    ///   204×144（行高 136→152），压力行(26)及以上不动，新增电流行(44,高16)+标签"电流："，
+    ///   SN(62)/配方(81)/延时(102/120)/按钮(101)整体下移 16，间距全都不变；
     ///   false 时与本图逐像素一致。开关走 ShowCurrentRow 属性（MainForm 按 UsePowerMeter 装配一次），
-    ///   行高/画布/命中一律走 GetEffectiveRowHeight()/GetEffectiveInnerHeight()，禁止手写 170/182。
+    ///   行高/画布/命中一律走 GetEffectiveRowHeight()/GetEffectiveInnerHeight()，禁止手写 128/136。
     /// - 值框文字左内边距：ValueTextLeftPadding=6px（V1.52，文字不贴值框左边框，值框坐标不变）
-    /// - 状态块配色见下方"状态块配色"；颜色值均可由 PanelLayout.json 覆盖
+    /// - 状态块配色见下方"状态块配色"；颜色值收敛在 PanelLayoutConfig，改代码生效
     /// 【状态块配色（V1.28 约定；工作状态块已删，状态只看面板底色＋上电/真空块；
     /// 绿统一加深为 ForestGreen：白字对比度 2:1→4.6:1，与设置按钮/各窗绿按钮同色）】
     /// - 上电/下电：绿=ForestGreen=上电，浅灰=LightGray=下电
@@ -155,7 +156,7 @@ namespace AgingTestSystem.Views
     public partial class WorkstationGridView : System.Windows.Forms.UserControl
     {
         // ===== 布局配置 =====
-        /// <summary>面板布局配置（默认内置，可被 PanelLayout.json 覆盖）</summary>
+        /// <summary>面板布局配置（纯代码缺省，无外部文件覆盖）</summary>
         private readonly PanelLayoutConfig _layout;
 
         // ===== 字体 =====
@@ -163,10 +164,11 @@ namespace AgingTestSystem.Views
         // 释放旧字体防 GDI 泄漏（Dispose 已释放两者，见 Designer）。
         /// <summary>面板正文文字字体（显式创建，不继承主窗体缩放字体，保证与小矩形匹配）</summary>
         private Font _panelFont;
-        /// <summary>设备编号标题字体（缺省 12pt：左上独占行，槽位宽裕）</summary>
+        /// <summary>设备编号标题字体（缺省 11pt：并入第一行与上下电/真空同行，槽位 61px；
+        /// "NO.72"实测 56px，12pt 要 62px 塞不下；物理字号仍更大更清）</summary>
         private Font _titleFont;
         /// <summary>
-        /// 设置按钮字体（独立大字：按钮框 50×42，"设置"两字在正文字号下只占角落；
+        /// 设置按钮字体（独立大字：按钮框 50×36，"设置"两字在正文字号下只占角落；
         /// 字号取配置 SetButtonFontSize（缺省 12），跟 zoom 等比缩放，与 RebuildFonts 同建同释放）。
         /// </summary>
         private Font _setButtonFont;
@@ -184,7 +186,7 @@ namespace AgingTestSystem.Views
         /// <summary>竖排字间隙（px，布局态由字高换算缓存，Paint 只读）</summary>
         private int _rowSelectGap;
 
-        // ===== 配置解析出的颜色（浅色值来自 PanelLayoutConfig，可被 PanelLayout.json 覆盖） =====
+        // ===== 配置解析出的颜色（浅色值来自 PanelLayoutConfig 纯代码缺省） =====
         // 以下"跟随主题切换"的颜色去掉 readonly，SetDarkMode 里整体换肤；
         // 语义状态色（上电绿/故障红/繁忙黄/选中橙/完成蓝…）保持 readonly，深浅两边都不动——
         // 绿底白字/灰底黑字在深底上照样清晰，动了反而丢业务含义。
@@ -290,9 +292,9 @@ namespace AgingTestSystem.Views
             InitializeComponent();
             this.DoubleBuffered = true;
 
-            // 加载布局配置；颜色分两批：语义状态色直接解析（终身不变），
+            // 加载布局配置（纯代码缺省，无外部文件）；颜色分两批：语义状态色直接解析（终身不变），
             // 主题色走 ApplyLightColors（SetDarkMode 切深色/切回浅色都调它，保证浅色精确还原配置值）
-            _layout = PanelLayoutConfig.LoadOrDefault();
+            _layout = PanelLayoutConfig.CreateDefault();
 
             _colorPowerOn = Parse(_layout.ColorPowerOn, Color.ForestGreen);
             _colorPowerOff = Parse(_layout.ColorPowerOff, Color.LightGray);
@@ -631,7 +633,7 @@ namespace AgingTestSystem.Views
         /// 开/上电块（绿底白字）两边都不动，不走这里。
         /// </summary>
         /// <param name="dark">true=深色配色，false=浅色配色</param>
-        /// <param name="lightBack">浅色底（配置值，PanelLayout.json 可覆盖）</param>
+        /// <param name="lightBack">浅色底（配置值，来自 PanelLayoutConfig）</param>
         /// <param name="back">块底色</param>
         /// <param name="fore">块文字色</param>
         public static void GetOffBlockThemeColors(bool dark, Color lightBack, out Color back, out Color fore)
@@ -746,13 +748,6 @@ namespace AgingTestSystem.Views
         /// </summary>
         public void Configure(int columns, int rows, int totalDevices)
         {
-            // 首次运行时若程序目录没有 PanelLayout.json，自动导出一份默认配置，
-            // 方便现场直接修改配置文件微调界面（坐标/颜色/字号/文字），无需重新编译。
-            if (!System.IO.File.Exists(PanelLayoutConfig.GetConfigPath()))
-            {
-                _layout.SaveDefault();
-            }
-
             _columns = columns;
             _rows = rows;
             _totalDevices = totalDevices;
@@ -778,7 +773,7 @@ namespace AgingTestSystem.Views
         /// 是否显示电流行（运行时开关，默认 false = 原来布局逐像素不变）。
         /// 主窗体按 DeviceConfig.UsePowerMeter 传入一次（结构型开关，改后重启生效，
         /// 与 UsePowerMeter 同口径，不跟项目热更）。
-        /// 置 true → 布局 ShowCurrent 置位 + 锚定重解（面板有效高 +21，下游下移 21）
+        /// 置 true → 布局 ShowCurrent 置位 + 锚定重解（面板有效高 +16，下游下移 16）
         /// + 画布重算 + 重绘；置 false 回到原来布局。重解幂等，反复置位不漂移。
         /// </summary>
         public bool ShowCurrentRow
@@ -792,7 +787,7 @@ namespace AgingTestSystem.Views
                 if (_columns > 0)
                 {
                     UpdateCanvasSize();
-                    // 内容高变了（面板 170→188），自适应 zoom 跟着重算。
+                    // 内容高变了（面板 128→144），自适应 zoom 跟着重算。
                     UpdateAutoFit();
                 }
                 Invalidate();
@@ -827,10 +822,11 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 选中框边长（物理像素，恒正方形 + 跟面板尺寸走）。
-        /// 【为什么不能直接画布局矩形】双向自适应下 zoomX≠zoomY（如 1080p 下 0.844/0.553），
-        /// 18×18 的布局框会被压成 15×10 的扁条（用户目检：长方形不好看）。
+        /// 【为什么不能直接画布局矩形】双向自适应下 zoomX≠zoomY（如旧布局 1080p 下 0.844/0.553），
+        /// 布局框会被压成扁条（用户目检：长方形不好看）。
         /// 改为取"缩放后宽高较小边"为边长：面板大框大、面板小框小（自适应），且永远是正方形；
-        /// 下限 4px（再小点不中画了，直接保底，此时早已触 zoom 下限走滚动兜底）。
+        /// 下限 4px（再小点不中画了，直接保底）。
+        /// V1.89 框 18→16 但缩放比变大，物理反而更大更易点。
         /// </summary>
         private int SelectBoxSide()
         {
@@ -1086,7 +1082,7 @@ namespace AgingTestSystem.Views
             DrawValueBox(g, Offset(Scaled(_layout.RcDelayTimeValue.ToRectangle()), panelLeft, panelTop), item.DelayTimeText);
             DrawValueBox(g, Offset(Scaled(_layout.RcBurnInValue.ToRectangle()), panelLeft, panelTop), item.BurnInTimeText);
 
-            // 静态标签（X 走 zoomX、Y 走 zoomY）
+            // 静态标签（X 走 zoomX、Y 走 zoomY；标签列 65px 宽，四字 10pt 实测 65px 刚好装下）
             DrawLabel(g, new Point(panelLeft + ScaledX(_layout.LabelPressurePosition.X), panelTop + ScaledY(_layout.LabelPressurePosition.Y)), "真空压力");
             // "电流："标签（与值框同条件：开才画；关时坐标无意义，不画即可）。
             if (ShowCurrentRow && _layout.LabelCurrentPosition != null)
