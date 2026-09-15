@@ -208,8 +208,18 @@ namespace AgingTestSystem.Models
         /// <summary>面板正文文字大小（单位：磅 pt）</summary>
         public float FontSize { get; set; } = 9f;
 
-        /// <summary>设备编号标题字体大小（磅）</summary>
-        public float TitleFontSize { get; set; } = 9f;
+        /// <summary>设备编号标题字体大小（磅；【V1.88.29】9→12：标题独占左上行，
+        /// 槽位（x=9 到选中框左缘 181）168px 宽，"NO.72" 12pt 实测仅约 44px，之前偏保守）</summary>
+        public float TitleFontSize { get; set; } = 12f;
+
+        /// <summary>
+        /// 设置按钮文字大小（磅；【V1.88.29 新增】用户点名绿底白字看不清：
+        /// 按钮框 50×42 逻辑像素，"设置"两字在 9pt 正文下只占角落，独立放大到 12pt
+        /// （zoom1 下实测约 43×22px，框内左右各留 3px＋上下各留 10px；
+        /// 14pt 实测 50px 顶满边框，回归红过，故取 12；跟 zoom 等比缩放，下限同 MinFontSize）；
+        /// 老 json 缺字段即 12，不迁移）。
+        /// </summary>
+        public float SetButtonFontSize { get; set; } = 12f;
 
         /// <summary>设备编号标题是否加粗</summary>
         public bool TitleFontBold { get; set; } = true;
@@ -373,14 +383,15 @@ namespace AgingTestSystem.Models
         /// <summary>面板背景色-故障（浅粉）</summary>
         public string ColorFaultBackground { get; set; } = "255,192,203";
 
-        /// <summary>上电状态块背景色（绿）</summary>
-        public string ColorPowerOn { get; set; } = "50,205,50";
+        /// <summary>上电状态块背景色（绿；【V1.88.29】随设置按钮统一加深为 ForestGreen：
+        /// ON 态白字，对比度 2:1→4.6:1；OFF 态是灰底不受影响）</summary>
+        public string ColorPowerOn { get; set; } = "34,139,34";
 
         /// <summary>下电状态块背景色（浅灰）</summary>
         public string ColorPowerOff { get; set; } = "211,211,211";
 
-        /// <summary>真空开状态块背景色（绿）</summary>
-        public string ColorVacuumOn { get; set; } = "50,205,50";
+        /// <summary>真空开状态块背景色（绿；【V1.88.29】随设置按钮统一加深为 ForestGreen，同上）</summary>
+        public string ColorVacuumOn { get; set; } = "34,139,34";
 
         /// <summary>
         /// 真空异常状态块背景色（红：阀已开但负压未达到阈值，"开了没吸住"）。
@@ -395,8 +406,10 @@ namespace AgingTestSystem.Models
         /// <summary>面板背景-已完成·待取料（淡钢蓝，V1.59 新增）</summary>
         public string ColorCompletedBackground { get; set; } = "176,196,222";
 
-        /// <summary>"设置"按钮背景色（绿）</summary>
-        public string ColorSetButton { get; set; } = "50,205,50";
+        /// <summary>"设置"按钮背景色（绿；【V1.88.29】亮绿 50,205,50→深绿 34,139,34：
+        /// 白字压亮绿对比度仅约 2:1，4pt 小字 wash 到看不清；深绿约 4.6:1，
+        /// 仍是绿色语义，深浅主题通用，老 json 手改过颜色的不受影响）</summary>
+        public string ColorSetButton { get; set; } = "34,139,34";
 
         /// <summary>行全选按钮背景色（浅灰）</summary>
         public string ColorRowSelectButton { get; set; } = "211,211,211";

@@ -244,6 +244,12 @@
   `ComputePopupItemSize`（主按钮尺寸只当下限＋文本 `MeasureText`＋纵/横内边距），`Font = hostButton.Font`
   不另起字号——原生 Button chrome 比 Sunny 厚，等尺寸硬套 18px 行装 9pt 字即上下顶格（6 倍放大实锤）。
   改顶栏字号只改 `ApplyHeaderFonts` 的一处常量，弹窗自动跟。
+- **全仓绿统一 ForestGreen（V1.88.29 用户点名）**：绿底白字的按钮/标签（工位设置/上电/真空开/选中✓、
+  主窗批量按钮、四个窗的保存类绿按钮）一律 `ForestGreen`（亮绿＋白字对比度仅 2:1，小字 wash 到看不清，
+  深绿约 4.6:1，仍是绿色语义）。Designer 只能写字面值（`Color.ForestGreen`，禁成员表达式是 R8b 红线），
+  配置写 `"34,139,34"`（同一色，改一边必须对另一边）；缺显式白字的绿按钮钉死 `ForeColor=White`。
+  改颜色/字号缺省后，已有 json（`PanelLayout.json`）会覆盖新缺省——验证前删 bin 文件、现场删程序目录文件
+  （项目未上线，不写迁移分支，老规矩）。
 - **动态控件重建必须先 Dispose 再 Clear（V1.72.12 血泪）**：`Controls.Clear()` 只摘父子关系，
   孤儿 Sunny 控件（UITextBox/UIComboBox，内部包原生 TextBox）进终结器线程 Dispose，
   内部读 Handle 即跨线程崩溃（堆栈终点 `ResetAutoComplete←Dispose←Finalize`，Name 全空、

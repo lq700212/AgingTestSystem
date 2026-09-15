@@ -1563,6 +1563,17 @@ namespace AgingTestSystem.Tests
             // —— 工作状态块已删（V1.88.16：信息冗余，看面板底色+上电/真空块） ——
             Check("布局无RcWorkState属性",
                 typeof(PanelLayoutConfig).GetProperty("RcWorkState") == null);
+            // —— 清晰度（V1.88.29：标题12pt/设置按钮14pt独立大字/绿统一ForestGreen） ——
+            var plcDef = new PanelLayoutConfig();
+            Check("标题缺省12pt（左上独占行，槽位宽裕）",
+                Math.Abs(plcDef.TitleFontSize - 12f) < 0.01f, "实际 " + plcDef.TitleFontSize);
+            Check("设置按钮字号缺省12pt", Math.Abs(plcDef.SetButtonFontSize - 12f) < 0.01f,
+                "实际 " + plcDef.SetButtonFontSize);
+            Check("绿统一深绿ForestGreen（设置/上电/真空开）",
+                plcDef.ColorSetButton == "34,139,34"
+                && plcDef.ColorPowerOn == "34,139,34"
+                && plcDef.ColorVacuumOn == "34,139,34",
+                "实际 " + plcDef.ColorSetButton + "/" + plcDef.ColorPowerOn + "/" + plcDef.ColorVacuumOn);
             Check("布局无ColorWork*配色",
                 typeof(PanelLayoutConfig).GetProperty("ColorWorkIdle") == null
                 && typeof(PanelLayoutConfig).GetProperty("ColorWorkFault") == null);
@@ -5084,6 +5095,46 @@ namespace AgingTestSystem.Tests
                         int gpv = gpFld != null ? (int)gpFld.GetValue(grid) : 0;
                         Check("行全选度量已缓存(字高>0且间隙≥2)", chv > 0 && gpv >= 2,
                             "字高" + chv + "px 间隙" + gpv + "px");
+                        // 设置按钮独立大字（【V1.88.29】绿底白字看不清：框50×42，12pt跟zoom走；
+                        // 14pt实测50px顶满边框故取12，左右各留3px、上下各留10px；
+                        // 标题12pt槽位（x=9到选中框181）168px，"NO.72"装得下）。
+                        System.Drawing.Font sbf = null;
+                        try
+                        {
+                            sbf = WorkstationGridView.BuildSetButtonFont(new PanelLayoutConfig(), 1f);
+                            Check("设置按钮字号=配置×zoom(12×1)",
+                                sbf != null && Math.Abs(sbf.Size - 12f) < 0.05f,
+                                sbf != null ? "实际 " + sbf.Size.ToString("F2") + "pt" : "字体为null");
+                            Check("设置按钮字体加粗", sbf != null && sbf.Bold);
+                            if (sbf != null)
+                            {
+                                int setW = System.Windows.Forms.TextRenderer.MeasureText("设置", sbf).Width;
+                                int setH = System.Windows.Forms.TextRenderer.MeasureText("设置", sbf).Height;
+                                Check("设置两字装进50×42框（左右各留≥2px）",
+                                    setW <= 46 && setH <= 38, "实际 " + setW + "×" + setH + "px");
+                            }
+                            System.Drawing.Font titleProbe = null;
+                            try
+                            {
+                                titleProbe = new System.Drawing.Font("微软雅黑", 12f, System.Drawing.FontStyle.Bold);
+                                int titleW = System.Windows.Forms.TextRenderer.MeasureText("NO.72", titleProbe).Width;
+                                Check("标题NO.72装进选中框前168px槽", titleW <= 160, "实际 " + titleW + "px");
+                            }
+                            finally { if (titleProbe != null) { try { titleProbe.Dispose(); } catch { } } }
+                        }
+                        finally { if (sbf != null) { try { sbf.Dispose(); } catch { } } }
+                        System.Drawing.Font sbfMin = null;
+                        try
+                        {
+                            sbfMin = WorkstationGridView.BuildSetButtonFont(new PanelLayoutConfig(), 0.05f);
+                            Check("设置按钮字号下限4pt", sbfMin != null && sbfMin.Size >= 4f);
+                        }
+                        finally { if (sbfMin != null) { try { sbfMin.Dispose(); } catch { } } }
+                        var sbFld = tg.GetField("_setButtonFont", BindingFlags.NonPublic | BindingFlags.Instance);
+                        var sbGrid = sbFld != null ? sbFld.GetValue(grid) as System.Drawing.Font : null;
+                        Check("重建后设置按钮字体12pt加粗（zoom=1）",
+                            sbGrid != null && Math.Abs(sbGrid.Size - 12f) < 0.15f && sbGrid.Bold,
+                            sbGrid != null ? "实际 " + sbGrid.Size.ToString("F2") + "pt" : "字体为null");
                     }
                     // 无句柄挂载即铺满（【V1.88.24】缺省就是双向铺满，不用切模式；
                     // MinSize 同步/V1.88.15 事后校正随滚动删除，只锁 zoom+画布）。
