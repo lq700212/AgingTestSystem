@@ -196,6 +196,14 @@ namespace AgingTestSystem.Views
         private int _rowSelectCharH;
         /// <summary>竖排字间隙（px，布局态由字高换算缓存，Paint 只读）</summary>
         private int _rowSelectGap;
+        /// <summary>
+        /// 标签文本行高（物理像素，布局态实测缓存，Paint 只读）。
+        /// 10pt 正文字实际约 19px，比 16 高的值框高 3px——标签矩形按此高度画、
+        /// 以同行框中心为基准居中，字整体比框高时上下对称溢出到空白处，不裁字。
+        /// </summary>
+        private int _labelLineH;
+        /// <summary>标题文本行高（物理像素，同上；11pt 约 19px，第一行 20 高块装得下，仍按实测居中）</summary>
+        private int _titleLineH;
 
         // ===== 配置解析出的颜色（浅色值来自 PanelLayoutConfig 纯代码缺省） =====
         // 以下"跟随主题切换"的颜色去掉 readonly，SetDarkMode 里整体换肤；
@@ -328,6 +336,7 @@ namespace AgingTestSystem.Views
             _rowSelectCharsAll = ToCharStrings(_layout.RowSelectAllText);
             _rowSelectCharsCancel = ToCharStrings(_layout.RowSelectCancelText);
             RefreshRowSelectMetrics();
+            RefreshLabelMetrics();
 
             // 初始化缓存画刷/画笔：语义色两个一次建好，主题色四个走 RebuildThemeBrushes
             // （SetDarkMode 里复用它重建，保证颜色与字段永远一致）。
@@ -371,6 +380,7 @@ namespace AgingTestSystem.Views
                 // 图形上下文创建失败时保持 1.0（96DPI），不影响 100% 缩放的旧环境
             }
             _dpiScale = dpi / 96f;
+            RefreshLabelMetrics();
             if (_columns > 0)
             {
                 UpdateCanvasSize();
@@ -512,6 +522,7 @@ namespace AgingTestSystem.Views
             if (oldSetButton != null) oldSetButton.Dispose();
             if (oldTimeValue != null) oldTimeValue.Dispose();
             RefreshRowSelectMetrics();
+            RefreshLabelMetrics();
         }
 
         /// <summary>
@@ -1085,9 +1096,9 @@ namespace AgingTestSystem.Views
                 g.FillRectangle(bg, panelLeft, panelTop, ScaledX(_layout.PanelInnerWidth), ScaledY(_layout.GetEffectiveInnerHeight()));
             }
 
-            // 设备编号（左上角）
-            TextRenderer.DrawText(g, $"NO.{item.DeviceId}", _titleFont,
-                new Point(panelLeft + ScaledX(_layout.TitlePosition.X), panelTop + ScaledY(_layout.TitlePosition.Y)), _colorText);
+            // 设备编号（矩形按标题字实测行高、以第一行状态块中心为基准居中，
+            // 与状态块/值框走同一套 VerticalCenter+NoPadding，中心线天然对齐；Point直画是顶对齐，字高一变就偏）
+            DrawLabel(g, GetLabelDrawRect("Title", panelLeft, panelTop), $"NO.{item.DeviceId}", _titleFont);
 
             // 状态块（工作状态块已删：第一行只剩上电/下电＋真空开/关；
             // 状态看面板底色＋这两块，不再有文字状态块）
@@ -1114,17 +1125,19 @@ namespace AgingTestSystem.Views
             DrawValueBox(g, Offset(Scaled(_layout.RcDelayTimeValue.ToRectangle()), panelLeft, panelTop), item.DelayTimeText, _timeValueFont);
             DrawValueBox(g, Offset(Scaled(_layout.RcBurnInValue.ToRectangle()), panelLeft, panelTop), item.BurnInTimeText, _timeValueFont);
 
-            // 静态标签（X 走 zoomX、Y 走 zoomY；标签列 65px 宽，四字 10pt 实测 65px 刚好装下）
-            DrawLabel(g, new Point(panelLeft + ScaledX(_layout.LabelPressurePosition.X), panelTop + ScaledY(_layout.LabelPressurePosition.Y)), "真空压力");
+            // 静态标签（矩形按正文字实测行高、以右侧同行框中心为基准居中；
+            // 行高 19＞框高 16 时上下对称溢出到空白处，不裁字；标志与值框文本同口径，中心线天然对齐。
+            // 标签列宽走配置，字再大也只在框内省略不盖值框）
+            DrawLabel(g, GetLabelDrawRect("Pressure", panelLeft, panelTop), "真空压力", _panelFont);
             // "电流："标签（与值框同条件：开才画；关时坐标无意义，不画即可）。
             if (ShowCurrentRow && _layout.LabelCurrentPosition != null)
             {
-                DrawLabel(g, new Point(panelLeft + ScaledX(_layout.LabelCurrentPosition.X), panelTop + ScaledY(_layout.LabelCurrentPosition.Y)), "电流：");
+                DrawLabel(g, GetLabelDrawRect("Current", panelLeft, panelTop), "电流：", _panelFont);
             }
-            DrawLabel(g, new Point(panelLeft + ScaledX(_layout.LabelSnPosition.X), panelTop + ScaledY(_layout.LabelSnPosition.Y)), "SN:");
-            DrawLabel(g, new Point(panelLeft + ScaledX(_layout.LabelRecipePosition.X), panelTop + ScaledY(_layout.LabelRecipePosition.Y)), "配方:");
-            DrawLabel(g, new Point(panelLeft + ScaledX(_layout.LabelDelayTimePosition.X), panelTop + ScaledY(_layout.LabelDelayTimePosition.Y)), "延时时间");
-            DrawLabel(g, new Point(panelLeft + ScaledX(_layout.LabelBurnInPosition.X), panelTop + ScaledY(_layout.LabelBurnInPosition.Y)), "烧屏时间");
+            DrawLabel(g, GetLabelDrawRect("SN", panelLeft, panelTop), "SN:", _panelFont);
+            DrawLabel(g, GetLabelDrawRect("Recipe", panelLeft, panelTop), "配方:", _panelFont);
+            DrawLabel(g, GetLabelDrawRect("Delay", panelLeft, panelTop), "延时时间", _panelFont);
+            DrawLabel(g, GetLabelDrawRect("Burn", panelLeft, panelTop), "烧屏时间", _panelFont);
 
             // 设置按钮（绿底白字；独立大字 _setButtonFont＋深绿底，
             // 白字对比度 2:1→4.6:1，小屏看得清）
@@ -1223,10 +1236,135 @@ namespace AgingTestSystem.Views
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
         }
 
-        /// <summary>绘制静态标签文字</summary>
-        private void DrawLabel(Graphics g, Point location, string text)
+        /// <summary>
+        /// 实测单行文本高度（布局态调用，Paint 里只读缓存）：同字体的不同短串行高一致，
+        /// 取代表串量一次即可；标志与绘制侧同口径（Left+NoPadding），量出来即画出来的高度。
+        /// </summary>
+        /// <param name="font">当前实际字体（含 zoom 缩放）</param>
+        /// <param name="sample">代表串（标签取"真空压力"，标题取"NO.72"）</param>
+        public static int MeasureLabelLineH(Font font, string sample)
         {
-            TextRenderer.DrawText(g, text, _panelFont, location, _colorText);
+            if (font == null) return 1;
+            if (string.IsNullOrEmpty(sample)) sample = "真空压力";
+            int h = TextRenderer.MeasureText(sample, font, new Size(int.MaxValue, int.MaxValue),
+                TextFormatFlags.Left | TextFormatFlags.NoPadding).Height;
+            return h < 1 ? 1 : h;
+        }
+
+        /// <summary>重算标签/标题行高（字体或纵向比例换了必调：构造一次＋RebuildFonts 跟 zoom 走＋DpiScale 变时）</summary>
+        private void RefreshLabelMetrics()
+        {
+            _labelLineH = MeasureLabelLineH(_panelFont, "真空压力");
+            _titleLineH = MeasureLabelLineH(_titleFont, "NO.72");
+        }
+
+        /// <summary>
+        /// 以目标框中心为基准的矩形（纯函数，回归可直接断言）：X/宽走标签列，
+        /// 高取文本行高、Y 按行高居中于目标框。行高＞框高时上下对称溢出到空白处只不裁字；
+        /// 行高≤框高时框内居中。奇数差截断最多偏 1px，调用方断言中心差≤1。
+        /// </summary>
+        /// <param name="x">矩形左缘</param>
+        /// <param name="w">矩形宽</param>
+        /// <param name="box">对齐的目标框</param>
+        /// <param name="h">文本行高</param>
+        public static Rectangle CenterRectOn(int x, int w, Rectangle box, int h)
+        {
+            if (h < 1) h = 1;
+            if (w < 1) w = 1;
+            return new Rectangle(x, box.Y + (box.Height - h) / 2, w, h);
+        }
+
+        /// <summary>
+        /// 标签绘制矩形（逻辑像素纯函数，回归可直接断言）：矩形按文本行高、
+        /// 以右侧同行框中心为基准居中（见 <see cref="CenterRectOn"/>）；
+        /// 绘制与值框文本同标志，中心线天然重合，且字整体比框高也不裁；
+        /// 字宽走标签列宽，超宽只在框内省略不盖值框。标题取第一行状态块为基准。
+        /// </summary>
+        /// <param name="layout">布局配置</param>
+        /// <param name="key">Title/Pressure/Current/SN/Recipe/Delay/Burn</param>
+        /// <param name="lineH">文本行高（逻辑像素，调用方按当前字体实测传入；标题与标签行高不同，各传各的）</param>
+        public static Rectangle ComputeLabelRect(PanelLayoutConfig layout, string key, int lineH)
+        {
+            if (layout == null) return Rectangle.Empty;
+            if (lineH < 1) lineH = 1;
+            int labelW = 65;
+            if (layout.LabelPressurePosition != null && layout.LabelPressurePosition.Width.HasValue
+                && layout.LabelPressurePosition.Width.Value > 0)
+                labelW = layout.LabelPressurePosition.Width.Value;
+            switch (key)
+            {
+                case "Title":
+                    {
+                        int titleX = layout.TitlePosition != null ? layout.TitlePosition.X : 6;
+                        Rectangle power = layout.RcPower != null
+                            ? layout.RcPower.ToRectangle() : new Rectangle(74, 4, 45, 20);
+                        int w = power.X - titleX - 6;
+                        if (w < 1) w = 1;
+                        return CenterRectOn(titleX, w, power, lineH);
+                    }
+                case "Pressure":
+                    {
+                        Rectangle box = layout.RcPressureValue.ToRectangle();
+                        int x = layout.LabelPressurePosition != null ? layout.LabelPressurePosition.X : box.X - labelW;
+                        int w = layout.LabelPressurePosition != null && layout.LabelPressurePosition.Width.HasValue
+                            ? layout.LabelPressurePosition.Width.Value : labelW;
+                        return CenterRectOn(x, w, box, lineH);
+                    }
+                case "Current":
+                    {
+                        Rectangle box = layout.RcCurrentValue.ToRectangle();
+                        int x = layout.LabelCurrentPosition != null ? layout.LabelCurrentPosition.X : box.X - labelW;
+                        return CenterRectOn(x, labelW, box, lineH);
+                    }
+                case "SN":
+                    {
+                        Rectangle box = layout.RcSNValue.ToRectangle();
+                        int x = layout.LabelSnPosition != null ? layout.LabelSnPosition.X : box.X - labelW;
+                        return CenterRectOn(x, labelW, box, lineH);
+                    }
+                case "Recipe":
+                    {
+                        Rectangle box = layout.RcRecipeValue.ToRectangle();
+                        int x = layout.LabelRecipePosition != null ? layout.LabelRecipePosition.X : box.X - labelW;
+                        return CenterRectOn(x, labelW, box, lineH);
+                    }
+                case "Delay":
+                    {
+                        Rectangle box = layout.RcDelayTimeValue.ToRectangle();
+                        int x = layout.LabelDelayTimePosition != null ? layout.LabelDelayTimePosition.X : box.X - labelW;
+                        return CenterRectOn(x, labelW, box, lineH);
+                    }
+                case "Burn":
+                    {
+                        Rectangle box = layout.RcBurnInValue.ToRectangle();
+                        int x = layout.LabelBurnInPosition != null ? layout.LabelBurnInPosition.X : box.X - labelW;
+                        return CenterRectOn(x, labelW, box, lineH);
+                    }
+                default: return Rectangle.Empty;
+            }
+        }
+
+        /// <summary>
+        /// 标签绘制矩形（物理像素，绘制侧唯一入口）：逻辑上按当前字体实测行高居中
+        /// （走 <see cref="ComputeLabelRect"/>），再缩放到物理；缩放取整最多差 1px 且上下对称。
+        /// 行高缓存随字体/纵向比例走，纵向总比例为零时回退物理行高。
+        /// </summary>
+        /// <param name="key">与 ComputeLabelRect 同口径</param>
+        /// <param name="panelLeft">面板左上角物理 X</param>
+        /// <param name="panelTop">面板左上角物理 Y</param>
+        private Rectangle GetLabelDrawRect(string key, int panelLeft, int panelTop)
+        {
+            int physH = key == "Title" ? _titleLineH : _labelLineH;
+            double s = (double)_dpiScale * _zoomY;
+            int logicalH = s > 0 ? Math.Max(1, (int)Math.Round(physH / s)) : physH;
+            return Offset(Scaled(ComputeLabelRect(_layout, key, logicalH)), panelLeft, panelTop);
+        }
+
+        /// <summary>绘制静态标签文字（矩形按文本行高、以同行框中心为基准，标志与值框文本同口径）</summary>
+        private void DrawLabel(Graphics g, Rectangle rc, string text, Font font)
+        {
+            TextRenderer.DrawText(g, text, font ?? _panelFont, rc, _colorText,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis);
         }
 
         /// <summary>把面板设计坐标偏移到画布绝对坐标</summary>

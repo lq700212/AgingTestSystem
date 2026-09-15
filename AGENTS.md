@@ -337,6 +337,12 @@
   （R1 快照释放/R2 非模态 Show/R3 Remove/R4 动态创建/R5 同步 Invoke/R6 Timer 释放/
   R7 长事件退订/R8 Designer 可序列化，HIGH 拦提交）；
   新增非模态弹窗在 `$SafeShowKeys` 登记（方法|文件|配对），R2 验行为不认空登记。
+- **自绘行标签必须按行高中心对齐，不许硬塞进框高（V1.97 血泪）**：`TextRenderer.DrawText`
+  用 `Point` 是顶对齐直画，用矩形 `VerticalCenter+NoPadding` 是框内居中——两边混用字高一变
+  就差 1~2px；且字（10pt 实测 19px）比框（16px）高时，硬取同 Y/H 会上下裁字（冒号圆点先没）。
+  矩形高度取文本行高（随字体/缩放实测缓存，Paint 里只读）、Y 以同行框中心为基准
+  （`CenterRectOn` 纯函数），溢出部分上下对称落空白处；标题同理以第一行状态块为基准。
+  锁"中心差≤1"+行高下限用例。
 - **自绘性能大坑（V1.57.3 血泪教训）**：**禁止用"离屏 Bitmap 整幅预渲染 + OnPaint DrawImage 拷贝"来优化自绘控件**。实测离屏大图（2040×2025）上 `TextRenderer.DrawText` 每处约 **2.2ms**（屏幕 DC 上近 0ms），全量渲染 72 面板一次高达 2247ms，而 `UpdateAll` 每秒全量刷新 → 整个软件每 1 秒卡死。且 `g.Clear(白色)` 会把面板间隙刷白导致"面板连成一片"。**正确做法**：OnPaint 只重绘可见区面板（`e.ClipRectangle` 算行列范围），数据/选中变化仅 `Invalidate`；滚动卡顿用"16ms 定时器节流 AutoScrollPosition + 画刷/画笔缓存字段"解决，不要预渲染。判断优化效果务必用**真实屏幕 DC**（`CreateGraphics`）测，离屏 Graphics 的 TextRenderer 慢是 GDI+ 固有行为、不代表真实帧速。
 
 ## 关键文件导航
