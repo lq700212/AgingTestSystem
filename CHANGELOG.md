@@ -3,6 +3,38 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md).
 
+## V1.88.27 — 顶栏权限区与项目区同构，六段状态字上下居中对齐（2026-09-15，用户点名"当前项目/操作权限等文本上下居中对齐"）
+
+### 改动范围
+
+- **权限区 Panel 化**（`Views/MainForm.Designer.cs`：`panelPermission` 由 `FlowLayoutPanel` 改为
+  `Panel`，`lblPermissionPrefix` 改 `Dock=Left＋MiddleLeft`，`lblPermissionRole` 改
+  `Dock=Fill＋MiddleLeft＋AutoEllipsis`，Add 顺序换为"先 Fill 后 Left"，与 `pnlProject` 同构；
+  字段注释同步；删 `WrapContents`）。
+  之前权限两标签 `AutoSize=true＋Top=9＋TextAlign=TopLeft`，靠 `LayoutHeaderColumns` 按
+  RowStyle 高（30）算 `Padding.Top` 硬垫——实际容器只有 22（扣掉表头边距），多垫 2px
+  反而偏下（harness 实测标签中心 55.5 vs 表头中心 53.0），且与项目/通讯的 MiddleLeft 混用。
+- **删 Padding 硬垫**（`Views/MainForm.cs`：`LayoutHeaderColumns` 删 `Padding.Top` 四行，
+  注释改"垂直居中由 Dock 天然保证"；构造加 `lblPermissionPrefix.Width = PreferredWidth`
+  与项目前缀同路，跟字号/DPI；两处 Flow 注释改 Panel 口径）。
+- **回归**（`tests/TestRunner.cs`）：加"权限区是 Panel"类型锁（只验字段类型，不构造主窗）。
+
+### 为什么这么改
+
+- 三段状态（项目/权限/通讯）必须同一套居中机制：`Dock=Fill 全高＋MiddleLeft` 下标签
+  Bounds 中心恒等于容器中心（harness 六段 delta 全 0），行高再改（28/30/36）自动跟；
+  Flow＋Padding 是"用一个数（RowStyle 高）猜另一个数（容器客户高）"，行高/边距一动就偏。
+- 权限前缀之前 `TopLeft＋AutoSize`，文本贴标签顶（标签内偏上 4px），靠容器偏下 2.5px
+  巧合抵消才与别段同基线（46..57）；改 Panel 后六段文本天然同基线，不靠巧合。
+
+### 验证
+
+- 真窗 harness：六标签 `Top=0＋H=24＋MiddleLeft`，Bounds 中心全 53.0＝表头中心；
+  六段文本同为 46..57（中心 51.5，Sunny MiddleLeft 固有 1.5px 字体基线偏移，六段一致）；
+  按钮中心 53.0，视觉齐整，截图目检通过。
+- `build_and_test.ps1 -Affected`：1878 断言全绿（含新增类型锁）。
+- **水印对齐**：`BuildWatermark.ReleaseLabel` V1.88.26→V1.88.27。
+
 ## V1.88.26 — 顶栏状态字 9pt 居中＋列宽代码实测＋顶栏压到 30（2026-09-15，用户要求"左边没居中、字和按钮一样大、顶栏再矮点"）
 
 ### 改动范围

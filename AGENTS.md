@@ -163,6 +163,9 @@
     项目名 Fill 标签关着 AutoSize 只报 0 宽，AutoSize 列被压成前缀宽、名字常年看不见）。
     AutoSize 列的填充子必须显式开 AutoSize；排查先 dump 各控件 `AutoSize` 属性值。
     前缀类 Dock=Left 定宽标签保持关闭（只取首选高度+垂直居中，不参与列宽）。
+    垂直居中一律 Panel＋Dock 全高＋MiddleLeft，禁 FlowLayoutPanel＋Padding.Top 硬垫
+    （V1.88.27 血泪：硬垫用 RowStyle 高算，实际容器扣掉表头边距小 6px，多垫 2px 反偏下，
+    且 Flow 子 TopLeft 与 MiddleLeft 混用；顶栏项目/权限/通讯三段同构 Panel，Bounds 中心恒等容器中心）。
   - 多行块编辑必须逐行核对：Edit 工具会模糊匹配吞掉间隔行（V1.71 实锤：27 行块吞掉
     3 个 `new`，构造即 NRE）。改完 Designer 必跑"声明/实例化配对"扫描 +
     harness 构造一次（NRE 当场现形）+ 截图目检。

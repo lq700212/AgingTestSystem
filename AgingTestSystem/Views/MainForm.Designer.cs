@@ -51,7 +51,7 @@
             this.pnlProject = new System.Windows.Forms.Panel();
             this.lblProject = new Sunny.UI.UILabel();
             this.lblProjectPrefix = new Sunny.UI.UILabel();
-            this.panelPermission = new System.Windows.Forms.FlowLayoutPanel();
+            this.panelPermission = new System.Windows.Forms.Panel();
             this.lblPermissionPrefix = new Sunny.UI.UILabel();
             this.lblPermissionRole = new Sunny.UI.UILabel();
             this.lblCommStatusLabel = new Sunny.UI.UILabel();
@@ -207,39 +207,43 @@
             // panelPermission
             // 
             this.panelPermission.BackColor = System.Drawing.SystemColors.Control;
-            this.panelPermission.Controls.Add(this.lblPermissionPrefix);
             this.panelPermission.Controls.Add(this.lblPermissionRole);
+            this.panelPermission.Controls.Add(this.lblPermissionPrefix);
             this.panelPermission.Dock = System.Windows.Forms.DockStyle.Fill;
             this.panelPermission.Location = new System.Drawing.Point(163, 0);
             this.panelPermission.Margin = new System.Windows.Forms.Padding(0, 0, 12, 0);
             this.panelPermission.Name = "panelPermission";
             this.panelPermission.Size = new System.Drawing.Size(174, 30);
             this.panelPermission.TabIndex = 1;
-            this.panelPermission.WrapContents = false;
             // 
             // lblPermissionPrefix
             // 
-            this.lblPermissionPrefix.AutoSize = true;
+            this.lblPermissionPrefix.AutoSize = false;
+            this.lblPermissionPrefix.Dock = System.Windows.Forms.DockStyle.Left;
             this.lblPermissionPrefix.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.lblPermissionPrefix.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
-            this.lblPermissionPrefix.Location = new System.Drawing.Point(0, 9);
+            this.lblPermissionPrefix.Location = new System.Drawing.Point(0, 0);
             this.lblPermissionPrefix.Margin = new System.Windows.Forms.Padding(0, 0, 0, 0);
             this.lblPermissionPrefix.Name = "lblPermissionPrefix";
-            this.lblPermissionPrefix.Size = new System.Drawing.Size(119, 16);
+            this.lblPermissionPrefix.Size = new System.Drawing.Size(119, 30);
             this.lblPermissionPrefix.TabIndex = 0;
             this.lblPermissionPrefix.Text = "当前操作权限: ";
+            this.lblPermissionPrefix.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // lblPermissionRole
             // 
-            this.lblPermissionRole.AutoSize = true;
+            this.lblPermissionRole.AutoEllipsis = true;
+            this.lblPermissionRole.AutoSize = false;
+            this.lblPermissionRole.Dock = System.Windows.Forms.DockStyle.Fill;
             this.lblPermissionRole.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.lblPermissionRole.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
-            this.lblPermissionRole.Location = new System.Drawing.Point(119, 9);
+            this.lblPermissionRole.Location = new System.Drawing.Point(119, 0);
             this.lblPermissionRole.Margin = new System.Windows.Forms.Padding(0, 0, 0, 0);
             this.lblPermissionRole.Name = "lblPermissionRole";
-            this.lblPermissionRole.Size = new System.Drawing.Size(55, 16);
+            this.lblPermissionRole.Size = new System.Drawing.Size(55, 30);
             this.lblPermissionRole.TabIndex = 1;
             this.lblPermissionRole.Text = "操作员";
+            this.lblPermissionRole.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // lblCommStatusLabel
             // 
@@ -775,8 +779,8 @@
         private Sunny.UI.UILabel lblProjectPrefix;
         /// <summary>项目名标签（【V1.72.7 新增】容器内 Dock=Fill，构造里回填项目名；V1.78 起加粗）</summary>
         private Sunny.UI.UILabel lblProject;
-        /// <summary>当前操作权限显示容器（V1.19.7：拆为前缀+角色名两个标签）</summary>
-        private System.Windows.Forms.FlowLayoutPanel panelPermission;
+        /// <summary>当前操作权限显示容器（V1.19.7：拆为前缀+角色名两个标签；V1.88.27 起与 pnlProject 同构 Panel+Dock，上下居中天然成立）</summary>
+        private System.Windows.Forms.Panel panelPermission;
         /// <summary>固定前缀"当前操作权限: "（默认黑字）</summary>
         private Sunny.UI.UILabel lblPermissionPrefix;
         /// <summary>角色名标签（V1.19.7：ForeColor 按权限着色——管理员=红/技术员=蓝/操作员=绿）</summary>
