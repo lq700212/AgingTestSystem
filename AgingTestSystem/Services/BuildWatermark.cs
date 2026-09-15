@@ -39,7 +39,7 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 对外版本号，跟着 CHANGELOG 走。发版时同步改这里和 CHANGELOG 顶部小节标题。
         /// </summary>
-        public const string ReleaseLabel = "V1.88.27";
+        public const string ReleaseLabel = "V1.88.28";
 
         /// <summary>
         /// 是否混淆版。调试期恒 false；以后打混淆包时改成 true 再编译，

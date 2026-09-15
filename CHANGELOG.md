@@ -3,6 +3,48 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md).
 
+## V1.88.28 — 顶栏锁死 30＋下拉选项防裁字＋行全选竖排大字（2026-09-15，用户三点：顶栏高度固定/选项栏文字显示不全/全选按钮竖排大字）
+
+### 改动范围
+
+- **顶栏高度锁死 30，不可自定义**（`Models/HomeLayoutConfig.cs` 新增 `FixedHeaderHeight` 常量；
+  `LoadOrDefault`/`ClampToRange`/`Save` 三处统一归位（老文件 34 等旧值直接作废），`HeaderRange` 删除；
+  `Views/MainForm.cs` `ApplyHomeLayout` 取常量不读文件；
+  `Dialogs/HomeLayoutEditorForm.cs`＋Designer 删顶栏输入行＋顶栏拖动边（`HeaderBottom` 枚举/命中/绘制/取值四处同步删，
+  预览顶栏画固定 30 并明示"不可调"，数值面板 3 行→2 行）。
+- **下拉选项按文本实测撑开**（`Views/MainForm.cs` 新增 `ComputePopupItemSize` 纯函数＋
+  `PopupItemHPad/VPad` 常量；`ShowDropdownPopup` 用主按钮字体逐项 `MeasureText` 取最大，
+  格尺寸＝max(主按钮，下限)（文本实测＋余量）：字体仍与主按钮同源（`Font = hostButton.Font`，
+  字号一处调、两处跟，用户点名要求）。根因：原生 Button chrome 比 Sunny 厚，
+  18px 行装 9pt 字上下顶格（6 倍放大实锤），文本 77px/114px 宽倒不缺。
+- **行全选按钮竖排大字**（`Models/PanelLayoutConfig.cs` 新增 `RowSelectFontScale` 缺省 2；
+  `Views/WorkstationGridView.cs` 新增 `_rowSelectFont`（`RebuildFonts` 同建同释放＋`Designer.Dispose`）、
+  构造拆字的逐字缓存、布局态实测字高/间隙（`RefreshRowSelectMetrics`），`DrawRowSelectButton`
+  按"字高＋正常间隙（字高 1/4，下限 2px）"排紧凑一竖块整块居中（`ComputeRowSelectStartY`/
+  `RowSelectGapForCharH` 纯函数；等分撑满两字离太远、丑，第一版已推翻）。
+- **回归**（`tests/TestRunner.cs`）：顶栏锁死（存 44 读回 30、常量 30、越界归 30、编辑器无 `_nudHeader` 字段、
+  右侧钳制改走 `RightPanelRange`）；下拉尺寸四锁（常规 114×22/长文撑宽/大按钮下限/非法不炸）；
+  行全选九锁（倍率缺省/9→18 加粗/单字格高/间隙正常/整块居中/块底不超/零字回顶/间隙下限/字号下限/重建 18pt/度量缓存）。
+
+### 为什么这么改
+
+- 顶栏"可调"已无意义：9pt 字＋18px 按钮＋30px 行是互相咬合的一套（28 是按钮 22＋边距的物理下限），
+  放开调只会调出"字大行小裁字/行大空荡"两种坏结果；锁死后三处（配置/主窗/编辑器）认同一个常量，
+  老文件静默归位（项目未上线，不写迁移分支）。
+- 下拉裁字是"等尺寸硬套"的想当然：选项字比主按钮字长是常态（"主页区域调整"6 字 vs "关于"2 字），
+  尺寸必须按文本实测来，字体必须与主按钮同源——两个规则各管一头（尺寸管装下，字体管一致），
+  用户"要调一起调"即后一条的字面意思。
+- 全选横排两字在 169px 高的按钮里显小是事实；竖排后等分两格字距 30px＋太散同样是事实
+  （截图目检推翻第一版）。"字高＋1/4 字隙＋整块居中"是常规竖排观感，间隙公式进纯函数可调。
+
+### 验证
+
+- 真窗 harness：老文件 34 加载归 30、主窗第 0 行 30、编辑器只剩 2 个 nud 且构造不炸；
+  关于下拉 3 项行高 18→22，6 倍放大字上下见蓝边；行全选"全/选"紧凑竖排居中（8.8pt vs 正文 4.4pt）。
+- `build_and_test.ps1` 全量 1894 断言全绿（含新增 16 条；中途 P3 策略集成用例红过 3 条，
+  同代码重跑即绿——采集周期定时器满负载饿死抖动，与本次改动无关，见 DeviceManagerIntegrationTests 注释）。
+- **水印对齐**：`BuildWatermark.ReleaseLabel` V1.88.27→V1.88.28。
+
 ## V1.88.27 — 顶栏权限区与项目区同构，六段状态字上下居中对齐（2026-09-15，用户点名"当前项目/操作权限等文本上下居中对齐"）
 
 ### 改动范围

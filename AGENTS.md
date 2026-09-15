@@ -237,6 +237,13 @@
   - 获取实际 DPI 用 `CreateGraphics().DpiX`，**不要用 `Control.DeviceDpi`**（PerMonitorV2 下句柄刚创建时返回 96，实测不可靠）。
   - 新增自绘控件/改自绘坐标时，记得同步缩放命中检测（鼠标坐标是物理像素）、tooltip、局部重绘矩形，漏一处点击/重绘就错位。
 - **区域宽度按比例自适应，禁止写死像素（V1.65 用户原则）**：主界面各区域宽度（如右侧状态按钮区）一律用"占父容器百分比 + 上下限钳制"（见 `MainForm.RightPanelRatio/RightPanelMinWidth/RightPanelMaxWidth` 与纯函数 `ComputeRightPanelWidth`），窗口 `Resize` 时重算；写死像素在设计屏上正好、换台工控机就溢出/留白。用户手动保存的配置文件（`HomeLayout.json`）是绝对值、优先级高于比例；计算逻辑抽纯函数并锁回归用例。
+  **例外：顶栏高度锁死（V1.88.28 用户点名）**：顶栏 30px 是与 9pt 字/18px 按钮互相咬合的一套，
+  可调只会调出坏结果——`HomeLayoutConfig.FixedHeaderHeight` 是唯一值，加载/保存/钳制/主窗/预览全认它，
+  编辑器顶栏输入行与拖动边已删，老文件旧值静默归位（项目未上线，不写迁移）。
+- **下拉选项尺寸按文本实测、字体与主按钮同源（V1.88.28）**：`ShowDropdownPopup` 的选项格
+  `ComputePopupItemSize`（主按钮尺寸只当下限＋文本 `MeasureText`＋纵/横内边距），`Font = hostButton.Font`
+  不另起字号——原生 Button chrome 比 Sunny 厚，等尺寸硬套 18px 行装 9pt 字即上下顶格（6 倍放大实锤）。
+  改顶栏字号只改 `ApplyHeaderFonts` 的一处常量，弹窗自动跟。
 - **动态控件重建必须先 Dispose 再 Clear（V1.72.12 血泪）**：`Controls.Clear()` 只摘父子关系，
   孤儿 Sunny 控件（UITextBox/UIComboBox，内部包原生 TextBox）进终结器线程 Dispose，
   内部读 Handle 即跨线程崩溃（堆栈终点 `ResetAutoComplete←Dispose←Finalize`，Name 全空、

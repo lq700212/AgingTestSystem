@@ -12,9 +12,10 @@ namespace AgingTestSystem.Dialogs
     ///
     /// 【作用】
     /// 让用户不用改代码、不用看坐标数字，直接用鼠标拖动主界面各区域的"边缘"来调整尺寸：
-    /// - 顶栏高度（HeaderHeight；【V1.88.23】顶栏菜单并单行，双键合一）
     /// - 右侧状态按钮区宽度（RightPanelWidth）
     /// - 底部状态栏高度（StatusBarHeight）
+    /// （【V1.88.28】顶栏高度锁死 30 不可调：编辑器删顶栏输入行＋顶栏拖动边，
+    /// 老文件残留旧值加载即归位，见 HomeLayoutConfig.FixedHeaderHeight。）
     /// 工作站列表面板（splitContainerMain.Panel1）自动占满剩余宽度，无需手动配置。
     ///
     /// 【界面布局】（本窗体全部由代码创建，无需 Designer 维护）
@@ -22,7 +23,7 @@ namespace AgingTestSystem.Dialogs
     /// │ ┌──────────────────────────────────────────────────┐ │
     /// │ │  预览区（自绘控件，按 1400×900 逻辑坐标系等比缩放）  │ │
     /// │ │ ┌──────────────────────────────────────────────┐ │ │
-    /// │ │ │  顶栏 HeaderHeight（项目/权限/通讯＋4 按钮）    │ │ │
+    /// │ │ │  顶栏（固定 30，不可拖）                       │ │ │
     /// │ │ ├───────────────────────────┬──────────────────┤ │ │
     /// │ │ │                           │ 右侧状态按钮区      │ │ │
     /// │ │ │  工作站列表面板（自动占剩余） │ RightPanelWidth  │ │ │
@@ -32,7 +33,6 @@ namespace AgingTestSystem.Dialogs
     /// │ │ └──────────────────────────────────────────────┘ │ │
     /// │ │  提示：把鼠标移到区域边缘，光标变双向箭头后按住拖动 │ │ │
     /// │ └──────────────────────────────────────────────────┘ │
-    /// │ 顶栏高 [nudHeader]                                    │
     /// │ 右侧区域宽 [nudRight]   状态栏高 [nudStatus]          │
     /// │        [恢复默认]  [保存]  [取消]                     │
     /// └──────────────────────────────────────────────────────┘
@@ -40,7 +40,7 @@ namespace AgingTestSystem.Dialogs
     /// 【交互说明】
     /// - 预览区内部固定使用 1400×900 逻辑坐标系（与主窗体设计尺寸一致），
     ///   按预览区客户区等比缩放显示，窗口拉大/缩小不影响比例。
-    /// - 可拖动的 3 条边缘：顶栏下边 / 右侧区左边 / 状态栏上边。
+    /// - 可拖动的 2 条边缘：右侧区左边 / 状态栏上边。
     /// - 鼠标靠近边缘（≤6 逻辑像素）时高亮该边缘并切换为双向箭头光标，
     ///   按住拖动实时改对应配置值，数值输入框同步刷新；
     ///   也可直接改输入框数值，拖动与输入双向同步。
@@ -89,7 +89,6 @@ namespace AgingTestSystem.Dialogs
             _preview.LayoutChanged += Preview_LayoutChanged;
             _pnlPreviewHost.Controls.Add(_preview);
             _syncing = true;
-            _nudHeader.Value = ClampNud(_nudHeader, _layout.HeaderHeight);
             _nudRight.Value = ClampNud(_nudRight, _layout.RightPanelWidth);
             _nudStatus.Value = ClampNud(_nudStatus, _layout.StatusBarHeight);
             _syncing = false;
@@ -139,7 +138,6 @@ namespace AgingTestSystem.Dialogs
         {
             if (_syncing) return;
             _syncing = true;
-            _layout.HeaderHeight = ClampToRange((int)_nudHeader.Value, HomeLayoutConfig.HeaderRange);
             _layout.RightPanelWidth = ClampToRange((int)_nudRight.Value, HomeLayoutConfig.RightPanelRange);
             _layout.StatusBarHeight = ClampToRange((int)_nudStatus.Value, HomeLayoutConfig.StatusBarRange);
             _preview.Invalidate();
@@ -160,28 +158,25 @@ namespace AgingTestSystem.Dialogs
             // 【V1.72.16】赋值前一律钳制：HomeLayout.json 可能是旧版本存的越界值
             // （或预览控件将来又被拖出范围），直接赋给 NumericUpDown.Value 会抛
             // ArgumentOutOfRangeException（现场"340 的值对于 Value 无效"就是这么来的）。
-            _nudHeader.Value = ClampNud(_nudHeader, _layout.HeaderHeight);
             _nudRight.Value = ClampNud(_nudRight, _layout.RightPanelWidth);
             _nudStatus.Value = ClampNud(_nudStatus, _layout.StatusBarHeight);
             _syncing = false;
         }
 
         /// <summary>
-        /// 恢复默认：把三个值重置为内置默认并刷新。
+        /// 恢复默认：把两个可调值重置为内置默认并刷新（【V1.88.28】顶栏固定 30，不在恢复之列）。
         /// 注意：右侧宽度默认值写死在 <see cref="MainForm.DefaultRightPanelWidth"/>（240），
-        /// 其余三区域用 <see cref="HomeLayoutConfig"/> 的类默认，与主窗体未配置时的
+        /// 其余区域用 <see cref="HomeLayoutConfig"/> 的类默认，与主窗体未配置时的
         /// 生效值保持一致，避免"恢复默认"反而变成另一套尺寸。
         /// </summary>
         private void BtnRestore_Click(object sender, EventArgs e)
         {
             var def = new HomeLayoutConfig();
-            _layout.HeaderHeight = def.HeaderHeight;
             _layout.RightPanelWidth = MainForm.DefaultRightPanelWidth;
             _layout.StatusBarHeight = def.StatusBarHeight;
             _syncing = true;
             // 【V1.72.16】同上钳制：缺省值理论上都在范围内，但钳一下零成本，
             // 万一将来改了 Range 常量忘同步 Designer，这里就是最后一道闸。
-            _nudHeader.Value = ClampNud(_nudHeader, _layout.HeaderHeight);
             _nudRight.Value = ClampNud(_nudRight, _layout.RightPanelWidth);
             _nudStatus.Value = ClampNud(_nudStatus, _layout.StatusBarHeight);
             _syncing = false;
@@ -210,12 +205,11 @@ namespace AgingTestSystem.Dialogs
     /// 绘制前先把客户区等比缩放到 1280×900 的视口（居中留白），
     /// 所有区域坐标/鼠标命中判断都在逻辑坐标系里做，天然适配任意窗口大小与 DPI。
     ///
-    /// 【可拖动边缘】共 3 条，拖动时通过 <see cref="Layout"/> 属性实时改值并触发
+    /// 【可拖动边缘】共 2 条，拖动时通过 <see cref="Layout"/> 属性实时改值并触发
     /// <see cref="LayoutChanged"/> 事件：
-    /// 1. 顶栏下边（y = HeaderHeight）→ 调 HeaderHeight
-    /// （【V1.88.23】顶栏菜单并单行，旧标题栏/菜单两条边合一）
-    /// 2. 右侧区域左边（x = 1280 - RightPanelWidth）→ 调 RightPanelWidth
-    /// 3. 状态栏上边（y = 900 - StatusBarHeight）→ 调 StatusBarHeight
+    /// 1. 右侧区域左边（x = 1280 - RightPanelWidth）→ 调 RightPanelWidth
+    /// 2. 状态栏上边（y = 900 - StatusBarHeight）→ 调 StatusBarHeight
+    /// （【V1.88.28】顶栏下边已删：顶栏锁死 FixedHeaderHeight，不可拖）。
     /// </summary>
     internal class HomeLayoutPreviewControl : Control
     {
@@ -249,11 +243,10 @@ namespace AgingTestSystem.Dialogs
         /// <summary>鼠标当前悬停的高亮边缘（None=无）</summary>
         private DragEdge _hoverEdge;
 
-        /// <summary>可拖动的边缘类型（【V1.88.23】顶栏菜单并单行：标题/菜单两条边合一）</summary>
+        /// <summary>可拖动的边缘类型（【V1.88.28】顶栏下边已删：顶栏锁死，不可拖）</summary>
         private enum DragEdge
         {
             None,
-            HeaderBottom,   // 顶栏下边 → 调 HeaderHeight
             RightLeft,      // 右侧区域左边 → 调 RightPanelWidth
             StatusTop       // 状态栏上边 → 调 StatusBarHeight
         }
@@ -321,7 +314,7 @@ namespace AgingTestSystem.Dialogs
             if (Layout == null) return;
 
             Rectangle v = GetViewport();
-            int header = Layout.HeaderHeight;
+            int header = HomeLayoutConfig.FixedHeaderHeight;
             int right = Layout.RightPanelWidth;
             int status = Layout.StatusBarHeight;
 
@@ -329,9 +322,10 @@ namespace AgingTestSystem.Dialogs
             int bodyTop = header;
             int bodyH = LOGIC_H - status - bodyTop;    // 主体区高度
 
-            // ① 顶栏（天蓝；【V1.88.23】标题栏+菜单栏并单行，一块画）
+            // ① 顶栏（天蓝；【V1.88.23】标题栏+菜单栏并单行，一块画；
+            // 【V1.88.28】固定 30 不可调，块上明示"固定"防误拖）
             DrawBlock(g, v.Left, v.Top,
-                LOGIC_W, header, "顶栏（项目/权限/通讯+4按钮）  " + header + "px",
+                LOGIC_W, header, "顶栏（固定 30，不可调）  " + header + "px",
                 Color.FromArgb(230, 240, 255), Color.FromArgb(70, 110, 180));
 
             // ② 工作站列表面板（浅绿，占左侧剩余）
@@ -369,7 +363,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 画 3 条可拖动边缘。悬停/拖动中的边缘用红色加粗显示，方便用户看出"这里可以拖"。
+        /// 画 2 条可拖动边缘。悬停/拖动中的边缘用红色加粗显示，方便用户看出"这里可以拖"。
         /// </summary>
         private void DrawEdges(Graphics g, Rectangle v, int header, int right, int status)
         {
@@ -377,7 +371,6 @@ namespace AgingTestSystem.Dialogs
             // 每条边缘的逻辑起点与长度
             var edges = new (DragEdge Edge, int X1, int Y1, int X2, int Y2)[]
             {
-                (DragEdge.HeaderBottom, 0, header, LOGIC_W, header),                  // 顶栏下边（横线，全宽）
                 (DragEdge.RightLeft, LOGIC_W - right, bodyTop, LOGIC_W - right, LOGIC_H - status), // 右侧左边（竖线）
                 (DragEdge.StatusTop, 0, LOGIC_H - status, LOGIC_W, LOGIC_H - status), // 状态栏上边（横线，全宽）
             };
@@ -403,14 +396,12 @@ namespace AgingTestSystem.Dialogs
         {
             if (Layout == null) return DragEdge.None;
 
-            int header = Layout.HeaderHeight;
+            int header = HomeLayoutConfig.FixedHeaderHeight;
             int right = Layout.RightPanelWidth;
             int status = Layout.StatusBarHeight;
             int bodyTop = header;
 
-            // 依次判断 3 条边缘（距离 ≤ HIT_TOLERANCE 且落在边缘线段范围内）
-            if (Math.Abs(lp.Y - header) <= HIT_TOLERANCE && lp.X >= 0 && lp.X <= LOGIC_W)
-                return DragEdge.HeaderBottom;
+            // 依次判断 2 条边缘（距离 ≤ HIT_TOLERANCE 且落在边缘线段范围内）
             if (Math.Abs(lp.X - (LOGIC_W - right)) <= HIT_TOLERANCE && lp.Y >= bodyTop && lp.Y <= LOGIC_H - status)
                 return DragEdge.RightLeft;
             if (Math.Abs(lp.Y - (LOGIC_H - status)) <= HIT_TOLERANCE && lp.X >= 0 && lp.X <= LOGIC_W)
@@ -425,8 +416,7 @@ namespace AgingTestSystem.Dialogs
             switch (edge)
             {
                 case DragEdge.RightLeft: return Cursors.SizeWE;   // 左右拖动
-                case DragEdge.StatusTop:
-                case DragEdge.HeaderBottom: return Cursors.SizeNS;  // 上下拖动
+                case DragEdge.StatusTop: return Cursors.SizeNS;  // 上下拖动
                 default: return Cursors.Default;
             }
         }
@@ -485,7 +475,6 @@ namespace AgingTestSystem.Dialogs
         {
             switch (edge)
             {
-                case DragEdge.HeaderBottom: return Layout.HeaderHeight;
                 case DragEdge.RightLeft: return Layout.RightPanelWidth;
                 case DragEdge.StatusTop: return Layout.StatusBarHeight;
                 default: return 0;
@@ -501,11 +490,6 @@ namespace AgingTestSystem.Dialogs
             int newValue = _dragStartValue;
             switch (edge)
             {
-                case DragEdge.HeaderBottom:
-                    // 下边向下拖 → 高度增大
-                    newValue = _dragStartValue + (lp.Y - _dragStartLogic.Y);
-                    newValue = Clamp(newValue, HomeLayoutConfig.HeaderRange);
-                    break;
                 case DragEdge.RightLeft:
                     // 左边向右拖 → 右侧区域变窄（宽度减小）
                     newValue = _dragStartValue - (lp.X - _dragStartLogic.X);
@@ -535,7 +519,6 @@ namespace AgingTestSystem.Dialogs
         {
             switch (edge)
             {
-                case DragEdge.HeaderBottom: Layout.HeaderHeight = value; break;
                 case DragEdge.RightLeft: Layout.RightPanelWidth = value; break;
                 case DragEdge.StatusTop: Layout.StatusBarHeight = value; break;
             }

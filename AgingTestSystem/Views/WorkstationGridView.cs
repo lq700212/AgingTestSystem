@@ -95,13 +95,14 @@ namespace AgingTestSystem.Views
     /// ┌───────────────────────────────────────────┬──────────┐
     /// │             画布（本控件 OnPaint）         │ 行全选列 │
     /// │ ┌──────┬──────┬──────┬──────┬──────┬───  │ ├──────────┤
-    /// │ │ NO.1 │ NO.2 │ NO.3 │ NO.4 │ NO.5 │ ... │ │ [全选]   │ ← 第1行
-    /// │ ├──────┼──────┼──────┼──────┼──────┼───  │ │ [全选]   │ ← 第2行
-    /// │ │ NO.9 │ NO.10│ NO.11│ NO.12│ NO.13│ ... │ │ [全选]   │ ← 第3行
-    /// │ │ ...  │ ...  │ ...  │ ...  │ ...  │ ... │ │ [全选]   │ ← 第4~9行
+    /// │ │ NO.1 │ NO.2 │ NO.3 │ NO.4 │ NO.5 │ ... │ │ [全]     │ ← 第1行（【V1.88.28】竖排大字：
+    /// │ ├──────┼──────┼──────┼──────┼──────┼───  │ │ [选]     │   "全/选"按正常字隙排成紧凑一竖块、
+    /// │ │ NO.9 │ NO.10│ NO.11│ NO.12│ NO.13│ ... │ │ [全]     │   整块居中（等分撑满太散）；
+    /// │ │ ...  │ ...  │ ...  │ ...  │ ...  │ ... │ │ [选]     │   字号=正文×RowSelectFontScale；
     /// │ └──────┴──────┴──────┴──────┴──────┴───  │ ├──────────┤
     /// │ 8列（列宽209，每格内容204+左右边距各2）      │ 行内全部   │
     /// │ × 9行（行高182，每格内容170+上下缝12）      │ 选中→[取消]│
+    /// │ （竖排：[取]/[消]上下两格）                  │          │
     /// └───────────────────────────────────────────┴──────────┘
     /// （保持 8×9=72，不动列数；【V1.88.17】面板 222×205 紧凑到 204×170，
     /// 内容 1896×2025→1736×1638，纵向缩放压力大减）
@@ -231,6 +232,19 @@ namespace AgingTestSystem.Views
         private Font _panelFont;
         /// <summary>设备编号标题字体（微软雅黑 9 Bold）</summary>
         private Font _titleFont;
+        /// <summary>
+        /// 行全选按钮字体（【V1.88.28 新增】竖排大字：字号 = 正文字号 × 配置倍率，
+        /// 与 RebuildFonts 同建同释放；绘制时按字逐格居中，Paint 里不量字）。
+        /// </summary>
+        private Font _rowSelectFont;
+        /// <summary>行全选"全选"文案逐字缓存（构造时拆好，Paint 只按下标取）</summary>
+        private readonly string[] _rowSelectCharsAll;
+        /// <summary>行全选"取消"文案逐字缓存（构造时拆好，Paint 只按下标取）</summary>
+        private readonly string[] _rowSelectCharsCancel;
+        /// <summary>竖排单字格高（px，布局态实测缓存，Paint 只读）</summary>
+        private int _rowSelectCharH;
+        /// <summary>竖排字间隙（px，布局态由字高换算缓存，Paint 只读）</summary>
+        private int _rowSelectGap;
 
         // ===== 配置解析出的颜色（浅色值来自 PanelLayoutConfig，可被 PanelLayout.json 覆盖） =====
         // 【V1.60 深色模式】以下"跟随主题切换"的颜色去掉 readonly，SetDarkMode 里整体换肤；
@@ -379,6 +393,12 @@ namespace AgingTestSystem.Views
             _panelFont = new Font(_layout.FontFamily, _layout.FontSize, FontStyle.Bold);
             _titleFont = new Font(_layout.FontFamily, _layout.TitleFontSize,
                 _layout.TitleFontBold ? FontStyle.Bold : FontStyle.Regular);
+            _rowSelectFont = BuildRowSelectFont(_layout, _layout.FontSize);
+            // 【V1.88.28】竖排逐字绘制的字符缓存：Paint 里只按下标取，不量字不拼串不分配；
+            // 文案来自配置（json 可覆盖），构造时拆好，全生命周期不变。
+            _rowSelectCharsAll = ToCharStrings(_layout.RowSelectAllText);
+            _rowSelectCharsCancel = ToCharStrings(_layout.RowSelectCancelText);
+            RefreshRowSelectMetrics();
 
             // 【V1.57.2】初始化缓存画刷/画笔：语义色两个一次建好，主题色四个走 RebuildThemeBrushes
             // （SetDarkMode 里复用它重建，保证颜色与字段永远一致）。
@@ -585,11 +605,86 @@ namespace AgingTestSystem.Views
             if (titleSize < MinFontSize) titleSize = MinFontSize;
             Font oldPanel = _panelFont;
             Font oldTitle = _titleFont;
+            Font oldRowSelect = _rowSelectFont;
             _panelFont = new Font(_layout.FontFamily, panelSize, FontStyle.Bold);
             _titleFont = new Font(_layout.FontFamily, titleSize,
                 _layout.TitleFontBold ? FontStyle.Bold : FontStyle.Regular);
+            _rowSelectFont = BuildRowSelectFont(_layout, panelSize);
             if (oldPanel != null) oldPanel.Dispose();
             if (oldTitle != null) oldTitle.Dispose();
+            if (oldRowSelect != null) oldRowSelect.Dispose();
+            RefreshRowSelectMetrics();
+        }
+
+        /// <summary>
+        /// 按正文实际字号构建行全选字体（【V1.88.28】纯静态，可单测：字号 = panelSize × 配置倍率，
+        /// 下限保 <see cref="MinFontSize"/>；加粗与正文一致，小字清楚）。
+        /// </summary>
+        /// <param name="layout">布局配置（取字族与倍率）</param>
+        /// <param name="panelSize">正文实际字号（pt，已按 zoom 缩放钳制）</param>
+        public static Font BuildRowSelectFont(PanelLayoutConfig layout, float panelSize)
+        {
+            float scale = layout != null && layout.RowSelectFontScale > 0 ? layout.RowSelectFontScale : 2f;
+            float size = panelSize * scale;
+            if (size < MinFontSize) size = MinFontSize;
+            string family = layout != null && !string.IsNullOrEmpty(layout.FontFamily)
+                ? layout.FontFamily : "微软雅黑";
+            return new Font(family, size, FontStyle.Bold);
+        }
+
+        /// <summary>文案拆逐字数组（null/空即空数组，调用方按空画空按钮）</summary>
+        private static string[] ToCharStrings(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return new string[0];
+            string[] chars = new string[text.Length];
+            for (int i = 0; i < text.Length; i++) chars[i] = text[i].ToString();
+            return chars;
+        }
+
+        /// <summary>
+        /// 竖排字间隙（【V1.88.28】纯函数：字高的 1/4 四舍五入、下限 2px——"正常间隙"，
+        /// 字挨太紧难读、等分撑满又太散；回归可直接断言）。
+        /// </summary>
+        public static int RowSelectGapForCharH(int charH)
+        {
+            if (charH < 1) charH = 1;
+            int gap = (int)Math.Round(charH * 0.25);
+            return gap < 2 ? 2 : gap;
+        }
+
+        /// <summary>
+        /// 竖排整块起始 Y（【V1.88.28】纯函数，回归可直接断言）。
+        /// n 个字按"字高＋间隙"排成紧凑一竖块，整块在按钮内垂直居中；
+        /// 块超高（极端小窗）时上下对称溢出，仍居中。
+        /// </summary>
+        /// <param name="rcY">按钮顶</param>
+        /// <param name="rcH">按钮高</param>
+        /// <param name="charH">单字格高（布局态实测）</param>
+        /// <param name="gap">字间隙（见 RowSelectGapForCharH）</param>
+        /// <param name="count">字数（"全选"/"取消"恒 2）</param>
+        public static int ComputeRowSelectStartY(int rcY, int rcH, int charH, int gap, int count)
+        {
+            if (count <= 0) return rcY;
+            int total = count * charH + (count - 1) * gap;
+            return rcY + (rcH - total) / 2;
+        }
+
+        /// <summary>
+        /// 实测竖排单字格高（布局态调用——构造/RebuildFonts 里各一次，Paint 里只读缓存）。
+        /// 四个字（全/选/取/消）同字族同字号等高，量整串单行高即单字格高。
+        /// </summary>
+        public static int MeasureRowSelectCharH(Font font)
+        {
+            if (font == null) return 1;
+            int h = TextRenderer.MeasureText("全选取消", font).Height;
+            return h < 1 ? 1 : h;
+        }
+
+        /// <summary>重算行全选竖排度量（字体换了必调：构造一次＋RebuildFonts 里跟 zoom 走）</summary>
+        private void RefreshRowSelectMetrics()
+        {
+            _rowSelectCharH = MeasureRowSelectCharH(_rowSelectFont);
+            _rowSelectGap = RowSelectGapForCharH(_rowSelectCharH);
         }
 
         /// <summary>
@@ -1160,15 +1255,27 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 绘制行全选按钮（浅灰底，该行全部选中时显示"取消"否则"全选"）
+        /// 绘制行全选按钮（浅灰底，该行全部选中时显示"取消"否则"全选"）。
+        /// 【V1.88.28】文字改竖排大字：n 个字按"字高＋正常间隙"排成紧凑一竖块、
+        /// 整块在按钮内垂直居中（见 ComputeRowSelectStartY；等分撑满两字离太远、丑）；
+        /// 字体走 _rowSelectFont（字号 = 正文 × 配置倍率，RebuildFonts 里跟 zoom 重建）；
+        /// 字高/间隙是布局态实测缓存（RefreshRowSelectMetrics），字符取构造缓存，
+        /// Paint 里不量字不拼串。
         /// </summary>
         private void DrawRowSelectButton(Graphics g, Rectangle rc, int row)
         {
             g.FillRectangle(_brushRowSelect, rc);
             g.DrawRectangle(_penBorder, rc);
-            TextRenderer.DrawText(g, IsRowAllSelected(row) ? _layout.RowSelectCancelText : _layout.RowSelectAllText,
-                _panelFont, rc, _colorText,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            string[] chars = IsRowAllSelected(row) ? _rowSelectCharsCancel : _rowSelectCharsAll;
+            if (chars == null || chars.Length == 0) return;
+            int step = _rowSelectCharH + _rowSelectGap;
+            int y = ComputeRowSelectStartY(rc.Y, rc.Height, _rowSelectCharH, _rowSelectGap, chars.Length);
+            for (int i = 0; i < chars.Length; i++)
+            {
+                var slot = new Rectangle(rc.X, y + i * step, rc.Width, _rowSelectCharH);
+                TextRenderer.DrawText(g, chars[i], _rowSelectFont, slot, _colorText,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            }
         }
 
         /// <summary>绘制状态色块（填充 + 边框 + 文字水平垂直居中）</summary>

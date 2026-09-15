@@ -154,7 +154,8 @@ namespace AgingTestSystem.Models
         /// 面板间纵向缝由 20 收到 12，为一屏铺满减内容高）</summary>
         public int PanelRowHeight { get; set; } = 182;
 
-        /// <summary>最右侧"行全选"按钮列宽（【V1.88.17】80→64，"全选/取消"两字用不满 80）</summary>
+        /// <summary>最右侧"行全选"按钮列宽（【V1.88.17】80→64，"全选/取消"两字用不满 80；
+        /// 【V1.88.28】文字改竖排后列宽不变：单字宽绰绰有余，宽是给手指留的不是给字留的）</summary>
         public int RowSelectButtonColumnWidth { get; set; } = 64;
 
         /// <summary>面板内容设计宽（每个面板实际绘制区域宽度；
@@ -212,6 +213,13 @@ namespace AgingTestSystem.Models
 
         /// <summary>设备编号标题是否加粗</summary>
         public bool TitleFontBold { get; set; } = true;
+
+        /// <summary>
+        /// 行全选按钮字号倍率（相对面板正文字号；【V1.88.28 新增】用户点名全选按钮字竖排＋大点：
+        /// 按钮高 ≈ 面板高（169 逻辑像素），横排两字显小，竖排后纵向空间绰绰有余，
+        /// 字号 = 正文字号 × 本倍率，加粗与正文一致；老 json 缺字段即 2，不迁移）。
+        /// </summary>
+        public float RowSelectFontScale { get; set; } = 2f;
 
         /// <summary>静态标签文字高度（px，默认 12）——【V1.58.19 垂直锚定】</summary>
         /// 用于标签垂直居中对齐（<see cref="ElementPoint.VerticalCenterAlignTo"/>）时计算 Y：
