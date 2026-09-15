@@ -1445,23 +1445,23 @@ namespace AgingTestSystem.Tests
 
         // =====================================================================
         // 9. PanelLayoutConfig —— 默认布局 / 锚定幂等 / 宽高联动（自绘面板布局核心）
-        //    断言基准 = V1.91 紧凑默认值（PanelInnerWidth=204, Height=128；标题并入第一行；
+        //    断言基准 = V1.95 默认值（PanelInnerWidth=204, Height=140；标题并入第一行；
         //    标签列65/值列X74/按钮46宽；纯代码缺省，无 PanelLayout.json 文件）
         // =====================================================================
         private static void PanelLayoutTests()
         {
             var c = PanelLayoutConfig.CreateDefault();
-            Check("CreateDefault 返回默认布局", c != null && c.PanelInnerWidth == 204 && c.PanelInnerHeight == 128);
+            Check("CreateDefault 返回默认布局", c != null && c.PanelInnerWidth == 204 && c.PanelInnerHeight == 140);
 
             // 关键元素按锚定规则解析出的基准坐标（V1.91：标签列65/值列右移/按钮收窄46）
             var setBtn = c.RcSetButton.ToRectangle();
             Check("设置按钮右锚定 X=204-9-46=149", setBtn.X == 149 && setBtn.Width == 46,
                 "实际 " + setBtn.ToString());
-            Check("设置按钮下锚定 Y=128-7-36=85", setBtn.Y == 85 && setBtn.Height == 36,
+            Check("设置按钮下锚定 Y=140-7-36=97", setBtn.Y == 97 && setBtn.Height == 36,
                 "实际 " + setBtn.ToString());
             var selBox = c.RcSelectBox.ToRectangle();
-            Check("选中框右上锚定 (185,6) 14x14（并入第一行）", selBox.X == 185 && selBox.Y == 6
-                && selBox.Width == 14 && selBox.Height == 14, "实际 " + selBox.ToString());
+            Check("选中框右上锚定 (181,4) 18x18（并入第一行，对勾保留）", selBox.X == 181 && selBox.Y == 4
+                && selBox.Width == 18 && selBox.Height == 18, "实际 " + selBox.ToString());
             var sn = c.RcSNValue.ToRectangle();
             Check("SN 框右对齐设置按钮 X=74 宽121", sn.X == 74 && sn.Width == 121, "实际 " + sn.ToString());
             var pressure = c.RcPressureValue.ToRectangle();
@@ -1471,11 +1471,11 @@ namespace AgingTestSystem.Tests
             Check("压力框右缘=设置按钮右缘",
                 pressure.X + pressure.Width
                 == c.RcSetButton.ToRectangle().X + c.RcSetButton.ToRectangle().Width);
-            // 第一行四件套同行：编号(6,6)＋下电(74,4)＋真空(127,4)＋选中框(185,6)
-            Check("第一行：下电块 (74,4) 49x18（左缘对齐SN框）", c.RcPower.ToRectangle().X == 74 && c.RcPower.ToRectangle().Y == 4
-                && c.RcPower.ToRectangle().Width == 49 && c.RcPower.ToRectangle().Height == 18,
+            // 第一行四件套同行：编号(6,6)＋下电(74,4)＋真空(123,4)＋选中框(181,4)
+            Check("第一行：下电块 (74,4) 45x18（左缘对齐SN框）", c.RcPower.ToRectangle().X == 74 && c.RcPower.ToRectangle().Y == 4
+                && c.RcPower.ToRectangle().Width == 45 && c.RcPower.ToRectangle().Height == 18,
                 "实际 " + c.RcPower.ToRectangle().ToString());
-            Check("第一行：真空块 (127,4) 54x18", c.RcVacuumOpen.ToRectangle().X == 127 && c.RcVacuumOpen.ToRectangle().Y == 4
+            Check("第一行：真空块 (123,4) 54x18", c.RcVacuumOpen.ToRectangle().X == 123 && c.RcVacuumOpen.ToRectangle().Y == 4
                 && c.RcVacuumOpen.ToRectangle().Width == 54 && c.RcVacuumOpen.ToRectangle().Height == 18,
                 "实际 " + c.RcVacuumOpen.ToRectangle().ToString());
             Check("第一行：编号与状态块同行 Y=6/4", c.TitlePosition.ToPoint().Y == 6
@@ -1503,20 +1503,20 @@ namespace AgingTestSystem.Tests
 
             // ── 高度联动：面板高 +10 → 下链下移、上链锁定、差值由交接缝吸收（V1.77）──
             var tall = PanelLayoutConfig.CreateDefault();
-            tall.PanelInnerHeight = 138;
+            tall.PanelInnerHeight = 150;
             tall.ResolveAnchors();
-            Check("高度+10: 设置按钮 Y 85→95", tall.RcSetButton.ToRectangle().Y == 95);
-            Check("高度+10: SN 框 Y=46 不动(上链锁定，V1.77 改走自上而下链)",
-                tall.RcSNValue.ToRectangle().Y == 46);
-            Check("高度+10: 配方框 Y 65→75", tall.RcRecipeValue.ToRectangle().Y == 75);
-            Check("高度+10: 交接缝吸收差值(SN→配方间距3→13)",
-                tall.RcRecipeValue.ToRectangle().Y - (tall.RcSNValue.ToRectangle().Y + 16) == 13);
+            Check("高度+10: 设置按钮 Y 97→107", tall.RcSetButton.ToRectangle().Y == 107);
+            Check("高度+10: SN 框 Y=52 不动(上链锁定，V1.77 改走自上而下链)",
+                tall.RcSNValue.ToRectangle().Y == 52);
+            Check("高度+10: 配方框 Y 77→87", tall.RcRecipeValue.ToRectangle().Y == 87);
+            Check("高度+10: 交接缝吸收差值(SN→配方间距9→19)",
+                tall.RcRecipeValue.ToRectangle().Y - (tall.RcSNValue.ToRectangle().Y + 16) == 19);
             Check("高度+10: 真空块第一行 Y=4(TopMargin固定)", tall.RcVacuumOpen.ToRectangle().Y == 4);
-            Check("高度+10: 压力框 Y=26 不动(吊真空块下方)",
-                tall.RcPressureValue.ToRectangle().Y == 26);
-            Check("高度+10: 延时两行 Y 86/104→96/114",
-                tall.RcDelayTimeValue.ToRectangle().Y == 96 && tall.RcBurnInValue.ToRectangle().Y == 114);
-            Check("高度+10: 选中框 TopMargin 锚定不动仍 Y=6", tall.RcSelectBox.ToRectangle().Y == 6);
+            Check("高度+10: 压力框 Y=28 不动(吊真空块下方)",
+                tall.RcPressureValue.ToRectangle().Y == 28);
+            Check("高度+10: 延时两行 Y 98/116→108/126",
+                tall.RcDelayTimeValue.ToRectangle().Y == 108 && tall.RcBurnInValue.ToRectangle().Y == 126);
+            Check("高度+10: 选中框 TopMargin 锚定不动仍 Y=4", tall.RcSelectBox.ToRectangle().Y == 4);
             Check("高度+10: 真空块 Y=4 不动(上链基准)", tall.RcVacuumOpen.ToRectangle().Y == 4);
             Check("高度+10: 下电框跟随真空块仍 Y=4", tall.RcPower.ToRectangle().Y == 4);
             Check("高度+10: 压力框右缘=设置按钮右缘(与SN/配方同界)",
@@ -1537,16 +1537,16 @@ namespace AgingTestSystem.Tests
             Check("宽度+10: 压力框 X=84 宽121(右缘跟设置按钮)",
                 wPressure.X == 84 && wPressure.Width == 121,
                 "实际 " + wPressure.ToString());
-            Check("宽度+10: 选中框 X 185→195(RightMargin=5 跟随)", wide.RcSelectBox.ToRectangle().X == 195);
-            Check("宽度+10: 真空块跟随选中框 X 127→137", wide.RcVacuumOpen.ToRectangle().X == 137,
+            Check("宽度+10: 选中框 X 181→191(RightMargin=5 跟随)", wide.RcSelectBox.ToRectangle().X == 191);
+            Check("宽度+10: 真空块跟随选中框 X 123→133", wide.RcVacuumOpen.ToRectangle().X == 133,
                 "实际 " + wide.RcVacuumOpen.ToRectangle().ToString());
-            Check("宽度+10: 下电左缘仍对齐SN(84)宽49→49", wide.RcPower.ToRectangle().X == 84
-                && wide.RcPower.ToRectangle().Width == 49,
+            Check("宽度+10: 下电左缘仍对齐SN(84)宽45→45", wide.RcPower.ToRectangle().X == 84
+                && wide.RcPower.ToRectangle().Width == 45,
                 "实际 " + wide.RcPower.ToRectangle().ToString());
 
             // ── 标签垂直居中：随目标框移动（V1.77：压力框定高位，标签不动）──
-            Check("压力标签定高位不动(Y=26)",
-                c.LabelPressurePosition.ToPoint().Y == 26 && tall.LabelPressurePosition.ToPoint().Y == 26,
+            Check("压力标签定高位不动(Y=28)",
+                c.LabelPressurePosition.ToPoint().Y == 28 && tall.LabelPressurePosition.ToPoint().Y == 28,
                 "基准 " + c.LabelPressurePosition.ToPoint().ToString() + " 加高后 " + tall.LabelPressurePosition.ToPoint().ToString());
 
             // ── 颜色解析工具 ──
@@ -1578,28 +1578,28 @@ namespace AgingTestSystem.Tests
             // 纯代码默认（不读文件，零文件依赖）：new 出来就是 ShowCurrent=false 的原布局
             var cur = new PanelLayoutConfig();
             Check("电流行缺省关闭", cur.ShowCurrent == false);
-            Check("关电流有效高=128/行高=136",
-                cur.GetEffectiveInnerHeight() == 128 && cur.GetEffectiveRowHeight() == 136);
+            Check("关电流有效高=140/行高=148",
+                cur.GetEffectiveInnerHeight() == 140 && cur.GetEffectiveRowHeight() == 148);
             cur.ShowCurrent = true;
             cur.ResolveAnchors();
-            Check("开电流有效高144/行高152",
-                cur.GetEffectiveInnerHeight() == 144 && cur.GetEffectiveRowHeight() == 152);
+            Check("开电流有效高156/行高164",
+                cur.GetEffectiveInnerHeight() == 156 && cur.GetEffectiveRowHeight() == 164);
             var rcCur = cur.RcCurrentValue.ToRectangle();
-            Check("开电流电流行 (74,44,121,16) 与压力同界",
-                rcCur.X == 74 && rcCur.Y == 44 && rcCur.Width == 121 && rcCur.Height == 16,
+            Check("开电流电流行 (74,48,121,16) 与压力同界",
+                rcCur.X == 74 && rcCur.Y == 48 && rcCur.Width == 121 && rcCur.Height == 16,
                 "实际 " + rcCur.ToString());
-            Check("开电流SN下移62", cur.RcSNValue.ToRectangle().Y == 62);
-            Check("开电流配方81且交接缝仍3",
-                cur.RcRecipeValue.ToRectangle().Y == 81
-                && cur.RcRecipeValue.ToRectangle().Y - (cur.RcSNValue.ToRectangle().Y + 16) == 3);
-            Check("开电流按钮101/延时102/120",
-                cur.RcSetButton.ToRectangle().Y == 101
-                && cur.RcDelayTimeValue.ToRectangle().Y == 102
-                && cur.RcBurnInValue.ToRectangle().Y == 120);
-            Check("开电流压力框不动26/真空块4",
-                cur.RcPressureValue.ToRectangle().Y == 26 && cur.RcVacuumOpen.ToRectangle().Y == 4);
-            Check("开电流标签44", cur.LabelCurrentPosition.ToPoint().Y == 44);
-            Check("开电流SN标签跟随62", cur.LabelSnPosition.ToPoint().Y == 62);
+            Check("开电流SN下移68", cur.RcSNValue.ToRectangle().Y == 68);
+            Check("开电流配方93且交接缝仍9",
+                cur.RcRecipeValue.ToRectangle().Y == 93
+                && cur.RcRecipeValue.ToRectangle().Y - (cur.RcSNValue.ToRectangle().Y + 16) == 9);
+            Check("开电流按钮113/延时114/132",
+                cur.RcSetButton.ToRectangle().Y == 113
+                && cur.RcDelayTimeValue.ToRectangle().Y == 114
+                && cur.RcBurnInValue.ToRectangle().Y == 132);
+            Check("开电流压力框不动28/真空块4",
+                cur.RcPressureValue.ToRectangle().Y == 28 && cur.RcVacuumOpen.ToRectangle().Y == 4);
+            Check("开电流标签48", cur.LabelCurrentPosition.ToPoint().Y == 48);
+            Check("开电流SN标签跟随68", cur.LabelSnPosition.ToPoint().Y == 68);
             // 关回去：与默认快照零差异（开关往返不漂移）
             cur.ShowCurrent = false;
             cur.ResolveAnchors();
@@ -4807,12 +4807,12 @@ namespace AgingTestSystem.Tests
                     Check("负坐标不命中", !hit(new Point(-5, -5)).Item1);
                     var center = hit(new Point(b1.Width / 2, b1.Height / 2));
                     Check("1号中心命中1", center.Item1 && center.Item2 == 1);
-                    // 面板间隙不命中（zoom=1/dpi=1：内容204x128，格209x136；
-                    // 面板内容左上偏移+2：行缝 y∈[130,136)、列缝 x∈[206,209)；
-                    // 点缝隙以前误翻上一个面板。数字随紧凑布局更新（V1.90）。
-                    Check("行间隙不命中", !hit(new Point(b1.Width / 2, 132)).Item1);
+                    // 面板间隙不命中（zoom=1/dpi=1：内容204x140，格209x148；
+                    // 面板内容左上偏移+2：行缝 y∈[142,148)、列缝 x∈[206,209)；
+                    // 点缝隙以前误翻上一个面板。数字随布局更新（V1.90 紧凑，V1.95 加高）。
+                    Check("行间隙不命中", !hit(new Point(b1.Width / 2, 144)).Item1);
                     Check("列间隙不命中", !hit(new Point(207, 50)).Item1);
-                    Check("内容底边内仍命中", hit(new Point(100, 129)).Item1);
+                    Check("内容底边内仍命中", hit(new Point(100, 141)).Item1);
                     Func<DeviceStatus, Color> bc = st => (Color)backOf.Invoke(grid, new object[] { st });
                     var cFault = bc(DeviceStatus.Fault); var cTest = bc(DeviceStatus.Testing);
                     var cDone = bc(DeviceStatus.Completed); var cIdle = bc(DeviceStatus.Idle);
@@ -4906,7 +4906,7 @@ namespace AgingTestSystem.Tests
 
                     // —— 自适应缩放（只留双向精确铺满一屏：FitWidth/FitMode/
                     // 单轴ComputeFitZoom/MinZoom钳制/拖拽滚动全删） ——
-                    // 内容 8×209+48=1720 宽、9×136=1224 高（V1.89 紧凑布局关电流）。
+                    // 内容 8×209+48=1720 宽、9×148=1332 高（V1.89 紧凑布局关电流，V1.95 加高）。
                     double bzx, bzy;
                     WorkstationGridView.ComputeFitZoom(1600, 800, 1736, 1638, out bzx, out bzy);
                     Check("ComputeFitZoom双向独立（1600/1736，800/1638）",
@@ -4987,16 +4987,16 @@ namespace AgingTestSystem.Tests
                     {
                         zoomXFld.SetValue(grid, 0.5f);
                         zoomYFld.SetValue(grid, 0.25f);
-                        // 边长=min(ScaledX(14),ScaledY(14))=min(7,4)=4；
-                        // x=100+102-4-2=196，y=200+2=202（TopMargin=6：Round(1.5)=2）。
+                        // 边长=min(ScaledX(18),ScaledY(18))=min(9,4)=4；
+                        // x=100+102-4-2=196，y=200+1=201（TopMargin=4：Round(1)=1）。
                         Rectangle sq = (Rectangle)selRectM.Invoke(grid, new object[] { 100, 200 });
                         Check("扁拉伸下选中框仍正方形且边长取小边",
                             sq.Width == sq.Height && sq.Width == 4, "实际 " + sq.ToString());
-                        Check("选中框右上位置(196,202)",
-                            sq.X == 196 && sq.Y == 202, "实际 " + sq.ToString());
+                        Check("选中框右上位置(196,201)",
+                            sq.X == 196 && sq.Y == 201, "实际 " + sq.ToString());
                         Rectangle sql = (Rectangle)selLocalM.Invoke(grid, null);
-                        Check("局部矩形与绘制同源((96,2,4,4))",
-                            sql.X == 96 && sql.Y == 2 && sql.Width == 4 && sql.Height == 4,
+                        Check("局部矩形与绘制同源((96,1,4,4))",
+                            sql.X == 96 && sql.Y == 1 && sql.Width == 4 && sql.Height == 4,
                             "实际 " + sql.ToString());
                         zoomXFld.SetValue(grid, 1f);
                         zoomYFld.SetValue(grid, 1f);
@@ -5017,7 +5017,7 @@ namespace AgingTestSystem.Tests
                         var tf = tfFld != null ? tfFld.GetValue(grid) as System.Drawing.Font : null;
                         Check("窄边小zoom下正文字号钳4pt", pf != null && pf.Size >= 4f);
                         Check("窄边小zoom下标题字号钳4pt", tf != null && tf.Size >= 4f);
-                        // 1280×1024真实zoom（V1.89 内容 1720×1224：972×736可用区 zx≈0.565、zy≈0.601，
+                        // 1280×1024真实zoom（V1.89 内容 1720×1224、V1.95 加高到 1720×1332：972×736可用区，
                         // 窄边是横向；此处仍用旧 zx/zy 探针验证"跟随窄边不卡下限"的机制不变）。
                         // 理想4.49pt必须跟随缩小、不再被卡到6pt（卡住即标签挤叠复现）。
                         zoomXFld.SetValue(grid, 0.5593f);
@@ -5044,7 +5044,7 @@ namespace AgingTestSystem.Tests
                         // 行全选竖排（竖排大字＋正常间隙＋整块居中；
                         // 字高/间隙布局态缓存，Paint 只读——回归锁纯函数与缺省）。
                         Check("行全选字号倍率缺省2", new PanelLayoutConfig().RowSelectFontScale == 2f);
-                        // V1.89 紧凑：缺省内容 8×209+48=1720 宽、9×136=1224 高（字号由窄边定）。
+                        // V1.89 紧凑＋V1.95 加高：缺省内容 8×209+48=1720 宽、9×148=1332 高（字号由窄边定）。
                         Check("行全选列宽缺省48", new PanelLayoutConfig().RowSelectButtonColumnWidth == 48);
                         var defLayout = new PanelLayoutConfig();
                         Check("缺省内容宽1720",
@@ -5063,12 +5063,12 @@ namespace AgingTestSystem.Tests
                             Check("字间隙正常(≥2px且≤字高一半)", rgap >= 2 && rgap <= chh / 2 + 1,
                                 "间隙" + rgap + "px vs 字高" + chh + "px");
                             int total = 2 * chh + rgap;
-                            int y0 = WorkstationGridView.ComputeRowSelectStartY(2, 127, chh, rgap, 2);
-                            Check("两字整块垂直居中", y0 == 2 + (127 - total) / 2,
+                            int y0 = WorkstationGridView.ComputeRowSelectStartY(2, 139, chh, rgap, 2);
+                            Check("两字整块垂直居中", y0 == 2 + (139 - total) / 2,
                                 "实际y0=" + y0 + "，块高" + total + "px");
-                            Check("块底不超按钮底", y0 + total <= 2 + 127);
+                            Check("块底不超按钮底", y0 + total <= 2 + 139);
                             Check("零字回顶（空按钮不画）",
-                                WorkstationGridView.ComputeRowSelectStartY(2, 127, chh, rgap, 0) == 2);
+                                WorkstationGridView.ComputeRowSelectStartY(2, 139, chh, rgap, 0) == 2);
                             Check("间隙下限2px（0高不炸）", WorkstationGridView.RowSelectGapForCharH(0) == 2);
                         }
                         finally { if (rsf != null) { try { rsf.Dispose(); } catch { } } }
@@ -5097,7 +5097,7 @@ namespace AgingTestSystem.Tests
                         // 设置按钮独立大字（绿底白字看不清：框46×36，12pt跟zoom走；
                         // "设置"实测42px，框内左右各留2px是完整显示的底线；
                         // 标题11pt槽位（x=6到下电块74）68px，"NO.72"实测56px装得下；
-                        // 下电49宽（"上电"37px各留6px）、真空54宽（"真空开"51px各留1~2px已到底）。
+                        // 下电45宽（"上电"37px各留4px，居中画不贴边）、真空54宽（"真空开"51px各留1~2px已到底）。
                         System.Drawing.Font sbf = null;
                         try
                         {
@@ -5126,7 +5126,7 @@ namespace AgingTestSystem.Tests
                             {
                                 panelProbe = new System.Drawing.Font("微软雅黑", 10f, System.Drawing.FontStyle.Bold);
                                 int powerW = System.Windows.Forms.TextRenderer.MeasureText("上电", panelProbe).Width;
-                                Check("上电两字装进49宽下电块", powerW <= 45, "实际 " + powerW + "px");
+                                Check("上电两字装进45宽下电块", powerW <= 41, "实际 " + powerW + "px");
                                 int vacW = System.Windows.Forms.TextRenderer.MeasureText("真空开", panelProbe).Width;
                                 Check("真空三字装进54宽真空块", vacW <= 52, "实际 " + vacW + "px");
                             }
@@ -5163,11 +5163,11 @@ namespace AgingTestSystem.Tests
                             // 第一行同行锁：编号/下电/真空/选中框 Y 同行，右缘链无交叠。
                             var defL = new PanelLayoutConfig();
                             defL.ResolveAnchors();
-                            Check("第一行同行（编号6/下电4/真空4/选中6）",
+                            Check("第一行同行（编号6/下电4/真空4/选中4）",
                                 defL.TitlePosition.ToPoint().Y == 6
                                 && defL.RcPower.ToRectangle().Y == 4
                                 && defL.RcVacuumOpen.ToRectangle().Y == 4
-                                && defL.RcSelectBox.ToRectangle().Y == 6);
+                                && defL.RcSelectBox.ToRectangle().Y == 4);
                             Check("第一行无交叠（标题→下电→真空→选中）",
                                 defL.TitlePosition.ToPoint().X + 56 <= defL.RcPower.ToRectangle().X
                                 && defL.RcPower.ToRectangle().X + defL.RcPower.ToRectangle().Width <= defL.RcVacuumOpen.ToRectangle().X
@@ -5194,7 +5194,7 @@ namespace AgingTestSystem.Tests
                     }
                     // 无句柄挂载即铺满（缺省就是双向铺满，不用切模式；
                     // MinSize 同步/V1.88.15 事后校正随滚动删除，只锁 zoom+画布）。
-                    // 800×600 宿主：可用区 800×600 精确（不再预扣 1px），内容 1720×1224。
+                    // 800×600 宿主：可用区 800×600 精确（不再预扣 1px），内容 1720×1332。
                     var hostPanel = new System.Windows.Forms.Panel();
                     try
                     {
@@ -5204,17 +5204,18 @@ namespace AgingTestSystem.Tests
                         float zhy = zoomYFld != null ? (float)zoomYFld.GetValue(grid) : 0f;
                         Check("挂载后zoomX按宽算(800/1720)",
                             zoomXFld != null && Math.Abs(zhx - 800.0 / 1720.0) < 0.002);
-                        Check("挂载后zoomY按高算(600/1224)",
-                            zoomYFld != null && Math.Abs(zhy - 600.0 / 1224.0) < 0.002);
+                        Check("挂载后zoomY按高算(600/1332)",
+                            zoomYFld != null && Math.Abs(zhy - 600.0 / 1332.0) < 0.002);
                         Check("画布精确等于宿主客户区(±1px取整)",
                             Math.Abs(grid.Size.Width - 800) <= 1 && Math.Abs(grid.Size.Height - 600) <= 1);
                         Check("无滚动同步残留（MinSize保持空）",
                             hostPanel.AutoScrollMinSize == System.Drawing.Size.Empty);
-                        // 字号取窄边：10×800/1720≈4.65pt（V1.89 压紧后小窗也不再钳下限）。
+                        // 字号取窄边：V1.95 加高后 800×600 宿主里窄边是纵向（600/1332≈0.450＜800/1720≈0.465），
+                        // 正文 10×600/1332≈4.50pt（小窗也不再钳下限）。
                         var pfFitFld = tg.GetField("_panelFont", BindingFlags.NonPublic | BindingFlags.Instance);
                         var pfFit = pfFitFld != null ? pfFitFld.GetValue(grid) as System.Drawing.Font : null;
-                        Check("窄边字号≈4.65pt（不钳下限）",
-                            pfFit != null && Math.Abs(pfFit.Size - 10f * 800f / 1720f) < 0.05f,
+                        Check("窄边字号≈4.50pt（不钳下限）",
+                            pfFit != null && Math.Abs(pfFit.Size - 10f * 600f / 1332f) < 0.05f,
                             pfFit != null ? "实际 " + pfFit.Size.ToString("F2") + "pt" : "字体为null");
                         Check("面板正文字体加粗（V1.88.25小字清楚，harness A/B黑像素+34%）",
                             pfFit != null && pfFit.Bold);
@@ -5225,15 +5226,15 @@ namespace AgingTestSystem.Tests
                         try { hostPanel.Dispose(); } catch { }
                     }
                     // 去标题栏收益锁：同宽下可用高 807→845（+38 全给工作站区），
-                    // V1.89 内容高 1224：zoomX=976/1720≈0.567 是窄边，正文 10×0.567≈5.67pt。
+                    // V1.95 内容高 1332：zoomX=976/1720≈0.567 是窄边，正文 10×0.567≈5.67pt。
                     var hostTall = new System.Windows.Forms.Panel();
                     try
                     {
                         hostTall.ClientSize = new System.Drawing.Size(976, 845);
                         hostTall.Controls.Add(grid);
                         float zty = zoomYFld != null ? (float)zoomYFld.GetValue(grid) : 0f;
-                        Check("去标题后zoomY按高算(845/1224)",
-                            zoomYFld != null && Math.Abs(zty - 845.0 / 1224.0) < 0.002);
+                        Check("去标题后zoomY按高算(845/1332)",
+                            zoomYFld != null && Math.Abs(zty - 845.0 / 1332.0) < 0.002);
                         var pfTallFld = tg.GetField("_panelFont", BindingFlags.NonPublic | BindingFlags.Instance);
                         var pfTall = pfTallFld != null ? pfTallFld.GetValue(grid) as System.Drawing.Font : null;
                         Check("去标题后正文字号≈5.67pt（窄边横向定）",
@@ -5334,22 +5335,22 @@ namespace AgingTestSystem.Tests
                     .Count(p => p.Function == IoFunction.Unknown) == 0);
 
             // —— 右侧宽度比例自适应（V1.65 比例＋固定布局：无文件，永远跟窗口走） ——
-            Check("比例常量0.19/护栏180~280",
-                MainForm.RightPanelRatio == 0.19
-                && MainForm.RightPanelMinWidth == 180 && MainForm.RightPanelMaxWidth == 280);
-            Check("设计宽1394→265",
-                MainForm.ComputeRightPanelWidth(1394) == 265);
-            Check("1366屏分隔容器1360→258",
-                MainForm.ComputeRightPanelWidth(1360) == 258);
-            Check("新设计宽1274→242",
-                MainForm.ComputeRightPanelWidth(1274) == 242);
-            Check("1080p大屏钳到上限280",
-                MainForm.ComputeRightPanelWidth(1914) == 280);
-            Check("小屏700钳到下限180",
-                MainForm.ComputeRightPanelWidth(700) == 180);
-            Check("宽0/负数按设计宽兜底→266",
-                MainForm.ComputeRightPanelWidth(0) == 266
-                && MainForm.ComputeRightPanelWidth(-5) == 266);
+            Check("比例常量0.16/护栏200~240",
+                MainForm.RightPanelRatio == 0.16
+                && MainForm.RightPanelMinWidth == 200 && MainForm.RightPanelMaxWidth == 240);
+            Check("设计宽1394→223",
+                MainForm.ComputeRightPanelWidth(1394) == 223);
+            Check("1366屏分隔容器1360→218",
+                MainForm.ComputeRightPanelWidth(1360) == 218);
+            Check("新设计宽1274→204",
+                MainForm.ComputeRightPanelWidth(1274) == 204);
+            Check("1080p大屏钳到上限240",
+                MainForm.ComputeRightPanelWidth(1914) == 240);
+            Check("小屏700钳到下限200",
+                MainForm.ComputeRightPanelWidth(700) == 200);
+            Check("宽0/负数按设计宽兜底→224",
+                MainForm.ComputeRightPanelWidth(0) == 224
+                && MainForm.ComputeRightPanelWidth(-5) == 224);
 
             // —— 工作站区最小宽度保护（V1.88.17：右侧再宽也不能吃掉 Panel1） ——
             Check("左侧最小宽常量640", MainForm.MinWorkstationPanelWidth == 640);
@@ -5359,11 +5360,11 @@ namespace AgingTestSystem.Tests
                 MainForm.ClampRightPanelWidthForWorkstation(600, 1274, 4, 640) == 600);
             Check("600在1150小窗下压到506",
                 MainForm.ClampRightPanelWidthForWorkstation(600, 1150, 4, 640) == 506);
-            Check("过窄100提下限180",
-                MainForm.ClampRightPanelWidthForWorkstation(100, 1274, 4, 640) == 180);
+            Check("过窄100提下限200",
+                MainForm.ClampRightPanelWidthForWorkstation(100, 1274, 4, 640) == 200);
             Check("容器宽不可读(≤0)不钳",
                 MainForm.ClampRightPanelWidthForWorkstation(298, 0, 4, 640) == 298);
-            Check("容器本身太窄保右侧(700窗maxRight=56<180)",
+            Check("容器本身太窄保右侧(700窗maxRight=56<200)",
                 MainForm.ClampRightPanelWidthForWorkstation(500, 700, 4, 640) == 500);
 
             // —— 参数设置入口无权限提示（新增：按钮常亮可点，无权限点后弹"权限不够"） ——

@@ -61,17 +61,18 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 右侧区宽度占分隔容器总宽的比例（写死像素换台工控机就溢出/留白，所以按窗口实际宽等比；
-        /// 0.19（V1.93 起：原 0.234 下操作按钮 260 宽、文字实测仅 151px，右侧太空，
-        /// 同行工作站区被挤；19% 下按钮约 204 宽仍富余 50px，省出的全还给网格）；
+        /// 0.16（V1.94 起：按钮宽=右侧宽-38 是固定关系，文字实测 151px，按钮 162 目检不断字（155 贴边），
+        /// 故右侧 200 即底线；16% 下常用屏右侧约 204、按钮约 166，省出的全还给网格，站内字跟 zoomX 长大）；
         /// 大小屏分别由 <see cref="RightPanelMinWidth"/>/<see cref="RightPanelMaxWidth"/> 钳住）。
         /// </summary>
-        public const double RightPanelRatio = 0.19;
+        public const double RightPanelRatio = 0.16;
 
-        /// <summary>比例算出的右侧宽度下限：再窄操作按钮文字（"启动运行（选中台）"）放不下。与编辑器钳制下限对齐。</summary>
-        public const int RightPanelMinWidth = 180;
+        /// <summary>比例算出的右侧宽度下限：按钮宽=右侧宽-38（分组边距8＋按钮左右留白30），
+        /// 最长文字"下料判定（选中台）"实测 151px，按钮 162 目检不断字，故下限取 200（按钮 162）。</summary>
+        public const int RightPanelMinWidth = 200;
 
-        /// <summary>比例算出的右侧宽度上限：大屏上按 19% 会算出 360+，右侧用不了那么多，省给左侧网格。</summary>
-        public const int RightPanelMaxWidth = 280;
+        /// <summary>比例算出的右侧宽度上限：大屏上按 16% 会算出 300+，右侧用不了那么多，省给左侧网格。</summary>
+        public const int RightPanelMaxWidth = 240;
 
         /// <summary>
         /// 工作站列表区最小宽度（像素）。右侧再宽也不能吃掉这 640px（否则 72 站被压成小方块没法看；
@@ -1470,7 +1471,7 @@ namespace AgingTestSystem.Views
 
             _gridView = new WorkstationGridView();
             _gridView.Configure(_config.PanelColumns, _config.PanelRows, _config.TotalBarometers);
-            // 电流行开关（UsePowerMeter；改后重启生效）：开=面板加"电流："行（128→144），关=原布局
+            // 电流行开关（UsePowerMeter；改后重启生效）：开=面板加"电流："行（140→156），关=原布局
             _gridView.ShowCurrentRow = _config.UsePowerMeter;
 
             // 画布跟随主题（语义状态色两边不动，见 SetDarkMode）
