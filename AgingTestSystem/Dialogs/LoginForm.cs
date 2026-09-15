@@ -19,6 +19,8 @@ namespace AgingTestSystem.Dialogs
     /// 4. 密码框使用密码模式，输入字符显示为圆点
     /// 5. 用户名下拉框自动列出该角色已有账号，可直接选择（也可手动输入）
     /// 6. 勾选"记住密码"后，下次登录自动填充该角色的用户名和密码
+    /// 7. 打开时账号框已有默认账号（记住回填/默认选中首个）→ 光标默认进密码框，
+    ///    无账号可显时才停账号框（三个角色同一套逻辑）
     /// 【界面布局】
     /// ┌──────────────────────────────┐
     /// │        切换为 XXX权限         │ ← 窗体标题（动态显示目标角色）
@@ -111,8 +113,14 @@ namespace AgingTestSystem.Dialogs
                 txtUsername.SelectedIndex = 0;
             }
 
-            // 默认聚焦用户名下拉框，方便用户直接选择或输入
-            txtUsername.Focus();
+            // 初始焦点：账号框已有默认账号（记住登录回填 / 默认选中首个）
+            // → 光标直接进密码框，省一次 Tab；无账号可显（空）→ 停账号框等输入。
+            // 走 ActiveControl 而非 Focus：Load 时窗体尚未可见，Focus 会静默失败，
+            // ActiveControl 赋值在显示时照样生效。
+            if (!string.IsNullOrWhiteSpace(txtUsername.Text))
+                this.ActiveControl = txtPassword;
+            else
+                this.ActiveControl = txtUsername;
         }
 
         /// <summary>

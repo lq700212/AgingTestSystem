@@ -6,7 +6,6 @@ using System.Windows.Forms;
 using AgingTestSystem.Controls;
 using AgingTestSystem.Models;
 using AgingTestSystem.Services;
-using AgingTestSystem.Views;
 
 namespace AgingTestSystem.Dialogs
 {
@@ -203,21 +202,6 @@ namespace AgingTestSystem.Dialogs
         public HashSet<string> SavedKeys { get; private set; }
 
         /// <summary>
-        /// 是否在本次会话中修改了主页布局（在"主页区域"分类点击编辑器并保存后置 true）。
-        /// 主页布局不写在 App.config，而是 HomeLayout.json；主窗体在设置窗口关闭后
-        /// 读取该标记，为 true 则调用 ApplyHomeLayout() 让新布局立即生效。
-        /// </summary>
-        public bool HomeLayoutChanged { get; private set; }
-
-        /// <summary>
-        /// 主窗体当前生效的右侧宽度（主窗体构造时传入：无 json 时为按窗口比例
-        /// 算出的值，有 json 时为文件绝对值）。"主页区域"行的摘要显示与编辑器初始化
-        /// 都以它为准，保证设置里看到的和主界面实际一致。为 null 时（理论上只有
-        /// 将来别的调用方不传才出现）回退到 MainForm.DefaultRightPanelWidth。
-        /// </summary>
-        private readonly int? _effectiveRightWidth;
-
-        /// <summary>
         /// 数字类配置项的范围约束（防输入越界/乱输），保存前仍会按 ValidateValue 二次校验。
         /// </summary>
         private static readonly Dictionary<string, (decimal Min, decimal Max, int Decimals, decimal Increment)> _numericKeys =
@@ -373,9 +357,6 @@ namespace AgingTestSystem.Dialogs
             { "ScannerStopBits", "扫码枪停止位（1）" },
             { "ScannerParity", "扫码枪校验位（None）" },
             { "ScannerDebugLog", "扫码枪心跳调试日志开关（false/true）" },
-
-            // ===== 主页区域（V1.58，非 App.config 项，点击弹可视化编辑器） =====
-            { "HomeLayout", "主界面各区域尺寸（顶部标题栏/菜单栏/右侧区域/状态栏），点击弹出可视化编辑器拖动调整" },
         };
 
         /// <summary>
@@ -476,22 +457,16 @@ namespace AgingTestSystem.Dialogs
                 "ScannerBaudRate", "ScannerDataBits", "ScannerStopBits", "ScannerParity",
                 "ScannerDebugLog"
             }),
-            ("主页区域", new string[]
-            {
-                "HomeLayout"
-            }),
         };
 
         /// <summary>
         /// 构造函数
         /// </summary>
         /// <param name="config">当前生效的设备配置（主窗体传入，用于取兜底值与类型校验）</param>
-        /// <param name="effectiveRightWidth">主窗体当前生效的右侧宽度（见 _effectiveRightWidth）</param>
-        public SettingsForm(DeviceConfig config, int? effectiveRightWidth = null)
+        public SettingsForm(DeviceConfig config)
         {
             InitializeComponent();
             _config = config;
-            _effectiveRightWidth = effectiveRightWidth;
 
             // 按分类创建分隔标题和表格，再填充数据并排布版面
             SetupSections();
@@ -1074,59 +1049,6 @@ namespace AgingTestSystem.Dialogs
                 string currentValue = grid.Rows[e.RowIndex].Cells["colValue"].Value?.ToString() ?? "";
                 ShowDisplayModesPopup(grid, e.RowIndex, currentValue);
             }
-            else if (key == "HomeLayout")
-            {
-                // 主页区域调整：弹出可视化编辑器，保存后刷新该行显示。
-                ShowHomeLayoutEditor(grid, e.RowIndex);
-            }
-        }
-
-        /// <summary>
-        /// 获取"当前生效的主页布局"。
-        /// 右侧宽度的取值语义跟随主窗体：无 HomeLayout.json 时主界面是按窗口
-        /// 比例算出的值（主窗体构造本窗体时经 effectiveRightWidth 传入），有 json 时
-        /// 以文件为准。此方法统一"编辑器初始化 / 设置表摘要显示 / 点击编辑"三处的取值，
-        /// 避免未配置时编辑器里显示固定值、主界面实际是另一套的偏差。
-        /// </summary>
-        private Models.HomeLayoutConfig GetEffectiveHomeLayout()
-        {
-            var layout = Models.HomeLayoutConfig.LoadOrDefault();
-            if (!System.IO.File.Exists(Models.HomeLayoutConfig.GetConfigPath()))
-            {
-                layout.RightPanelWidth = _effectiveRightWidth ?? MainForm.DefaultRightPanelWidth;
-            }
-            return layout;
-        }
-
-        /// <summary>
-        /// 弹出"主页区域调整"可视化编辑器（拖动矩形块边缘调整主界面各区域尺寸）。
-        /// 编辑结果直接写入 HomeLayout.json（HomeLayoutConfig.Save），保存后刷新本行摘要，
-        /// 并置位 <see cref="HomeLayoutChanged"/> 供主窗体在设置关闭后重新应用布局。
-        /// 注意：HomeLayout 不是 App.config 项，保存配置时会被跳过（见 btnSave_Click），
-        /// 不会误写入 App.config。
-        /// </summary>
-        private void ShowHomeLayoutEditor(DataGridView grid, int rowIndex)
-        {
-            var layout = GetEffectiveHomeLayout();
-            using (var editor = new HomeLayoutEditorForm(layout))
-            {
-                // 走窗体自己的 ApplyTheme：整窗着色 + 预览画布深色换纯黑底
-                // （布局预览画布底由窗体显式指定，见 HomeLayoutEditorForm.ApplyTheme）
-                editor.ApplyTheme();
-                if (editor.ShowDialog(this) == DialogResult.OK)
-                {
-                    // 保存成功：刷新本行显示当前尺寸摘要，并标记"已改主页布局"
-                    grid.Rows[rowIndex].Cells["colValue"].Value = BuildHomeLayoutSummary(layout);
-                    LayoutSections();
-                    HomeLayoutChanged = true;
-                }
-            }
-        }
-
-        /// <summary>把布局配置整理成一行摘要文字（设置表格里显示用）</summary>
-        private static string BuildHomeLayoutSummary(Models.HomeLayoutConfig layout)
-        {
-            return $"右侧区域 {layout.RightPanelWidth}px | 顶栏 {layout.HeaderHeight}px | 状态栏 {layout.StatusBarHeight}px";
         }
 
         /// <summary>
@@ -1538,14 +1460,6 @@ namespace AgingTestSystem.Dialogs
         /// </summary>
         private string GetEffectiveValue(string key)
         {
-            // 主页区域调整：HomeLayout 不是 App.config 配置项，而是 HomeLayout.json
-            // 里的布局参数。这里显示当前生效的尺寸摘要，方便用户在设置里一眼看到现状。
-            if (key == "HomeLayout")
-            {
-                var layout = GetEffectiveHomeLayout();
-                return $"点击编辑：右侧区域 {layout.RightPanelWidth}px | 顶栏 {layout.HeaderHeight}px | 状态栏 {layout.StatusBarHeight}px";
-            }
-
             // 策略 key 优先读项目文件（当前项目生效值优先于机器缺省）
             if (ProjectPolicyStore.PolicyKeys.Contains(key))
             {
@@ -1615,14 +1529,6 @@ namespace AgingTestSystem.Dialogs
             if (key == "FanIpCandidates" || key == "IoBackupChannelMappings"
                 || key == "CustomAlarmRules" || key == "ReportColumns"
                 || key == "DisplayModes")
-            {
-                var cell = new DataGridViewPopupEditCell();
-                cell.Value = value;
-                return cell;
-            }
-
-            // 主页区域调整：只读单元格 + 点击弹出可视化编辑器（见 Grid_CellClick）
-            if (key == "HomeLayout")
             {
                 var cell = new DataGridViewPopupEditCell();
                 cell.Value = value;
@@ -2481,11 +2387,6 @@ namespace AgingTestSystem.Dialogs
 
                 string key = row.Cells["colKey"].Value?.ToString();
                 if (string.IsNullOrWhiteSpace(key)) continue;
-
-                // HomeLayout 是 HomeLayout.json 里的布局配置（非 App.config 项），
-                // 保存设置时跳过它——主页布局已由可视化编辑器直接写入 HomeLayout.json，
-                // 不该把"摘要文字"误写进 App.config。
-                if (key == "HomeLayout") continue;
 
                 string value = (row.Cells["colValue"].Value?.ToString() ?? "").Trim();
                 if (!ValidateValue(key, value, out string error))

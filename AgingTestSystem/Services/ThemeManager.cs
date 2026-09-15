@@ -26,9 +26,8 @@ namespace AgingTestSystem.Services
     ///   SunnyUI 的 UIButton 不是原生 Button 的子类（自绘控件），
     ///   `is Button` 认不出它——这里按类型名单独走同一条"不动"分支；
     ///   语义色经 ApplyButtonColors 写入（原生走 BackColor，Sunny 走 Style=Custom+FillColor）。
-    /// - 自绘控件不动：WorkstationGridView（工位大画布）、CircleButton（圆形灯）、
-    ///   HomeLayoutPreviewControl（布局预览画布）自己管颜色，由各自的 SetDarkMode
-    ///   或父容器透色跟随，不在本类递归里硬改；
+    /// - 自绘控件不动：WorkstationGridView（工位大画布）、CircleButton（圆形灯）
+    ///   自己管颜色，由各自的 SetDarkMode 或父容器透色跟随，不在本类递归里硬改；
     /// - MessageBox 是系统弹窗，跟随 Windows 系统主题，本类管不着，不管。
     /// </summary>
     public enum AppThemeMode
@@ -416,8 +415,7 @@ namespace AgingTestSystem.Services
         /// 递归入口：先给自己着色，再钻进子控件 + 工具条目。
         /// 【跳过名单】（自绘/自己管颜色，硬改反而坏事，见类头"配色约定"）：
         /// WorkstationGridView（调自己的 SetDarkMode）、CircleButton（圆形灯自绘）、
-        /// HomeLayoutPreviewControl（布局预览画布：底色由 HomeLayoutEditorForm.ApplyTheme
-        /// 显式指定，深色纯黑，这里跳过避免通用映射给成深灰）、UIScrollBar（SunnyUI 滚动条自绘）。
+        /// UIScrollBar（SunnyUI 滚动条自绘）。
         /// </summary>
         private static void ApplyRecursive(Control c, bool toDark)
         {
@@ -437,7 +435,6 @@ namespace AgingTestSystem.Services
                 return; // 它没有需要递归的子控件，直接返回
             }
             if (typeName.EndsWith("CircleButton")
-                || typeName.EndsWith("HomeLayoutPreviewControl")
                 || typeName.EndsWith("UIScrollBar"))
             {
                 return;

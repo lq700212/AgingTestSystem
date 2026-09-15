@@ -53,12 +53,11 @@ namespace AgingTestSystem.Views
     /// </remarks>
     public partial class MainForm : Sunny.UI.UIForm
     {
-        /// <summary>
-        /// 右侧区宽度兜底值（构造极早期容器宽不可读、编辑器"恢复默认"两处用；
-        /// 平时生效值走 <see cref="ComputeRightPanelWidth"/>：无用户配置文件按窗口比例，
-        /// 有则用文件里的绝对值）。
-        /// </summary>
-        public const int DefaultRightPanelWidth = 240;
+        /// <summary>顶栏高度（固定 30，不可调：与 9pt 字/18px 按钮咬合，改了只出坏结果）</summary>
+        public const int HeaderHeight = 30;
+
+        /// <summary>底部状态栏高度（固定 30，不可调）</summary>
+        public const int StatusBarHeight = 30;
 
         /// <summary>
         /// 右侧区宽度占分隔容器总宽的比例（写死像素换台工控机就溢出/留白，所以按窗口实际宽等比；
@@ -174,12 +173,12 @@ namespace AgingTestSystem.Views
 
             this.DoubleBuffered = true;
 
-            // 项目档案就位（HomeLayout/配方/策略路径都依赖它，必须在 LoadConfig 之前；首跑自动建"烧屏测试"）
+            // 项目档案就位（配方/策略路径都依赖它，必须在 LoadConfig 之前；首跑自动建"烧屏测试"）
             string activeProject = ProjectProfile.EnsureActiveProfile();
             System.Diagnostics.Debug.WriteLine($"[项目档案] 当前项目: {activeProject}");
             UpdateProjectDisplay(activeProject);
 
-            // 应用主页布局（右侧宽/状态栏高；顶栏锁 30，文件旧值作废）
+            // 应用固定主页布局（顶栏 30/状态栏 30/右侧按窗口比例）
             ApplyHomeLayout();
 
             // 右侧分组宽变时操作按钮跟着缩放，防溢出
@@ -224,14 +223,11 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 右侧区目标宽度（纯函数）：有用户配置文件用文件绝对值；否则按窗口宽×比例算，上下限钳住。
+        /// 右侧区目标宽度（纯函数）：按窗口宽×比例算，上下限钳住（无配置文件，永远跟窗口走）。
         /// </summary>
         /// <param name="containerWidth">分隔容器当前总宽（像素）；≤0 时按设计宽 1400 兜底</param>
-        /// <param name="hasCustomLayout">现场是否保存过 HomeLayout.json</param>
-        /// <param name="customWidth">文件里的 RightPanelWidth（仅 hasCustomLayout=true 时有效）</param>
-        public static int ComputeRightPanelWidth(int containerWidth, bool hasCustomLayout, int customWidth)
+        public static int ComputeRightPanelWidth(int containerWidth)
         {
-            if (hasCustomLayout) return customWidth;
             int baseWidth = containerWidth > 0 ? containerWidth : 1400;
             int target = (int)Math.Round(baseWidth * RightPanelRatio);
             if (target < RightPanelMinWidth) target = RightPanelMinWidth;
@@ -262,34 +258,26 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 上次分隔容器总宽（Resize 防重复：只有总宽变了才按比例重算右侧；
-        /// 手动拖分隔条不改总宽，不会被比例覆盖；有 json 时绝对值优先，直接返回）。
+        /// 分隔条已锁死（IsSplitterFixed），用户拖不动，比例永远按窗口走）。
         /// </summary>
         private int _lastSplitWidth = -1;
 
-        /// <summary>分隔容器尺寸变化 → 总宽变了且无自定义 json 时按比例重算右侧宽度</summary>
+        /// <summary>分隔容器尺寸变化 → 总宽变了按比例重算右侧宽度</summary>
         private void SplitContainerMain_Resize(object sender, EventArgs e)
         {
             if (splitContainerMain.Width == _lastSplitWidth) return;
             _lastSplitWidth = splitContainerMain.Width;
-            if (System.IO.File.Exists(HomeLayoutConfig.GetConfigPath())) return;
             AdjustRightPanelWidth();
         }
 
         /// <summary>
         /// 按目标宽度摆右侧区：设 SplitterDistance 让 Panel2 等于目标宽，再同步操作按钮宽防溢出。
-        /// 目标宽：无 json 按窗口比例算（<see cref="ComputeRightPanelWidth"/>），有 json 用文件绝对值。
+        /// 目标宽按窗口比例算（<see cref="ComputeRightPanelWidth"/>）。
         /// </summary>
         private void AdjustRightPanelWidth()
         {
-            // 无 json → 按窗口比例算；有 json → 文件绝对值优先（用户自定义）。
             // 构造极早期分隔容器宽不可读（≤0）时，ComputeRightPanelWidth 内部按设计宽 1400 兜底。
-            bool hasCustom = System.IO.File.Exists(HomeLayoutConfig.GetConfigPath());
-            int custom = 0;
-            if (hasCustom)
-            {
-                custom = HomeLayoutConfig.LoadOrDefault().RightPanelWidth;
-            }
-            int targetRight = ComputeRightPanelWidth(splitContainerMain.Width, hasCustom, custom);
+            int targetRight = ComputeRightPanelWidth(splitContainerMain.Width);
             // 第二道钳：保左侧最小宽（见 ClampRightPanelWidthForWorkstation）
             targetRight = ClampRightPanelWidthForWorkstation(targetRight, splitContainerMain.Width,
                 splitContainerMain.SplitterWidth, MinWorkstationPanelWidth);
@@ -312,18 +300,16 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 应用主页布局：顶栏锁 30（不读文件旧值）、状态栏读配置、右侧调宽。
-        /// 入口：构造启动、"主页区域调整"编辑器保存后（热生效）。
+        /// 应用主页布局：顶栏 30、状态栏 30 固定，右侧按窗口比例调宽。
+        /// 入口：构造启动、窗口 Resize、项目切换后重排（布局是纯代码固定值，不读任何文件）。
         /// </summary>
         private void ApplyHomeLayout()
         {
-            var layout = HomeLayoutConfig.LoadOrDefault();
-
-            tableLayoutPanelMain.RowStyles[0].Height = HomeLayoutConfig.FixedHeaderHeight;
+            tableLayoutPanelMain.RowStyles[0].Height = HeaderHeight;
             // 底部状态栏高度（第 2 行）
-            tableLayoutPanelMain.RowStyles[2].Height = layout.StatusBarHeight;
+            tableLayoutPanelMain.RowStyles[2].Height = StatusBarHeight;
 
-            // 右侧区域宽度（由 AdjustRightPanelWidth 内部读同一配置设置 SplitterDistance）
+            // 右侧区域宽度（按窗口比例，见 AdjustRightPanelWidth）
             AdjustRightPanelWidth();
         }
 
@@ -2271,7 +2257,7 @@ namespace AgingTestSystem.Views
         /// 4) StationSettingsCache.Reload（丢掉旧项目回填，读新项目文件）；
         /// 5) DeviceManager.ClearProjectScopedState（清旧工位指派 + 规则计时）；
         /// 6) LoadRecipes（同一 List 就地换数据，自动完成源引用不变）；
-        /// 7) ApplyHomeLayout（新项目布局立即重排）+ 顶栏项目名刷新；
+        /// 7) ApplyHomeLayout（固定布局重排：顶栏/状态栏/右侧宽与项目无关，纯代码值）+ 顶栏项目名刷新；
         /// 8) 恢复采集 + 立即刷一帧面板（不等下个 1 秒周期，SN/配方当场清空）。
         /// 【不动什么】硬件连接不断（串口/耦合器/送风机/扫码枪是跟机器的）；
         /// 结构型配置（设备数/Mock 等）本就跟机器，LoadConfig 读出来与原来一致。
@@ -2334,7 +2320,7 @@ namespace AgingTestSystem.Views
                 // 6) 配方列表：同一 List 就地换（自动完成源/各录入窗引用不变）
                 LoadRecipes();
 
-                // 7) 主页布局 + 顶栏项目名
+                // 7) 固定布局重排 + 顶栏项目名
                 ApplyHomeLayout();
                 UpdateProjectDisplay(newName);
 
@@ -2389,13 +2375,6 @@ namespace AgingTestSystem.Views
             {
                 items.Add(("设置", MenuHelpSettings_Click));
             }
-
-            // "主页区域调整"：可视化拖动矩形块边缘调整主界面各区域尺寸。
-            // 权限放开：所有登录用户可见可用（布局微调属非关键操作，
-            // 现场操作员也可能需要按自己习惯微调右侧宽度/行高，故不再限制管理员）。
-            items.Add(("主页区域调整", MenuHelpHomeLayout_Click));
-
-            // "工作站大字/铺满"切换：只留一屏铺满，不再提供入口。
 
             // 【通讯测试】仅技术员及以上权限可见（操作员不可见）
             if (_userManager.HasPermission(UserRole.Technician))
@@ -2940,59 +2919,13 @@ namespace AgingTestSystem.Views
                 return;
             }
 
-            // 把当前生效的右侧宽度传给设置窗体，供"主页区域"行显示/编辑用
-            // （无 json 时为按窗口比例算出的值，有 json 时为文件绝对值，与主界面一致）。
-            bool hasHomeCustom = System.IO.File.Exists(HomeLayoutConfig.GetConfigPath());
-            int homeCustomWidth = hasHomeCustom ? HomeLayoutConfig.LoadOrDefault().RightPanelWidth : 0;
-            int effectiveRightWidth = ComputeRightPanelWidth(splitContainerMain.Width, hasHomeCustom, homeCustomWidth);
-            using (var form = new SettingsForm(_config, effectiveRightWidth))
+            using (var form = new SettingsForm(_config))
             {
                 ThemeManager.ApplyTo(form);
                 if (form.ShowDialog(this) == DialogResult.OK &&
                     form.SavedKeys != null && form.SavedKeys.Count > 0)
                 {
                     ApplySettingsHotReload(form.SavedKeys);
-                }
-
-                // 若在设置里改了主页布局（HomeLayout.json 已更新），立即重新应用
-                if (form.HomeLayoutChanged)
-                {
-                    ApplyHomeLayout();
-                    WriteLog("主页区域调整已保存并应用");
-                }
-            }
-        }
-
-        /// <summary>
-        /// 主页区域调整 → 弹出可视化编辑器，拖动矩形块边缘调整主界面各区域尺寸。
-        /// - 编辑器基于当前 HomeLayout.json（或默认值）创建，拖动/输入实时改内存配置；
-        /// - 点击【保存】后 HomeLayout.json 已写入，这里调用 ApplyHomeLayout 让新布局
-        ///   立即生效（无需重启，工作站列表/右侧区域/菜单栏/状态栏当场重排）。
-        /// - 权限放开：所有登录用户可用（菜单项不再限制管理员）。
-        /// </summary>
-        private void MenuHelpHomeLayout_Click(object sender, EventArgs e)
-        {
-            // 若现场从未保存过 HomeLayout.json，则当前生效的是按窗口比例算出的值
-            // （ComputeRightPanelWidth，约 23.4%），编辑器里应显示这个值而不是
-            // HomeLayoutConfig 的类默认（240），否则会出现"编辑器里显示 240、
-            // 主界面实际 320"的偏差。因此这里手动把未配置项补成当前生效值。
-            // 注意：编辑器里点【保存】会把该值写成 json 绝对值并定格（此后不再跟随窗口）；
-            // 想恢复跟随，删掉程序目录下的 HomeLayout.json 并重启。
-            var layout = HomeLayoutConfig.LoadOrDefault();
-            if (!System.IO.File.Exists(HomeLayoutConfig.GetConfigPath()))
-            {
-                layout.RightPanelWidth = ComputeRightPanelWidth(splitContainerMain.Width, false, 0);
-            }
-
-            using (var form = new HomeLayoutEditorForm(layout))
-            {
-                // 走窗体自己的 ApplyTheme：整窗着色 + 预览画布深色换纯黑底
-                form.ApplyTheme();
-                if (form.ShowDialog(this) == DialogResult.OK)
-                {
-                    // 保存成功：重新应用布局，让调整立即生效
-                    ApplyHomeLayout();
-                    WriteLog("主页区域调整已保存并应用");
                 }
             }
         }

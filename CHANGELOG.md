@@ -3,6 +3,52 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md).
 
+## V1.92 — 第一行对齐＋删主页布局自定义＋分隔条锁死＋登录焦点＋时间值 9pt（2026-09-15，用户五点：上电块左缘对齐值框列/选中框再小点/主页区域调整删干净/登录有账号光标进密码框/时间串截断想办法）
+
+### 改动范围
+
+- **第一行对齐＋选中框 14**（`Models/PanelLayoutConfig.cs`＋`Views/WorkstationGridView.cs`）：
+  下电块左缘对齐 SN 框（`LeftAlignTo="SNValue"`，X=74，与下方值框列对齐）＋右缘贴真空关左缘 Gap=4，
+  宽由双端推导 49（127-74-4）；"上电"10pt 实测 37px，49 宽两边各留 6px。
+  真空块 54 不动（"真空开"实测 51px 已到底）。选中框 16→14（TopMargin 5→6 保持行内居中，
+  点框/点空白都能翻选，框小不影响操作）。标题槽 62→74，"NO.72"距下电留 12px。
+- **删主页布局自定义**（项目未上线，不兼容老文件，改干净；V1.91 删 PanelLayout.json 的续篇）：
+  删 `Models/HomeLayoutConfig.cs`、`Dialogs/HomeLayoutEditorForm.*`（3 文件）＋csproj 登记；
+  `MainForm`：about 下拉"主页区域调整"项＋`MenuHelpHomeLayout_Click` 删除，
+  `ComputeRightPanelWidth` 去文件分支（单参纯比例），`ApplyHomeLayout` 取固定常量
+  （顶栏/状态栏 30＋右侧比例），设置窗构造去右侧宽透传；
+  `SettingsForm`："主页区域"分类＋说明＋`HomeLayoutChanged`＋编辑器三方法＋取值/建格/保存三分支全删；
+  `ProjectProfile.ProjectScopedFiles` 去掉 `HomeLayout.json`；
+  `ThemeManager` 跳过名单去掉已删的预览画布。
+- **分隔条锁死**（`Views/MainForm.Designer.cs`＋`MainForm.cs`）：
+  `splitContainerMain.IsSplitterFixed=true`，鼠标拖不动工作站/右侧分栏，
+  比例永远按窗口走（Resize 照常按 23.4% 重算，代码设 SplitterDistance 不受影响）。
+- **登录窗初始焦点**（`Dialogs/LoginForm.cs`，三角色共用同一窗体，一处改三处生效）：
+  账号框有默认账号（记住回填/默认选中首个）→ 光标默认进密码框；
+  无账号可显（空）→ 停账号框。走 `ActiveControl`（Load 时 Focus 会静默失败）。
+- **时间值单独 9pt**（`Models/PanelLayoutConfig.cs` 新增 `TimeValueFontSize`＋
+  `Views/WorkstationGridView.cs` 新增 `_timeValueFont`/`BuildTimeValueFont`/绘制重载）：
+  72 框是全套最紧的槽，"00:00:00" 10pt 要 71px（文本区 66px）截断成"00:00:.."，
+  9pt 只要 56px（含最宽"88:88:88"同宽）；数字笔画简单，小 1pt 照样清楚。
+  标签仍是正文 10pt，只动值。设置按钮不动（12pt 已是完整显示底线，缩它腾不出 5px 还伤点击）。
+
+### 为什么这么改
+
+- 下电块以前右缘贴真空推左缘（X=67），与下方值框列（X=74）差 7px，视觉上"头不对缝"；
+  改双端锚定后左缘永久跟 SN 框走，真空/选中框再动也不错位。
+- 主页布局可调是"现场免编译微调"时代的产物：项目未上线，文件口只会带来
+  "代码改了、现场文件覆盖新缺省"的灵异 bug（V1.91 实锤），分隔条能拖则比例名存实亡，
+  留着就是负债，一并锁死。
+- 时间截断的根因是 8 位定长串撞上 72 宽＋6px 内边距：缩按钮要连带缩"设置"字号
+  （12→10）还腾不够 5px，纯亏；时间值小 1pt 零布局改动，数字可读性无损。
+
+### 验证
+
+- harness 实测（生产同口径 `TextRenderer.MeasureText`）：上电 37px 装 49 块、真空开 51px 装 54 块、
+  时间串 9pt 56px 装 66 区（88:88:88 同宽）、标题 56px 装 68 槽。
+- `build_and_test.ps1` 全量回归全绿；终结器审计 HIGH=0。
+- 真窗冒烟：主界面截图 72 格＋右侧区比例正常（见本次截图）。
+
 ## V1.91 — 长标签恢复＋按钮收窄＋删布局文件自定义（2026-09-15，用户三点：延时时间/烧屏时间/真空压力保持原名/右边按钮区收窄但字要完整/布局尺寸去掉用户自定义，项目未上线改干净）
 
 ### 改动范围
