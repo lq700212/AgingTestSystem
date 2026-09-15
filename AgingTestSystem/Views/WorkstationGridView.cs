@@ -21,7 +21,7 @@ namespace AgingTestSystem.Views
     ///   绘制/命中/画布尺寸全经 ScaledX/ScaledY 放大；取 DPI 用 CreateGraphics().DpiX，
     ///   别用 DeviceDpi（建句柄瞬间谎报 96）；
     /// - 交互全走坐标命中（点选中框/空白翻选，点设置区开窗，鼠标触屏同走 MouseUp）；
-    /// - 坐标/颜色/字号走 <see cref="PanelLayoutConfig"/>（json 可覆盖，现场微调不用重编译），
+    /// - 坐标/颜色/字号走 <see cref="PanelLayoutConfig"/>（纯代码缺省，改布局改代码重编译），
     ///   面板内元素全锚定：字段全表与三步解析顺序见 PanelLayoutConfig 类头，改坐标前必读。
     ///   （锚定只声明"以谁为基准、距离多少"，间距取当前实际空隙；
     ///   老 json 缺新字段时删文件重导，不要手补。）
@@ -55,13 +55,13 @@ namespace AgingTestSystem.Views
     /// （zoomX/zoomY 并进 ScaledX/ScaledY）。
     /// 二、单个面板内容（204×128，坐标均为"相对面板左上角"；紧凑布局：
     /// 标题/选中框并入第一行与上下电/真空同行，纵向省 42px 换缩放比；
-    /// 状态块 56×20→54×18、值框 130×18→121×16、延时框 66→72、
-    /// 设置按钮 50×42→46×36、选中框 18→16；正文 9→10pt、标题 12→11pt，
-    /// 物理字号反而 4.7→7.0pt 更清；标签列 56→65 装四字长标签）：
+    /// 下电 54→49（左缘对齐值框列 74）、真空 54 不动、值框 130×18→121×16、
+    /// 延时框 66→72、设置按钮 50×42→46×36、选中框 16→14；正文 9→10pt、
+    /// 标题 12→11pt，物理字号反而 4.7→7.0pt 更清；标签列 56→65 装四字长标签）：
     /// ┌──────────────────────────────────────────────┐
-    /// │ NO.1 ┌────────┐ ┌────────┐        ┌────────┐  │ ← 第一行同行四件套
-    /// │ (6,6)│ 上电/下电│ │ 真空开/关│        │选中框✓ │  │    编号11pt＋两状态块54×18＋选中框16×16
-    /// │      └────────┘ └────────┘        └────────┘  │
+    /// │ NO.1 ┌──────┐ ┌────────┐        ┌──────┐      │ ← 第一行同行四件套
+    /// │ (6,6)│上电/下电│ │真空开/关│        │选中框✓ │  │    编号11pt＋下电49×18＋真空54×18＋选中框14×14
+    /// │      └──────┘ └────────┘        └──────┘      │
     /// │ 真空压力 ┌──────────────────────────────┐    │
     /// │          │  78 kPa                      │    │
     /// │          └──────────────────────────────┘    │
@@ -75,10 +75,10 @@ namespace AgingTestSystem.Views
     /// │          └────────────┘                        │
     /// └──────────────────────────────────────────────┘
     /// 标注说明（括号内为锚定关系）：
-    /// - 行1（Y=4,H=18）：编号 NO.1(6,6；LeftMargin=6+TopMargin=6) + 上电/下电块(67,4,54,18；
-    ///   右缘贴真空关左缘 Gap=4＋Y/H 对齐真空块） + 真空开/关块(125,4,54,18；
-    ///   右缘贴选中框左缘 Gap=4＋TopMargin=4） + 选中框(183,5,16,16；RightMargin=5+TopMargin=5，
-    ///   边长取缩放后较小边恒正方形，缩放比变大后物理反而 9.5→11.3px 更大更好点，见 SelectBoxSide）
+    /// - 行1（Y=4,H=18）：编号 NO.1(6,6；LeftMargin=6+TopMargin=6) + 上电/下电块(74,4,49,18；
+    ///   左缘对齐 SN 框＋右缘贴真空关左缘 Gap=4，宽两端推导＋Y/H 对齐真空块） + 真空开/关块(127,4,54,18；
+    ///   右缘贴选中框左缘 Gap=4＋TopMargin=4） + 选中框(185,6,14,14；RightMargin=5+TopMargin=6，
+    ///   边长取缩放后较小边恒正方形，见 SelectBoxSide）
     /// - 行2：压力值框(74,26,121,16；左缘对齐 SN 框＋右缘对齐设置按钮，宽 121；
     ///   Y 吊真空块下方 TopToBottomGap=4，Y=4+18+4=26)
     ///   + 电流值框 RcCurrentValue(74,44,121,16；与压力同界；
@@ -87,7 +87,8 @@ namespace AgingTestSystem.Views
     /// - 行3：SN 值框(74,46,121,16；吊电流行下方 TopToBottomGap=2：
     ///   关电流电流行高按 0，Y=44+0+2=46；开时 Y=44+16+2=62；SN 序列号最长，值框保持最宽一档)
     /// - 行4：配方值框(74,65,121,16；下缘贴设置按钮上缘、Gap=4)
-    /// - 行5：延时时间值框(74,86,72,16；以设置按钮中心为基准、CenterOffsetY=-9) +
+    /// - 行5：延时时间值框(74,86,72,16；框内值走 9pt 时间字，标签仍 10pt；
+    ///   以设置按钮中心为基准、CenterOffsetY=-9) +
     ///   设置按钮(149,85,46,36；下缘距面板底 BottomMargin=7) + 烧屏时间值框(74,104,72,16；CenterOffsetY=9)
     /// - 编号：NO.1(6,6)（LeftMargin=6 + TopMargin=6，与第一行同行）
     /// - 标签列：真空压力(9,26)/SN:(9,46)/配方:(9,65)/延时时间(9,86)/烧屏时间(9,104)
@@ -95,8 +96,8 @@ namespace AgingTestSystem.Views
     ///   标签列宽 65：四字 10pt 实测 65px 零余量装得下，"00:00:00"实测 71px 装进 72 框）
     /// - 标签列左缘 X=9，设置按钮右缘贴右（RightMargin=9，右缘 195），
     ///   左留白 9 = 右留白 9 → 面板内内容整体水平居中（右缘 195/宽 204 对称不变）；
-    ///   编号 X=6 比标签列多探 3px（给 11pt 标题留槽）；选中框 TopMargin=5（Y=5，
-    ///   与第一行 4~22 同行居中，框 16 上下各留 1px）。
+    ///   编号 X=6 比标签列多探 3px（给 11pt 标题留槽，"NO.72"右缘 62 距下电 74 留 12px）；
+    ///   选中框 TopMargin=6（Y=6，与第一行 4~22 同行居中，框 14 上下各留 2px）。
     /// - 值框文字左内边距：ValueTextLeftPadding=6px（V1.52，文字不贴值框左边框，值框坐标不变）
     /// - 状态块配色见下方"状态块配色"；颜色值收敛在 PanelLayoutConfig，改代码生效
     /// - 延时时间/烧屏时间两行中心与设置按钮中心垂直居中对齐
@@ -122,8 +123,9 @@ namespace AgingTestSystem.Views
     ///   真空块接替当上链基准（见 PanelLayoutConfig 类头"完整锚定链"）；下电改对齐真空块。
     ///   解析顺序：先 RightMargin 面板锚定，再 RightAlignTo/VerticalAlignTo 元素间锚定。
     /// - 真空压力框 LeftAlignTo="SNValue"（左缘对齐 SN 框左缘）+
-    ///   RightToLeftAlignTo="VacuumOpen"（右缘贴合真空关左缘），宽度自动=145-57=88；
-    ///   下电 LeftAlignTo="PressureValue"（左边缘与压力框左边缘对齐）。
+    ///   RightAlignTo="SetButton"（右缘对齐设置按钮，宽 121 与 SN/配方同界）；
+    ///   下电 LeftAlignTo="SNValue"（左缘对齐 SN 框，与下方值框列对齐）+
+    ///   RightToLeftAlignTo="VacuumOpen"（右缘贴真空关左缘 Gap=4，宽两端推导 49）。
     /// - "压力"标签 Width=56 固定文字宽 + RightToLeftAlignTo="PressureValue"
     ///   （右缘贴合压力框左缘，X=65-56=9）；SN:/配方:/延时/烧屏 四标签 LeftAlignTo="LabelPressure"
     ///   （左缘对齐"压力"标签）。
@@ -172,6 +174,12 @@ namespace AgingTestSystem.Views
         /// 字号取配置 SetButtonFontSize（缺省 12），跟 zoom 等比缩放，与 RebuildFonts 同建同释放）。
         /// </summary>
         private Font _setButtonFont;
+        /// <summary>
+        /// 延时/烧屏时间值字体（比正文小 1pt：时间框 72 是全套最紧的槽，
+        /// "00:00:00" 10pt 要 71px 会截断，9pt 只要 56px；字号取配置 TimeValueFontSize，
+        /// 跟 zoom 等比缩放，与 RebuildFonts 同建同释放）。
+        /// </summary>
+        private Font _timeValueFont;
         /// <summary>
         /// 行全选按钮字体（竖排大字：字号 = 正文字号 × 配置倍率，
         /// 与 RebuildFonts 同建同释放；绘制时按字逐格居中，Paint 里不量字）。
@@ -310,6 +318,7 @@ namespace AgingTestSystem.Views
             _titleFont = new Font(_layout.FontFamily, _layout.TitleFontSize,
                 _layout.TitleFontBold ? FontStyle.Bold : FontStyle.Regular);
             _setButtonFont = BuildSetButtonFont(_layout, 1f);
+            _timeValueFont = BuildTimeValueFont(_layout, 1f);
             _rowSelectFont = BuildRowSelectFont(_layout, _layout.FontSize);
             // 竖排逐字绘制的字符缓存：Paint 里只按下标取，不量字不拼串不分配；
             // 文案来自配置（json 可覆盖），构造时拆好，全生命周期不变。
@@ -487,15 +496,18 @@ namespace AgingTestSystem.Views
             Font oldTitle = _titleFont;
             Font oldRowSelect = _rowSelectFont;
             Font oldSetButton = _setButtonFont;
+            Font oldTimeValue = _timeValueFont;
             _panelFont = new Font(_layout.FontFamily, panelSize, FontStyle.Bold);
             _titleFont = new Font(_layout.FontFamily, titleSize,
                 _layout.TitleFontBold ? FontStyle.Bold : FontStyle.Regular);
             _rowSelectFont = BuildRowSelectFont(_layout, panelSize);
             _setButtonFont = BuildSetButtonFont(_layout, z);
+            _timeValueFont = BuildTimeValueFont(_layout, z);
             if (oldPanel != null) oldPanel.Dispose();
             if (oldTitle != null) oldTitle.Dispose();
             if (oldRowSelect != null) oldRowSelect.Dispose();
             if (oldSetButton != null) oldSetButton.Dispose();
+            if (oldTimeValue != null) oldTimeValue.Dispose();
             RefreshRowSelectMetrics();
         }
 
@@ -524,6 +536,22 @@ namespace AgingTestSystem.Views
         public static Font BuildSetButtonFont(PanelLayoutConfig layout, float zoom)
         {
             float baseSize = layout != null && layout.SetButtonFontSize > 0 ? layout.SetButtonFontSize : 12f;
+            float size = baseSize * zoom;
+            if (size < MinFontSize) size = MinFontSize;
+            string family = layout != null && !string.IsNullOrEmpty(layout.FontFamily)
+                ? layout.FontFamily : "微软雅黑";
+            return new Font(family, size, FontStyle.Bold);
+        }
+
+        /// <summary>
+        /// 按 zoom 构建延时/烧屏时间值字体（纯静态，可单测：字号 = 配置 TimeValueFontSize × zoom，
+        /// 下限保 <see cref="MinFontSize"/>；数字笔画简单，小 1pt 照样清楚，加粗与正文一致）。
+        /// </summary>
+        /// <param name="layout">布局配置（取字族与 TimeValueFontSize）</param>
+        /// <param name="zoom">窄边缩放比（与正文/标题同源，保证四套字同比例）</param>
+        public static Font BuildTimeValueFont(PanelLayoutConfig layout, float zoom)
+        {
+            float baseSize = layout != null && layout.TimeValueFontSize > 0 ? layout.TimeValueFontSize : 9f;
             float size = baseSize * zoom;
             if (size < MinFontSize) size = MinFontSize;
             string family = layout != null && !string.IsNullOrEmpty(layout.FontFamily)
@@ -1079,8 +1107,9 @@ namespace AgingTestSystem.Views
             }
             DrawValueBox(g, Offset(Scaled(_layout.RcSNValue.ToRectangle()), panelLeft, panelTop), item.SnText);
             DrawValueBox(g, Offset(Scaled(_layout.RcRecipeValue.ToRectangle()), panelLeft, panelTop), item.RecipeText);
-            DrawValueBox(g, Offset(Scaled(_layout.RcDelayTimeValue.ToRectangle()), panelLeft, panelTop), item.DelayTimeText);
-            DrawValueBox(g, Offset(Scaled(_layout.RcBurnInValue.ToRectangle()), panelLeft, panelTop), item.BurnInTimeText);
+            // 时间框走小 1pt 的时间字（72 框最紧，"00:00:00" 10pt 会截断、9pt 装得下；标签仍是正文 10pt）
+            DrawValueBox(g, Offset(Scaled(_layout.RcDelayTimeValue.ToRectangle()), panelLeft, panelTop), item.DelayTimeText, _timeValueFont);
+            DrawValueBox(g, Offset(Scaled(_layout.RcBurnInValue.ToRectangle()), panelLeft, panelTop), item.BurnInTimeText, _timeValueFont);
 
             // 静态标签（X 走 zoomX、Y 走 zoomY；标签列 65px 宽，四字 10pt 实测 65px 刚好装下）
             DrawLabel(g, new Point(panelLeft + ScaledX(_layout.LabelPressurePosition.X), panelTop + ScaledY(_layout.LabelPressurePosition.Y)), "真空压力");
@@ -1168,6 +1197,14 @@ namespace AgingTestSystem.Views
         /// </summary>
         private void DrawValueBox(Graphics g, Rectangle rc, string text)
         {
+            DrawValueBox(g, rc, text, _panelFont);
+        }
+
+        /// <summary>
+        /// 绘制值框（字体由调用方指定：延时/烧屏时间框走小 1pt 的时间字，其余走正文字）。
+        /// </summary>
+        private void DrawValueBox(Graphics g, Rectangle rc, string text, Font font)
+        {
             g.FillRectangle(_brushValueBox, rc);
             g.DrawRectangle(_penBorder, rc);
             // 文本绘制矩形 = 值框矩形左移内边距（宽度同步缩短，防止文字溢出到右边框）
@@ -1179,7 +1216,7 @@ namespace AgingTestSystem.Views
                 rc.Y,
                 Math.Max(1, rc.Width - pad),
                 rc.Height);
-            TextRenderer.DrawText(g, text, _panelFont, textRc, _colorText,
+            TextRenderer.DrawText(g, text, font ?? _panelFont, textRc, _colorText,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
         }
 

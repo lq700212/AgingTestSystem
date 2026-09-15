@@ -12,7 +12,7 @@
 //    7. TestEventLogger       —— CSV 转义/表头/落盘
 //    8. AppLogFileWriter      —— 操作日志追加/UTF-8/多线程并发完整性
 //    9. PanelLayoutConfig     —— 默认布局解析、锚定幂等性、宽高联动推导
-//   10. HomeLayoutConfig      —— 主页布局默认配置加载
+//   10. HomeLayoutConfig      —— 主页固定布局（无文件无编辑器：常量＋删除锁）
 //   11. 模型序列化            —— RecipeConfig/StationInfo/UserAccount 往返与 Clone
 //   12b. PolicyV167            —— 工艺策略纯函数 + 名单同步锁 + tooltip + 项目档案
 //   12c. MesV168                —— MES 映射解析 + 组包 + 上报器（Fake 传输，零外网）
@@ -573,6 +573,30 @@ namespace AgingTestSystem.Tests
             Check("dev+双业务管理员保留 dev", umKeep.Login(UserRole.Administrator, "dev", "dev123").Success);
             Check("dev+双业务管理员保留第一个(b1)", umKeep.Login(UserRole.Administrator, "b1", "1111").Success);
             Check("dev+双业务管理员丢弃第二个(b2)", !umKeep.Login(UserRole.Administrator, "b2", "2222").Success);
+
+            // 登录窗初始焦点：三角色共用同一 LoginForm，账号框有默认账号
+            // （记住回填/默认选中首个）→ 光标默认进密码框，省一次 Tab；
+            // 无账号可显（空）→ 停账号框。反射调 Load，不 Show 不弹框。
+            EnterCleanDir();
+            var umFocus = new UserManager();
+            foreach (UserRole r in new[] { UserRole.Operator, UserRole.Technician, UserRole.Administrator })
+            {
+                LoginForm lf = null;
+                try
+                {
+                    lf = new LoginForm(umFocus, r);
+                    typeof(LoginForm).GetMethod("LoginForm_Load",
+                        BindingFlags.NonPublic | BindingFlags.Instance)
+                        ?.Invoke(lf, new object[] { lf, EventArgs.Empty });
+                    var userBox = (Control)typeof(LoginForm).GetField("txtUsername",
+                        BindingFlags.NonPublic | BindingFlags.Instance).GetValue(lf);
+                    var pwdBox = (Control)typeof(LoginForm).GetField("txtPassword",
+                        BindingFlags.NonPublic | BindingFlags.Instance).GetValue(lf);
+                    Check("登录窗" + r + "账号框有默认账号", !string.IsNullOrWhiteSpace(userBox.Text));
+                    Check("登录窗" + r + "光标默认进密码框", lf.ActiveControl == pwdBox);
+                }
+                finally { if (lf != null) { try { lf.Dispose(); } catch { } } }
+            }
         }
 
         // =====================================================================
@@ -1436,8 +1460,8 @@ namespace AgingTestSystem.Tests
             Check("设置按钮下锚定 Y=128-7-36=85", setBtn.Y == 85 && setBtn.Height == 36,
                 "实际 " + setBtn.ToString());
             var selBox = c.RcSelectBox.ToRectangle();
-            Check("选中框右上锚定 (183,5) 16x16（并入第一行）", selBox.X == 183 && selBox.Y == 5
-                && selBox.Width == 16 && selBox.Height == 16, "实际 " + selBox.ToString());
+            Check("选中框右上锚定 (185,6) 14x14（并入第一行）", selBox.X == 185 && selBox.Y == 6
+                && selBox.Width == 14 && selBox.Height == 14, "实际 " + selBox.ToString());
             var sn = c.RcSNValue.ToRectangle();
             Check("SN 框右对齐设置按钮 X=74 宽121", sn.X == 74 && sn.Width == 121, "实际 " + sn.ToString());
             var pressure = c.RcPressureValue.ToRectangle();
@@ -1447,17 +1471,21 @@ namespace AgingTestSystem.Tests
             Check("压力框右缘=设置按钮右缘",
                 pressure.X + pressure.Width
                 == c.RcSetButton.ToRectangle().X + c.RcSetButton.ToRectangle().Width);
-            // 第一行四件套同行：编号(6,6)＋下电(67,4)＋真空(125,4)＋选中框(183,5)
-            Check("第一行：下电块 (67,4) 54x18", c.RcPower.ToRectangle().X == 67 && c.RcPower.ToRectangle().Y == 4
-                && c.RcPower.ToRectangle().Width == 54 && c.RcPower.ToRectangle().Height == 18,
+            // 第一行四件套同行：编号(6,6)＋下电(74,4)＋真空(127,4)＋选中框(185,6)
+            Check("第一行：下电块 (74,4) 49x18（左缘对齐SN框）", c.RcPower.ToRectangle().X == 74 && c.RcPower.ToRectangle().Y == 4
+                && c.RcPower.ToRectangle().Width == 49 && c.RcPower.ToRectangle().Height == 18,
                 "实际 " + c.RcPower.ToRectangle().ToString());
-            Check("第一行：真空块 (125,4) 54x18", c.RcVacuumOpen.ToRectangle().X == 125 && c.RcVacuumOpen.ToRectangle().Y == 4
+            Check("第一行：真空块 (127,4) 54x18", c.RcVacuumOpen.ToRectangle().X == 127 && c.RcVacuumOpen.ToRectangle().Y == 4
                 && c.RcVacuumOpen.ToRectangle().Width == 54 && c.RcVacuumOpen.ToRectangle().Height == 18,
                 "实际 " + c.RcVacuumOpen.ToRectangle().ToString());
             Check("第一行：编号与状态块同行 Y=6/4", c.TitlePosition.ToPoint().Y == 6
                 && c.RcPower.ToRectangle().Y == 4 && c.RcVacuumOpen.ToRectangle().Y == 4);
             Check("第一行：标题右缘不碰下电块", c.TitlePosition.ToPoint().X + 56 <= c.RcPower.ToRectangle().X,
-                "标题槽 6+56=62 vs 下电 67");
+                "标题槽 6+56=62 vs 下电 74");
+            Check("第一行：下电左缘对齐SN框左缘", c.RcPower.ToRectangle().X == c.RcSNValue.ToRectangle().X,
+                "下电X" + c.RcPower.ToRectangle().X + " vs SN X" + c.RcSNValue.ToRectangle().X);
+            Check("第一行：下电右缘贴真空左缘留4px", c.RcVacuumOpen.ToRectangle().X - (c.RcPower.ToRectangle().X + c.RcPower.ToRectangle().Width) == 4,
+                "真空X" + c.RcVacuumOpen.ToRectangle().X + " vs 下电右缘" + (c.RcPower.ToRectangle().X + c.RcPower.ToRectangle().Width));
             // V1.91：标签列65/值列右移74/按钮收窄46（长标签零余量装得下，按钮完整显示是底线）
             Check("标签列宽65且右缘贴值列左缘",
                 c.LabelPressurePosition.Width == 65
@@ -1488,7 +1516,7 @@ namespace AgingTestSystem.Tests
                 tall.RcPressureValue.ToRectangle().Y == 26);
             Check("高度+10: 延时两行 Y 86/104→96/114",
                 tall.RcDelayTimeValue.ToRectangle().Y == 96 && tall.RcBurnInValue.ToRectangle().Y == 114);
-            Check("高度+10: 选中框 TopMargin 锚定不动仍 Y=5", tall.RcSelectBox.ToRectangle().Y == 5);
+            Check("高度+10: 选中框 TopMargin 锚定不动仍 Y=6", tall.RcSelectBox.ToRectangle().Y == 6);
             Check("高度+10: 真空块 Y=4 不动(上链基准)", tall.RcVacuumOpen.ToRectangle().Y == 4);
             Check("高度+10: 下电框跟随真空块仍 Y=4", tall.RcPower.ToRectangle().Y == 4);
             Check("高度+10: 压力框右缘=设置按钮右缘(与SN/配方同界)",
@@ -1509,10 +1537,11 @@ namespace AgingTestSystem.Tests
             Check("宽度+10: 压力框 X=84 宽121(右缘跟设置按钮)",
                 wPressure.X == 84 && wPressure.Width == 121,
                 "实际 " + wPressure.ToString());
-            Check("宽度+10: 选中框 X 183→193(RightMargin=5 跟随)", wide.RcSelectBox.ToRectangle().X == 193);
-            Check("宽度+10: 真空块跟随选中框 X 125→135", wide.RcVacuumOpen.ToRectangle().X == 135,
+            Check("宽度+10: 选中框 X 185→195(RightMargin=5 跟随)", wide.RcSelectBox.ToRectangle().X == 195);
+            Check("宽度+10: 真空块跟随选中框 X 127→137", wide.RcVacuumOpen.ToRectangle().X == 137,
                 "实际 " + wide.RcVacuumOpen.ToRectangle().ToString());
-            Check("宽度+10: 下电块跟随真空块 X 67→77", wide.RcPower.ToRectangle().X == 77,
+            Check("宽度+10: 下电左缘仍对齐SN(84)宽49→49", wide.RcPower.ToRectangle().X == 84
+                && wide.RcPower.ToRectangle().Width == 49,
                 "实际 " + wide.RcPower.ToRectangle().ToString());
 
             // ── 标签垂直居中：随目标框移动（V1.77：压力框定高位，标签不动）──
@@ -1644,79 +1673,26 @@ namespace AgingTestSystem.Tests
         }
 
         // =====================================================================
-        // 10. HomeLayoutConfig —— 主页布局默认配置
+        // 10. HomeLayoutConfig —— 主页固定布局（无文件、无编辑器，纯代码值）
         // =====================================================================
         private static void HomeLayoutTests()
         {
-            string cfgPath = ProjectProfile.ResolveDataPath("HomeLayout.json", true);
-            if (File.Exists(cfgPath)) File.Delete(cfgPath);
-
-            var c = HomeLayoutConfig.LoadOrDefault();
-            Check("HomeLayout 默认配置非 null", c != null);
-            if (c == null) return;
-            Check("HeaderHeight 默认 30（V1.88.26 顶栏字9pt再压）", c.HeaderHeight == 30);
-            Check("RightPanelWidth 默认 240(V1.65比例时代的编辑器基准)", c.RightPanelWidth == 240);
-            Check("StatusBarHeight 默认 30", c.StatusBarHeight == 30);
-
-            // 往返：顶栏锁死 30——存 44 读回仍是 30（用户点名固定，老值作废；
-            // Save 落盘前先归位，文件里永远 30）
-            c.HeaderHeight = 44;
-            c.Save();
-            var reloaded = HomeLayoutConfig.LoadOrDefault();
-            Check("Save→Load顶栏锁死30（存44读回30）", reloaded.HeaderHeight == 30);
-            if (File.Exists(cfgPath)) File.Delete(cfgPath); // 还原，避免影响后续用例
-
-            // 调整范围约束（编辑器钳制依据，与 HomeLayoutEditorForm 常量同步；
-            // 顶栏不再参与：只有 FixedHeaderHeight 一个值）
-            Check("顶栏锁死常量30（V1.88.28固定，不可调）",
-                HomeLayoutConfig.FixedHeaderHeight == 30);
-            Check("右侧区范围180~600", HomeLayoutConfig.RightPanelRange.Min == 180 && HomeLayoutConfig.RightPanelRange.Max == 600);
-            Check("状态栏范围15~60", HomeLayoutConfig.StatusBarRange.Min == 15 && HomeLayoutConfig.StatusBarRange.Max == 60);
-
-            // 损坏回退：写垃圾后仍返回默认值（BaseDirectory 是共享 run 目录，用完必须还原）
-            try
-            {
-                File.WriteAllText(cfgPath, "{broken json");
-                var fallback = HomeLayoutConfig.LoadOrDefault();
-                Check("损坏文件回退默认30/240/30",
-                    fallback.HeaderHeight == 30
-                    && fallback.RightPanelWidth == 240 && fallback.StatusBarHeight == 30);
-            }
-            finally
-            {
-                if (File.Exists(cfgPath)) File.Delete(cfgPath);
-            }
-
-            // 越界钳制（V1.88.17：手改 json 写 5000 高/负宽，进不了主窗，只变"不好看"；
-            // 顶栏不再按范围钳：一律归固定 30）
-            try
-            {
-                File.WriteAllText(cfgPath,
-                    "{\"HeaderHeight\":5000,\"RightPanelWidth\":-50,\"StatusBarHeight\":0}");
-                var clamped = HomeLayoutConfig.LoadOrDefault();
-                Check("越界文件顶栏归30/右侧180/状态15",
-                    clamped.HeaderHeight == 30
-                    && clamped.RightPanelWidth == 180 && clamped.StatusBarHeight == 15);
-            }
-            finally
-            {
-                if (File.Exists(cfgPath)) File.Delete(cfgPath);
-            }
-
-            // 老文件兼容（V1.88.23：只有 TopBar/Menu 双键、无 HeaderHeight → 缺省 30，不迁移）
-            try
-            {
-                File.WriteAllText(cfgPath,
-                    "{\"TopBarHeight\":40,\"MenuHeight\":50,\"RightPanelWidth\":240,\"StatusBarHeight\":30}");
-                var legacy = HomeLayoutConfig.LoadOrDefault();
-                Check("老双键文件读出HeaderHeight缺省30",
-                    legacy.HeaderHeight == 30
-                    && legacy.RightPanelWidth == 240 && legacy.StatusBarHeight == 30);
-            }
-            finally
-            {
-                if (File.Exists(cfgPath)) File.Delete(cfgPath);
-            }
+            // 固定值锁（顶栏/状态栏 30，右侧按窗口比例，见 UiPureHelpers）：
+            // 布局不读任何文件，改尺寸只改 MainForm 常量重编译。
+            Check("顶栏固定30", MainForm.HeaderHeight == 30);
+            Check("状态栏固定30", MainForm.StatusBarHeight == 30);
+            // 删除锁：配置类/编辑窗体/菜单入口已删干净（项目未上线，不兼容老文件）。
+            Check("HomeLayoutConfig 类型已删",
+                Type.GetType("AgingTestSystem.Models.HomeLayoutConfig") == null);
+            Check("HomeLayoutEditorForm 类型已删",
+                Type.GetType("AgingTestSystem.Dialogs.HomeLayoutEditorForm") == null);
+            Check("关于菜单无主页区域调整入口",
+                typeof(MainForm).GetMethod("MenuHelpHomeLayout_Click",
+                    BindingFlags.NonPublic | BindingFlags.Instance) == null);
+            Check("设置窗无HomeLayoutChanged标记",
+                typeof(SettingsForm).GetProperty("HomeLayoutChanged") == null);
+            var sfCtor = typeof(SettingsForm).GetConstructor(new Type[] { typeof(DeviceConfig) });
+            Check("设置窗构造单参（去右侧宽透传）", sfCtor != null);
 
             // 顶栏单行结构锁（V1.88.23：Top/Menu 双面板合一；只锁字段存在性，
             // 行高行为由真窗 harness 目检锁——MainForm 构造太重不进回归）
@@ -4083,7 +4059,6 @@ namespace AgingTestSystem.Tests
             Check("IP候选→弹窗格", cellOf("FanIpCandidates", "a") is DataGridViewPopupEditCell);
             Check("报表列→弹窗格", cellOf("ReportColumns", "时间=time") is DataGridViewPopupEditCell);
             Check("显示字典→弹窗格", cellOf("DisplayModes", "白场") is DataGridViewPopupEditCell);
-            Check("主页布局→弹窗格", cellOf("HomeLayout", "") is DataGridViewPopupEditCell);
             var baudCell = cellOf("BaudRate", "230400");
             Check("波特率含档位+自定义回显",
                 baudCell is DataGridViewComboBoxCell
@@ -4133,7 +4108,7 @@ namespace AgingTestSystem.Tests
                     Check("关键键在分类里",
                         catKeys.Contains("AlarmPressureThresholdKPa")
                         && catKeys.Contains("IoBackupChannelMappings")
-                        && catKeys.Contains("HomeLayout"));
+                        && !catKeys.Contains("HomeLayout"));
                     Check("分类键50+项", catKeys.Count >= 50);
                 }
                 finally { sf.Dispose(); }
@@ -5012,16 +4987,16 @@ namespace AgingTestSystem.Tests
                     {
                         zoomXFld.SetValue(grid, 0.5f);
                         zoomYFld.SetValue(grid, 0.25f);
-                        // 边长=min(ScaledX(16),ScaledY(16))=min(8,4)=4；
-                        // x=100+102-4-2=196，y=200+1=201（TopMargin=5：Round(1.25)=1）。
+                        // 边长=min(ScaledX(14),ScaledY(14))=min(7,4)=4；
+                        // x=100+102-4-2=196，y=200+2=202（TopMargin=6：Round(1.5)=2）。
                         Rectangle sq = (Rectangle)selRectM.Invoke(grid, new object[] { 100, 200 });
                         Check("扁拉伸下选中框仍正方形且边长取小边",
                             sq.Width == sq.Height && sq.Width == 4, "实际 " + sq.ToString());
-                        Check("选中框右上位置(196,201)",
-                            sq.X == 196 && sq.Y == 201, "实际 " + sq.ToString());
+                        Check("选中框右上位置(196,202)",
+                            sq.X == 196 && sq.Y == 202, "实际 " + sq.ToString());
                         Rectangle sql = (Rectangle)selLocalM.Invoke(grid, null);
-                        Check("局部矩形与绘制同源((96,1,4,4))",
-                            sql.X == 96 && sql.Y == 1 && sql.Width == 4 && sql.Height == 4,
+                        Check("局部矩形与绘制同源((96,2,4,4))",
+                            sql.X == 96 && sql.Y == 2 && sql.Width == 4 && sql.Height == 4,
                             "实际 " + sql.ToString());
                         zoomXFld.SetValue(grid, 1f);
                         zoomYFld.SetValue(grid, 1f);
@@ -5121,7 +5096,8 @@ namespace AgingTestSystem.Tests
                             "字高" + chv + "px 间隙" + gpv + "px");
                         // 设置按钮独立大字（绿底白字看不清：框46×36，12pt跟zoom走；
                         // "设置"实测42px，框内左右各留2px是完整显示的底线；
-                        // 标题11pt槽位（x=6到下电块67）61px，"NO.72"实测56px装得下）。
+                        // 标题11pt槽位（x=6到下电块74）68px，"NO.72"实测56px装得下；
+                        // 下电49宽（"上电"37px各留6px）、真空54宽（"真空开"51px各留1~2px已到底）。
                         System.Drawing.Font sbf = null;
                         try
                         {
@@ -5142,17 +5118,56 @@ namespace AgingTestSystem.Tests
                             {
                                 titleProbe = new System.Drawing.Font("微软雅黑", 11f, System.Drawing.FontStyle.Bold);
                                 int titleW = System.Windows.Forms.TextRenderer.MeasureText("NO.72", titleProbe).Width;
-                                Check("标题NO.72装进第一行61px槽", titleW <= 61, "实际 " + titleW + "px");
+                                Check("标题NO.72装进第一行68px槽", titleW <= 68, "实际 " + titleW + "px");
                             }
                             finally { if (titleProbe != null) { try { titleProbe.Dispose(); } catch { } } }
+                            System.Drawing.Font panelProbe = null;
+                            try
+                            {
+                                panelProbe = new System.Drawing.Font("微软雅黑", 10f, System.Drawing.FontStyle.Bold);
+                                int powerW = System.Windows.Forms.TextRenderer.MeasureText("上电", panelProbe).Width;
+                                Check("上电两字装进49宽下电块", powerW <= 45, "实际 " + powerW + "px");
+                                int vacW = System.Windows.Forms.TextRenderer.MeasureText("真空开", panelProbe).Width;
+                                Check("真空三字装进54宽真空块", vacW <= 52, "实际 " + vacW + "px");
+                            }
+                            finally { if (panelProbe != null) { try { panelProbe.Dispose(); } catch { } } }
+                            // 时间值 9pt：72 框文本区 66px，"00:00:00" 10pt 要 71 会截断成"00:00:.."；
+                            // 数字笔画简单，小 1pt 照样清楚；设置按钮不动（12pt 已是完整显示底线）。
+                            Check("时间值字号缺省9pt", Math.Abs(new PanelLayoutConfig().TimeValueFontSize - 9f) < 0.01f);
+                            System.Drawing.Font timeProbe = null;
+                            try
+                            {
+                                timeProbe = new System.Drawing.Font("微软雅黑", 9f, System.Drawing.FontStyle.Bold);
+                                int t0 = System.Windows.Forms.TextRenderer.MeasureText("00:00:00", timeProbe).Width;
+                                Check("时间串9pt装进72框文本区66px", t0 <= 66, "实际 " + t0 + "px");
+                                int t8 = System.Windows.Forms.TextRenderer.MeasureText("88:88:88", timeProbe).Width;
+                                Check("最宽时间串88:88:88装得下", t8 <= 66, "实际 " + t8 + "px");
+                            }
+                            finally { if (timeProbe != null) { try { timeProbe.Dispose(); } catch { } } }
+                            System.Drawing.Font tvf = null;
+                            System.Drawing.Font tvfMin = null;
+                            try
+                            {
+                                tvf = WorkstationGridView.BuildTimeValueFont(new PanelLayoutConfig(), 1f);
+                                Check("时间值字体9pt加粗（zoom=1）",
+                                    tvf != null && Math.Abs(tvf.Size - 9f) < 0.15f && tvf.Bold,
+                                    tvf != null ? "实际 " + tvf.Size.ToString("F2") + "pt" : "字体为null");
+                                tvfMin = WorkstationGridView.BuildTimeValueFont(new PanelLayoutConfig(), 0.05f);
+                                Check("时间值字号下限4pt", tvfMin != null && tvfMin.Size >= 4f);
+                            }
+                            finally
+                            {
+                                if (tvf != null) { try { tvf.Dispose(); } catch { } }
+                                if (tvfMin != null) { try { tvfMin.Dispose(); } catch { } }
+                            }
                             // 第一行同行锁：编号/下电/真空/选中框 Y 同行，右缘链无交叠。
                             var defL = new PanelLayoutConfig();
                             defL.ResolveAnchors();
-                            Check("第一行同行（编号6/下电4/真空4/选中5）",
+                            Check("第一行同行（编号6/下电4/真空4/选中6）",
                                 defL.TitlePosition.ToPoint().Y == 6
                                 && defL.RcPower.ToRectangle().Y == 4
                                 && defL.RcVacuumOpen.ToRectangle().Y == 4
-                                && defL.RcSelectBox.ToRectangle().Y == 5);
+                                && defL.RcSelectBox.ToRectangle().Y == 6);
                             Check("第一行无交叠（标题→下电→真空→选中）",
                                 defL.TitlePosition.ToPoint().X + 56 <= defL.RcPower.ToRectangle().X
                                 && defL.RcPower.ToRectangle().X + defL.RcPower.ToRectangle().Width <= defL.RcVacuumOpen.ToRectangle().X
@@ -5171,6 +5186,11 @@ namespace AgingTestSystem.Tests
                         Check("重建后设置按钮字体12pt加粗（zoom=1）",
                             sbGrid != null && Math.Abs(sbGrid.Size - 12f) < 0.15f && sbGrid.Bold,
                             sbGrid != null ? "实际 " + sbGrid.Size.ToString("F2") + "pt" : "字体为null");
+                        var tvFld = tg.GetField("_timeValueFont", BindingFlags.NonPublic | BindingFlags.Instance);
+                        var tvGrid = tvFld != null ? tvFld.GetValue(grid) as System.Drawing.Font : null;
+                        Check("重建后时间值字体9pt加粗（zoom=1）",
+                            tvGrid != null && Math.Abs(tvGrid.Size - 9f) < 0.15f && tvGrid.Bold,
+                            tvGrid != null ? "实际 " + tvGrid.Size.ToString("F2") + "pt" : "字体为null");
                     }
                     // 无句柄挂载即铺满（缺省就是双向铺满，不用切模式；
                     // MinSize 同步/V1.88.15 事后校正随滚动删除，只锁 zoom+画布）。
@@ -5313,26 +5333,23 @@ namespace AgingTestSystem.Tests
                 IoMapBuilder.Build(new DeviceConfig { TotalBarometers = 72, TotalInputs = 72, TotalOutputs = 144 })
                     .Count(p => p.Function == IoFunction.Unknown) == 0);
 
-            // —— 右侧宽度比例自适应（V1.65：MainForm.ComputeRightPanelWidth 纯函数） ——
+            // —— 右侧宽度比例自适应（V1.65 比例＋固定布局：无文件，永远跟窗口走） ——
             Check("比例常量0.234/护栏180~340",
                 MainForm.RightPanelRatio == 0.234
                 && MainForm.RightPanelMinWidth == 180 && MainForm.RightPanelMaxWidth == 340);
             Check("设计宽1394→326(与现状一致)",
-                MainForm.ComputeRightPanelWidth(1394, false, 0) == 326);
+                MainForm.ComputeRightPanelWidth(1394) == 326);
             Check("1366屏分隔容器1360→318",
-                MainForm.ComputeRightPanelWidth(1360, false, 0) == 318);
+                MainForm.ComputeRightPanelWidth(1360) == 318);
             Check("新设计宽1274→298",
-                MainForm.ComputeRightPanelWidth(1274, false, 0) == 298);
+                MainForm.ComputeRightPanelWidth(1274) == 298);
             Check("1080p大屏钳到上限340",
-                MainForm.ComputeRightPanelWidth(1914, false, 0) == 340);
+                MainForm.ComputeRightPanelWidth(1914) == 340);
             Check("小屏700钳到下限180",
-                MainForm.ComputeRightPanelWidth(700, false, 0) == 180);
+                MainForm.ComputeRightPanelWidth(700) == 180);
             Check("宽0/负数按设计宽兜底→328",
-                MainForm.ComputeRightPanelWidth(0, false, 0) == 328
-                && MainForm.ComputeRightPanelWidth(-5, false, 0) == 328);
-            Check("有json自定义值原样优先",
-                MainForm.ComputeRightPanelWidth(1394, true, 260) == 260
-                && MainForm.ComputeRightPanelWidth(1394, true, 500) == 500);
+                MainForm.ComputeRightPanelWidth(0) == 328
+                && MainForm.ComputeRightPanelWidth(-5) == 328);
 
             // —— 工作站区最小宽度保护（V1.88.17：右侧再宽也不能吃掉 Panel1） ——
             Check("左侧最小宽常量640", MainForm.MinWorkstationPanelWidth == 640);
@@ -5533,13 +5550,9 @@ namespace AgingTestSystem.Tests
                 offBack.ToArgb() == Color.LightGray.ToArgb() && offFore.ToArgb() == Color.Black.ToArgb(),
                 "实际=" + offBack + "/" + offFore);
 
-            // —— V1.60.4：布局预览画布底（纯函数，不 new 窗体就能断） ——
             // （注：V1.71 公共参数保存按钮改语义绿，DimGray 特例与 GetSaveButtonThemeColors 已删除；
-            // Sunny 按钮语义色保护由上面的通用分支覆盖，不再单列。）
-            Check("深色布局预览画布纯黑",
-                HomeLayoutEditorForm.GetPreviewBackColor(true).ToArgb() == Color.Black.ToArgb());
-            Check("浅色布局预览画布白纸",
-                HomeLayoutEditorForm.GetPreviewBackColor(false).ToArgb() == Color.White.ToArgb());
+            // Sunny 按钮语义色保护由上面的通用分支覆盖，不再单列。
+            // 主页布局编辑器已删：预览画布 GetPreviewBackColor 连同窗体一起删除，无残留。）
 
             // —— V1.62：映射表剩余分支全锁（公开查表函数直接断言） ——
             Check("单元格Empty/白→深格底",
@@ -6373,77 +6386,7 @@ namespace AgingTestSystem.Tests
             }
             finally { try { policyForm.Dispose(); } catch { } }
 
-            // —— ②③主页布局窗：量程字面值 + 越界赋值不炸（顶栏行已删，锁死30） ——
-            var layout = new HomeLayoutConfig();
-            var homeForm = new HomeLayoutEditorForm(layout);
-            try
-            {
-                var t = typeof(HomeLayoutEditorForm);
-                var nudRight = t.GetField("_nudRight", Flags)?.GetValue(homeForm) as NumericUpDown;
-                var nudStatus = t.GetField("_nudStatus", Flags)?.GetValue(homeForm) as NumericUpDown;
-                Check("布局窗两个输入框建好（V1.88.28顶栏行已删）",
-                    nudRight != null && nudStatus != null);
-                Check("顶栏输入框已删（_nudHeader无字段，锁死30不可调）",
-                    t.GetField("_nudHeader", Flags) == null);
-                if (nudRight != null && nudStatus != null)
-                {
-                    Check("右侧量程=Range字面值(180~600)",
-                        nudRight.Minimum == HomeLayoutConfig.RightPanelRange.Min
-                        && nudRight.Maximum == HomeLayoutConfig.RightPanelRange.Max);
-                    Check("状态栏量程=Range字面值(15~60)",
-                        nudStatus.Minimum == HomeLayoutConfig.StatusBarRange.Min
-                        && nudStatus.Maximum == HomeLayoutConfig.StatusBarRange.Max);
-
-                    // 现场原案：右侧 340（旧 0~100 会炸，现在范围内）拖动同步不抛。
-                    layout.RightPanelWidth = 340;
-                    bool dragOk = true;
-                    try
-                    {
-                        t.GetMethod("Preview_LayoutChanged", Flags)
-                            ?.Invoke(homeForm, new object[] { homeForm, EventArgs.Empty });
-                    }
-                    catch { dragOk = false; }
-                    Check("拖动同步340不抛且框值=340",
-                        dragOk && nudRight.Value == 340m);
-
-                    // 旧文件越界值（如右侧 100，小于下限 180）同步时钳住不抛。
-                    layout.RightPanelWidth = 100;
-                    bool clampOk = true;
-                    try
-                    {
-                        t.GetMethod("Preview_LayoutChanged", Flags)
-                            ?.Invoke(homeForm, new object[] { homeForm, EventArgs.Empty });
-                    }
-                    catch { clampOk = false; }
-                    Check("越界旧值100同步钳到下限180不抛",
-                        clampOk && nudRight.Value == nudRight.Minimum);
-
-                    // 输入框写入钳制（V1.88.17：手输超限到不了 json；反射直调私有 ClampToRange）。
-                    var clampM = t.GetMethod("ClampToRange", Flags);
-                    Check("反射找到ClampToRange", clampM != null);
-                    if (clampM != null)
-                    {
-                        Check("输入钳上(5000→右侧上限600)",
-                            (int)clampM.Invoke(null, new object[] { 5000, HomeLayoutConfig.RightPanelRange }) == 600);
-                        Check("输入钳下(-5→右侧下限180)",
-                            (int)clampM.Invoke(null, new object[] { -5, HomeLayoutConfig.RightPanelRange }) == 180);
-                    }
-                }
-                Check("布局窗AutoScale=None（Sunny canonical，预览不脏）",
-                    homeForm.AutoScaleMode == AutoScaleMode.None);
-            }
-            finally { try { homeForm.Dispose(); } catch { } }
-
-            // 构造期越界初值也不炸（ClampNud 第一道闸）。
-            var legacyLayout = new HomeLayoutConfig { RightPanelWidth = 50 };
-            bool ctorOk = true;
-            HomeLayoutEditorForm legacyForm = null;
-            try { legacyForm = new HomeLayoutEditorForm(legacyLayout); }
-            catch { ctorOk = false; }
-            Check("构造期越界初值50不炸", ctorOk && legacyForm != null);
-            if (legacyForm != null) { try { legacyForm.Dispose(); } catch { } }
-
-            // —— ④判定窗 AutoScale.None（与批量窗同锁，防 Font+Zoom 混搭回潮） ——
+            // —— ②判定窗 AutoScale.None（与批量窗同锁，防 Font+Zoom 混搭回潮） ——
             var judge2 = new UnloadJudgeForm();
             try
             {

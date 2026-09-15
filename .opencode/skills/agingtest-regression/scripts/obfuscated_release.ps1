@@ -176,7 +176,7 @@ try {
     Copy-Item -Path (Join-Path $inDir "*") -Destination $pkgDir -Force -Exclude @(
         "AgingTestSystem.exe", "*.pdb", "*.xml",
         "Users.json", "RememberedLogin.json", "TestSession.json", "MainSetting.ini",
-        "MesQueue.json", "PanelLayout.json", "HomeLayout.json", "Logs", "Projects")
+        "MesQueue.json", "Logs", "Projects")
     Copy-Item -LiteralPath (Join-Path $shipExeDir "AgingTestSystem.exe") -Destination $pkgDir -Force
     if (-not (Test-Path (Join-Path $pkgDir "AgingTestSystem.exe.config"))) {
         Fail "[PACKAGE FAIL] 缺 exe.config（App.config 没编进去，跑不起来）" 1

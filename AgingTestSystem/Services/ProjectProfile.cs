@@ -9,13 +9,14 @@ namespace AgingTestSystem.Services
     /// <summary>
     /// 项目档案管理（一期"多项目切换"）。
     /// 【解决什么问题】
-    /// 以前所有运行时文件（配方/工位设置/主页布局）都堆在程序目录，换一个客户
+    /// 以前所有运行时文件（配方/工位设置）都堆在程序目录，换一个客户
     /// 就得手动备份一堆 json，出差现场极易弄混。现在按"项目"隔离：
     ///   程序目录/Projects/&lt;项目名&gt;/  =  Recipes.json + StationSettings.json
-    ///                              + HomeLayout.json + Policy.json（策略）
+    ///                              + Policy.json（策略）
     /// 出差切项目 = 下拉选个名字即时生效（无需重启），30 秒搞定，不动代码。
     /// 【跟项目的 vs 跟机器的：为什么这样分】
-    /// - 跟项目（进 Profile 目录）：配方、工位设置、主页布局、工艺策略——换客户就换这套。
+    /// - 跟项目（进 Profile 目录）：配方、工位设置、工艺策略——换客户就换这套。
+    ///   （主页布局是纯代码固定值，不跟文件，见 MainForm.ApplyHomeLayout）
     /// - 跟机器（留程序目录全局）：Users.json（账号全公司通用）、TestSession.json
     ///   （本机中断快照）、Logs/（本机日志）、
     ///   App.config 连接参数（COM 口/IP 是这台工控机的接线，不是工艺）。
@@ -36,7 +37,6 @@ namespace AgingTestSystem.Services
         {
             "Recipes.json",
             "StationSettings.json",
-            "HomeLayout.json",
             PolicyFileName
         };
 

@@ -45,7 +45,7 @@ namespace AgingTestSystem.Models
     /// 【依赖顺序铁律】被依赖元素必须先解析（<see cref="ResolveElementAlign"/> 注释为准，
     ///   此处是摘要）：
     ///   ① 面板 → ② 设置按钮(BottomMargin，有效高) → 选中框(右上固定) → 真空关
-    ///   (右缘贴选中框左缘) → 下电(右缘贴真空关左缘，Y/H 对齐真空块) → SN(X 右缘跟随先解)
+    ///   (右缘贴选中框左缘) → 下电(左缘对齐 SN＋右缘贴真空关，Y/H 对齐真空块) → SN(X 右缘跟随先解)
     ///   → 压力框(左缘 SN/右缘设置按钮宽 130，Y 吊真空块) → 电流行(TopToBottom:压力框)
     ///   → SN 终解 Y；配方(BottomToTop:SetButton)；延时两行(VerticalCenter:SetButton) → 标签。
     ///   顺序错会取到目标旧值，表现为"改了不生效 / 元素错位"。
@@ -58,9 +58,9 @@ namespace AgingTestSystem.Models
     ///        右缘 195 距面板右缘 9px，下缘距面板底 7px；宽 50→46，"设置"12pt 实测 42px 完整显示是底线)
     ///          └─ 配方框 RcRecipeValue(右缘:SetButton→X=74 + 下缘贴设置上缘、Gap=4 → Y=85-16-4=65)
     ///   上链（顶部→下，面板增高时不动；标题/编号与选中框并入第一行）：
-    ///     ├─ 选中框 RcSelectBox(右上固定：RightMargin=5 + TopMargin=5 → X=204-5-16=183、Y=5，16×16)
-    ///     ├─ 真空关 RcVacuumOpen(右缘贴选中框左缘 Gap=4 → X=183-4-54=125；Y=4 固定顶区，54×18)
-    ///     │    ├─ 下电 RcPower(右缘贴真空关左缘 Gap=4 → X=125-4-54=67；Y/H 对齐真空块)
+    ///     ├─ 选中框 RcSelectBox(右上固定：RightMargin=5 + TopMargin=6 → X=204-5-14=185、Y=6，14×14)
+    ///     ├─ 真空关 RcVacuumOpen(右缘贴选中框左缘 Gap=4 → X=185-4-54=127；Y=4 固定顶区，54×18)
+    ///     │    ├─ 下电 RcPower(左缘对齐 SN 框 X=74＋右缘贴真空关左缘 Gap=4 → 宽 127-74-4=49；Y/H 对齐真空块)
     ///     │    ├─ 编号 TitlePosition(左上：LeftMargin=6 + TopMargin=6 → X=6、Y=6，与第一行同行)
     ///     │    ├─ 压力框 RcPressureValue(左缘:SN(74)/右缘:SetButton(195)→宽121；
     ///     │    │    Y 吊真空块下方 TopToBottomGap=4 → 4+18+4=26，121×16)
@@ -79,11 +79,11 @@ namespace AgingTestSystem.Models
     ///   开电流行（ShowCurrent=true，有效高 128+16=144）：上链压力/真空关/电流行不动，
     ///   SN 46→62、配方 65→81、延时 86/104→102/120、设置按钮 85→101，
     ///   间距全都不变（交接缝 81-(62+16)=3 ✓、配方→按钮 101-(81+16)=4 ✓、底边距 144-(101+36)=7 ✓）。
-    ///   横链头 = View 面板右缘(内容宽 204)：选中框(RightMargin=5,TopMargin=5→X=183,Y=5)；
+    ///   横链头 = View 面板右缘(内容宽 204)：选中框(RightMargin=5,TopMargin=6→X=185,Y=6)；
     ///   面板左缘：编号(LeftMargin=6,TopMargin=6→X=6)、标签列(X=9)
     ///   标签列左缘 X=9 与设置按钮右缘 195 关于面板中线（204/2=102）对称：
     ///   左留白 9 = 右留白 204-195=9，面板内内容整体水平居中。编号 X=6 比标签列多探出 3px，
-    ///   给 11pt 标题留槽位（"NO.72"实测 56px，6+56=62 距下电块 67 留 5px）。改 PanelInnerWidth 时
+    ///   给 11pt 标题留槽位（"NO.72"实测 56px，6+56=62 距下电块 74 留 12px）。改 PanelInnerWidth 时
     ///   左右各留边距、中间元素按锚定自动联动，始终居中。
     /// 【调整指南】
     /// - 改面板宽度：改 PanelInnerWidth / PanelColumnWidth，右缘元素自动跟随，无需手改坐标。
@@ -191,6 +191,15 @@ namespace AgingTestSystem.Models
         /// </summary>
         public float SetButtonFontSize { get; set; } = 12f;
 
+        /// <summary>
+        /// 延时/烧屏时间值文字大小（磅；时间框 72 宽是整套布局里最紧的槽：
+        /// "00:00:00" 10pt 实测 71px，框内文本区 72-6=66px 装不下走省略号（"00:00:.."）；
+        /// 9pt 实测 56px（含最宽的"88:88:88"同宽），两边各留 5px；
+        /// 数字笔画简单，小 1pt 照样清楚。标签"延时时间"仍是正文 10pt，只动值。
+        /// 跟 zoom 等比缩放，下限同 MinFontSize。
+        /// </summary>
+        public float TimeValueFontSize { get; set; } = 9f;
+
         /// <summary>设备编号标题是否加粗</summary>
         public bool TitleFontBold { get; set; } = true;
 
@@ -213,17 +222,17 @@ namespace AgingTestSystem.Models
         // 右侧留白太多），故 X 全部还原为 V1.58.9 布局，改为缩小面板宽度
         // （PanelInnerWidth 240→222、PanelColumnWidth 245→227）来减小右侧空隙。
 
-        /// <summary>上电/下电状态块（V1.89 并入第一行：右缘贴真空关左缘 Gap=4，
-        /// RightToLeftAlignTo="VacuumOpen"，Y/H 取真空块同行等高；
-        /// X=125-4-54=67；宽 56→54（"真空开"10pt 实测 51px，54 宽左右各留 1~2px，居中不顶边）；
-        /// 高 20→18，与真空块同行 4~22）</summary>
-        public ElementRect RcPower { get; set; } = new ElementRect { X = 67, Y = 4, Width = 54, Height = 18, RightToLeftAlignTo = "VacuumOpen", RightToLeftGap = 4, VerticalAlignTo = "VacuumOpen" };
+        /// <summary>上电/下电状态块（并入第一行：左缘对齐 SN 框 LeftAlignTo="SNValue"（X=74，
+        /// 与下方值框列左缘对齐）＋右缘贴真空关左缘 Gap=4（RightToLeftAlignTo="VacuumOpen"），
+        /// 宽由两端推导（127-74-4=49）；Y/H 取真空块同行等高。
+        /// "上电/下电"10pt 实测 37px，49 宽左右各留 6px；真空块 54 宽不动（"真空开"实测 51px 已到底）。</summary>
+        public ElementRect RcPower { get; set; } = new ElementRect { X = 74, Y = 4, Width = 49, Height = 18, LeftAlignTo = "SNValue", RightToLeftAlignTo = "VacuumOpen", RightToLeftGap = 4, VerticalAlignTo = "VacuumOpen" };
 
-        /// <summary>真空开/关状态块（V1.89 并入第一行当上链基准：右缘贴选中框左缘 Gap=4，
-        /// RightToLeftAlignTo="SelectBox"（原来右缘对齐设置按钮，选中框并入同行后让位），
-        /// X=183-4-54=125；Y 取 TopMargin=4 固定顶区，54×18；
-        /// 下电块 Y/H 对齐它、压力框 Y 吊它下方（4+18+4=26）。）</summary>
-        public ElementRect RcVacuumOpen { get; set; } = new ElementRect { X = 125, Y = 4, Width = 54, Height = 18, RightToLeftAlignTo = "SelectBox", RightToLeftGap = 4, TopMargin = 4 };
+        /// <summary>真空开/关状态块（并入第一行当上链基准：右缘贴选中框左缘 Gap=4，
+        /// RightToLeftAlignTo="SelectBox"，X=185-4-54=127；Y 取 TopMargin=4 固定顶区，54×18；
+        /// 下电块 Y/H 对齐它、压力框 Y 吊它下方（4+18+4=26）。宽 54 不动："真空开"10pt 实测 51px，
+        /// 左右各留 1~2px 已是下限。）</summary>
+        public ElementRect RcVacuumOpen { get; set; } = new ElementRect { X = 127, Y = 4, Width = 54, Height = 18, RightToLeftAlignTo = "SelectBox", RightToLeftGap = 4, TopMargin = 4 };
 
         /// <summary>压力值框（V1.91 标签恢复"真空压力"四字：标签列 56→65，
         /// 左缘对齐 SN 框 LeftAlignTo="SNValue"（X=74）、右缘对齐设置按钮
@@ -262,7 +271,7 @@ namespace AgingTestSystem.Models
 
         /// <summary>延时时间值框（左缘锚定 SN 框 LeftAlignTo="SNValue"（X=74）；
         /// 垂直居中于设置按钮 VerticalCenterAlignTo="SetButton"。
-        /// 宽 72（"00:00:00"10pt 实测 71px，左内边距 6 另算，实测装得下）、高 16、
+        /// 宽 72（框内值走 9pt 时间字："00:00:00"实测 56px，文本区 72-6=66 装得下；10pt 要 71px 会截断）、高 16、
         /// CenterOffsetY=-9：Y=85+(36-16)/2-9=86，即框中心 94 位于按钮中心 103
         /// 上方 9px，与烧屏框精确对称（高差为偶数，无截断误差）。右缘 146 距按钮左缘 149 留 3px）</summary>
         public ElementRect RcDelayTimeValue { get; set; } = new ElementRect { X = 74, Y = 86, Width = 72, Height = 16, LeftAlignTo = "SNValue", VerticalCenterAlignTo = "SetButton", CenterOffsetY = -9 };
@@ -281,15 +290,15 @@ namespace AgingTestSystem.Models
         /// 是"垂直链"的链头：面板高改变时按钮自动贴底跟随；改面板宽时按右留白 9 自动联动）</summary>
         public ElementRect RcSetButton { get; set; } = new ElementRect { X = 149, Y = 85, Width = 46, Height = 36, RightMargin = 9, BottomMargin = 7 };
 
-        /// <summary>右上选中指示框（V1.89 并入第一行与编号/上下电/真空同行：
-        /// 右上角锚定 RightMargin=5 + TopMargin=5 → X=204-5-16=183，Y=5，16×16
-        /// （18→16：第一行高 18，框 16 上下各留 1px；物理边长反而 9.5px→11.3px，
-        /// 因缩放比 0.526→0.703 更大更好点）。
+        /// <summary>右上选中指示框（并入第一行与编号/上下电/真空同行：
+        /// 右上角锚定 RightMargin=5 + TopMargin=6 → X=204-5-14=185，Y=6，14×14
+        /// （16→14：第一行高 18，框 14 上下各留 2px，居中不顶边；点框/点空白都能翻选，
+        /// 框小一点不影响操作）。
         /// 注意：选中框属"右上角元素"，不参与内容居中平移，保持右缘距面板右缘 5px。
         /// 绘制恒正方形：边长取本矩形缩放后的较小边（跟面板尺寸走，见
         /// WorkstationGridView.SelectBoxSide），位置仍走 RightMargin/TopMargin；
         /// 命中与绘制同源（GetSelectBoxLocalRect），改锚定不漂移。</summary>
-        public ElementRect RcSelectBox { get; set; } = new ElementRect { X = 183, Y = 5, Width = 16, Height = 16, RightMargin = 5, TopMargin = 5 };
+        public ElementRect RcSelectBox { get; set; } = new ElementRect { X = 185, Y = 6, Width = 14, Height = 14, RightMargin = 5, TopMargin = 6 };
 
         /// <summary>设备编号文字位置（V1.89 并入第一行：LeftMargin=6 + TopMargin=6 → X=6、Y=6，
         /// 与下电/真空/选中框同行；原来独占一行（9,4）。左探 3px 给 11pt 标题留槽
@@ -463,7 +472,7 @@ namespace AgingTestSystem.Models
         /// 下链（面板底→上，面板增高时整体下移）：设置按钮（BottomMargin，有效高）→ 配方（贴设置按钮）
         /// 上链（顶部→下，面板增高时不动）：选中框（右上固定）→ 真空关（右缘贴选中框+Y 顶区不动）
         /// → SN（X 右缘跟随先解，Y 按电流缺省先解；电流解完后再终解一次 Y，防手改间隙）
-        /// → 下电（右缘贴真空关，Y/H 对齐真空块，同行等高）
+        /// → 下电（左缘对齐 SN＋右缘贴真空关，宽由两端推导；Y/H 对齐真空块，同行等高）
         /// → 压力框（X 左缘 SN/右缘设置按钮，Y 吊真空块）
         /// → 电流行（吊压力框）→ SN 终解 → 延时两行（居中设置按钮）。
         /// 两链在"SN→配方"之间交接：缺省高度下 SN 下缘距配方上缘 3px，
@@ -482,8 +491,9 @@ namespace AgingTestSystem.Models
             // ③ SN：X 右缘跟随设置按钮（必须在压力框/电流行之前——两者左缘都读 SN.X）；
             //    Y 按电流缺省值先解，终解在⑦。
             RcSNValue = AlignSelf(RcSNValue);
-            // ④ 下电：右缘贴真空关（RightToLeft）+ Y/H 对齐真空块（VerticalAlignTo，同行等高）；
-            //    真空块上面已定，与编号/选中框同行（Y=4）。
+            // ④ 下电：左缘对齐 SN（LeftAlignTo）+ 右缘贴真空关（RightToLeft，Gap=4，宽两端推导）
+            //    + Y/H 对齐真空块（VerticalAlignTo，同行等高）；
+            //    SN.X（③）与真空块（②）上面已定，与编号/选中框同行（Y=4）。
             RcPower = AlignSelf(RcPower);
             // ⑤ 依赖 SN/真空块：压力框左缘对齐 SN + 右缘对齐设置按钮 + Y 吊真空块下方（Y=26，见类头锚定链）
             RcPressureValue = AlignSelf(RcPressureValue);

@@ -42,7 +42,7 @@ New-Item -ItemType Directory -Path $runDir -Force | Out-Null
 Copy-Item -Path (Join-Path $bin "*") -Destination $runDir -Force
 
 # remove runtime json so harness starts from a clean state every time
-foreach ($f in @("Users.json", "Recipes.json", "PanelLayout.json", "HomeLayout.json",
+foreach ($f in @("Users.json", "Recipes.json",
                  "RememberedLogin.json", "StationSettings.json")) {
     $p = Join-Path $runDir $f
     if (Test-Path $p) { Remove-Item -LiteralPath $p -Force }

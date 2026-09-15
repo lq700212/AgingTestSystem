@@ -49,10 +49,9 @@ $Map = @(
     @{ Pat = @("*ChangePasswordForm*", "*LoginForm*", "*UserManagementForm*"); Mods = @("UserManager") },
     @{ Pat = @("*UnloadJudgeForm*");                Mods = @("PolicyV167", "DeviceManagerPolicy", "UiFinalizerV172_14", "DesignerStabilityV172_16") },
     @{ Pat = @("*ProjectSwitchForm*");              Mods = @("PolicyV167") },
-    @{ Pat = @("*HomeLayoutEditorForm*");           Mods = @("HomeLayoutConfig", "DesignerStabilityV172_16") },
     @{ Pat = @("*CommunicationTestForm*", "*FanTestForm*", "*IoRemapVisualForm*"); Mods = @("ScannerParse", "ModbusConvert", "FanParse", "IoOutputChannelRemap", "SettingsValidate", "UiFinalizerV172_14", "DesignerStabilityV172_16") },
     @{ Pat = @("*ProcessPolicyForm*", "*PolicyGraph*"); Mods = @("ProcessPolicyV170", "PolicyV167", "PolicyNodeComboV1851", "UiFinalizerV172_14", "DesignerStabilityV172_16") },
-    @{ Pat = @("*MainForm*");                       Mods = @("UiPureHelpers", "UiStyleV172_1", "ThemeManager", "SettingsValidate", "UiFinalizerV172_14", "DesignerStabilityV172_16") },
+    @{ Pat = @("*MainForm*");                       Mods = @("HomeLayoutConfig", "UiPureHelpers", "UiStyleV172_1", "ThemeManager", "SettingsValidate", "UiFinalizerV172_14", "DesignerStabilityV172_16") },
     @{ Pat = @("*WorkstationGridView*");            Mods = @("PanelLayoutConfig", "UiPureHelpers") },
     @{ Pat = @("*RuleListEditorPopup*");            Mods = @("RuleExprV169", "SettingsValidate", "PowerReportV174") },
     @{ Pat = @("*IoMappingEditorPopup*", "*IpListEditorPopup*", "*ReportColumnsEditorPopup*", "*DisplayModesEditorPopup*", "*DataGridViewNumericUpDownCell*", "*IoRemapGraphControl*"); Mods = @("SettingsValidate", "IoOutputChannelRemap", "PowerReportV174", "UiFinalizerV172_14") },
@@ -93,7 +92,6 @@ $Map = @(
     @{ Pat = @("*RecipeConfig*");                   Mods = @("RecipeStorage", "ModelRoundtrip", "LegacyRecipeGuard", "UiPureHelpers", "DeviceManagerExtended") },
     @{ Pat = @("*StationInfo*");                    Mods = @("AgingBusinessModel", "ModelRoundtrip", "StationCache", "DeviceManagerExtended") },
     @{ Pat = @("*PanelLayoutConfig*");              Mods = @("PanelLayoutConfig", "UiPureHelpers") },
-    @{ Pat = @("*HomeLayoutConfig*");               Mods = @("HomeLayoutConfig", "DesignerStabilityV172_16") },
     @{ Pat = @("*TestSession*");                    Mods = @("TestSessionStore", "DeviceManagerIntegration", "DeviceManagerPolicy") },
     @{ Pat = @("*UserAccount*", "*UserRole*");      Mods = @("UserManager", "ModelRoundtrip") }
     # 【V1.87.1】本行禁尾逗号：PS5.1 里 @() 最后一个哈希表后跟逗号即整本解析失败

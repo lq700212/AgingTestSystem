@@ -83,22 +83,20 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Controls/RuleListEditorPopup.cs` | 规则表编辑弹窗（V1.69：多行文本+实时校验+变量速查） |
 | `Views/ProcessPolicyForm.cs` / `Views/PolicyGraph.cs` | 工艺策略窗（V1.70 建图为"流程驾驶舱"，V1.73 改名：固定拓扑画布，节点显示真实配置+实时台数，点节点改配置走同一条保存路；滚轮缩放/中键平移/节点拖拽；入口=参数设置下拉） |
 | `Services/Mock*.cs` | Mock 实现（免接线演示） |
-| `Views/MainForm.cs` | 主窗体：无系统标题栏（V1.89 起 Sunny 标题藏掉，最小化/最大化/关闭自绘进顶栏最右，顶栏拖动/双击/边缘缩放走 WndProc）；工位区 8×9 一屏铺满；顶栏单行 30px（项目/权限/通讯＋4 按钮）；状态栏（"在线"全部离线标红）；权限控制、扫码事件、操作区按钮；深色切换收进"关于"下拉，仅 dev 可见 |
-| `Views/WorkstationGridView.cs` | 工位网格（自绘大画布，V1.51）：1 个 UserControl 画全部面板 + 行全选列（V1.88.28 起竖排大字：字号＝正文×`RowSelectFontScale`，紧凑一竖块居中；V1.90 正文 10pt/标题 11pt/设置按钮独立 12pt 大字＋深绿底），滚动零撕裂；文字绝对坐标绘制无模糊；布局纯代码缺省（V1.91 起删掉 PanelLayout.json 文件自定义，改布局改代码重编译）；坐标命中实现单击选中/设置按钮/选中框/行全选/悬停提示（V1.88.14 起长按删除，点框或点空白即切换）；V1.88.24 起只留双向铺满一屏（FitWidth/FitMode/拖拽滚动全删；V1.91 面板 204×128，标题/选中框并入第一行与上下电/真空同行，标签列 65 装四字长标签、值列 121、按钮 46×36；选中框恒正方形跟面板走；zoom 并进 ScaledX/ScaledY + 字体取窄边下限 4pt（V1.88.21：1280×1024小屏跟随缩小不挤叠）+ 正文加粗（V1.88.25 小字清楚）；V1.60 起 SetDarkMode 跟随全局主题（语义状态色不动） |
-| `Models/PanelLayoutConfig.cs` | 工位面板布局配置模型（V1.51）：面板网格尺寸/面板内各元素坐标/字体/颜色（"R,G,B"）/按钮与提示文字；`LoadOrDefault` 文件缺失或损坏回退内置默认；V1.58.13~1.58.19 起全部元素改为"锚定"解析（右缘/上缘/下缘/对齐/垂直居中，改面板宽高自动联动），字段全表见类头注释 |
+| `Views/MainForm.cs` | 主窗体：无系统标题栏（V1.89 起 Sunny 标题藏掉，最小化/最大化/关闭自绘进顶栏最右，顶栏拖动/双击/边缘缩放走 WndProc）；工位区 8×9 一屏铺满；顶栏单行 30px（项目/权限/通讯＋4 按钮）；状态栏（"在线"全部离线标红）；权限控制、扫码事件、操作区按钮；深色切换收进"关于"下拉，仅 dev 可见；主界面布局纯代码固定（顶栏/状态栏 30，右侧按窗口 23.4% 比例，分隔条锁死不可拖） |
+| `Views/WorkstationGridView.cs` | 工位网格（自绘大画布，V1.51）：1 个 UserControl 画全部面板 + 行全选列（V1.88.28 起竖排大字：字号＝正文×`RowSelectFontScale`，紧凑一竖块居中；V1.90 正文 10pt/标题 11pt/设置按钮独立 12pt 大字＋深绿底），滚动零撕裂；文字绝对坐标绘制无模糊；布局纯代码缺省（V1.91 起删掉 PanelLayout.json 文件自定义，改布局改代码重编译）；坐标命中实现单击选中/设置按钮/选中框/行全选/悬停提示（V1.88.14 起长按删除，点框或点空白即切换）；V1.88.24 起只留双向铺满一屏（FitWidth/FitMode/拖拽滚动全删；V1.91 面板 204×128，标题/选中框并入第一行与上下电/真空同行，标签列 65 装四字长标签、值列 121、按钮 46×36；V1.92 下电 49×18 左缘对齐值框列、选中框 16→14；选中框恒正方形跟面板走；zoom 并进 ScaledX/ScaledY + 字体取窄边下限 4pt（V1.88.21：1280×1024小屏跟随缩小不挤叠）+ 正文加粗（V1.88.25 小字清楚）；V1.60 起 SetDarkMode 跟随全局主题（语义状态色不动） |
+| `Models/PanelLayoutConfig.cs` | 工位面板布局配置模型（V1.51）：面板网格尺寸/面板内各元素坐标/字体/颜色（"R,G,B"）/按钮与提示文字；纯代码缺省（V1.91 起删掉 PanelLayout.json 文件自定义，改布局改代码重编译）；V1.58.13~1.58.19 起全部元素改为"锚定"解析（右缘/上缘/下缘/对齐/垂直居中，改面板宽高自动联动），字段全表见类头注释 |
 | `Dialogs/CommunicationTestForm.cs` | 通讯测试窗体（IO 耦合器 DO 输出测试，负压阀/载台上电两页 9×8 灯按钮 + V1.80 预留点位页（预留 DI 只读灯 + 预留 DO 可点灯，点位来自 IoMapBuilder）+ 一键遍历 + V1.81 通道右键端口映射（可视化连线页，保存走设置表同一条路即时生效）） |
 | `Dialogs/FanTestForm.cs` | 送风机测试窗体（定值启停 + 温湿度显示） |
 | `Dialogs/SettingsForm.cs` | 系统设置（管理员，按分类编辑 App.config 全部配置项 + V1.67“工艺策略”分类（策略存项目 Policy.json）；写回 exe.config/Policy.json 保存即生效，连接参数自动重连；仅设备数量/布局/模拟开关等结构型配置重启生效；说明悬停 tooltip 超 40 字换行） |
-| `Dialogs/HomeLayoutEditorForm.cs` | 主页区域调整编辑器（V1.58，管理员）：自绘预览 + 拖动两条边缘实时改右侧区/状态栏尺寸（V1.88.28 起顶栏锁死 30：输入行与拖动边已删），保存写 `HomeLayout.json` 即生效，无需重编译 |
-| `Models/HomeLayoutConfig.cs` | 主页布局配置模型（V1.58）：顶栏锁死 30（V1.88.28，不可调，老值加载归位）/右侧区/状态栏两个尺寸 + Range 约束，`LoadOrDefault` 缺文件或损坏回退内置默认；MainForm 启动与保存后据此应用布局 |
 | `Dialogs/StationSettingsForm.cs` | 工位设置（SN/配方/延时时间/烧屏时间/极限温度/负压阈值/显示模式 写入 StationInfo，V1.66 加后两项；配方名 V1.88.13 起下拉单选禁手输、库中已无则保存拦停；两时间三 NumericUpDown 冒号分隔，V1.28；保存=应用+缓存+存配方、加入对列=应用+存配方、下电=关闭载台上电） |
 | `Dialogs/RecipeManagerForm.cs` | 配方管理窗口（左侧列表可滚动 + 右侧可编辑输入，延时时间/烧屏时间冒号分隔三 NumericUpDown，V1.28；V1.66 加负压阈值/显示模式；添加/更新/删除操作即自动落盘 Recipes.json，V1.27 起无"保存设置"按钮） |
 | `Dialogs/BatchRecipeForm.cs` | 批量设置配方窗口（配方名称/延时时间/烧屏时间/极限温度/负压阈值/显示模式，V1.66 加后两项；配方名 V1.88.13 起下拉单选禁手输；两时间均三 NumericUpDown 冒号分隔，V1.28 删"延时时间2"，两个时间都写入配方；加入队列=保存配方+应用到选中工位，无选中先保存配方并提示选择） |
 | `Dialogs/IdBindingForm.cs` / `InputLotForm.cs` | 录入批号 + 工位↔SN 绑定（扫码枪自动识别填充，生成 Excel） |
-| `Models/` | BarometerData / FanData(+FanRunState) / IoStatus / DeviceConfig / RecipeConfig / StationInfo / PanelLayoutConfig / HomeLayoutConfig / PolicyEnums（V1.67 工艺策略枚举） / 用户模型 |
-| `Services/ProjectProfile.cs` / `Services/ProjectPolicyStore.cs` | 项目档案（V1.67）：`Projects/<项目>/` 路径解析/迁移/切换（配方/工位设置/主页布局/策略跟项目，用户/快照/日志跟机器）；策略分流读写 Policy.json（PolicyKeys 唯一名单） |
+| `Models/` | BarometerData / FanData(+FanRunState) / IoStatus / DeviceConfig / RecipeConfig / StationInfo / PanelLayoutConfig / PolicyEnums（V1.67 工艺策略枚举） / 用户模型 |
+| `Services/ProjectProfile.cs` / `Services/ProjectPolicyStore.cs` | 项目档案（V1.67）：`Projects/<项目>/` 路径解析/迁移/切换（配方/工位设置/策略跟项目，用户/快照/日志跟机器；主页布局是纯代码固定值，不跟文件）；策略分流读写 Policy.json（PolicyKeys 唯一名单） |
 | `Dialogs/UnloadJudgeForm.cs` / `Dialogs/ProjectSwitchForm.cs` | 下料判定窗（V1.67，Q22 待判定配套）/ 项目切换窗（V1.67，仅管理员；V1.72.12 起 Designer 化，静态边框进 Designer.cs） |
-| `.opencode/skills/agingtest-regression/` | 项目最终测试验证技能：一键"构建→冒烟→1910 条回归断言"，用例源码 `tests/TestRunner.cs`，新测试用例一律沉淀于此（用法见其 SKILL.md） |
+| `.opencode/skills/agingtest-regression/` | 项目最终测试验证技能：一键"构建→冒烟→1918 条回归断言"，用例源码 `tests/TestRunner.cs`，新测试用例一律沉淀于此（用法见其 SKILL.md） |
 
 > WinForms 视图均拆 `.cs` + `.Designer.cs` 两个 partial；**所有 .cs 必须 UTF-8 with BOM 编码**（否则设计器报"无法设计基类 System.Void"）。
 
