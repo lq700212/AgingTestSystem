@@ -12,18 +12,15 @@ namespace AgingTestSystem.Services
 {
     /// <summary>
     /// 扫码枪服务（真实扫码枪接入）
-    ///
     /// 【功能说明】
     /// 参考 SerialScannerTest Demo（Honeywell Xenon 1902 扫码枪串口测试）实现真实扫码枪逻辑：
     /// - 自动识别扫码枪串口（WMI 查询设备名称包含关键词的 COM 口）
     /// - 打开串口并监听数据，把收到的串口数据按行解析成一条条码
     /// - 通过事件 OnBarcodeScanned 通知上层业务（写日志 / ID绑定SN自动填充等）
     /// - 断线/未插入时定时重连，现场不用每次手动重开
-    ///
     /// 【通讯参数】（与 SerialScannerTest Demo 实测一致）
     /// - 波特率 115200、数据位 8、停止位 1、校验 None、ASCII 文本
     /// - 扫码枪输出格式：条码内容 + 回车/换行 结尾（一行一条码）
-    ///
     /// 【线程安全说明】
     /// SerialPort.DataReceived 在后台线程触发，这里用 SynchronizationContext
     /// 把扫码事件/状态事件封送到创建本服务的线程（通常就是 UI 线程），
@@ -140,7 +137,7 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 周期探测频率：每 N 次心跳（3 秒/次）做一次"关闭-重搜-重开"（约 N×3 秒）。
-        /// 【V1.16.6 断连检测的兜底保证】WMI/注册表在应用还握着打开句柄时会被驱动残留
+        /// WMI/注册表在应用还握着打开句柄时会被驱动残留
         /// 骗过（鬼设备）；只有关掉句柄再搜才绝对可靠。正在收数据时自动延后探测。
         /// </summary>
         private const int CloseRescanEveryTicks = 4;   // 约 12 秒
@@ -150,21 +147,21 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 隐藏消息窗口（接收 WM_DEVICECHANGE 系统广播）
-        /// 【V1.16.4 新增】扫码枪被拔出时 Windows 会广播"设备移除完成"消息，
+        /// 扫码枪被拔出时 Windows 会广播"设备移除完成"消息，
         /// 收到后立即断开并重新识别，不依赖 WMI/注册表是否残留（见 HandleDeviceChangeMessage）。
         /// 在 UI 线程创建（ScannerService 在 UI 线程构造），消息处理也就在 UI 线程，线程安全。
         /// </summary>
         private DeviceChangeWindow _deviceChangeWindow;
 
         /// <summary>
-        /// 上一次连接状态（用于"连上/断开"边沿检测，【V1.16.2 新增】）
+        /// 上一次连接状态（用于"连上/断开"边沿检测，）
         /// 心跳机制下，只在上一次是"已连接"、本次变成"未连接"（或反向）时提示一次，
         /// 避免失败过程每 3 秒刷一条日志。
         /// </summary>
         private bool _wasConnected;
 
         /// <summary>
-        /// 本次"未连接"是否已提示过（【V1.16.2 新增】）
+        /// 本次"未连接"是否已提示过（）
         /// true = 本次掉线已经提示过一次，后续后台静默重试不再刷日志；
         /// 连接成功后复位为 false，下次掉线允许再提示一次。
         /// </summary>
@@ -189,7 +186,7 @@ namespace AgingTestSystem.Services
             // 启动定时器：持续监听，未连接时自动重试
             _reconnectTimer.Start();
 
-            // 【V1.16.4】创建设备消息窗口：USB 插拔时 Windows 会广播 WM_DEVICECHANGE，
+            // 创建设备消息窗口：USB 插拔时 Windows 会广播 WM_DEVICECHANGE，
             // 收到"设备移除完成"立即断开重连、"设备插入"立即试连，不用等心跳周期。
             if (_deviceChangeWindow == null)
             {
@@ -220,21 +217,17 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 处理系统设备变化通知（【V1.16.4 新增】【V1.16.6 扩展覆盖更多消息类型】）
+        /// 处理系统设备变化通知（）
         /// 由 <see cref="DeviceChangeWindow"/> 在 UI 线程调用，参数是 WM_DEVICECHANGE 的 wParam。
-        ///
         /// 【为什么这能解决"拔掉识别不到"】
         /// 心跳轮询的 WMI / 注册表判定，在应用还握着串口打开句柄时会被驱动残留误导
         /// （PnP 节点、SERIALCOMM 条目不随物理拔出立即消失）。
         /// 而 WM_DEVICECHANGE 的 DBT_DEVICEREMOVEPENDING / REMOVECOMPLETE 是 Windows 在设备
         /// 移除（挂起/完成）时向所有顶层窗口广播的通知，与驱动残留无关。
-        ///
-        /// 【V1.16.6 为什么原来没检测到（只处理 REMOVECOMPLETE 不够）】
         /// 拔掉"正被应用占用"的 USB 串口时，很多驱动【只发 DBT_DEVICEREMOVEPENDING，
         /// 不发 DBT_DEVICEREMOVECOMPLETE】（移除一直处于挂起，直到句柄关闭才完成）。
         /// 所以这里把 PENDING 也当断连处理；DEVNODES_CHANGED（任何设备树变化都触发）
         /// 作为最泛的兜底，收到就刷新一次连接状态。
-        ///
         /// 【处理方式】
         /// - 移除挂起/完成：先 Disconnect 关闭句柄（不碰 COM，可立即执行；关闭后残留
         ///   的注册表/PnP 节点才真正清除），再 TryConnect 重新按关键词搜索：
@@ -242,8 +235,6 @@ namespace AgingTestSystem.Services
         ///   状态/日志由 TryConnect 的边沿逻辑负责，不会刷屏。
         /// - 设备插入：扫码枪没连上时立即试连一次，不用等心跳周期。
         /// - 设备树变化：延迟做一次"检查+重连"，由搜索决定扫码枪在不在。
-        ///
-        /// 【V1.16.5 关键修复：不能在消息里直接发 WMI 查询】
         /// WM_DEVICECHANGE 处理期间系统正处于"输入同步呼叫"中，此时发起任何传出
         /// COM 调用（WMI 的 ManagementObjectSearcher）会抛
         /// RPC_E_CANTCALLOUT_ININPUTSYNCCALL（托管调试助手 DisconnectedContext）。
@@ -288,7 +279,7 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 把动作推迟到当前消息（WM_DEVICECHANGE）处理完之后执行
-        /// 【V1.16.5 新增】见 <see cref="HandleDeviceChangeMessage"/>：
+        /// 见 <see cref="HandleDeviceChangeMessage"/>：
         /// 设备消息处理期间的 COM 上下文不允许传出呼叫，必须等消息返回、
         /// 回到正常消息泵后再发 WMI 查询。有 UI 同步上下文就用它 Post
         /// （下一轮消息泵执行，仍在本线程）；没有则直接执行。
@@ -306,8 +297,6 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 尝试连接扫码枪
         /// 内部方法：由 Start、重连定时器或 <see cref="TryReconnectNow"/> 调用
-        ///
-        /// 【V1.16.2 静默后台重连（心跳机制）】
         /// 不再"重试几次就放弃"，而是让重连定时器一直开着、每 3 秒在后台静默重试。
         /// 日志只记"边沿"：连上 / 断开 各提示一次；连续失败的中间过程不刷日志
         /// （解决"一直重试很吵"的痛点，又保留"设备插上后自动恢复"的能力）。
@@ -382,7 +371,7 @@ namespace AgingTestSystem.Services
                 // 复位"已提示未连接"标记：下次掉线允许再提示一次
                 _disconnectReported = false;
 
-                // 【V1.16.3】心跳调试日志：确认新代码在跑，并记录实际解析到的端口
+                // 心跳调试日志：确认新代码在跑，并记录实际解析到的端口
                 DebugLog($"连接成功: 端口={_currentPortName}，识别关键词='{_config.ScannerDeviceKeyword}'");
             }
             else
@@ -399,7 +388,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 断连边沿处理（【V1.16.2 新增】）
+        /// 断连边沿处理（）
         /// 由串口错误 / 数据接收异常调用：只在"原本已连接"变成"断开"时提示一次
         /// "哪个设备断了、什么原因"，并标记"已提示"，让后续静默重试不刷日志。
         /// </summary>
@@ -417,7 +406,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 按需重连（【V1.16.1 新增】【V1.16.2 简化】）
+        /// 按需重连（）
         /// 用户需要扫码时（如打开"录入批号 / ID绑定"窗口）调用本方法立即重连一次。
         /// 心跳机制下后台本来就会静默重试，这里只是确保重连定时器在跑并立刻试一次。
         /// </summary>
@@ -457,7 +446,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 从设备名称里提取 COM 口的正则（【V1.16.4 修正】）
+        /// 从设备名称里提取 COM 口的正则（）
         /// 例："Honeywell Xenon 1902 (COM10)" → "COM10"。
         /// 用 (?!\d) 防止 "COM10" 里的 "COM1" 被当成独立端口误匹配
         /// （老的字符串 Contains 写法在设备名含 COM10 时会同时误收 COM1）。
@@ -467,7 +456,6 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 通过 WMI 查询设备描述，自动定位包含关键词的 COM 端口
-        ///
         /// 【原理】（与 SerialScannerTest Demo 一致）
         /// 用 System.Management 查询 Win32_PnPEntity，筛选名称同时包含 "COM" 和
         /// 设备关键词（默认 "Xenon 1902"）的设备，再从名称里提取端口号。
@@ -484,7 +472,6 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 按设备关键词搜索匹配的串口名称列表（WMI 动态搜索）
         /// 连接建立与心跳断连判定共用这一套"动态搜索串口名"的逻辑。
-        ///
         /// 【返回值约定】（心跳判定依赖这个区分）
         /// - 返回 null：WMI 查询失败（权限不足/服务临时异常）——无法判定设备状态
         /// - 返回空列表：查询成功，但没有任何串口匹配设备关键词——设备已不在（被拔掉）
@@ -606,7 +593,7 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 重连定时器 Tick（UI 线程触发）
-        /// 【V1.16.3 心跳】先检查当前连接是否还"活着"
+        /// 先检查当前连接是否还"活着"
         /// （动态识别模式：按设备关键词重新搜索串口；固定端口模式：查系统串口列表），
         /// 如果掉线了再自动尝试重连。
         /// </summary>
@@ -620,8 +607,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 心跳检查：当前连接是否还存活（【V1.16.3 重写】）
-        ///
+        /// 心跳检查：当前连接是否还存活（）
         /// 【为什么原来的断连检测失效（V1.16.2 的双重判定不可靠）】
         /// 单纯拔掉 USB 虚拟串口时，SerialPort 的 ErrorReceived / DataReceived
         /// 事件在 Windows 上【不一定触发】。更关键的是下面两招在扫码枪上都不灵：
@@ -632,8 +618,6 @@ namespace AgingTestSystem.Services
         /// 结果：_isConnected 一直保持 true，状态栏永远"已连接"，
         /// 重连定时器里 TryConnect() 第一行 if(_isConnected) return 短路，
         /// 扫码枪拔掉后再插回去也永远恢复不了。
-        ///
-        /// 【V1.16.3 核心思路：和连接建立一样"动态搜索串口名"再确认一遍】
         /// 连接建立本来就是按设备关键词（默认 "Xenon 1902"）用 WMI 搜出来的；
         /// 心跳也重新跑一遍同样的搜索：设备被拔掉后，PnP 设备节点会从系统里消失，
         /// WMI 就再也搜不到该串口 → 判定断连。WMI 反映的是【物理设备是否真在】，
@@ -734,7 +718,7 @@ namespace AgingTestSystem.Services
                 }
             }
 
-            // ===== 【V1.16.6】周期"关闭-重搜-重开"探测（断连检测的兜底保证） =====
+            // ===== 周期"关闭-重搜-重开"探测（断连检测的兜底保证） =====
             // 上面的轻量检查在应用还握着打开句柄时会被驱动残留骗过（鬼设备）：
             // WMI / 系统串口列表都还显示端口在，实际上扫码枪已经被拔。
             // 唯一绝对可靠的验证是关掉句柄再搜——句柄一关，残留立刻释放，
@@ -764,15 +748,13 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 周期"关闭-重搜-重开"探测（【V1.16.6 新增】断连检测的兜底保证）
-        ///
+        /// 周期"关闭-重搜-重开"探测（断连检测的兜底保证）
         /// 【为什么需要它】
         /// WMI 重新搜索（心跳①）和系统串口列表（心跳②）都建立在"拔掉后残留会清除"
         /// 的假设上。但应用【还握着打开句柄】时，部分 USB 转串口驱动会让 PnP 节点和
         /// SERIALCOMM 条目一直残留（鬼设备），两路信号都误判"设备还在"，
         /// 心跳就永远判不出断连。而【关掉句柄】是唯一能把残留真正释放掉的操作——
         /// 句柄一关，再搜 WMI 就是绝对真实的物理状态。
-        ///
         /// 【做法】每 CloseRescanEveryTicks 次心跳（约 12 秒）：
         /// - Disconnect() 关闭句柄（释放残留）
         /// - TryConnect() 重新按关键词搜索：
@@ -821,7 +803,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 心跳调试日志（【V1.16.3 新增】）
+        /// 心跳调试日志（）
         /// ScannerDebugLog=true 时把端口搜索结果通过状态事件打到 LOG，
         /// 用于现场排查"扫码枪断连识别不到"：能直接看到心跳每个周期
         /// WMI 搜到什么、系统串口列表是什么、判定结果如何。
@@ -852,7 +834,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 隐藏消息窗口（【V1.16.4 新增】）
+        /// 隐藏消息窗口（）
         /// 一个不显示的顶层窗口，用来接收 Windows 广播的 WM_DEVICECHANGE 设备消息。
         /// - 在 UI 线程创建（ScannerService 在 UI 线程构造 → Start 也在 UI 线程），
         ///   所以 WndProc 也在 UI 线程执行，可直接调用 Disconnect/TryConnect，无跨线程问题。
@@ -945,7 +927,7 @@ namespace AgingTestSystem.Services
 
             Stop();
 
-            // 【V1.16.4】销毁隐藏消息窗口（和创建同线程，UI 线程）
+            // 销毁隐藏消息窗口（和创建同线程，UI 线程）
             if (_deviceChangeWindow != null)
             {
                 try { _deviceChangeWindow.DestroyHandle(); }

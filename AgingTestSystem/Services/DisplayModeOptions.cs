@@ -6,16 +6,13 @@ using AgingTestSystem.Models;
 namespace AgingTestSystem.Services
 {
     /// <summary>
-    /// 显示模式字典（【V1.74 新增】Q20 记录层可配：烧屏画面选项纯函数）。
-    ///
+    /// 显示模式字典（Q20 记录层可配：烧屏画面选项纯函数）。
     /// 【为什么是字典而不是自由文本】V1.66 起 DisplayMode 是自由文本框，
     /// 手滑写"白场 "（尾空格）/"白色"（别名）就会造出两条追溯口径，
     /// 后道按画面分组统计时对不上。字典把选项收敛到一份名单。
-    ///
-    /// 【V1.74】三窗输入框已换成下拉（UIComboBox + DropDownList，只能选字典，
+    /// 三窗输入框已换成下拉（UIComboBox + DropDownList，只能选字典，
     /// 手打进不来）；保存校验是第二道门（防老配方遗留值 + 代码回填绕过），
     /// 脏输入进不了配方文件。选项由各窗构造按字典代码填（R8a 禁 Designer 写 AddRange）。
-    ///
     /// 【PG 控制】本字典只管"记录层"（配方存什么、日志带什么、MES 报什么）；
     /// 上位机不控 PG 切画面（没 PG 协议）。画面分段/视频走二期。
     /// </summary>
@@ -112,7 +109,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 显示模式维度是否启用（【V1.75 新增】三窗显隐总开关，纯函数回归可单测）。
+        /// 显示模式维度是否启用（三窗显隐总开关，纯函数回归可单测）。
         /// false/空配置=隐藏（三窗不显示该行，配方存空串）；true=显示下拉+字典生效。
         /// </summary>
         public static bool ShouldShowDisplayMode(DeviceConfig config)
@@ -130,7 +127,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 下拉框数据源（含历史遗留值兜底，【V1.74】三窗下拉共用）。
+        /// 下拉框数据源（含历史遗留值兜底，三窗下拉共用）。
         /// 字典选项原序返回；遗留值（老配方文件里的字典外文本）追加在末尾，
         /// 保证回填可见、保存时由 ValidateInput 拦下整改——看得见才改得掉。
         /// 空/空白遗留值不追加（空=清空，合法状态）。
@@ -152,7 +149,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 校验录入值（【V1.74】三窗保存入口共用：空=允许（清空），字典内=存规范写法，
+        /// 校验录入值（三窗保存入口共用：空=允许（清空），字典内=存规范写法，
         /// 字典外=拦并报出全部选项——客户第一次填错即看到名单，不用来回问）。
         /// </summary>
         /// <param name="input">输入框原文</param>

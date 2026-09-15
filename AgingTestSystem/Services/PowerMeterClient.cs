@@ -6,14 +6,12 @@ using AgingTestSystem.Models;
 namespace AgingTestSystem.Services
 {
     /// <summary>
-    /// 载台电流表真实驱动桩（【V1.74 新增】Q2 通用骨架的真实端占位）。
-    ///
+    /// 载台电流表真实驱动桩（Q2 通用骨架的真实端占位）。
     /// 【为什么是个桩】电表还没选型（串口表还是网口表、什么协议、几个回路全未知），
     /// 没有协议写不出驱动。本桩的作用是"占住真实端的位置"，让 DeviceManager 的
     /// Mock/真实二选一接线现在就能写完、回归现在就能跑：
     /// - UseMockCommunication=true → MockPowerMeter（有数）；
     /// - UseMockCommunication=false → 本桩（连不上、读数全 NaN，但绝不抛异常拖垮采集）。
-    ///
     /// 【电表到货后怎么做】把本桩改成真驱动（参考 FanControllerClient 的写法）：
     /// Connect 里建连接、ReadAllCurrents 里按 deviceId 读电流填数组，
     /// 失败一路填 NaN（上层跳过，不断追溯链）。上层业务零改动。

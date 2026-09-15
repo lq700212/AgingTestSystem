@@ -6,11 +6,9 @@ namespace AgingTestSystem.Dialogs
 {
     /// <summary>
     /// 录入批号窗体（业务逻辑部分）
-    ///
     /// 【功能说明】
     /// 用于手动录入产品批号，点击主界面的"录入批号"按钮后弹出此窗口。
     /// 批号录入后可用于标识当前生产批次，便于后续追溯和数据分析。
-    ///
     /// 【界面布局】
     /// 参考用户提供的图片设计：
     /// ┌─────────────────────────────────────┐
@@ -20,19 +18,16 @@ namespace AgingTestSystem.Dialogs
     /// │                                     │
     /// │    [确定]           [取消]          │ ← 确定和取消按钮
     /// └─────────────────────────────────────┘
-    ///
     /// 【工作流程】
     /// 1. 用户点击主界面"录入批号"按钮，弹出此窗口
     /// 2. 用户在文本框中输入批号
     /// 3. 点击"确定"按钮或按回车键确认录入
     /// 4. 触发批号录入完成事件，主窗体可订阅此事件获取批号
     /// 5. 点击"取消"按钮关闭窗口，不做任何操作
-    ///
     /// 【输入校验规则】
     /// - 批号不能为空
     /// - 批号长度限制：最大100个字符（可根据实际需求调整）
     /// - 允许包含：数字、字母、下划线、中划线等常见批号字符
-    ///
     /// 【预留说明】
     /// 1. 当前批号仅通过事件传递给主窗体，未持久化存储
     /// 2. 后续可扩展：将批号写入数据库、关联生产记录等
@@ -48,7 +43,7 @@ namespace AgingTestSystem.Dialogs
         public event EventHandler<string> OnLotInputCompleted;
 
         /// <summary>
-        /// 【V1.16 新增】扫码枪服务引用
+        /// 扫码枪服务引用
         /// 由主窗体传入，继续传递给 ID绑定窗体（IdBindingForm），
         /// 使 ID 绑定界面打开时扫码结果能自动识别"工位号"（恰好2位数字）
         /// 和"产品SN"并填入对应输入框（V1.16 更新支持工位号扫码）。
@@ -57,7 +52,7 @@ namespace AgingTestSystem.Dialogs
         private readonly ScannerService _scanner;
 
         /// <summary>
-        /// 【V1.19.11 新增】设备管理器引用
+        /// 设备管理器引用
         /// 由主窗体传入，继续传递给 ID绑定窗体（IdBindingForm）。
         /// 【用途】ID 绑定保存时把"工位 → SN"写入设备管理器工位静态信息，
         /// 使工位面板的 SN 显示与绑定关联一致（扫码枪扫码或手动输入均可）。
@@ -122,7 +117,6 @@ namespace AgingTestSystem.Dialogs
         /// <summary>
         /// 执行确认逻辑（核心方法）
         /// 抽取为独立方法，避免重复代码
-        /// 
         /// 【业务流程】
         /// 1. 验证批号输入
         /// 2. 验证通过后弹出 ID绑定界面（IdBindingForm）
@@ -152,11 +146,11 @@ namespace AgingTestSystem.Dialogs
             }
 
             // 批号验证通过，弹出ID绑定界面
-            // 【V1.16】把扫码枪服务传进去：ID绑定窗体打开时，扫码结果自动识别工位号/SN 并填入输入框（V1.16 更新支持工位号扫码）
-            // 【V1.19.11】把设备管理器传进去：绑定保存时把"工位 → SN"写入工位静态信息，工位面板 SN 同步显示
+            // 把扫码枪服务传进去：ID绑定窗体打开时，扫码结果自动识别工位号/SN 并填入输入框（V1.16 更新支持工位号扫码）
+            // 把设备管理器传进去：绑定保存时把"工位 → SN"写入工位静态信息，工位面板 SN 同步显示
             using (var bindingForm = new IdBindingForm(lotNumber, _scanner, _deviceManager))
             {
-                // 【V1.60】子窗体打开前按当前主题着色
+                // 子窗体打开前按当前主题着色
                 AgingTestSystem.Services.ThemeManager.ApplyTo(bindingForm);
                 // 订阅ID绑定完成事件
                 bindingForm.OnBindingCompleted += (sender2, data) =>

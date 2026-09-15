@@ -88,7 +88,7 @@ agingtest-regression/
     └── ObfuscationAcceptance.cs ← 混淆验收跑器（behavior/dump 双模式，见一点六）
 ```
 
-## 三、测试覆盖范围（46 个模块，1903 断言）
+## 三、测试覆盖范围（46 个模块，1910 断言）
 
 | 模块 | 覆盖点 |
 | --- | --- |
@@ -118,7 +118,7 @@ agingtest-regression/
 | FanParse(V1.62) | 寄存器解析(/100 全字段)、不足 6 个、非法枚举透传、未连接约定、Connect(null) |
 | StationTime(V1.62) | 时分秒组合、25 小时不截断(V1.62 修复锁)、超 99 钳制、文本格式、Clamp |
 | HistoryCsv(V1.62) | CSV 解析边角、与 TestEventLogger 互逆 11 列（V1.76：SN/配方/结果结构化+报表格映射锁）、报表列设置按钮权限门与布局锁（V1.75：默认无权限/按钮五字/无重叠/不出右界/宽容五字/管理员有权限） |
-| UiPureHelpers(V1.62) | 批号去空格、配方查找(ignoreCase)+25h 不截断、工位温度读取(V1.63 数字框恒合法+回填钳制)、IP 合法、数字格钳制、网格命中/边界/四色、位值→通道、风机中文(V1.63 对齐主窗)、CH340 谓词/串口参数钳制(V1.63)、右侧宽度比例 ComputeRightPanelWidth(V1.65：0.234 常量/护栏/兜底/自定义优先 8 条)、配方窗负压/显示模式框回填(V1.66)、反射 as-cast 跟随控件换型（V1.71：TextBox→UITextBox 两处）、两窗tooltip+破空显隐纯函数（V1.73）、配方管理窗6项tooltip全覆盖+换行锁（V1.86.5）、参数入口无权限提示3条（V1.88：有权限放行/无权限含权限不够/指明去用户权限）、时间名统一（V1.88.12：两窗tooltip锁"对应工位面板延时时间/烧屏时间"+配方窗标签"延时时间：/烧屏时间："）、真空块三色（V1.88.12：ApplyData反射阀关灰/阀开到位绿/阀开未到位红+红绿异色+下电逻辑不变）、选中框常显签名锁（V1.88.12：DrawPanel去anySelected+旧调度已删+IsAnySelected门控保留）、单击点选（V1.88.14：长按整套删除IsAnySelected/ClearAllSelection/_longPressTimer/Tick+ToggleSelect无门槛翻转反射+按宽自适应ComputeFitZoom宽口径/zoom并进Scaled/字体下限6pt/AutoFit默认开）、延时0填0阀电同开tooltip锁（V1.88.14：三窗"同时开"）、双向精确铺满（V1.88.17：ComputeFitZoomBoth独立/非法回1,1/MinMax0.15/4/ScaledX/ScaledY/矩形双向/挂载双轴+铺满±1px/选中框正方形+命中同源/保Panel1宽640七条）、小屏字号（V1.88.21：MinFontSize6→4/1280真实zoom跟随缩小+标签时间装槽两条）、双模式大字（V1.88.22：ComputeFitZoom单轴捞回/默认FitWidth/双模式挂载+字号等比9条）、删滚动单路（V1.88.24：枚举/FitMode/单轴/MinMax/拖拽Tick/校正删除锁+挂载精确铺满/窄边4pt/面板加粗+顶栏分区字段/SetFontSizePt三锁）、顶栏列宽高度（V1.88.26：默认30/范围28/回退老文件30/量程28/钳-5→28/纯函数常规封顶非法三锁；V1.88.27：权限区Panel类型锁，与项目区同构Dock居中；V1.88.28：行全选竖排九锁——倍率缺省2/9→18加粗/单字格/间隙/整块居中/块底/零字/下限/重建18pt/度量缓存；V1.88.29：标题12/设置12缺省/三绿深绿值/设置字体四锁/标题槽位/重建12pt） |
+| UiPureHelpers(V1.62) | 批号去空格、配方查找(ignoreCase)+25h 不截断、工位温度读取(V1.63 数字框恒合法+回填钳制)、IP 合法、数字格钳制、网格命中/边界/四色、位值→通道、风机中文(V1.63 对齐主窗)、CH340 谓词/串口参数钳制(V1.63)、右侧宽度比例 ComputeRightPanelWidth(V1.65：0.234 常量/护栏/兜底/自定义优先 8 条)、配方窗负压/显示模式框回填(V1.66)、反射 as-cast 跟随控件换型（V1.71：TextBox→UITextBox 两处）、两窗tooltip+破空显隐纯函数（V1.73）、配方管理窗6项tooltip全覆盖+换行锁（V1.86.5）、参数入口无权限提示3条（V1.88：有权限放行/无权限含权限不够/指明去用户权限）、时间名统一（V1.88.12：两窗tooltip锁"对应工位面板延时时间/烧屏时间"+配方窗标签"延时时间：/烧屏时间："）、真空块三色（V1.88.12：ApplyData反射阀关灰/阀开到位绿/阀开未到位红+红绿异色+下电逻辑不变）、选中框常显签名锁（V1.88.12：DrawPanel去anySelected+旧调度已删+IsAnySelected门控保留）、单击点选（V1.88.14：长按整套删除IsAnySelected/ClearAllSelection/_longPressTimer/Tick+ToggleSelect无门槛翻转反射+按宽自适应ComputeFitZoom宽口径/zoom并进Scaled/字体下限6pt/AutoFit默认开）、延时0填0阀电同开tooltip锁（V1.88.14：三窗"同时开"）、双向精确铺满（V1.88.17：ComputeFitZoomBoth独立/非法回1,1/MinMax0.15/4/ScaledX/ScaledY/矩形双向/挂载双轴+铺满±1px/选中框正方形+命中同源/保Panel1宽640七条）、小屏字号（V1.88.21：MinFontSize6→4/1280真实zoom跟随缩小+标签时间装槽两条）、双模式大字（V1.88.22：ComputeFitZoom单轴捞回/默认FitWidth/双模式挂载+字号等比9条）、删滚动单路（V1.88.24：枚举/FitMode/单轴/MinMax/拖拽Tick/校正删除锁+挂载精确铺满/窄边4pt/面板加粗+顶栏分区字段/SetFontSizePt三锁）、顶栏列宽高度（V1.88.26：默认30/范围28/回退老文件30/量程28/钳-5→28/纯函数常规封顶非法三锁；V1.88.27：权限区Panel类型锁，与项目区同构Dock居中；V1.88.28：行全选竖排九锁——倍率缺省2/9→18加粗/单字格/间隙/整块居中/块底/零字/下限/重建18pt/度量缓存；V1.88.29：标题12/设置12缺省/三绿深绿值/设置字体四锁/标题槽位/重建12pt；V1.89：全选列缺省48/内容宽1720/挂载zoomX期望同步/去标题收益锁（976×845→zoomY=845/1638/正文≈4.64pt)/窗口三按钮穿透判定与明暗配色/版本弹窗跟水印常量） |
 | **DeviceManagerExtended(V1.62)** | 状态口/在线数/启动错误、批量 SN、配方名负压联动、副本隔离、非法电池、连接与间隔热生效、批量阈值+定时器恢复、反方向报警端到端、全局时长回退、定格隔离、清理回全局、不限时、2s 延时门、空闲容错、自愈计数、报警驻留、边沿单次(CSV 计数，V1.76 列序4/5)、快照全字段+双台+批号、急停、停止再启动、风机生命周期(MockFan，V1.88.14 追加 E26b：两台到时完成→风机停，省电回归锁)、超长数组与错 id 防火墙、脏快照恢复、显示模式下发/保持/清空+叠加采集可见+GetTestingDeviceIds(V1.66) |
 | PolicyV167(V1.67) | BuildStartBlockText 阻断文案、MapAlarmResult 责任映射、ComputeResumeDuration 剩余/跑超/回拨、ValidatePolicyCombination 矛盾锁、ParseValue 大小写/非法、PolicyKeys↔DeviceConfig↔下拉选项三处同步锁、DeviceConfig 缺省=现状锁（含身份口径RecordTime）、身份口径解析+ResolveEventIdentity五态（现值/定格/无快照回退/半快照/null转空，V1.76）、快照新字段缺省锁、ValidateValue 策略分支+点位、NormalizePolicyValue 脏值兜底、WrapTooltip 40字换行、ProjectProfile 非法名/重复/切换拒绝/路径分流、Policy.json 存取往返、热更往返12条(V1.72.10：切A/切B/切回指针路径缓存跟人走+finally恢复)、Default自愈3条(正主在删+补拷+重名不覆盖/正主不在整体改名)、DeviceConfig.CopyFrom引用不变全量拷脱钩、ClearProjectScopedState清指派+Pause/Resume不擅自启动、DeleteProfile删不存在空名被拒切入当前禁删切回删除列表干净指针不变(V1.72.11)、ApplyLoadedRecipes空null清空替换引用不变(V1.72.12)、ValidatePolicyCombination无阀分支+布尔键15项(V1.73)；V1.84 补齐：Delete/Switch 路径穿越拒绝+野目录不算项目（空backup过滤）、IsValidProfileName名单、原子写（临时文件无残留+内容完整）、密码迭代 DoS 防护（巨量超界判失败）；V1.84.1：策略缓存手改即生效（三元指纹）+破空阀碰撞纯函数5判（阀区/电区拦/预留/输入区放行/0不拦）+原子二次覆盖走Replace |
 | **DeviceManagerPolicy(V1.67)** | 治具责任端到端(装夹异常+CSV)、待判定完成+下料录入(收/跳过/null)+CSV明细、失压保持(不停机+边沿单条不刷屏)、续跑(快照阶段/上电时刻+剩余60s+重抽真空)、泄压(破空阀开+CSV+复位关阀不残留) |
@@ -440,3 +440,12 @@ UI 弹窗分支（如配方同名覆盖确认框，靠界面手工测试）、�
     不要追着改产品/用例，重跑确认即可。若连续两次红才按真故障查）。
     **教训：#38 反向验证铁律同样管用例加固——一次绿可能是等出来的，
     定向爆破红一次才算数。**
+49. **改布局缺省必须删 run 隔离外的旧 json，否则新缺省被覆盖假绿/假红**
+    （V1.89：全选列 64→48 后 bin\Debug\PanelLayout.json 仍是 64，主程序与 harness
+    全读旧值；run_unit_tests 隔离目录会删六个运行时 json 所以用例走新缺省——同一改动
+    两边行为分叉极易误判）。修法：验证前删 bin 旧文件让程序重导（项目未上线不迁移）；
+    现场升级同样删一次程序目录旧文件。**教训：缺省值一改，先问"谁会覆盖它"。**
+50. **版本号只许一个出处**（V1.89：版本说明弹窗写死 V1.58.4 长期没人改，任务栏标题
+    另写死 V1.16——两处各说各话）。修法：两处都取 `BuildWatermark.ReleaseLabel`，
+    用例断言 `Contains(ReleaseLabel)` 而非字面量，改版只改常量＋CHANGELOG。
+    **教训：字面版本号出现第二次时就收敛到常量。**

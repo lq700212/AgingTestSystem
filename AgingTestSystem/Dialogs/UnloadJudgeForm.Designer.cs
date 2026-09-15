@@ -4,7 +4,7 @@ using System.Windows.Forms;
 namespace AgingTestSystem.Dialogs
 {
     /// <summary>
-    /// 下料判定窗体 — 设计器部分（【V1.72.12 新增】纯代码拆分：静态边框进 Designer）。
+    /// 下料判定窗体 — 设计器部分（纯代码拆分：静态边框进 Designer）。
     /// 这里只装"静态边框"：窗体属性 + 范围标签/单选/输入/下拉/两按钮/结果标签。
     /// 以下两样仍在 UnloadJudgeForm.cs 里用代码做：
     /// ①_lblScope 初值（BuildScopeText 要吃构造传进的 deviceIds/deviceManager 真参数，
@@ -12,7 +12,6 @@ namespace AgingTestSystem.Dialogs
     /// ②判定执行逻辑（BtnExecute_Click 调 DeviceManager 落盘）。
     /// 【布局】绝对定位（UIForm 自绘蓝标题占 35px，内容从 y=47 起排）；
     /// MinimumSize=ClientSize 锁缩小（V1.71 绝对布局窗统一做法）。
-    /// 【V1.72.16 设计器可预览二次修复（上次没修住，教训）】
     /// 上次只补了无参构造 + 标签具名，漏了两个设计器认不出的东西，预览照样坏：
     /// ①_cmbDisposition.Items.AddRange(Dispositions) 引了另一个 partial 里的静态字段，
     /// 设计器的 CodeDom 反序列化在实例上找不到静态成员，直接加载失败。
@@ -154,7 +153,6 @@ namespace AgingTestSystem.Dialogs
             this._cmbDisposition.DropDownStyle = Sunny.UI.UIDropDownStyle.DropDownList;
             // 处置选项不在这里填：Items.AddRange(Dispositions) 引静态字段，设计器加载失败，
             // 改由构造在 InitializeComponent 后用代码填（运行时 4 项，预览空下拉，不影响）。
-            //
             // _btnExecute（Sunny 默认蓝，主操作）
             //
             this._btnExecute.Name = "_btnExecute";

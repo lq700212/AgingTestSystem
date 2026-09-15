@@ -13,11 +13,9 @@ namespace AgingTestSystem.Dialogs
 {
     /// <summary>
     /// 通讯测试窗体（IO 耦合器 DO 输出通道测试）—— SunnyUI 界面版
-    ///
     /// 【用途】
     ///   现场调试/开发阶段验证 GX-CL140 耦合器 DO 输出接线。通过主窗体"关于"下拉菜单的
     ///   "通讯测试"进入（仅技术员及以上权限可见，V1.20）。
-    ///
     /// 【界面】（整体使用 SunnyUI 控件，风格与主程序/系统设置一致，V1.21 重构）
     /// ┌──────────────────────────────────────────────────┐
     /// │ [●]未连接         通讯测试（UIForm 标题栏）        │ ← 蓝色标题栏，ShowTitle
@@ -46,7 +44,6 @@ namespace AgingTestSystem.Dialogs
     /// │ txtLog（日志框，只读多行）                        │
     /// └──────────────────────────────────────────────────┘
     /// 圆形灯按钮：每个通道一个自绘 CircleButton，点击控制该路 ON/OFF。
-    ///
     /// 【预留点位页设计（V1.80 新增）】
     ///   - 点位表不手写：构造时按 IoMapBuilder.Build(_config) 取 Function=Unknown 的点，
     ///     随 TotalInputs/TotalOutputs 改配置自适应（默认预留 DI=73~80/X110~X117 8 路，
@@ -56,7 +53,6 @@ namespace AgingTestSystem.Dialogs
     ///   - DO 可写：一律读-改-写。0x2009 同时是备用映射目标（见问题确认清单#106），
     ///     映射启用时自动保位（ComputePreserveMask）：两边写同一寄存器互不覆盖。
     ///   - 一键遍历：预留页只遍历 DO（DI 驱动不了）；三个网格统一走 ISweepableGrid 接口。
-    ///
     /// 【一键遍历（V1.22 新增）】
     ///   - 点击底部"一键遍历"按钮（紫），对当前页签的测试做"通断跑马灯"检测：
     ///     每 500ms 只点亮一路通道、其余全部熄灭，72 路循环往复，用于快速检查每路
@@ -66,7 +62,6 @@ namespace AgingTestSystem.Dialogs
     ///     刷新按钮，界面不卡顿；上一拍未完成时自动跳过下一拍，避免任务堆积。
     ///   - 实时反馈：每拍写完后读回 10 个寄存器，用真实通断状态更新圆形灯按钮，
     ///     一眼可看出哪路实际输出异常。
-    ///
     ///     【共享连接（V1.23 重构）】
     ///   - 本窗体**不再自建 Modbus TCP 连接**，而是复用主程序 DeviceManager 拥有的
     ///     那一条 IO 耦合器连接（ModbusTcpIoController，与采集线程同源）：
@@ -76,15 +71,12 @@ namespace AgingTestSystem.Dialogs
     ///     · 断连检测 → 顶部 LED/状态由 1s 状态定时器按 DeviceManager.IsIoConnected 刷新，
     ///       断开后主程序的心跳/自动重连机制会自动恢复，本窗体只提示不重复弹窗。
     ///   - 效果：主界面与测试窗体共享同一条连接，不再重复建立/占用第二路 TCP。
-    ///
     /// 【逻辑】移植自测试工程 ModbusTcpIoControllerTest：
     ///   - 载台上电测试 ← PowerOnTestForm（按钮网格控制每一路 ON/OFF）
     ///   - 负压开关测试 ← MainForm.btnWriteDatas（批量扫描每个通道），并升级为
     ///     与载台上电测试一致的"点击按钮控制该通道亮起"交互
-    ///
     /// 【通讯】通讯库 NModbus 由主程序的 ModbusTcpIoController 持有，本窗体只通过
     ///   DeviceManager 的共享连接操作，**不持有任何 TcpClient/IModbusMaster**。
-    ///
     /// 【寄存器与通道】
     ///   - DO 起始 0x2000，每寄存器 16 路，bit0=第1路（GX-CL140 + DQ50P-S 已现场确认）
     ///   - 负压阀 72 路：deviceId 1~72 → 0x2000~0x2004（0x2004 只用低字节，Y100~Y107）
@@ -92,7 +84,6 @@ namespace AgingTestSystem.Dialogs
     ///   - 0x2004 两测试共享：低字节=负压阀 Y100~Y107，高字节=载台电 Y110~Y117
     ///     因此写入 0x2004 时采用"读-改-写"，只动本 Tab 拥有的字节，不覆盖对方
     ///     （各自用 OwnedMask 标记拥有的位，写前读回现值再合并）。
-    ///
     /// 【备用通道映射】复用生产工程配置（DeviceConfig.IoBackupChannelMappingEnabled /
     ///   IoBackupChannelMappings），逻辑与 ModbusTcpIoController 一致；默认关闭。
     ///   - 写入跟随映射：被映射的源通道位不写源寄存器，其信号汇总写到备用目标寄存器
@@ -103,7 +94,6 @@ namespace AgingTestSystem.Dialogs
     ///   - 点击被映射的通道（手动 toggle 或一键遍历点亮）都会弹出**非模态悬浮提示窗**
     ///     （RemapNoticeForm，不阻塞流程、不抢焦点，可保持打开继续操作其他窗口）告知
     ///     "该通道已做备用通道映射、实际输出通道是哪个寄存器第几路"并在日志追加映射记录。
-    ///
     /// 【右键映射（V1.81 新增）】
     ///   - 负压/载台/预留 DO 的圆形灯支持右键菜单：映射到备用通道…（打开可视化连线页并
     ///     预选该源，点目标即连线）/ 取消本通道映射（直接删 + 落盘）/ 查看映射去向 /
@@ -228,11 +218,11 @@ namespace AgingTestSystem.Dialogs
                 RowIoNames: BuildCarrierIoNames(),
                 OwnedMask: new[] { 0xFF00, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0x0000 });
 
-            // 【V1.80】预留点位网格：点位表来自 IoMapBuilder（Function=Unknown），
+            // 预留点位网格：点位表来自 IoMapBuilder（Function=Unknown），
             // 在自己的两个面板里建灯（DI 只读 + DO 可点），标题行显示实际路数/地址段
             _spareGrid = new SpareGrid(this, panelSpareDi, panelSpareDo, lblSpareDiTitle, lblSpareDoTitle);
 
-            // 【V1.81】右键端口映射：三页可点灯共用一份菜单（预留 DI 只读灯不挂）
+            // 右键端口映射：三页可点灯共用一份菜单（预留 DI 只读灯不挂）
             BuildRemapMenu();
         }
 
@@ -250,7 +240,7 @@ namespace AgingTestSystem.Dialogs
             // 启动连接状态定时器（每 1s 跟随主程序共享连接的实时状态刷新 LED，不发报文）
             _statusTimer.Start();
 
-            // 【V1.81】右键入口一次性提示（现场第一次打开即知道，不用翻文档）
+            // 右键入口一次性提示（现场第一次打开即知道，不用翻文档）
             AppendLog("[提示] 通道灯支持右键：映射到备用通道 / 取消映射 / 查看去向（可视化连线，保存即时生效）");
 
             // 打开即复用主程序共享连接：后台线程执行，不阻塞界面
@@ -276,7 +266,7 @@ namespace AgingTestSystem.Dialogs
         /// <param name="connected">true=已连接，false=未连接</param>
         private void SetConnected(bool connected)
         {
-            // 【V1.72.14】关窗竞态下已排队的 BeginInvoke 仍会进到这里，直碰 led/lbl 即炸，故先拦。
+            // 关窗竞态下已排队的 BeginInvoke 仍会进到这里，直碰 led/lbl 即炸，故先拦。
             if (_closed || IsDisposed || Disposing) { _connected = connected; return; }
             try
             {
@@ -372,7 +362,7 @@ namespace AgingTestSystem.Dialogs
         /// <returns>true=已连接，false=连接失败/未连接</returns>
         private bool TryConnectSilent()
         {
-            // 【V1.72.15】关后不碰硬件：关闭瞬间后台连接任务若刚起步，直接返回，
+            // 关后不碰硬件：关闭瞬间后台连接任务若刚起步，直接返回，
             // 不调共享连接、不排队 UI 回调（RunOnUi 另有自拦，双保险）。
             if (_closed || IsDisposed || Disposing) return false;
             bool ok = _deviceManager.EnsureIoConnected();
@@ -442,7 +432,7 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 跨线程安全地在 UI 线程执行委托（后台线程 → UI 线程用 BeginInvoke）。
-        /// 【V1.72.14 加固】关闭后（_closed/IsDisposed/Disposing/句柄未建/已销毁）直接丢弃，
+        /// 关闭后（_closed/IsDisposed/Disposing/句柄未建/已销毁）直接丢弃，
         /// 不再 BeginInvoke：旧版只查 IsDisposed，关闭瞬间后台拍仍能 BeginInvoke 进已销毁句柄，
         /// 抛"线程间操作无效"（非 UI 线程弹窗）；BeginInvoke 本身包 try，防竞态。
         /// </summary>
@@ -468,7 +458,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>窗体关闭时停止所有定时器，释放资源（**不**断开共享连接——连接归主程序所有）
-        /// 【V1.72.14】首行置 _closed 拦后台回调；定时器/提示窗逐个 try 包，单个失败不影响其余；
+        /// 首行置 _closed 拦后台回调；定时器/提示窗逐个 try 包，单个失败不影响其余；
         /// 提示窗 Close+Dispose 包 try（它被用户点×后 Close 再调无妨，Dispose 保 Sunny 输入框在 UI 线程释放）。</summary>
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
@@ -554,7 +544,7 @@ namespace AgingTestSystem.Dialogs
         /// <param name="triggerRow">触发本次写入的排索引（0~8），仅用于日志显示</param>
         public void WriteRegister(ChannelGrid grid, int regIndex, int triggerRow)
         {
-            // 【V1.72.15】关后停硬件写（在途遍历拍的收尾调用进到这里即丢弃）。
+            // 关后停硬件写（在途遍历拍的收尾调用进到这里即丢弃）。
             if (_closed || IsDisposed || Disposing) return;
             int addr = grid.RegAddresses[regIndex];
             int val = grid.CurrentRegValues[regIndex];
@@ -631,7 +621,7 @@ namespace AgingTestSystem.Dialogs
 
                 _vacuumGrid.SetButtonsFromRegisters(values);
                 _carrierGrid.SetButtonsFromRegisters(values);
-                // 【V1.80】预留页同步：DO 灯按快照刷新 + DI 灯实时读（FC0x04）
+                // 预留页同步：DO 灯按快照刷新 + DI 灯实时读（FC0x04）
                 _spareGrid.SetButtonsFromRegisters(values);
                 _spareGrid.RefreshDiInputs();
 
@@ -722,13 +712,13 @@ namespace AgingTestSystem.Dialogs
                 ioName, srcReg, srcCh + 1, dstReg, dstCh + 1, dstCh + 1);
 
             // 复用同一个悬浮提示窗（非模态、不抢焦点），多次触发只更新文本，不重复弹窗
-            // 【V1.72.14】关闭竞态下不再建新窗（建了也随主窗一起释放，不如直接丢弃防孤儿）。
+            // 关闭竞态下不再建新窗（建了也随主窗一起释放，不如直接丢弃防孤儿）。
             try
             {
                 if (_remapNoticeForm == null || _remapNoticeForm.IsDisposed)
                 {
                     _remapNoticeForm = new RemapNoticeForm();
-                    // 【V1.60】提示窗打开前按当前主题着色
+                    // 提示窗打开前按当前主题着色
                     AgingTestSystem.Services.ThemeManager.ApplyTo(_remapNoticeForm);
                     _remapNoticeForm.Show(this);
                 }
@@ -740,7 +730,6 @@ namespace AgingTestSystem.Dialogs
         }
 
         // ===================== 右键端口映射（V1.81 新增） =====================
-        //
         // 【三页一套菜单】负压 72 灯 + 载台 72 灯 + 预留 DO 灯共用一份 ContextMenuStrip，
         // 点哪路、那路有没有映射，全在 Opening 现算（SourceControl 反查按钮→通道）。
         // 以后加第四页可点灯：建灯处挂 _remapMenu + GetChannelInfoFromButton 加一行即可。
@@ -865,7 +854,7 @@ namespace AgingTestSystem.Dialogs
             if (_closed || IsDisposed || Disposing) return;
             using (var form = new IoRemapVisualForm(_config))
             {
-                // 【V1.60】新窗打开前按当前主题着色
+                // 新窗打开前按当前主题着色
                 Services.ThemeManager.ApplyTo(form);
                 form.SaveButtonText = "保存并生效";
                 if (preselectReg != null) form.PreselectSource(preselectReg.Value, preselectCh.Value);
@@ -944,7 +933,7 @@ namespace AgingTestSystem.Dialogs
         /// <summary>
         /// 非模态映射提示窗：WS_EX_NOACTIVATE + WS_EX_TOOLWINDOW，弹窗不激活、不抢焦点、
         /// 不进任务栏/AltTab；置顶显示并停留在屏幕右上角，直到用户手动关闭。
-        /// 【V1.72.14】自带 FormClosed→Dispose：非模态 Close 不释放，不自释就是孤儿 Sunny 控件，
+        /// 自带 FormClosed→Dispose：非模态 Close 不释放，不自释就是孤儿 Sunny 控件，
         /// GC 终结器线程 Dispose 读 Handle 即跨线程崩（R2 白名单 reuse 只能保"主窗在时不进终结"，
         /// 用户先×掉提示窗、主窗后关的窗口期仍会进终结；自释后此窗永不进终结）。
         /// </summary>
@@ -1062,7 +1051,7 @@ namespace AgingTestSystem.Dialogs
         /// </summary>
         private void StartSweep()
         {
-            // 【V1.72.15】排队回调（状态定时断连/页签切换）关后进到这里即丢弃，不碰按钮/定时器。
+            // 排队回调（状态定时断连/页签切换）关后进到这里即丢弃，不碰按钮/定时器。
             if (_closed || IsDisposed || Disposing) return;
             // 按当前页签确定要遍历的测试网格
             if (tabControl.SelectedIndex == 0)
@@ -1108,7 +1097,7 @@ namespace AgingTestSystem.Dialogs
         /// </summary>
         private void StopSweep()
         {
-            // 【V1.72.15】同上：关后（定时器已释放）StopSweep 再调 Stop/Text 即炸，只收标记。
+            // 同上：关后（定时器已释放）StopSweep 再调 Stop/Text 即炸，只收标记。
             _sweepActive = false;
             if (_closed || IsDisposed || Disposing) { _sweepGrid = null; return; }
             try { _sweepTimer.Stop(); } catch { }
@@ -1145,7 +1134,7 @@ namespace AgingTestSystem.Dialogs
         ///  2) 加锁整体写回设备（读-改-写）；
         ///  3) 读回真实通道状态，切回 UI 线程实时刷新按钮，让跑马灯与实际通断同步。
         /// 连接中途断开时由共享连接的状态定时器统一处理（停遍历 + 提示）。
-        /// 【V1.72.15】关后停硬件写：关闭瞬间在途的拍若继续写寄存器，等于"关了窗还在动设备"，
+        /// 关后停硬件写：关闭瞬间在途的拍若继续写寄存器，等于"关了窗还在动设备"，
         /// 现每步查 _closed，关后整拍丢弃（设备保持关窗前状态，不残留半拍）。
         /// </summary>
         private void SweepStepWorker()
@@ -1173,7 +1162,7 @@ namespace AgingTestSystem.Dialogs
                 int[] regs = grid.ComputeSweepRegisters(idx);
 
                 // 2) 加锁写回设备（读-改-写保留共享字节/映射位）
-                // 【V1.72.15】写前再查关闭：计算与写之间关窗即停手。
+                // 写前再查关闭：计算与写之间关窗即停手。
                 if (_closed || IsDisposed || Disposing) return;
                 grid.ApplySweepRegisters(regs);
 
@@ -1196,7 +1185,7 @@ namespace AgingTestSystem.Dialogs
                 int totalForLog = grid.SweepChannelCount;
                 RunOnUi(() =>
                 {
-                    // 【V1.72.14】排队期间关窗即丢弃，不碰已释放的圆形灯按钮/提示窗。
+                    // 排队期间关窗即丢弃，不碰已释放的圆形灯按钮/提示窗。
                     if (_closed || IsDisposed || Disposing) return;
                     if (_sweepGrid == null) return;
                     try
@@ -1273,7 +1262,7 @@ namespace AgingTestSystem.Dialogs
         /// <summary>
         /// 遍历运行中切换页签时自动停止：一键遍历只作用于按下时所在的测试，
         /// 防止跑马灯误控制另一测试的输出通道。
-        /// 【V1.80】切进预留页时自动刷新一次（DI 灯平时不轮询，进页看最新）。
+        /// 切进预留页时自动刷新一次（DI 灯平时不轮询，进页看最新）。
         /// </summary>
         private void tabControl_SelectedIndexChanged(object sender, EventArgs e)
         {
@@ -1323,7 +1312,7 @@ namespace AgingTestSystem.Dialogs
         /// <summary>
         /// 把一条日志追加到底部 txtLog（SunnyUI UITextBox），并加时间戳，最多保留 200 行。
         /// 自动滚动到底部，方便现场随时查看最近操作。
-        /// 【V1.72.14】旧版用同步 Invoke：关闭瞬间后台拍 Invoke 进已销毁句柄即炸"线程间操作无效"
+        /// 旧版用同步 Invoke：关闭瞬间后台拍 Invoke 进已销毁句柄即炸"线程间操作无效"
         /// （非 UI 线程弹窗）；现改异步 BeginInvoke + 关闭/句柄三查 + 全程 try，后台收尾日志丢了就丢了，
         /// 不炸框；UI 线程直写分支同样包 try（关窗竞态下 txtLog 已释放）。
         /// </summary>
@@ -1764,11 +1753,11 @@ namespace AgingTestSystem.Dialogs
             /// <summary>
             /// 后台线程安全地写遍历寄存器（加锁串行化）：按本网格 OwnedMask 读-改-写，每寄存器一次，
             /// 并下发备用映射目标 0x2009。不逐条写日志（避免 500ms 一拍刷屏）。
-            /// 【V1.80】原窗体 WriteSweepRegisters 下沉到网格：三个网格各管各的写语义，worker 只认接口。
+            /// 原窗体 WriteSweepRegisters 下沉到网格：三个网格各管各的写语义，worker 只认接口。
             /// </summary>
             public void ApplySweepRegisters(int[] regs)
             {
-                // 【V1.72.15】关后停硬件写（与 SweepStepWorker 双保险）。
+                // 关后停硬件写（与 SweepStepWorker 双保险）。
                 if (_owner._closed || _owner.IsDisposed || _owner.Disposing) return;
                 lock (_owner._modbusLock)
                 {
@@ -1886,16 +1875,13 @@ namespace AgingTestSystem.Dialogs
 
         // ========================================================================
         //  预留点位网格（V1.80 新增）：上半预留 DI 只读状态灯 + 下半预留 DO 手动点动。
-        //
         //  【点位来源】构造时按 IoMapBuilder.Build(config) 取 Function=Unknown 的点，
         //  地址/路数全部来自映射表（默认 DI=73~80/X110~X117 共 8 路，
         //  DO=145~160/Y220~Y237 共 16 路），改 TotalInputs/TotalOutputs 配置自动适应；
         //  无预留时对应区显示"无预留"空态，窗体照常打开。
-        //
         //  【DI 只读灯】状态经 DeviceManager.GetAllInputs()（FC0x04，与采集同源）刷新，
         //  灯复用 CircleButton（Enabled=false 禁点击，纯看）；刷新入口只有两个：
         //  "读取状态"按钮 / 切进预留页自动刷新——状态定时器坚持不发报文，不管 DI。
-        //
         //  【DO 可点灯】点击 toggle + 读-改-写。所在寄存器（默认 0x2009）同时是
         //  备用映射目标（问题确认清单#106 备案的双重身份），映射启用时按下式保位，
         //  两边写同一寄存器互不覆盖；映射关闭时 preserve=0 即整寄存器直写。
@@ -2199,7 +2185,7 @@ namespace AgingTestSystem.Dialogs
             /// 映射保位保留，未连接/失败只记日志不抛。</summary>
             private void WriteDoRegisters(int reg)
             {
-                // 【V1.72.15】关后停硬件写
+                // 关后停硬件写
                 if (_owner._closed || _owner.IsDisposed || _owner.Disposing) return;
                 if (!_owner._connected)
                 {
@@ -2319,7 +2305,7 @@ namespace AgingTestSystem.Dialogs
             /// <summary>加锁写回设备：单寄存器读-改-写（保映射位）；未连接/关窗后静默丢弃</summary>
             public void ApplySweepRegisters(int[] regs)
             {
-                // 【V1.72.15】关后停硬件写（与 SweepStepWorker 双保险）。
+                // 关后停硬件写（与 SweepStepWorker 双保险）。
                 if (_owner._closed || _owner.IsDisposed || _owner.Disposing) return;
                 lock (_owner._modbusLock)
                 {

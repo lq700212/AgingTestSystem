@@ -5,18 +5,15 @@ using System.Collections.Generic;
 namespace AgingTestSystem.Services
 {
     /// <summary>
-    /// 报表列配置解析（【V1.74 新增】Q8 报表可配：列编排纯函数）。
-    ///
+    /// 报表列配置解析（Q8 报表可配：列编排纯函数）。
     /// 【为什么是纯函数】列配置是用户手填的，脏输入必须在解析层洗掉或报错，
     /// 不能流到导出线程。SettingsForm 校验、历史窗导出、回归用例三方共用同一份
     /// vocabulary，改可用字段只改这里（与 MesMapping 同思路）。
-    ///
     /// 【与 MES 映射的关系】MES vocabulary（MesMapping.FieldVocabulary）是
     /// "上报 payload 能带的字段"；这里是"历史 CSV 真实有的列"，11 个。
     /// 两套名单各管各的，不许互相引用，否则 CSV 加一列就要动 MES
     /// （V1.68 血泪：名单分叉即灵异 bug）。
-    ///
-    /// 【V1.76】SN/配方/结果结构化进 CSV（Q8 追溯口径），预设同步 11 列，
+    /// SN/配方/结果结构化进 CSV（Q8 追溯口径），预设同步 11 列，
     /// 列序与 CSV 物理列序一致（时间→批号→SN→配方→工位→事件→结果→详情→
     /// 压力→温度→电流）。项目未上线，无老文件包袱，不做缺列兼容。
     /// </summary>

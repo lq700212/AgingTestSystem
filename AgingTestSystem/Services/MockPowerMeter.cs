@@ -7,15 +7,13 @@ using AgingTestSystem.Models;
 namespace AgingTestSystem.Services
 {
     /// <summary>
-    /// 载台电流表模拟实现（【V1.74 新增】Q2 通用骨架的 Mock 端）。
+    /// 载台电流表模拟实现（Q2 通用骨架的 Mock 端）。
     /// 用于开发和演示阶段（UseMockCommunication=true 且 UsePowerMeter=true 时启用）。
-    ///
     /// 【与真实实现的区别】
     /// - 真实实现（以后写）：走电表协议，读真实电流；
     /// - 本模拟实现：不连任何硬件，每路电流在 0.05~0.60A 之间缓慢随机漂移
     ///   （模拟载台待机/老化负载），上电工位偏大、未上电工位偏小——演示面板悬停
     ///   与 CSV 落盘时肉眼可辨即可，不追求电气真实性。
-    ///
     /// 【设计说明】（给新手看的）
     /// 写法与 MockFanController 同模式：Connect 睡 200ms 模拟连接耗时；
     /// Random 非线程安全，用 _randomLock 保护；状态数组按 deviceCount 现配现建。

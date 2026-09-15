@@ -5,13 +5,11 @@ using System.Globalization;
 namespace AgingTestSystem.Services
 {
     /// <summary>
-    /// 规则表达式引擎（【V1.69 新增】三期：手写递归下降，沙盒求值，无副作用）。
-    ///
+    /// 规则表达式引擎（三期：手写递归下降，沙盒求值，无副作用）。
     /// 【为什么手写而不引入脚本引擎】
     /// 现场配的表达式跑在生产循环里（每秒×72台），IronPython/Lua 等外部引擎是
     /// "代码执行"，配错可能卡死/爆内存；手写解析器只认下面的白名单，语法错在
     /// 保存时就拦，运行时最多返回 error、绝不抛异常拖垮采集。
-    ///
     /// 【语言】（冻结，只做加法不做改法）
     /// - 字面量：数字（1 / 2.5 / .5）、true / false（大小写无所谓）；
     /// - 变量（大小写无所谓，见 Vocabulary）：pressure / temp / tempset / hum /
@@ -19,7 +17,6 @@ namespace AgingTestSystem.Services
     ///   current（V1.74：本工位载台电流A，无表=NaN）；
     /// - 运算符（优先级从低到高）：||  &&  == !=  > < >= <=  + -  * / %  !（非） -（负号）；
     /// - 括号改变优先级。单 & 单 | 非法（防把位运算错当逻辑运算）。
-    ///
     /// 【求值语义】全 double；比较返回 1/0；&& || 短路（右分支除零会被跳过，
     /// 如 x != 0 && 10/x > 2 是安全的）；除零/模零/未知变量 → error。
     /// 【NaN 语义】传感器不可用时变量取 NaN：NaN 参与任何比较/相等一律 false
@@ -37,7 +34,7 @@ namespace AgingTestSystem.Services
         /// device=工位号 / delaysecs=延时时间定格秒 / vacsecs=距开阀秒 /
         /// agesecs=距上电秒（未上电=0）/ duration=定格时长秒 / threshold=定格阈值kPa /
         /// di0=DI触点0/1 / hour=当前小时0-23 /
-        /// current=本工位载台电流A（【V1.74】无表=NaN，不参与判定只追溯）
+        /// current=本工位载台电流A（无表=NaN，不参与判定只追溯）
         /// </summary>
         public static readonly string[] Vocabulary = new string[]
         {

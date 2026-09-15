@@ -7,13 +7,11 @@ namespace AgingTestSystem.Dialogs
 {
     /// <summary>
     /// 登录窗体（业务逻辑部分）
-    ///
     /// 【功能说明】
     /// 用户切换权限时弹出此窗体，要求输入用户名和密码。
     /// - 输入正确：返回 DialogResult.OK，主窗体据此切换权限
     /// - 输入错误：弹出提示窗口告知错误原因
     /// - 点击取消：返回 DialogResult.Cancel，不切换权限
-    ///
     /// 【交互细节】
     /// 1. 窗体标题动态显示"切换为 XXX 权限"（XXX 为目标角色名）
     /// 2. 按 Enter 键等同点击"确认"按钮（提升操作效率）
@@ -21,7 +19,6 @@ namespace AgingTestSystem.Dialogs
     /// 4. 密码框使用密码模式，输入字符显示为圆点
     /// 5. 用户名下拉框自动列出该角色已有账号，可直接选择（也可手动输入）
     /// 6. 勾选"记住密码"后，下次登录自动填充该角色的用户名和密码
-    ///
     /// 【界面布局】
     /// ┌──────────────────────────────┐
     /// │        切换为 XXX权限         │ ← 窗体标题（动态显示目标角色）
@@ -73,7 +70,7 @@ namespace AgingTestSystem.Dialogs
             this.Text = $"{roleName}登录";
 
             // 加载该角色下已有账号，供用户直接下拉选择（也可手动输入）
-            // 【V1.64 隐藏入口】dev 不出现在下拉框里：知道的人手动输入照样能登，
+            // dev 不出现在下拉框里：知道的人手动输入照样能登，
             // 不知道的人从界面上看不出这个账号存在
             txtUsername.Items.Clear();
             foreach (UserAccount account in _userManager.GetAccounts(_targetRole))
@@ -86,7 +83,7 @@ namespace AgingTestSystem.Dialogs
             }
 
             // 若该角色记住了登录信息，自动填充用户名和密码并勾选"记住密码"
-            // 【V1.64 隐藏入口】记住的是 dev 也不回填：否则打开管理员登录框第一眼
+            // 记住的是 dev 也不回填：否则打开管理员登录框第一眼
             // 就看到 dev，等于把隐藏入口摆到台面上（dev 每次手动输入即可）
             var (savedUsername, savedPassword) = _userManager.GetRememberedLogin(_targetRole);
             if (savedUsername != null && UserManager.IsDevUsername(savedUsername))
@@ -150,7 +147,7 @@ namespace AgingTestSystem.Dialogs
             if (result.Success)
             {
                 // 记住密码：勾选则保存本次登录信息，未勾选则清除该角色已记住的信息
-                // 【V1.64 隐藏入口】dev 不存记住信息：存了下次打开也会被上面的加载逻辑跳过，
+                // dev 不存记住信息：存了下次打开也会被上面的加载逻辑跳过，
                 // 不如直接不存，RememberedLogin.json 里不留 dev 痕迹
                 if (!UserManager.IsDevUsername(txtUsername.Text))
                 {

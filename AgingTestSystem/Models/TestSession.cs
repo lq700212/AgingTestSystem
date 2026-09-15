@@ -6,7 +6,6 @@ namespace AgingTestSystem.Models
 {
     /// <summary>
     /// 在测任务快照（V1.59 新增，断电恢复用）
-    ///
     /// 【用途】老化测试讲究连续性，但现场可能遇到异常断电/程序崩溃。
     /// DeviceManager 在"有工位处于测试中"期间把所有在测任务的参数快照
     /// 持久化到 TestSession.json（经 <see cref="Services.TestSessionStore"/>）；
@@ -15,7 +14,6 @@ namespace AgingTestSystem.Models
     ///   为什么不续跑剩余时长：断电期间载台已断电、产品状态未知，
     ///   老化数据已不连续，续跑没有质量意义（行业通识 + 设计评审结论）；
     /// - 放弃 = 关闭这些工位的阀与电源（安全兜底），删除快照文件。
-    ///
     /// 【存了哪些参数、为什么】
     /// 启动测试时会把"定格后的本次任务参数"存进来（老化时长/报警阈值/SN/配方名/批号）：
     /// - 重启后 StationSettingsCache 的恢复时序不受控件加载顺序影响，快照自包含最稳；
@@ -72,14 +70,14 @@ namespace AgingTestSystem.Models
         public decimal AlarmThresholdKPa { get; set; }
 
         /// <summary>
-        /// 中断时的子阶段（【V1.67 新增】断电续跑用：(int)AgingPhase）。
+        /// 中断时的子阶段（断电续跑用：(int)AgingPhase）。
         /// Vacuuming=还没上电→恢复时整段重跑；Aging=已上电→可按剩余时长续跑。
         /// 老快照没有本字段（默认 0=None）→ 按整段重跑，安全回退。
         /// </summary>
         public int Phase { get; set; }
 
         /// <summary>
-        /// 上电时刻（【V1.67 新增】老化计时起点；还没上电=MinValue）。
+        /// 上电时刻（老化计时起点；还没上电=MinValue）。
         /// 续跑剩余时长 = DurationSeconds - (SavedAt - PowerOnTime)，断电期间不计入老化。
         /// </summary>
         public DateTime PowerOnTime { get; set; }

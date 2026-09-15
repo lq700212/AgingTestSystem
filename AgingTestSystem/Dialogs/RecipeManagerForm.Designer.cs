@@ -2,7 +2,6 @@ namespace AgingTestSystem.Dialogs
 {
     /// <summary>
     /// 配方管理窗体 —— 设计器自动生成部分
-    ///
     /// 【界面布局说明】
     /// 左右分栏布局：
     /// - 左侧：DataGridView 只显示序号和配方名称两列
@@ -178,7 +177,7 @@ namespace AgingTestSystem.Dialogs
             this.btnDelete.Size = new System.Drawing.Size(75, 23);
             this.btnDelete.TabIndex = 17;
             this.btnDelete.Text = "删除";
-            // 【V1.71】删除危险红（自绘按钮走 Custom+FillColor；添加/更新走默认蓝）
+            // 删除危险红（自绘按钮走 Custom+FillColor；添加/更新走默认蓝）
             this.btnDelete.FillColor = System.Drawing.Color.OrangeRed;
             this.btnDelete.RectColor = System.Drawing.Color.OrangeRed;
             this.btnDelete.ForeColor = System.Drawing.Color.White;
@@ -237,8 +236,7 @@ namespace AgingTestSystem.Dialogs
             this.lblLimitTempUnit.Text = "℃";
             //
             // lblNegativePressure
-            //
-            // 【V1.66】配方负压阈值输入：以前三窗都没有这个框，新建配方 NegativePressure 恒 0，
+            // 配方负压阈值输入：以前三窗都没有这个框，新建配方 NegativePressure 恒 0，
             // 下发后阈值≈0（负压域里≈永远到位），等于悄悄关掉真空保护。现在必填实数，
             // 新建默认=全局 AlarmPressureThresholdKPa（构造传入），存什么定格什么，无魔法值。
             //
@@ -279,8 +277,7 @@ namespace AgingTestSystem.Dialogs
             this.lblNegativePressureUnit.Text = "kPa";
             //
             // lblDisplayMode
-            //
-            // 【V1.66】烧屏画面记录（自由文本如"白场/RGB循环/棋盘格"）：只存配方追溯，
+            // 烧屏画面记录（自由文本如"白场/RGB循环/棋盘格"）：只存配方追溯，
             // 不参与任何判定；工位透传走 SetStationRecipe（见 DeviceManager）。
             //
             this.lblDisplayMode.AutoSize = true;
@@ -461,10 +458,10 @@ namespace AgingTestSystem.Dialogs
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(700, 355);
-            // 【V1.71】Dock 布局自适应放大；禁缩小（MinimumSize=ClientSize），防绝对子控件被挤出。
+            // Dock 布局自适应放大；禁缩小（MinimumSize=ClientSize），防绝对子控件被挤出。
             this.MinimumSize = new System.Drawing.Size(700, 355);
             this.Controls.Add(this.tableLayoutPanelMain);
-            // 【V1.71】UIForm 自绘蓝标题：删 FormBorderStyle，Dock 布局加顶 Pad 避开标题区。
+            // UIForm 自绘蓝标题：删 FormBorderStyle，Dock 布局加顶 Pad 避开标题区。
             this.Padding = new System.Windows.Forms.Padding(2, 38, 2, 2);
             this.MaximizeBox = false;
             this.MinimizeBox = false;
@@ -565,19 +562,19 @@ namespace AgingTestSystem.Dialogs
         /// <summary>极限温度单位</summary>
         private Sunny.UI.UILabel lblLimitTempUnit;
 
-        /// <summary>负压阈值标签（【V1.66】配方真空工艺要求，kPa）</summary>
+        /// <summary>负压阈值标签（配方真空工艺要求，kPa）</summary>
         private Sunny.UI.UILabel lblNegativePressure;
 
-        /// <summary>负压阈值输入（【V1.66】1位小数/步进0.5/范围±9999，新建默认=全局阈值）</summary>
+        /// <summary>负压阈值输入（1位小数/步进0.5/范围±9999，新建默认=全局阈值）</summary>
         private System.Windows.Forms.NumericUpDown nudNegativePressure;
 
         /// <summary>负压阈值单位</summary>
         private Sunny.UI.UILabel lblNegativePressureUnit;
 
-        /// <summary>显示模式标签（【V1.66】烧屏画面记录）</summary>
+        /// <summary>显示模式标签（烧屏画面记录）</summary>
         private Sunny.UI.UILabel lblDisplayMode;
 
-        /// <summary>显示模式输入（【V1.66】自由文本，最长50）</summary>
+        /// <summary>显示模式输入（自由文本，最长50）</summary>
         private Sunny.UI.UIComboBox cmbDisplayMode;
 
         /// <summary>添加按钮</summary>

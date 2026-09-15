@@ -7,15 +7,13 @@ using System.IO;
 namespace AgingTestSystem.Services
 {
     /// <summary>
-    /// 项目档案管理（【V1.67 新增】一期"多项目切换"）。
-    ///
+    /// 项目档案管理（一期"多项目切换"）。
     /// 【解决什么问题】
     /// 以前所有运行时文件（配方/工位设置/主页布局）都堆在程序目录，换一个客户
     /// 就得手动备份一堆 json，出差现场极易弄混。现在按"项目"隔离：
     ///   程序目录/Projects/&lt;项目名&gt;/  =  Recipes.json + StationSettings.json
     ///                              + HomeLayout.json + Policy.json（策略）
-    /// 出差切项目 = 下拉选个名字即时生效（【V1.72.10 热更】无需重启），30 秒搞定，不动代码。
-    ///
+    /// 出差切项目 = 下拉选个名字即时生效（无需重启），30 秒搞定，不动代码。
     /// 【跟项目的 vs 跟机器的：为什么这样分】
     /// - 跟项目（进 Profile 目录）：配方、工位设置、主页布局、工艺策略——换客户就换这套。
     /// - 跟机器（留程序目录全局）：Users.json（账号全公司通用）、TestSession.json
@@ -58,7 +56,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// <summary>缺省项目名（首跑/指针缺失时用；【V1.72.9】Default 改名而来，列表里不再有 Default）。</summary>
+        /// <summary>缺省项目名（首跑/指针缺失时用；Default 改名而来，列表里不再有 Default）。</summary>
         public const string DefaultProfileName = "烧屏测试";
 
         /// <summary>
@@ -105,7 +103,7 @@ namespace AgingTestSystem.Services
         /// 1) 无 ActiveProject → 指向 烧屏测试 并写回 exe.config（机器指针初始化）；
         /// 2) 清掉历史遗留的 Default 目录（见 CleanupLegacyDefault，项目未上线、改干净）；
         /// 3) 项目目录不存在 → 创建。
-        /// 【V1.68 改干净】删掉了"老文件搬家"：项目未上线，没有 V1.67 前的老用户，
+        /// 删掉了"老文件搬家"：项目未上线，没有 V1.67 前的老用户，
         /// 程序目录下的散文件一律视为垃圾不再认——要是启动后配方空了，去 Projects/烧屏测试
         /// 里建，不要从根目录捡（两份数据源是 Suspicion 之源）。
         /// </summary>
@@ -144,10 +142,9 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 清掉历史遗留的 Default 目录（【V1.72.10 改干净】V1.72.9 把缺省项目改名
+        /// 清掉历史遗留的 Default 目录（V1.72.9 把缺省项目改名
         /// "烧屏测试"，但老版本跑过的机器上还留着空的 Projects/Default，项目列表里
         /// 阴魂不散。本方法在每次启动时幂等执行，保证列表里永远没有 Default）。
-        ///
         /// 【规则】项目未上线、无老用户包袱，只认"目录里有没有货"：
         /// - Default 不存在 → 直接返回（大多数机器走这里，零开销）；
         /// - Default 存在、而 烧屏测试 不存在 → 整体改名（Move，里面若有配方一个不少）；
@@ -318,8 +315,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 删除项目（【V1.72.11】建错/验证用项目的清理口，配切换窗"删除项目"按钮）。
-        ///
+        /// 删除项目（建错/验证用项目的清理口，配切换窗"删除项目"按钮）。
         /// 【规则】空名、当前项目、不存在 → 一律 false：
         /// - 当前项目正在用（内存数据就是它），删了文件和内存对不上，
         ///   必须先切到别的项目再删；
@@ -354,7 +350,7 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 切换当前项目（只写机器指针 ActiveProject + 刷 appSettings 缓存）。
-        /// 【V1.72.10 热更】写完指针即返回，内存数据的换装由调用方
+        /// 写完指针即返回，内存数据的换装由调用方
         /// （MainForm.ReloadActiveProject）接力完成：重载配方/工位缓存/策略叠加/
         /// 主页布局 + 清工位指派 + 刷面板，全程无需重启。
         /// 约束：调用前必须确认无工位在测（ProjectSwitchForm 已拦，MainForm 双保险复查）。

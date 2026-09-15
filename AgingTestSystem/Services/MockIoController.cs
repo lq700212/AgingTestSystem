@@ -10,8 +10,6 @@ namespace AgingTestSystem.Services
     /// IO控制器模拟实现
     /// 用于开发和测试阶段，模拟IO输入输出操作
     /// 实际使用时需要替换为真实的硬件通信实现
-    ///
-    /// 【V1.09 更新 —— IO分配表】
     /// IO点编号规则(依据IO分配表):
     /// - 输入点(NPN, X地址): 1 ~ TotalInputs(默认 1 ~ 72)
     ///   对应物理地址 X000~X107(三菱八进制), 设备名: 真空负压表-1~72
@@ -19,7 +17,6 @@ namespace AgingTestSystem.Services
     ///   真空电磁阀(73~144): Y000~Y107
     ///   载台上电(145~216): Y110~Y217
     /// - 物理地址映射详见 <see cref="IoMapBuilder"/>
-    ///
     /// 【修复说明】
     /// 修复 M5：使用 lock 保护 Random，避免多线程访问导致内部状态损坏
     /// 修复 M7：将硬编码的 73/216 替换为基于 _config.TotalInputs/TotalOutputs 的动态计算
@@ -61,7 +58,7 @@ namespace AgingTestSystem.Services
 
         public bool Connect(DeviceConfig config)
         {
-            // 【V1.62】空配置直接拒绝：否则下行 config.TotalInputs 即空引用，
+            // 空配置直接拒绝：否则下行 config.TotalInputs 即空引用，
             // 且 _isConnected 会被置 true 造成"连上了假象"。
             if (config == null)
             {
@@ -153,7 +150,6 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 写入单个输出点状态
-        ///
         /// 【修复 M7】原硬编码 outputId &lt; 73 || outputId &gt; 216 改为动态计算
         /// 输出点起始编号 = TotalInputs + 1
         /// 输出点结束编号 = TotalInputs + TotalOutputs
@@ -214,7 +210,6 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 读取单个输出点状态
-        ///
         /// 【修复 M7】同 WriteOutput，动态计算输出点合法范围
         /// </summary>
         public bool ReadOutput(int outputId)

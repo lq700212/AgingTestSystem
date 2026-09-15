@@ -8,9 +8,8 @@ using Newtonsoft.Json;
 namespace AgingTestSystem.Views
 {
     /// <summary>
-    /// 工艺策略图静态数据（【V1.70 新增为 FlowGraph，V1.73 随窗体改名】工艺策略窗的图真相：
+    /// 工艺策略图静态数据（工艺策略窗的图真相：
     /// 拓扑画死，文本按配置生成）。
-    ///
     /// 【节点】启动开阀 / 抽真空 / 上电老化 / 完成下电 / 报警联动 / 断电恢复 / 下料判定 / MES上报。
     /// 每个节点挂它真正能改的配置 key（右栏编辑器按此生成）——条件写在边上，
     /// 改条件的入口永远在端点节点里，连线本身只读（防对着线发呆）。
@@ -123,7 +122,7 @@ namespace AgingTestSystem.Views
                 {
                     new NodeKey("MaxTestDurationSeconds", "全局时长(秒)", EditorKind.Text),
                     new NodeKey("CompleteExpression", "完成表达式", EditorKind.Text),
-                    // 【V1.83】画面维度归属上电老化阶段：开关 + 字典都在本节点改，
+                    // 画面维度归属上电老化阶段：开关 + 字典都在本节点改，
                     // 不用再去系统设置"工艺策略"分类里找。
                     new NodeKey("DisplayModeEnabled", "启用画面维度", EditorKind.Bool),
                     new NodeKey("DisplayModes", "画面字典(逗号分隔)", EditorKind.Text),
@@ -137,7 +136,7 @@ namespace AgingTestSystem.Views
                 {
                     new NodeKey("CompletionJudgePolicy", "完成判定", EditorKind.Enum),
                     new NodeKey("CompletionAction", "完成动作", EditorKind.Enum),
-                    // 【V1.83】破空阀总闸收进本节点：无阀时点位行照常隐藏（见
+                    // 破空阀总闸收进本节点：无阀时点位行照常隐藏（见
                     // ProcessPolicyForm.RebuildEditors），但开闸入口就在同一页，
                     // 不用再跳去系统设置，改完保存即刷新点位行显隐。
                     new NodeKey("VentValveEnabled", "本机装破空阀", EditorKind.Bool),
@@ -150,7 +149,7 @@ namespace AgingTestSystem.Views
                 DefaultRect = new Rectangle(430, 340, 240, 150),
                 Keys = new List<NodeKey>
                 {
-                    // 【V1.83】压力报警阈值/方向是报警联动的核心：以前只能去系统设置
+                    // 压力报警阈值/方向是报警联动的核心：以前只能去系统设置
                     // "报警参数"或公共参数窗改，驾驶舱看得到报警却改不了阈值，收进本节点。
                     new NodeKey("AlarmPressureThresholdKPa", "报警阈值(kPa)", EditorKind.Text),
                     new NodeKey("AlarmWhenPressureHigherThanThreshold", "报警方向(高于阈值)", EditorKind.Bool),
@@ -172,7 +171,7 @@ namespace AgingTestSystem.Views
                     new NodeKey("PowerLossPolicy", "恢复策略", EditorKind.Enum),
                 }
             },
-            // 【V1.83】下料判定不再是纯展示节点：事件身份口径（CSV/报表/MES
+            // 下料判定不再是纯展示节点：事件身份口径（CSV/报表/MES
             // 三处统一）与报表列配置归属"产出追溯"，在本节点改；完成判定口径
             // （自动PASS/待判定）仍在【完成下电】节点改，Info 保留该指引。
             new NodeDef
@@ -186,9 +185,9 @@ namespace AgingTestSystem.Views
                 },
                 Info = "待判定模式下，主界面操作区【下料判定】按钮录 PASS/FAIL。\r\n完成判定口径在【完成下电】节点改。"
             },
-            // 【V1.73】MES上报纯配置节点：触发器/字段映射/静态字段 3 个跟项目的 key
+            // MES上报纯配置节点：触发器/字段映射/静态字段 3 个跟项目的 key
             // 全在这里改（连接类开关/地址跟机器，在系统设置 MES 对接分类里改）。
-            // 【V1.83】总闸 MesEnabled 收进本节点：以前节点上显示"开关：开/关"
+            // 总闸 MesEnabled 收进本节点：以前节点上显示"开关：开/关"
             // 却无处可改（看得到改不了），现在同一页翻开关。
             // 无连线（上报正交于流程），画布右下角，绘制顺序最后。
             new NodeDef
@@ -278,13 +277,13 @@ namespace AgingTestSystem.Views
                     string expr = string.IsNullOrWhiteSpace(config.CompleteExpression)
                         ? "完成：时长到"
                         : "完成：时长到 或 表达式";
-                    // 【V1.83】画面维度进副标题：关了就是现状（不显示不校验），开了显示字典规模。
+                    // 画面维度进副标题：关了就是现状（不显示不校验），开了显示字典规模。
                     string dm = config.DisplayModeEnabled
                         ? $"画面：开({DisplayModeCountOf(config)}项)"
                         : "画面：关";
                     return new string[] { dur, expr, dm, $"老化 {counts.Aging} 台" };
                 case "done":
-                    // 【V1.83】破空阀状态进副标题：无阀是现状（点位行隐藏），有阀显示点位。
+                    // 破空阀状态进副标题：无阀是现状（点位行隐藏），有阀显示点位。
                     string vent = config.VentValveEnabled
                         ? (config.VentValveDoPoint > 0
                             ? $"破空阀：有(点{config.VentValveDoPoint})"
@@ -298,7 +297,7 @@ namespace AgingTestSystem.Views
                         $"已完成 {counts.Completed} 台"
                     };
                 case "alarm":
-                    // 【V1.83】阈值进副标题：报警联动改完阈值当场看得见，不用再去设置表核对。
+                    // 阈值进副标题：报警联动改完阈值当场看得见，不用再去设置表核对。
                     string thr = "阈值：" + config.AlarmPressureThresholdKPa.ToString("0.##")
                         + "kPa" + (config.AlarmWhenPressureHigherThanThreshold ? "(高于报)" : "(低于报)");
                     return new string[]
@@ -315,7 +314,7 @@ namespace AgingTestSystem.Views
                         counts.Snapshot > 0 ? $"快照 {counts.Snapshot} 台待恢复" : "无待恢复快照"
                     };
                 case "unload":
-                    // 【V1.83】口径与报表规模进副标题：改完事件身份/报表列当场看得见。
+                    // 口径与报表规模进副标题：改完事件身份/报表列当场看得见。
                     string ident = "口径：" + ShortEnum(config.EventIdentityMode.ToString());
                     int repCount = ReportColumnCountOf(config);
                     string rep = repCount < 0 ? "报表：缺省" : $"报表：{repCount}列";
@@ -404,7 +403,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 报表列数（【V1.83】下料节点副标题用：留空=-1 表示缺省预设，不硬编码列数，
+        /// 报表列数（下料节点副标题用：留空=-1 表示缺省预设，不硬编码列数，
         /// 预设变了副标题不用跟着改；配了返回实际解析出的列数，脏组按 0 计）。
         /// </summary>
         private static int ReportColumnCountOf(DeviceConfig config)
@@ -421,7 +420,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 画面字典项数（【V1.83】上电节点副标题用：留空=缺省预设，返回预设规模；
+        /// 画面字典项数（上电节点副标题用：留空=缺省预设，返回预设规模；
         /// 配了返回实际项数，脏输入按 0 计——保存时 ValidateValue 已拦，画布只看生效规模）。
         /// </summary>
         private static int DisplayModeCountOf(DeviceConfig config)
@@ -475,9 +474,9 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 节点布局存取（【V1.70】纯视图态：只存 X/Y，跟机器走 PolicyLayout.json；
+        /// 节点布局存取（纯视图态：只存 X/Y，跟机器走 PolicyLayout.json；
         /// 缩放/平移不存盘；文件损坏/缺失回缺省布局）。
-        /// 【V1.73】随窗体改名 FlowLayout.json→PolicyLayout.json（项目未上线，老文件直接弃用）。
+        /// 随窗体改名 FlowLayout.json→PolicyLayout.json（项目未上线，老文件直接弃用）。
         /// </summary>
         public static class LayoutStore
         {

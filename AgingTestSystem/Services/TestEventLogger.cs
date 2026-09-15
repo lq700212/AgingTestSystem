@@ -6,19 +6,16 @@ namespace AgingTestSystem.Services
 {
     /// <summary>
     /// 测试事件日志记录器（静态类）
-    ///
     /// 【用途】
     /// 把老化测试过程中的关键事件（启动 / 完成 / 报警 / 复位 / 停止 / 急停）
     /// 追加写入 CSV 文件，按"日期"分文件存放，供质量追溯和历史记录窗体读取。
-    ///
     /// 【文件格式】
     /// 目录：程序运行目录\Logs\
     /// 文件名：TestLog_yyyyMMdd.csv（每天一个文件）
     /// 表头：时间,批号,SN,配方,设备编号,事件,结果,详情,压力(kPa),温度(°C),电流(A)
-    /// （【V1.76】SN/配方/结果结构化进列：启动/完成行详情里原来人肉拼的
+    /// （SN/配方/结果结构化进列：启动/完成行详情里原来人肉拼的
     /// "SN:xxx 配方:xxx"字串同步摘除，同一信息只出现在专属列，不在详情里重复。
     /// NaN/无数据记空串，不写"NaN"字样。）
-    ///
     /// 【口径规则（V1.76）】
     /// - 身份（SN/配方）：DeviceManager.ResolveEventIdentity 统一决策——
     ///   记录现值=事件瞬间绑定值；启动定格=该轮启动值（无快照回退现值）；
@@ -27,7 +24,6 @@ namespace AgingTestSystem.Services
     ///   "报警"（FAIL/装夹异常/设备异常）三类事件有判定语义，其余（启动/上电/
     ///   真空建立/中止/复位/急停/恢复/泄压/规则行）记空——中止/复位明确不计结果，
     ///   启动时填旧结果会误导成"这次已合格"。
-    ///
     /// 【给新手的说明】
     /// - 静态类不需要实例化，直接 TestEventLogger.Write(...) 调用即可
     /// - 用 lock 保证多线程（采集线程 / UI 线程）同时写文件不会冲突
@@ -72,11 +68,11 @@ namespace AgingTestSystem.Services
         /// <param name="detail">事件详情描述</param>
         /// <param name="pressureKPa">关联的压力值（kPa，可选，用于报警/停止时记录）</param>
         /// <param name="temperature">关联的温度值（可选，用于送风机温度告警时记录）</param>
-        /// <param name="currentA">关联的载台电流（【V1.74 新增】可选，单位 A；
+        /// <param name="currentA">关联的载台电流（可选，单位 A；
         /// null/NaN 记空串。老调用保持 6 参，行为不变）。</param>
-        /// <param name="sn">产品 SN（【V1.76 新增】结构化列；null=空串）</param>
-        /// <param name="recipe">配方名称（【V1.76 新增】结构化列；null=空串）</param>
-        /// <param name="result">判定结果（【V1.76 新增】PASS/FAIL/待判定/装夹异常/设备异常；
+        /// <param name="sn">产品 SN（结构化列；null=空串）</param>
+        /// <param name="recipe">配方名称（结构化列；null=空串）</param>
+        /// <param name="result">判定结果（PASS/FAIL/待判定/装夹异常/设备异常；
         /// 无判定语义的事件传空；null=空串）</param>
         public static void Write(string lotNumber, int deviceId, string eventType,
             string detail, decimal? pressureKPa = null, float? temperature = null,
@@ -141,7 +137,7 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// CSV 字段转义
         /// 字段里如果含逗号 / 双引号 / 换行 / 回车，需要用双引号包裹、双引号翻倍
-        /// 【V1.62】补上回车 \r：串口/扫码字符串常带 \r\n，不包裹会导致 CSV 断行错位
+        /// 补上回车 \r：串口/扫码字符串常带 \r\n，不包裹会导致 CSV 断行错位
         /// （历史记录窗按行解析，错位后整行被丢弃，追溯链断裂）。
         /// </summary>
         private static string CsvEscape(string value)

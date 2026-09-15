@@ -4,7 +4,6 @@ namespace AgingTestSystem.Dialogs
 {
     /// <summary>
     /// 工位设置窗口 —— 设计器自动生成部分（V1.18 新增）
-    ///
     /// 【布局说明】
     /// ┌────────────────────────────────────────────────┐
     /// │ 工位设置窗口 NO 1                                │  ← 标题栏
@@ -16,7 +15,6 @@ namespace AgingTestSystem.Dialogs
     /// │  烧屏时间:              [___] │ [关闭窗口]     │
     /// │  极限温度:              [___] │               │
     /// └────────────────────────────────┴───────────────┘
-    ///
     /// 左侧为 6 个设置项（设置项名 + 输入框，均左对齐，整列居中）；
     /// 右侧为一列操作按钮。
     /// </summary>
@@ -277,7 +275,7 @@ namespace AgingTestSystem.Dialogs
             this.lblTemp.TabIndex = 10;
             this.lblTemp.Text = "极限温度:";
             //
-            // nudTemp - 极限温度输入框（【V1.63】TextBox 改 NumericUpDown：
+            // nudTemp - 极限温度输入框（TextBox 改 NumericUpDown：
             // 与配方管理窗 nudLimitTemp 对齐：1 位小数/步进 0.5/范围 0~300，
             // 非法输入根本进不来，V1.62 的"非法存 0"问题从输入端消除）
             //
@@ -295,8 +293,7 @@ namespace AgingTestSystem.Dialogs
             this.nudTemp.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             //
             // lblPressure - "负压阈值"设置项名称（左对齐）
-            //
-            // 【V1.66】本工位真空工艺要求（kPa）：回填优先级 缓存 > 配方 > 全局；
+            // 本工位真空工艺要求（kPa）：回填优先级 缓存 > 配方 > 全局；
             // 下发=框里是什么就是什么（存什么定格什么，无魔法值）。项目未上线无老包袱。
             //
             this.lblPressure.AutoSize = true;
@@ -337,8 +334,7 @@ namespace AgingTestSystem.Dialogs
             this.lblPressureUnit.Text = "kPa";
             //
             // lblDisplayMode - "显示模式"设置项名称（左对齐）
-            //
-            // 【V1.66】烧屏画面记录（自由文本）：回填优先级同负压；下发走 SetStationRecipe。
+            // 烧屏画面记录（自由文本）：回填优先级同负压；下发走 SetStationRecipe。
             //
             this.lblDisplayMode.AutoSize = true;
             this.lblDisplayMode.Location = new System.Drawing.Point(30, 334);
@@ -425,11 +421,11 @@ namespace AgingTestSystem.Dialogs
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(490, 370);
-            // 【V1.71】绝对布局：禁缩小（MinimumSize=ClientSize），防缩坏布局；可放大。
-            // 【V1.72.6】输入框 21→29 后末两行间距只剩 6px，窗加高 20（350→370），
+            // 绝对布局：禁缩小（MinimumSize=ClientSize），防缩坏布局；可放大。
+            // 输入框 21→29 后末两行间距只剩 6px，窗加高 20（350→370），
             // 负压行下移 6、显示行下移 17，行隙回到 15+。
             this.MinimumSize = new System.Drawing.Size(490, 370);
-            // 【V1.71】UIForm 自绘蓝标题：删 FormBorderStyle，内容整体上移 35px 已逐项下移。
+            // UIForm 自绘蓝标题：删 FormBorderStyle，内容整体上移 35px 已逐项下移。
             this.Controls.Add(this.btnClose);
             this.Controls.Add(this.btnAddToQueue);
             this.Controls.Add(this.btnSave);
@@ -521,15 +517,15 @@ namespace AgingTestSystem.Dialogs
         private Sunny.UI.UILabel lblTemp;
         /// <summary>极限温度输入（NumericUpDown，V1.63 由 TextBox 改，与配方管理窗对齐）</summary>
         private System.Windows.Forms.NumericUpDown nudTemp;
-        /// <summary>"负压阈值"设置项名称标签（【V1.66】本工位真空工艺要求，kPa）</summary>
+        /// <summary>"负压阈值"设置项名称标签（本工位真空工艺要求，kPa）</summary>
         private Sunny.UI.UILabel lblPressure;
         /// <summary>负压阈值输入（NumericUpDown，V1.66：1位小数/步进0.5/范围±9999）</summary>
         private System.Windows.Forms.NumericUpDown nudPressure;
         /// <summary>负压单位标签（kPa）</summary>
         private Sunny.UI.UILabel lblPressureUnit;
-        /// <summary>"显示模式"设置项名称标签（【V1.66】烧屏画面记录）</summary>
+        /// <summary>"显示模式"设置项名称标签（烧屏画面记录）</summary>
         private Sunny.UI.UILabel lblDisplayMode;
-        /// <summary>显示模式输入框（【V1.66】自由文本，最长50）</summary>
+        /// <summary>显示模式输入框（自由文本，最长50）</summary>
         private Sunny.UI.UIComboBox cmbDisplayMode;
         /// <summary>破空按钮（功能待确认）</summary>
         private Sunny.UI.UIButton btnBreakVacuum;

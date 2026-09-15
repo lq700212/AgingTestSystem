@@ -6,21 +6,18 @@ namespace AgingTestSystem.Services
 {
     /// <summary>
     /// IO映射表构建器
-    /// 【V1.09 新增】依据现场"IO分配表"建立内部连续编号与三菱PLC物理地址之间的映射关系。
-    ///
+    /// 依据现场"IO分配表"建立内部连续编号与三菱PLC物理地址之间的映射关系。
     /// 【IO分配表 实际配置】
     /// - 输入(NPN, 72个): 真空负压表-1~72, 地址 X000~X107 (八进制)
     /// - 输出(PNP, 144个):
     ///   * 真空电磁阀-1~72, 地址 Y000~Y107 (八进制)
     ///   * 载台上电-1~72,  地址 Y110~Y217 (八进制)
     /// - 每个气压表对应: 1输入 + 2输出
-    ///
     /// 【内部编号 vs 物理地址】
     /// 程序内部使用十进制连续编号(IoId)便于数组索引:
     ///   输入: 1 ~ TotalInputs
     ///   输出: TotalInputs+1 ~ TotalInputs+TotalOutputs
     /// 与硬件通信时需通过物理地址(PhysicalAddress)寻址。
-    ///
     /// 【八进制编址说明】
     /// 三菱PLC的 X/Y 点采用八进制编号(每位数字仅 0~7)。
     /// 例如 X007 之后是 X010(非 X008), X077 之后是 X100。
@@ -31,10 +28,8 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 构建完整的IO映射表
         /// 按"输入→真空电磁阀输出→载台上电输出→预留输入/输出"顺序生成所有IO点定义
-        ///
         /// 【设计说明】
         /// 业务角度：每个气压表固定对应 1输入 + 2输出，因此“业务必需”总数由 totalBarometers 决定。
-        ///
         /// 现场角度：GX-CL140 后面模块数量可能多于业务使用量（例如现场是 80DI/160DO，但业务用 72DI/144DO）。
         /// 因此本构建器支持把多出来的通道作为“预留点”也生成出来，便于后续扩展或现场排查。
         /// </summary>
@@ -170,7 +165,7 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 获取指定气压表的IO点映射(1输入 + 2输出)
-        /// 【V1.16】工位面板（WorkstationPanelView）已不再显示物理地址，不再调用本方法
+        /// 工位面板（WorkstationPanelView）已不再显示物理地址，不再调用本方法
         /// </summary>
         /// <param name="deviceId">气压表编号(1 ~ TotalBarometers)</param>
         /// <param name="totalBarometers">气压表总数</param>

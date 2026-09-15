@@ -5,7 +5,6 @@ namespace AgingTestSystem.Models
 {
     /// <summary>
     /// 工位静态信息模型（V1.19.11 新增）
-    ///
     /// 【用途】
     /// 气压表硬件本身只上报"压力"数值，SN / 配方 / 延时时间 / 烧屏时间 这类
     /// "工位配置"信息无法从设备读取，需要由上位机维护并叠加到采集数据上展示。
@@ -14,7 +13,6 @@ namespace AgingTestSystem.Models
     /// - 通过 工位设置窗口（StationSettingsForm 保存按钮）写入 SN / 配方 / 延时；
     /// - DeviceManager 在每次采集时把这里存的静态信息叠加到 BarometerData，
     ///   使工位面板（WorkstationPanelView）能显示关联后的 SN / 配方 / 延时。
-    ///
     /// 【为什么需要这个类】
     /// 原来 SN / 配方 / 延时只在 Mock 数据里生成，真实气压表（ModbusRtuBarometerReader）
     /// 采集的数据这些字段恒为空，面板上永远显示不了现场绑定的 SN。
@@ -49,7 +47,7 @@ namespace AgingTestSystem.Models
         public decimal? RecipeNegativePressure { get; set; }
 
         /// <summary>
-        /// 配方的显示模式（【V1.66 新增】烧屏画面记录，自由文本，可空）。
+        /// 配方的显示模式（烧屏画面记录，自由文本，可空）。
         /// 与 RecipeName 同步下发、同步清空；采集叠加到 BarometerData 供面板/日志追溯。
         /// </summary>
         public string DisplayMode { get; set; }

@@ -13,23 +13,19 @@ namespace AgingTestSystem.Dialogs
 {
     /// <summary>
     /// 历史记录查询窗体（业务逻辑部分）
-    ///
     /// 【功能说明】
     /// 查询和展示老化测试的历史事件日志（启动/完成/报警/复位/急停/真空建立等）。
-    ///
     /// 【数据来源（V1.10 改为读取真实日志文件）】
     /// - 日志文件：程序运行目录\Logs\TestLog_yyyyMMdd.csv（每天一个文件）
     /// - 写入方：<see cref="AgingTestSystem.Services.TestEventLogger"/>
     /// - 列格式：时间,批号,SN,配方,设备编号,事件,结果,详情,压力(kPa),温度(°C),电流(A)
     ///   （V1.76 结构化 11 列；行列不足 11 的脏行直接跳过——项目未上线，无老文件包袱）
     /// - 历史记录窗体按选择的日期范围读取对应日期的 CSV 文件并展示
-    ///
     /// 【导出（V1.74 落地）】
     /// 导出按钮把"当前查询结果"按 ReportColumns 列配置生成 xlsx：
     /// 留空=缺省预设11列（时间/批号/SN/配方/工位/事件/结果/详情/压力/温度/电流），客户在系统设置→
     /// 报表导出分类里改列（跟项目走，切项目即换模板）。写盘套路与 ID 绑定窗同源
     /// （OpenXml，表头加粗居中 + 数据行普通样式，零新依赖）。
-    ///
     /// 【界面布局】
     /// ┌────────────────────────────────────────────────┐
     /// │ 开始时间:[▣]  结束时间:[▣]  [查询] [导出] [报表列]│ ← panelTop 顶部查询条
@@ -84,13 +80,13 @@ namespace AgingTestSystem.Dialogs
         private readonly List<LogEntry> _logs = new List<LogEntry>();
 
         /// <summary>
-        /// 当前查询结果（【V1.74 新增】导出按钮的数据源：与表格显示同序同内容，
+        /// 当前查询结果（导出按钮的数据源：与表格显示同序同内容，
         /// 上限 500 条与显示一致——报表明细一次导 500 条可读性最好，要全量直接拷 CSV）。
         /// </summary>
         private readonly List<LogEntry> _shown = new List<LogEntry>();
 
         /// <summary>
-        /// 列配置权限（【V1.75 新增】构造传入：true=显示"报表列"按钮。
+        /// 列配置权限（构造传入：true=显示"报表列"按钮。
         /// 主窗体按管理员权限传入（与系统设置同口径）；操作员看不见按钮，
         /// 配置改不了——权限破洞比没入口更严重）。
         /// </summary>
@@ -130,7 +126,7 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 按日期范围查询日志并显示到 DataGridView
-        /// 【V1.10】从 Logs 目录的 CSV 文件读取真实日志
+        /// 从 Logs 目录的 CSV 文件读取真实日志
         /// </summary>
         private void QueryLogs()
         {
@@ -248,7 +244,6 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 解析一行 CSV（支持字段含逗号/双引号时用双引号包裹）
-        ///
         /// 【给新手的说明】
         /// 我们写入 CSV 时，如果详情里含逗号，会用双引号包起来，双引号本身翻倍转义。
         /// 解析时从行首逐字符扫描：碰到双引号就进入"引号内"状态，直到下一个双引号。
@@ -326,7 +321,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 导出按钮点击事件（【V1.74 落地】按 ReportColumns 列配置导出 xlsx）。
+        /// 导出按钮点击事件（按 ReportColumns 列配置导出 xlsx）。
         /// 数据源 = 当前查询结果（_shown，与表格同序同内容，上限 500 条）；
         /// 列配置留空走缺省预设 8 列，手改文件写错走预设兜底（Resolve 保证永远有列）。
         /// </summary>
@@ -589,7 +584,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 报表列按钮点击事件（【V1.75 新增】历史窗里的列配置入口：与设置表同一份配置、
+        /// 报表列按钮点击事件（历史窗里的列配置入口：与设置表同一份配置、
         /// 同一条保存路，客户在"要导出的地方"配列，不用去设置表翻 50 行）。
         /// 模态弹窗（using 包住，关闭即释放，无终结器风险）；确定后经 ValidateValue
         /// 校验进当前项目 Policy.json（跟项目走），导出按钮当场按新列出表。
@@ -601,7 +596,7 @@ namespace AgingTestSystem.Dialogs
             using (var popup = new Controls.ReportColumnsEditorPopup(current))
             {
                 Services.ThemeManager.ApplyTo(popup);
-                // 【V1.75】弹窗落到"报表列"按钮正下方（与设置表弹窗同算法）：
+                // 弹窗落到"报表列"按钮正下方（与设置表弹窗同算法）：
                 // 模态 ShowDialog + Manual 定位同样生效；底部越界改落上方。
                 // 全名写法：本文件同时引了 OpenXml.Spreadsheet（Font/Color 同名），
                 // 不加 using System.Drawing（与 ID 绑定窗同口径，防 CS0104 歧义）。

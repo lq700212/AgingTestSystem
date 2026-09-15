@@ -4,9 +4,9 @@ using System.Windows.Forms;
 namespace AgingTestSystem.Dialogs
 {
     /// <summary>
-    /// 项目切换窗体 — 设计器部分（【V1.72.12 新增】纯代码拆分：静态边框进 Designer）。
+    /// 项目切换窗体 — 设计器部分（纯代码拆分：静态边框进 Designer）。
     /// 这里只装"静态边框"：窗体属性 + 当前项目标签/项目列表/新建行/三操作按钮。
-    /// 【V1.73】删掉底部灰字备注 _lblNote（丑）：说明转到 _btnSwitch/_lblCurrent 的
+    /// 删掉底部灰字备注 _lblNote（丑）：说明转到 _btnSwitch/_lblCurrent 的
     /// 悬停 tooltip（超 40 字走 SettingsForm.WrapTooltip，全仓统一口径）；
     /// 窗体随之缩高 415→350。
     /// 以下在 ProjectSwitchForm.cs 里用代码做：

@@ -7,8 +7,7 @@ using AgingTestSystem.Services;
 namespace AgingTestSystem.Dialogs
 {
     /// <summary>
-    /// 项目切换窗体（【V1.67 新增】一期多项目切换入口，仅管理员）。
-    ///
+    /// 项目切换窗体（一期多项目切换入口，仅管理员）。
     /// 【界面布局】
     /// ┌──────────────────────────────────┐
     /// │ 当前项目：烧屏测试                │  ← 悬停：账号全局共享说明
@@ -18,12 +17,11 @@ namespace AgingTestSystem.Dialogs
     /// │ 新建：[________] [创建]          │
     /// │ [切换并生效] [删除项目] [关闭]   │  ← 切换按钮悬停说明随可用态变
     /// └──────────────────────────────────┘
-    ///
     /// 【规则】
     /// - 新建=以当前项目为模板复制（配方/策略/布局全带过去，回来改差异项即可）；
     /// - 切换=改机器指针 ActiveProject，主窗体随后热加载（配方/工位设置/策略/
-    ///   布局即时换装，【V1.72.10】无需重启；成功后 SwitchedProjectName 带回项目名）；
-    /// - 删除=删非当前项目整个目录（【V1.72.11】建错/验证完的清理口；当前项目
+    ///   布局即时换装，无需重启；成功后 SwitchedProjectName 带回项目名）；
+    /// - 删除=删非当前项目整个目录（建错/验证完的清理口；当前项目
     ///   禁删，先切走再删；二次确认防手滑）；
     /// - 有工位在测（Testing/Vacuuming/Aging）时禁切：切项目=换配方换策略，
     ///   跑中的任务会读劈叉，等停机/完成再切。
@@ -43,7 +41,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 本次成功切换到的项目名（【V1.72.10】主窗体凭此做热加载；null=没切换，
+        /// 本次成功切换到的项目名（主窗体凭此做热加载；null=没切换，
         /// 主窗体什么都不做。原来这里是"切换并重启"，现在即时生效不重启了）。
         /// </summary>
         public string SwitchedProjectName { get; private set; }
@@ -53,11 +51,11 @@ namespace AgingTestSystem.Dialogs
         {
             _deviceManager = new CountAdapter(testingCountProvider);
 
-            // 【V1.72.12 Designer 化】静态边框搬进 ProjectSwitchForm.Designer.cs，
+            // 静态边框搬进 ProjectSwitchForm.Designer.cs，
             // 这里只初填"要读服务"的那一项（项目列表依赖 ProjectProfile）。
             InitializeComponent();
 
-            // 【V1.73】说明全部转悬停 tooltip（底部灰字备注已删）：
+            // 说明全部转悬停 tooltip（底部灰字备注已删）：
             // 切换按钮的提示随可用态变，在测禁用时直接告诉用户为什么点不了。
             _tip = new ToolTip();
             _tip.ShowAlways = true;
@@ -192,7 +190,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 删除项目（【V1.72.11】建错名/验证完的清理口）。
+        /// 删除项目（建错名/验证完的清理口）。
         /// 只删"选中的非当前项目"：当前项目禁删（先切走再删，防内存与文件对不上）；
         /// 删的是别的项目目录，不碰当前内存与采集，所以在测也可删（与"禁切"不同，
         /// 这里不查 TestingCount，原因写在 DeleteProfile 注释里）。
@@ -256,7 +254,7 @@ namespace AgingTestSystem.Dialogs
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
-            // 【V1.72.10 热更】指针已改即返回，主窗体凭 SwitchedProjectName 热加载，
+            // 指针已改即返回，主窗体凭 SwitchedProjectName 热加载，
             // 不再弹窗问重启（原来 Application.Restart，已删）。
             SwitchedProjectName = name;
             this.DialogResult = DialogResult.OK;

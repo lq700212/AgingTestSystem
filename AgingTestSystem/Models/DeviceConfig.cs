@@ -19,14 +19,11 @@ namespace AgingTestSystem.Models
         /// <summary>
         /// IO输入总数
         /// 当前现场接线：GX-CL140 后面接了 3 个输入模块（2×DI50N-S + 1×DI40N-S），合计 80 路输入通道。
-        ///
         /// 重要：TotalInputs 表示“耦合器提供的 DI 通道总数”，不等同于气压表数量。
         /// - TotalBarometers（气压表数量）当前是 72
         /// - TotalInputs（输入通道数量）当前是 80（其中前 72 路用于真空负压表-1~72，剩余 8 路预留）
-        ///
         /// 输入点编号范围：1 ~ TotalInputs（默认 1 ~ 80）
-        ///
-        /// 【V1.09 更新】依据IO分配表:
+        /// 依据IO分配表:
         /// - 72 个输入点均为 NPN 型, 对应三菱PLC X 地址(八进制编址 X000~X107)
         /// - 设备名: 真空负压表-1 ~ 真空负压表-72
         /// - 物理地址映射详见 <see cref="Services.IoMapBuilder"/>
@@ -36,15 +33,12 @@ namespace AgingTestSystem.Models
         /// <summary>
         /// IO输出总数
         /// 当前现场接线：GX-CL140 后面接了 5 个输出模块（5×DQ50P-S），合计 160 路输出通道。
-        ///
         /// 重要：TotalOutputs 表示“耦合器提供的 DO 通道总数”，其中业务实际用到的是：
         /// - 真空电磁阀：72 路（对应 真空电磁阀-1~72）
         /// - 载台上电：72 路（对应 载台上电-1~72）
         /// 合计 144 路，其余 16 路预留。
-        ///
         /// 输出点编号范围：TotalInputs+1 ~ TotalInputs+TotalOutputs（默认 81 ~ 240）
-        ///
-        /// 【V1.09 更新】依据IO分配表:
+        /// 依据IO分配表:
         /// - 144 个输出点均为 PNP 型, 对应三菱PLC Y 地址(八进制编址)
         /// - 真空电磁阀-1~72: Y000~Y107 (内部编号 = TotalInputs + deviceId)
         /// - 载台上电-1~72:  Y110~Y217 (内部编号 = TotalInputs + TotalBarometers + deviceId)
@@ -96,24 +90,21 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 主视图每行显示的气压表数量（列数）
-        ///
         /// 保持 8 列 × 9 行 = 72（不动列数）。
-        /// 【V1.88.17】自适应（AutoFit）双向精确铺满：zoomX 按宽、zoomY 按高独立算，
+        /// 自适应（AutoFit）双向精确铺满：zoomX 按宽、zoomY 按高独立算，
         /// 72 站刚好一屏、无需拖滑块，不同工控机屏即换即铺满（见 WorkstationGridView）。
-        /// 【V1.88.24】V1.88.22 的双模式（FitWidth 大字版＋纵向滚动）已删，只留本双向铺满一路。
+        /// V1.88.22 的双模式（FitWidth 大字版＋纵向滚动）已删，只留本双向铺满一路。
         /// </summary>
         public int PanelColumns { get; set; } = 8;
 
         /// <summary>
         /// 主视图每列显示的气压表数量（行数）
-        ///
         /// 保持 9 行（见 PanelColumns 注释）。
         /// </summary>
         public int PanelRows { get; set; } = 9;
 
         /// <summary>
         /// 是否使用模拟通讯（Mock）
-        /// 
         /// 给新手的说明：
         /// - true：不需要接任何线，程序用随机数模拟气压与 IO 状态，方便先把 UI/业务跑通
         /// - false：启用真实通讯（气压表 Modbus RTU + IO Modbus TCP），需要现场接线与正确参数
@@ -122,7 +113,6 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 串口读取超时（毫秒）
-        /// 
         /// 超时的意义：
         /// - 防止串口在“设备断线/拔插/地址不对”时一直卡住线程
         /// - 超时后会抛异常，被上层捕获并通过 OnError 通知 UI
@@ -146,11 +136,9 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 是否对输入点逻辑取反
-        ///
         /// 现场可能出现的情况：
         /// - 线路/模块是 NPN（低电平有效）
         /// - 但耦合器映射到寄存器后，有的设备会把“低有效”转换为 “1=ON”，有的不会
-        ///
         /// 因为是否需要取反只能通过现场实测确认，所以做成配置项：
         /// - false：寄存器 bit=1 认为输入 ON（默认）
         /// - true：寄存器 bit=0 认为输入 ON（逻辑取反）
@@ -164,7 +152,6 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// IO 模块的从站地址（UnitId/SlaveId）
-        /// 
         /// 说明：
         /// - Modbus TCP 连接是 IP:Port，但协议里仍然有 UnitId 字段
         /// - 很多 IO 耦合器默认是 1（0x01）
@@ -173,7 +160,6 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// IO 输入寄存器起始地址（DI 区域起点）
-        /// 
         /// 约定：
         /// - 默认 0x1000（来自你提供的 GX-CL140 测试 Demo）
         /// - 16 个 DI 打包到 1 个寄存器（bit0=第1路，bit15=第16路）是否成立需现场确认
@@ -182,7 +168,6 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// IO 输出寄存器起始地址（DO 区域起点）
-        ///
         /// 约定：
         /// - 默认 0x2000（来自你提供的 GX-CL140 测试 Demo）
         /// - 当前实现采用 Holding Register + Read/Modify/Write 的方式写单点输出
@@ -191,13 +176,11 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 是否启用 IO 输出"备用通道映射"
-        ///
         /// 【背景】
         /// 现场某个 DQ 输出通道烧毁 / 电压不足后，把该通道的信号改写到备用通道。
         /// 因为本程序会复用到多个工作台，多数工作台没有烧通道，所以做成**开关**：
         /// - false：不启用（默认），所有工作台行为完全不变
         /// - true：启用，按 <see cref="IoBackupChannelMappings"/> 把物理读写位置重定向到备用通道
-        ///
         /// 业务侧（输出点编号、UI 显示、报警联动）在启用后完全不变，
         /// 只是"写 DO / 读 DO"时自动改写到备用通道。
         /// </summary>
@@ -211,7 +194,6 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 气压表压力值寄存器起始地址（Input Register，功能码 0x04）
-        ///
         /// 约定（以 ModbusRtuBarometerTest Demo 实测为准）：
         /// - 0x0001 = 压力原始值（按有符号 short 解释，支持负压）
         /// - 0x0002 = 小数位数（合法 0~4；非法时用 BarometerDefaultDecimalPlaces）
@@ -227,7 +209,6 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 压力值缩放系数
-        /// 
         /// 示例：
         /// - 设备回传 12345，真实压力可能是 12.345kPa，则可配置为 0.001
         /// - 目前默认 1，等待现场确认后再调整
@@ -236,7 +217,6 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 报警压力阈值（单位：kPa）
-        /// 
         /// 约定：
         /// - 默认 -5 kPa（界面里也默认填这个）
         /// - 真空压力通常为负数，数值越接近 0 代表真空越差
@@ -246,7 +226,6 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 报警比较方向
-        ///
         /// true：当 pressureKPa > AlarmPressureThresholdKPa 触发报警（真空变差：负数变“大”）
         /// false：当 pressureKPa < AlarmPressureThresholdKPa 触发报警（少见，保留扩展）
         /// </summary>
@@ -261,7 +240,6 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 是否启用冷却送风机接入
-        ///
         /// - true：程序启动时尝试连接送风机控制屏并周期轮询状态；
         ///         送风机是"可选设备"，连接失败不会影响整机启动
         /// - false：完全跳过送风机（不创建连接、不轮询、不显示）
@@ -294,7 +272,6 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 送风机 IP 自动识别开关
-        ///
         /// 【背景】现场冷却送风机控制器的 IP 可能是 192.168.1.220 / .221 / .222 中的任意一个
         ///（换工作台、换控制器都会变），如果 IP 写死，换现场就得改配置。
         /// 所以做成自动识别：
@@ -350,7 +327,6 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 真空建立确认超时（毫秒）
-        ///
         /// 【业务意义】
         /// 启动运行时先打开真空电磁阀，但真空建立需要时间（从常压抽到目标负压）。
         /// 如果开阀后 <VacuumConfirmTimeoutMs> 毫秒内压力仍未进入正常区间
@@ -361,7 +337,6 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 通讯故障报警阈值（连续读取失败次数）
-        ///
         /// 【业务意义】
         /// 气压表通讯中断时，压力会停留在旧值上，如果不处理会"假正常"继续老化。
         /// 当某台连续读取失败达到本阈值，视为通讯故障 → 触发报警（关阀+断电+标故障）。
@@ -370,10 +345,8 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 老化测试最大时长（秒），0 = 不限时长（手动停止）
-        ///
         /// 【业务意义】
         /// 老化测试到时长后自动完成该台（关真空+断载台电+标已完成·待取料PASS+记日志），形成业务闭环。
-        /// 【V1.59 取值规则，纠正旧注】
         /// 实际时长 = 工位配方"烧屏时间(BurnInTime)" &gt; 0 用配方值，否则回退本全局值；
         /// 配方与全局都为 0 = 不限时长（永不自动完成，只能手动停止）。
         /// 参数在启动瞬间定格，中途改配方/改本值不影响进行中的测试。
@@ -382,7 +355,6 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 是否把"气压表报警触点（DI）"并入报警判定
-        ///
         /// 【业务意义】
         /// 现场气压表除 RTU 压力值外，还有一路硬件报警触点接在 DI 上。
         /// 默认 false（仅显示，不参与联锁），因为触点"常开/常闭"与 NPN 线制
@@ -392,7 +364,6 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 送风机温度告警上限（°C），0 = 不启用温度告警
-        ///
         /// 【业务意义】
         /// 送风机回报的当前温度超过本上限时，界面把温度显示为红色并写日志，
         /// 提醒操作员老化箱可能过温（厂商自动控温异常时的人工兜底）。
@@ -400,8 +371,7 @@ namespace AgingTestSystem.Models
         public float FanTempAlarmLimitC { get; set; } = 0f;
 
         /// <summary>
-        /// 超温是否全线联停（【V1.66 新增】烧屏安全项，默认 false = 现状只记日志）。
-        ///
+        /// 超温是否全线联停（烧屏安全项，默认 false = 现状只记日志）。
         /// 【业务意义】
         /// false：超温只记日志、不停机（V1.66 之前的行为，保持不变）；
         /// true：送风机当前温度超过 <see cref="FanTempAlarmLimitC"/> 时，
@@ -412,7 +382,7 @@ namespace AgingTestSystem.Models
         public bool FanTempShutdownEnabled { get; set; } = false;
 
         // =====================================================================
-        // 工艺策略（【V1.67 新增】一期 L2 策略层：7 个待确认点全部可配）
+        // 工艺策略（一期 L2 策略层：7 个待确认点全部可配）
         // 说明：
         // - 每个策略的缺省值 = V1.67 之前的行为（枚举 0 值），不配=和以前一模一样；
         // - 策略是跟项目的：存 Projects/<项目>/Policy.json（见 ProjectPolicyStore），
@@ -469,7 +439,7 @@ namespace AgingTestSystem.Models
         public CompletionAction CompletionAction { get; set; } = CompletionAction.PowerOffOnly;
 
         /// <summary>
-        /// 事件行 SN/配方取值（【V1.76 新增】Q8 追溯口径开关，跟项目走）。
+        /// 事件行 SN/配方取值（Q8 追溯口径开关，跟项目走）。
         /// RecordTime=记录现值（现状：事件瞬间绑定的 SN/配方）；
         /// StartSnapshot=启动定格（该轮启动时的 SN/配方，中途重绑不污染已跑任务；
         /// 无快照时回退现值）。CSV/报表/MES 三处统一走 DeviceManager.ResolveEventIdentity。
@@ -485,7 +455,7 @@ namespace AgingTestSystem.Models
         public int VentValveDoPoint { get; set; } = 0;
 
         /// <summary>
-        /// 本机是否装破空阀（【V1.73 新增】通用型开关：这台工控机接没接破空阀硬件）。
+        /// 本机是否装破空阀（通用型开关：这台工控机接没接破空阀硬件）。
         /// false（默认，本项目无阀）：工位设置窗手动"破空"按钮自动隐藏，
         /// 完成动作选泄压保存即拦（防配出到时"假泄压"）；
         /// true（下个有阀项目）：按钮显示 + 点位生效，泄压真写 DO。
@@ -494,7 +464,7 @@ namespace AgingTestSystem.Models
         public bool VentValveEnabled { get; set; } = false;
 
         /// <summary>
-        /// 是否启用载台电流回采（【V1.74 新增】Q2 通用骨架总开关）。
+        /// 是否启用载台电流回采（Q2 通用骨架总开关）。
         /// false（默认，当前项目现状）：不建电表连接、不读数，BarometerData.LoadCurrentA
         /// 恒为 NaN（面板悬停显示"--"，CSV 记空，规则变量恒 false），零行为变化；
         /// true：按 UseMockCommunication 二选一（Mock 有数 / 真实桩连不上读 NaN），
@@ -504,7 +474,7 @@ namespace AgingTestSystem.Models
         public bool UsePowerMeter { get; set; } = false;
 
         // =====================================================================
-        // MES 对接（【V1.68 新增】二期：映射层可配，传输层走 HTTP POST JSON）
+        // MES 对接（二期：映射层可配，传输层走 HTTP POST JSON）
         // 说明：
         // - 能配的是"报什么/什么时候报/字段叫什么"（触发器 + 字段映射 + 静态字段）；
         //   协议栈（HTTP/重试/离线缓存）是代码，见 Services/MesReporter.cs。
@@ -546,7 +516,7 @@ namespace AgingTestSystem.Models
         public string MesAuthType { get; set; } = "None";
 
         /// <summary>
-        /// Bearer token（【V1.68】保存时自动 DPAPI 加密落盘，内存里是明文。
+        /// Bearer token（保存时自动 DPAPI 加密落盘，内存里是明文。
         /// 见 <see cref="Services.MesCrypto"/>）。
         /// </summary>
         public string MesAuthToken { get; set; } = "";
@@ -557,7 +527,7 @@ namespace AgingTestSystem.Models
         public string MesAuthUser { get; set; } = "";
 
         /// <summary>
-        /// Basic 鉴权密码（【V1.68】同 token 自动加密落盘，内存明文）。
+        /// Basic 鉴权密码（同 token 自动加密落盘，内存明文）。
         /// </summary>
         public string MesAuthPassword { get; set; } = "";
 
@@ -596,7 +566,7 @@ namespace AgingTestSystem.Models
         public string MesStaticFields { get; set; } = "";
 
         /// <summary>
-        /// 自定义 HTTP 头（【V1.68 新增】跟机器）："头名=头值"，多组用分号分隔。
+        /// 自定义 HTTP 头（跟机器）："头名=头值"，多组用分号分隔。
         /// 示例：X-Line=L5;X-ApiVer=2 —— MES 厂要求的租户/版本/产线头放这里。
         /// 与鉴权头同名时鉴权优先（Authorization 永远按 MesAuthType 生成，不会被覆盖，
         /// 防配错头把鉴权顶掉）。
@@ -604,7 +574,7 @@ namespace AgingTestSystem.Models
         public string MesCustomHeaders { get; set; } = "";
 
         // =====================================================================
-        // 规则流程（【V1.69 新增】三期：规则表达式 + 阶段流，全部跟项目走 Policy.json）
+        // 规则流程（三期：规则表达式 + 阶段流，全部跟项目走 Policy.json）
         // 说明：
         // - 规则只能加严不能松绑：自定义报警只会多报警（记 FAIL），动不了内置联锁；
         //   完成表达式 OR 语义只能提前完成（烧屏架少点亮更安全），拖不成无限老化；
@@ -639,7 +609,7 @@ namespace AgingTestSystem.Models
         public bool SkipVacuum { get; set; } = false;
 
         // =====================================================================
-        // 报表导出（【V1.74 新增】Q8 报表可配：列编排跟项目走 Policy.json）
+        // 报表导出（Q8 报表可配：列编排跟项目走 Policy.json）
         // 说明：
         // - 配的是"导出的列有哪些/叫什么/什么顺序"（显示名=字段），不是报表格式本身；
         //   格式固定 xlsx（表头加粗居中 + 数据行），由历史窗导出按钮生成；
@@ -655,7 +625,7 @@ namespace AgingTestSystem.Models
         public string ReportColumns { get; set; } = "";
 
         // =====================================================================
-        // 显示模式字典（【V1.74 新增】Q20 记录层可配：烧屏画面选项名单，跟项目）
+        // 显示模式字典（Q20 记录层可配：烧屏画面选项名单，跟项目）
         // 说明：
         // - 录入窗（配方管理/批量/工位设置）的显示模式输入框保存时按此校验：
         //   空=清空允许，字典内=存规范写法，字典外=拦并报出全部选项；
@@ -670,7 +640,7 @@ namespace AgingTestSystem.Models
         public string DisplayModes { get; set; } = "";
 
         /// <summary>
-        /// 是否启用显示模式维度（【V1.75 新增】Q20 收尾：当前项目没提画面，默认藏）。
+        /// 是否启用显示模式维度（Q20 收尾：当前项目没提画面，默认藏）。
         /// false（默认）：三窗隐藏显示模式行（标签+下拉，布局同步收缩），配方存空串，
         /// 上报/日志带空——当前项目零打扰；true：三窗显示下拉 + 字典生效。
         /// 跟项目（App.config 只做机器缺省，`Projects/&lt;项目&gt;/Policy.json` 优先）。
@@ -678,7 +648,7 @@ namespace AgingTestSystem.Models
         public bool DisplayModeEnabled { get; set; } = false;
 
         /// <summary>
-        /// 按事件分地址（【V1.68 新增】跟机器）："触发器=URL"，多组用分号分隔。
+        /// 按事件分地址（跟机器）："触发器=URL"，多组用分号分隔。
         /// 示例：Alarm=http://192.168.1.50:8080/api/alarm —— 报警走专用接口，其余走 MesEndpoint。
         /// 没配的事件回退 MesEndpoint；URL 必须 http(s):// 开头（保存时校验）。
         /// </summary>
@@ -693,7 +663,6 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 是否启用扫码枪
-        ///
         /// - true：程序启动时自动识别并连接扫码枪串口，扫码结果写入日志 /
         ///         ID绑定窗体的 SN 输入框自动填充
         /// - false（默认）：完全不连接扫码枪（现场没装扫码枪时用，避免无谓的 WMI 查询）
@@ -702,7 +671,6 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// 扫码枪固定串口（如 "COM10"）
-        ///
         /// - 留空（默认）：通过 WMI 按 <see cref="ScannerDeviceKeyword"/> 自动识别端口
         /// - 填了具体端口（如 "COM10"）：直接用固定端口连接（WMI 识别不到时用这个兜底）
         /// </summary>
@@ -744,8 +712,7 @@ namespace AgingTestSystem.Models
         public bool ScannerDebugLog { get; set; } = false;
 
         /// <summary>
-        /// 把另一份配置的全部可写属性原样拷进本实例（【V1.72.10 热更】项目切换用）。
-        ///
+        /// 把另一份配置的全部可写属性原样拷进本实例（项目切换用）。
         /// 【为什么不用"换引用"】MainForm._config 是 readonly，DeviceManager/MesReporter/
         /// MesReporter 持的是同一引用的"别名"——换引用只换了 MainForm 手里的，
         /// 干活的服务还捏着旧对象。用 CopyFrom 就地换血，所有持引用方下个周期

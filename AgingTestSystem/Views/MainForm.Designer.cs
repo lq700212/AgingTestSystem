@@ -2,12 +2,10 @@
 {
     /// <summary>
     /// 主窗体 —— 设计器自动生成部分
-    ///
     /// 【说明】
     /// 本文件由 Visual Studio 设计器维护，包含所有控件的创建和布局代码。
     /// 请勿手动修改此文件内容，所有修改请通过设计器界面操作。
     /// 业务逻辑代码请放在 MainForm.cs 文件中。
-    ///
     /// 为什么需要单独的 Designer.cs 文件？
     /// WinForms 设计器依赖"partial class"分部类机制，将界面布局代码（本文件）
     /// 与业务逻辑代码（.cs 文件）分离。设计器只解析 Designer.cs 文件中的
@@ -60,6 +58,9 @@
             this.btnParameter = new Sunny.UI.UIButton();
             this.btnLog = new Sunny.UI.UIButton();
             this.btnAbout = new Sunny.UI.UIButton();
+            this.btnWinMin = new System.Windows.Forms.Button();
+            this.btnWinMax = new System.Windows.Forms.Button();
+            this.btnWinClose = new System.Windows.Forms.Button();
             this.splitContainerMain = new System.Windows.Forms.SplitContainer();
             this.tableLayoutPanelRight = new System.Windows.Forms.TableLayoutPanel();
             this.groupBoxStatus = new Sunny.UI.UIGroupBox();
@@ -139,7 +140,7 @@
             // 
             // tableLayoutPanelHeader
             // 
-            this.tableLayoutPanelHeader.ColumnCount = 9;
+            this.tableLayoutPanelHeader.ColumnCount = 12;
             this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 180F));
             this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 180F));
             this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 110F));
@@ -149,6 +150,9 @@
             this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 120F));
             this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 120F));
             this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 120F));
+            this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 40F));
+            this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 40F));
+            this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 40F));
             this.tableLayoutPanelHeader.Controls.Add(this.pnlProject, 0, 0);
             this.tableLayoutPanelHeader.Controls.Add(this.panelPermission, 1, 0);
             this.tableLayoutPanelHeader.Controls.Add(this.lblCommStatusLabel, 2, 0);
@@ -157,6 +161,9 @@
             this.tableLayoutPanelHeader.Controls.Add(this.btnParameter, 6, 0);
             this.tableLayoutPanelHeader.Controls.Add(this.btnLog, 7, 0);
             this.tableLayoutPanelHeader.Controls.Add(this.btnAbout, 8, 0);
+            this.tableLayoutPanelHeader.Controls.Add(this.btnWinMin, 9, 0);
+            this.tableLayoutPanelHeader.Controls.Add(this.btnWinMax, 10, 0);
+            this.tableLayoutPanelHeader.Controls.Add(this.btnWinClose, 11, 0);
             this.tableLayoutPanelHeader.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tableLayoutPanelHeader.Location = new System.Drawing.Point(3, 3);
             this.tableLayoutPanelHeader.Name = "tableLayoutPanelHeader";
@@ -327,7 +334,49 @@
             this.btnAbout.Text = "关于";
             this.btnAbout.TipsFont = new System.Drawing.Font("宋体", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.btnAbout.Click += new System.EventHandler(this.btnAbout_Click);
-            // 
+            //
+            // btnWinMin（最小化：自绘横线，见 MainForm.InitWindowChrome）
+            //
+            this.btnWinMin.BackColor = System.Drawing.SystemColors.Control;
+            this.btnWinMin.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.btnWinMin.FlatAppearance.BorderSize = 0;
+            this.btnWinMin.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnWinMin.Location = new System.Drawing.Point(1157, 0);
+            this.btnWinMin.Margin = new System.Windows.Forms.Padding(0);
+            this.btnWinMin.Name = "btnWinMin";
+            this.btnWinMin.Size = new System.Drawing.Size(40, 30);
+            this.btnWinMin.TabIndex = 5;
+            this.btnWinMin.TabStop = false;
+            this.btnWinMin.UseVisualStyleBackColor = false;
+            //
+            // btnWinMax（最大化/还原：自绘方框，见 MainForm.InitWindowChrome）
+            //
+            this.btnWinMax.BackColor = System.Drawing.SystemColors.Control;
+            this.btnWinMax.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.btnWinMax.FlatAppearance.BorderSize = 0;
+            this.btnWinMax.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnWinMax.Location = new System.Drawing.Point(1197, 0);
+            this.btnWinMax.Margin = new System.Windows.Forms.Padding(0);
+            this.btnWinMax.Name = "btnWinMax";
+            this.btnWinMax.Size = new System.Drawing.Size(40, 30);
+            this.btnWinMax.TabIndex = 6;
+            this.btnWinMax.TabStop = false;
+            this.btnWinMax.UseVisualStyleBackColor = false;
+            //
+            // btnWinClose（关闭：自绘叉，悬停红底，见 MainForm.InitWindowChrome）
+            //
+            this.btnWinClose.BackColor = System.Drawing.SystemColors.Control;
+            this.btnWinClose.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.btnWinClose.FlatAppearance.BorderSize = 0;
+            this.btnWinClose.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnWinClose.Location = new System.Drawing.Point(1237, 0);
+            this.btnWinClose.Margin = new System.Windows.Forms.Padding(0);
+            this.btnWinClose.Name = "btnWinClose";
+            this.btnWinClose.Size = new System.Drawing.Size(40, 30);
+            this.btnWinClose.TabIndex = 7;
+            this.btnWinClose.TabStop = false;
+            this.btnWinClose.UseVisualStyleBackColor = false;
+            //
             // splitContainerMain
             // 
             this.splitContainerMain.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -732,8 +781,8 @@
             this.Controls.Add(this.rootScrollPanel);
             this.MinimumSize = new System.Drawing.Size(800, 600);
             this.Name = "MainForm";
-            this.Padding = new System.Windows.Forms.Padding(0, 38, 0, 0);
-            this.Text = "老化测试系统V1.16";
+            this.Padding = new System.Windows.Forms.Padding(0, 0, 0, 0);
+            this.ShowTitle = false;
             this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
             this.ZoomScaleRect = new System.Drawing.Rectangle(15, 15, 1280, 900);
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.MainForm_FormClosing);
@@ -771,15 +820,15 @@
 
         /// <summary>【新增】根滚动容器，包裹主布局，支持窗体缩小时显示滚动条</summary>
         private System.Windows.Forms.Panel rootScrollPanel;
-        /// <summary>主布局容器（3行：顶栏/内容/状态栏；【V1.88.23】顶栏菜单并单行）</summary>
+        /// <summary>主布局容器（3行：顶栏/内容/状态栏；顶栏菜单并单行）</summary>
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelMain;
-        /// <summary>顶栏容器（【V1.88.23】单行：项目/权限/通讯＋4 按钮；列：项目P34/权限P16/通讯100+70/按钮4×120）</summary>
+        /// <summary>顶栏容器（单行：项目/权限/通讯＋4 按钮；列：项目P34/权限P16/通讯100+70/按钮4×120）</summary>
         private System.Windows.Forms.TableLayoutPanel tableLayoutPanelHeader;
-        /// <summary>当前项目显示容器（【V1.79】顶栏第 1 列：前缀 + 项目名两个标签，背景与顶栏一致）</summary>
+        /// <summary>当前项目显示容器（顶栏第 1 列：前缀 + 项目名两个标签，背景与顶栏一致）</summary>
         private System.Windows.Forms.Panel pnlProject;
         /// <summary>固定前缀"当前项目："（常规体不加粗，V1.79 用户点名）</summary>
         private Sunny.UI.UILabel lblProjectPrefix;
-        /// <summary>项目名标签（【V1.72.7 新增】容器内 Dock=Fill，构造里回填项目名；V1.78 起加粗）</summary>
+        /// <summary>项目名标签（容器内 Dock=Fill，构造里回填项目名；V1.78 起加粗）</summary>
         private Sunny.UI.UILabel lblProject;
         /// <summary>当前操作权限显示容器（V1.19.7：拆为前缀+角色名两个标签；V1.88.27 起与 pnlProject 同构 Panel+Dock，上下居中天然成立）</summary>
         private System.Windows.Forms.Panel panelPermission;
@@ -803,6 +852,12 @@
         private Sunny.UI.UIButton btnLog;
         /// <summary>关于按钮（下拉：设置 / 版本说明；V1.64 起深浅模式切换也收进该下拉，仅 dev 可见）</summary>
         private Sunny.UI.UIButton btnAbout;
+        /// <summary>窗口最小化按钮（顶栏最右，自绘横线；绘制与行为见 MainForm.InitWindowChrome）</summary>
+        private System.Windows.Forms.Button btnWinMin;
+        /// <summary>窗口最大化/还原按钮（顶栏最右，自绘方框；最大化时画还原叠框）</summary>
+        private System.Windows.Forms.Button btnWinMax;
+        /// <summary>窗口关闭按钮（顶栏最右，自绘叉；悬停红底，走正常 FormClosing 流程）</summary>
+        private System.Windows.Forms.Button btnWinClose;
         /// <summary>中间分割容器（左:气压表 右:操作面板）</summary>
         private System.Windows.Forms.SplitContainer splitContainerMain;
         /// <summary>右侧布局容器</summary>

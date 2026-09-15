@@ -9,7 +9,6 @@ namespace AgingTestSystem.Dialogs
 {
     /// <summary>
     /// 批量设置配方窗口（业务逻辑部分）
-    ///
     /// 【功能说明】
     /// 本窗口用于批量设置配方参数（配方名称、延时时间、烧屏时间、极限温度、
     /// 负压阈值、显示模式），
@@ -21,13 +20,11 @@ namespace AgingTestSystem.Dialogs
     ///    - 有选中 → 把该配方的名称 / 延时时间 / 烧屏时间 /
     ///      负压阈值 / 显示模式应用到所有选中的工位面板。
     /// "关闭窗口"按钮直接关闭本窗体。
-    ///
     /// 【数据流转】
     /// 1. 主窗体在弹出本窗口时传入：设备管理器（应用配方到工位）、共享配方列表（_recipes）、
     ///    当前选中的工位编号数组（可能为空）。
     /// 2. 用户在窗口中填写各项配方参数。
     /// 3. 点击"加入队列" → 保存配方到共享列表并落盘 → 应用到选中工位。
-    ///
     /// 【界面布局】
     /// ┌─────────────────────────────────────────────┐
     /// │ 批量设置设置配方窗口                         │  ← 标题栏
@@ -42,14 +39,12 @@ namespace AgingTestSystem.Dialogs
     /// │         [加入队列]                          │  ← 保存配方 + 应用到选中工位
     /// │         [关闭窗口]                          │  ← 直接关闭
     /// └─────────────────────────────────────────────┘
-    ///
     /// 【字段映射（V1.28 与配方管理窗口对齐）】
     /// - 延时时间 → RecipeConfig.DelayTime（工位面板"延时时间"）
     /// - 烧屏时间 → RecipeConfig.BurnInTime（工位面板"烧屏时间"）
     /// - 极限温度 → RecipeConfig.LimitTemperature
     /// - 负压阈值 → RecipeConfig.NegativePressure（V1.66；必填实数，新建默认=全局阈值）
     /// - 显示模式 → RecipeConfig.DisplayMode（V1.66；自由文本，只追溯不判定）
-    ///
     /// 【注意事项】
     /// 1. 延时时间 / 烧屏时间均使用三个 NumericUpDown（时:分:秒，V1.28 由 TextBox 改）：
     ///    时 0-99、分 0-59、秒 0-59，控件自带范围限制，无需再校验；
@@ -78,13 +73,13 @@ namespace AgingTestSystem.Dialogs
         private readonly IReadOnlyList<int> _selectedDeviceIds;
 
         /// <summary>
-        /// 悬停说明（【V1.73 新增】每个设置项都挂 tooltip，超 40 字走
+        /// 悬停说明（每个设置项都挂 tooltip，超 40 字走
         /// SettingsForm.WrapTooltip 换行，全仓统一口径）。
         /// </summary>
         private ToolTip _tip;
 
         /// <summary>
-        /// 显示模式行是否显示（【V1.75 新增】构造时按开关定死，Fill 认它。
+        /// 显示模式行是否显示（构造时按开关定死，Fill 认它。
         /// 不读 cmb.Visible——窗体没 Show 时 Visible 读恒 false，读它下拉永远是空的）。
         /// </summary>
         private readonly bool _displayModeShown;
@@ -104,20 +99,20 @@ namespace AgingTestSystem.Dialogs
             _recipes = recipes;
             _selectedDeviceIds = selectedDeviceIds ?? new List<int>();
 
-            // 【V1.88.13】配方下拉填项（只能从库里选，手输错名串配方从根上堵死；
+            // 配方下拉填项（只能从库里选，手输错名串配方从根上堵死；
             // 新建配方走「参数设置 → 配方管理」。默认不选中，由用户亲手选）。
             FillRecipeCombo();
             cmbRecipeName.SelectedIndexChanged += CmbRecipeName_SelectedIndexChanged;
 
-            // 【V1.66】负压阈值框新建默认值=全局阈值（项目未上线无老包袱，所见即所得）；
+            // 负压阈值框新建默认值=全局阈值（项目未上线无老包袱，所见即所得）；
             // _deviceManager 为 null（纯保存模式）时用 DeviceConfig 类默认值（-5kPa）。
             decimal defaultPressure = _deviceManager != null
                 ? _deviceManager.Config.AlarmPressureThresholdKPa
                 : new DeviceConfig().AlarmPressureThresholdKPa;
             txtNegativePressure.Text = defaultPressure.ToString("0.#");
 
-            // 【V1.74】显示模式下拉填项（构造时填字典；改字典重开本窗即换）
-            // 【V1.75】开关关时整行隐藏 + 布局收缩（显示行是输入表末 Percent 行：
+            // 显示模式下拉填项（构造时填字典；改字典重开本窗即换）
+            // 开关关时整行隐藏 + 布局收缩（显示行是输入表末 Percent 行：
             // 行高改 Absolute 0 + 窗高缩 37，行隙/按钮区原样保留）。
             DeviceConfig displayCfg = _deviceManager != null ? _deviceManager.Config : null;
             _displayModeShown = DisplayModeOptions.ShouldShowDisplayMode(displayCfg);
@@ -192,7 +187,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 配方下拉填项（【V1.88.13 新增】构造时调一次：选项 = 配方库全部配方名。
+        /// 配方下拉填项（构造时调一次：选项 = 配方库全部配方名。
         /// 默认不选中（SelectedIndex=-1），保存时空名字照旧拦截，逼用户亲手选）。
         /// </summary>
         private void FillRecipeCombo()
@@ -213,7 +208,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 配方下拉选择变化（【V1.88.13 新增】按选中名查库回填参数；
+        /// 配方下拉选择变化（按选中名查库回填参数；
         /// 未选中/名字在库中已无（库被改过）直接返回，不动现有输入。
         /// 比较口径与工位窗 FindRecipe / RecipeStorage.FindDuplicateIndex 对齐
         /// （Trim + 忽略大小写；以前 Ordinal 精确比，库名若含前后空格会选中不回填，
@@ -262,19 +257,19 @@ namespace AgingTestSystem.Dialogs
             // 回填极限温度
             txtLimitTemp.Text = recipe.LimitTemperature.ToString("0.#");
 
-            // 【V1.66】回填负压阈值 + 显示模式（配方一定有实数，直接显示；显示模式 null→空串）
+            // 回填负压阈值 + 显示模式（配方一定有实数，直接显示；显示模式 null→空串）
             txtNegativePressure.Text = recipe.NegativePressure.ToString("0.#");
-            // 【V1.74】下拉回填（字典 + 遗留值追加，看得见存时拦）
+            // 下拉回填（字典 + 遗留值追加，看得见存时拦）
             FillDisplayModes(recipe.DisplayMode, true);
         }
 
         /// <summary>
-        /// 显示模式下拉填项（【V1.74 新增】字典驱动；字典走本机生效配置，
+        /// 显示模式下拉填项（字典驱动；字典走本机生效配置，
         /// 无 manager（纯保存模式）时读项目文件。selectIt=true 时选中给定值。）
         /// </summary>
         private void FillDisplayModes(string selectedAfterFill, bool selectIt = false)
         {
-            // 【V1.75】隐藏态守卫（同工位窗）：隐藏=恒空，防遗留值堵死保存。
+            // 隐藏态守卫（同工位窗）：隐藏=恒空，防遗留值堵死保存。
             // 认 _displayModeShown 字段（不读 Visible，见字段注释）。
             if (!_displayModeShown)
             {
@@ -337,7 +332,7 @@ namespace AgingTestSystem.Dialogs
                 return null;
             }
 
-            // 【V1.66】解析负压阈值（kPa，必填实数）：与公共参数窗同口径 ±9999。
+            // 解析负压阈值（kPa，必填实数）：与公共参数窗同口径 ±9999。
             // 不搞"0=用全局"魔法——新建默认已填全局值，用户看到的就是存的。
             decimal negativePressure;
             if (!decimal.TryParse(txtNegativePressure.Text.Trim(), out negativePressure))
@@ -355,7 +350,7 @@ namespace AgingTestSystem.Dialogs
                 return null;
             }
 
-            // 【V1.74】显示模式字典校验（Q20：空=清空允许，字典内=存规范写法，
+            // 显示模式字典校验（Q20：空=清空允许，字典内=存规范写法，
             // 字典外拦并报出全部选项；字典走本机生效配置，无 manager 时读项目文件）
             string canonicalMode, modeErr;
             if (!DisplayModeOptions.ValidateInput(cmbDisplayMode.Text,
@@ -387,7 +382,6 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 加入队列按钮点击事件
-        ///
         /// 【流程】
         /// 1. 校验并构建当前配方（GetCurrentRecipeConfig）；
         /// 2. 保存配方到本地配方列表（SaveWithDuplicateCheck，有同名询问是否覆盖更新）；
@@ -445,15 +439,15 @@ namespace AgingTestSystem.Dialogs
                 if (_deviceManager == null) break;
 
                 // 写入工位静态信息（采集线程叠加后，工位面板同步显示配方名称 / 延时时间 / 烧屏时间）
-                // 【V1.59】配方的负压值一并下发：启动测试时作为该工位的真空到位/报警阈值
-                // 【V1.66】显示模式一并下发：烧屏画面追溯（采集叠加到 BarometerData.DisplayMode）
+                // 配方的负压值一并下发：启动测试时作为该工位的真空到位/报警阈值
+                // 显示模式一并下发：烧屏画面追溯（采集叠加到 BarometerData.DisplayMode）
                 _deviceManager.SetStationRecipe(deviceId, recipe.Name, recipe.NegativePressure, recipe.DisplayMode);
                 _deviceManager.SetStationDelayTimes(deviceId, recipe.DelayTime, recipe.BurnInTime);
                 appliedCount++;
             }
 
             // ---- 5) 成功提示 ----
-            // 【V1.74】定格护栏（Q18 接受定格语义后的小提示）：在测工位按启动瞬间定格的
+            // 定格护栏（Q18 接受定格语义后的小提示）：在测工位按启动瞬间定格的
             // 旧参数跑完，本次下发只影响新启动——有交集才提示，无交集不打扰。
             string testingNote = BuildTestingNote();
             MessageBox.Show(
@@ -465,7 +459,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 定格提示文案（【V1.74 新增】纯逻辑可单测：选中工位与在测工位有交集才提示）。
+        /// 定格提示文案（纯逻辑可单测：选中工位与在测工位有交集才提示）。
         /// 在测判定走 DeviceManager.GetTestingDeviceIds（与项目切换禁切同口径）；
         /// manager 为 null/异常按"无在测"处理（纯保存模式不打扰）。
         /// </summary>

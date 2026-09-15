@@ -5,18 +5,15 @@ using System.Text;
 namespace AgingTestSystem.Services
 {
     /// <summary>
-    /// MES 密钥 DPAPI 加解密（【V1.68 新增】token/密码不再明文落盘）。
-    ///
+    /// MES 密钥 DPAPI 加解密（token/密码不再明文落盘）。
     /// 【为什么用 DPAPI】Windows 自带、机器级密钥管理，不用我们自己存密钥文件
     /// （自己存密钥=掩耳盗铃）。Scope 用 LocalMachine：产线工控机 single 账号自启动，
     /// 但管理员可能换 Windows 账号登录维护——CurrentUser 会导致"换个账号登录就解密失败"，
     /// LocalMachine 则本机任何账号都能解（威胁模型：工控机物理隔离，能进本机的人
     /// 本来就能读内存，此处防的是"配置文件被拷贝带走"，LocalMachine 够了）。
-    ///
     /// 【存储格式】"DPAPI:" + Base64(加密字节)。无此前缀的一律拒绝（返回 null），
     /// 不做明文兼容——项目未上线（PasswordHasher 同先例：非哈希一律判失败），
     /// 配置里出现明文就是手写错了，必须重填，不能悄悄吞下。
-    ///
     /// 【失败语义】解密失败/格式不对返回 null（调用方按空处理 + 记日志），绝不抛异常——
     /// 密钥坏了不能拖垮启动，最多是 MES 401，事件进离线缓存等修好重发。
     /// </summary>

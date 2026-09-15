@@ -2,11 +2,9 @@
 {
     /// <summary>
     /// 登录窗体 —— 设计器自动生成部分
-    ///
     /// 【说明】
     /// 本文件由 Visual Studio 设计器维护，包含所有控件的创建和布局代码。
     /// 业务逻辑代码请放在 LoginForm.cs 文件中。
-    ///
     /// 窗体布局：
     /// ┌──────────────────────────────┐
     /// │       切换为 XXX权限          │
@@ -155,10 +153,10 @@
             this.MinimizeBox = false;
             // 居中显示在父窗体上
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
-            // 【V1.71】UIForm 自绘蓝标题（约 35px），内容整体下移 35px，窗体同步加高；
+            // UIForm 自绘蓝标题（约 35px），内容整体下移 35px，窗体同步加高；
             // FormBorderStyle 删除（UIForm 自己管边框，固定值会盖掉自绘标题）。
             this.ClientSize = new System.Drawing.Size(380, 275);
-            // 【V1.71】绝对布局：禁缩小（MinimumSize=ClientSize），防缩坏布局；可放大。
+            // 绝对布局：禁缩小（MinimumSize=ClientSize），防缩坏布局；可放大。
             this.MinimumSize = new System.Drawing.Size(380, 275);
             this.Controls.Add(this.btnCancel);
             this.Controls.Add(this.btnOK);

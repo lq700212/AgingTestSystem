@@ -3,8 +3,7 @@ namespace AgingTestSystem.Models
 {
     /// <summary>
     /// IO点定义模型
-    /// 【V1.09 新增】描述单个IO点的静态配置信息（地址、功能、电气类型等）
-    ///
+    /// 描述单个IO点的静态配置信息（地址、功能、电气类型等）
     /// 该模型基于现场"IO分配表"整理而成，用于建立"内部连续编号"与"物理地址"之间的映射。
     /// 程序内部使用 <see cref="IoId"/>（十进制连续编号）进行索引，
     /// 与硬件通信时使用 <see cref="PhysicalAddress"/>（三菱PLC八进制地址，如 X000 / Y107）。
@@ -22,7 +21,6 @@ namespace AgingTestSystem.Models
         /// 物理地址（三菱PLC八进制编址）
         /// 输入示例：X000、X007、X010、X107
         /// 输出示例：Y000、Y107、Y110、Y217
-        ///
         /// 【八进制编址说明】
         /// 三菱PLC的 X/Y 点采用八进制编号，每位数字只能是 0~7。
         /// 例如 X007 的下一个是 X010（不是 X008），X077 的下一个是 X100。
@@ -66,7 +64,7 @@ namespace AgingTestSystem.Models
 
     /// <summary>
     /// 单个气压表对应的IO点映射集合
-    /// 【V1.09 新增】每个气压表对应 1 个输入 + 2 个输出
+    /// 每个气压表对应 1 个输入 + 2 个输出
     /// </summary>
     public class DeviceIoMapping
     {

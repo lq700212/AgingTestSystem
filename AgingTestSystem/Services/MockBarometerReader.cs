@@ -11,7 +11,6 @@ namespace AgingTestSystem.Services
     /// 气压表数据读取模拟实现
     /// 用于开发和测试阶段，模拟真实气压表数据
     /// 实际使用时需要替换为真实的硬件通信实现
-    ///
     /// 【修复说明】
     /// 修复 M5：使用 lock 保护 Random，避免多线程访问导致内部状态损坏
     /// 修复 M6：ReadAllData 增加 _config 判空，避免未 Connect 时抛 NullReferenceException
@@ -82,7 +81,7 @@ namespace AgingTestSystem.Services
             }
 
             // 使用 lock 保护 Random 访问（修复 M5）
-            // 【V1.09 更新】依据IO分配表: 1输入(真空负压表) + 2输出(真空电磁阀 + 载台上电)
+            // 依据IO分配表: 1输入(真空负压表) + 2输出(真空电磁阀 + 载台上电)
             int pressureInt;
             int delayTimeMin, delayTimeSec;
             int burnInMin, burnInSec;
@@ -150,7 +149,7 @@ namespace AgingTestSystem.Services
 
             if (!_isConnected)
             {
-                // 【V1.16.2 对齐真实实现】返回"全 null 数组"，让 DeviceManager 的
+                // 返回"全 null 数组"，让 DeviceManager 的
                 // 逐台循环能累加失败次数并触发"通讯故障"联动（与真实串口断开行为一致）
                 OnError?.Invoke(this, "设备未连接（等待自动重连）");
                 return new BarometerData[_config.TotalBarometers];
@@ -182,7 +181,7 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 模拟批量写入所有气压表的设备阈值
         /// 逐台调用 <see cref="SetThreshold"/>，返回 deviceId → 是否成功。
-        /// 【V1.16 对齐】串口未连接时返回空字典，让上层走"未连接"提示分支。
+        /// 串口未连接时返回空字典，让上层走"未连接"提示分支。
         /// </summary>
         public Dictionary<int, bool> SetAllThresholds(decimal thresholdValue)
         {

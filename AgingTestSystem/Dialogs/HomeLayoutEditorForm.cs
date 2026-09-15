@@ -8,16 +8,14 @@ using AgingTestSystem.Views;
 namespace AgingTestSystem.Dialogs
 {
     /// <summary>
-    /// 主页区域调整可视化编辑器（【V1.58】）
-    ///
+    /// 主页区域调整可视化编辑器（）
     /// 【作用】
     /// 让用户不用改代码、不用看坐标数字，直接用鼠标拖动主界面各区域的"边缘"来调整尺寸：
     /// - 右侧状态按钮区宽度（RightPanelWidth）
     /// - 底部状态栏高度（StatusBarHeight）
-    /// （【V1.88.28】顶栏高度锁死 30 不可调：编辑器删顶栏输入行＋顶栏拖动边，
+    /// （顶栏高度锁死 30 不可调：编辑器删顶栏输入行＋顶栏拖动边，
     /// 老文件残留旧值加载即归位，见 HomeLayoutConfig.FixedHeaderHeight。）
     /// 工作站列表面板（splitContainerMain.Panel1）自动占满剩余宽度，无需手动配置。
-    ///
     /// 【界面布局】（本窗体全部由代码创建，无需 Designer 维护）
     /// ┌─ 主页区域调整 ────────────────────────────────────────┐
     /// │ ┌──────────────────────────────────────────────────┐ │
@@ -36,7 +34,6 @@ namespace AgingTestSystem.Dialogs
     /// │ 右侧区域宽 [nudRight]   状态栏高 [nudStatus]          │
     /// │        [恢复默认]  [保存]  [取消]                     │
     /// └──────────────────────────────────────────────────────┘
-    ///
     /// 【交互说明】
     /// - 预览区内部固定使用 1400×900 逻辑坐标系（与主窗体设计尺寸一致），
     ///   按预览区客户区等比缩放显示，窗口拉大/缩小不影响比例。
@@ -45,7 +42,6 @@ namespace AgingTestSystem.Dialogs
     ///   按住拖动实时改对应配置值，数值输入框同步刷新；
     ///   也可直接改输入框数值，拖动与输入双向同步。
     /// - 尺寸上下限来自 <see cref="HomeLayoutConfig"/> 的 Range 常量，防止拖出合理范围。
-    ///
     /// 【保存】
     /// 点击【保存】把当前值写入 HomeLayout.json（<see cref="HomeLayoutConfig.Save"/>），
     /// 返回 DialogResult.OK；取消则不改动任何配置。
@@ -56,7 +52,7 @@ namespace AgingTestSystem.Dialogs
         private readonly HomeLayoutConfig _layout;
 
         /// <summary>
-        /// 自绘预览控件（【V1.72.16】在构造里代码创建，不进 Designer：
+        /// 自绘预览控件（在构造里代码创建，不进 Designer：
         /// HomeLayoutPreviewControl 是内部自定义控件（还用 new 藏了基类 Layout 事件），
         /// Designer 里 new 它/挂它的 LayoutChanged 事件，每次打开预览都标脏、存盘又零 diff，
         /// 纯幽灵脏，删 Layout=null 行都去不掉，只能整机搬出来，Designer 里只留空 Panel 占位。
@@ -75,7 +71,7 @@ namespace AgingTestSystem.Dialogs
         {
             _layout = layout;
 
-            // 【V1.72.12 Designer 化】静态边框搬进 HomeLayoutEditorForm.Designer.cs
+            // 静态边框搬进 HomeLayoutEditorForm.Designer.cs
             // （含 SuspendLayout 包裹 + AutoScale 三要素 + Dock 挂接，都在里面）。
             // 这里只回填"要吃构造参数"的三项：预览控件创建 + Layout 引用 + 四个输入框初值。
             InitializeComponent();
@@ -103,7 +99,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 预览画布主题底色（【V1.60.4】纯函数，方便回归直接断言）。
+        /// 预览画布主题底色（纯函数，方便回归直接断言）。
         /// 深色用户指定纯黑（各区域色块自带浅底+块内文字，不依赖画布底，黑底安全）；
         /// 浅色保持白纸效果。
         /// </summary>
@@ -130,7 +126,7 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 数值输入框变化 → 同步到配置并刷新预览。
-        /// 【V1.88.17】写入前按 Range 再钳一次：输入框自己的 Maximum 管得住上下箭头，
+        /// 写入前按 Range 再钳一次：输入框自己的 Maximum 管得住上下箭头，
         /// 管不住手输；钳后脏值到不了 json，
         /// 保存的文件永远合法，下次 LoadOrDefault 不用替它收拾。
         /// </summary>
@@ -155,7 +151,7 @@ namespace AgingTestSystem.Dialogs
         {
             if (_syncing) return;
             _syncing = true;
-            // 【V1.72.16】赋值前一律钳制：HomeLayout.json 可能是旧版本存的越界值
+            // 赋值前一律钳制：HomeLayout.json 可能是旧版本存的越界值
             // （或预览控件将来又被拖出范围），直接赋给 NumericUpDown.Value 会抛
             // ArgumentOutOfRangeException（现场"340 的值对于 Value 无效"就是这么来的）。
             _nudRight.Value = ClampNud(_nudRight, _layout.RightPanelWidth);
@@ -164,7 +160,7 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 恢复默认：把两个可调值重置为内置默认并刷新（【V1.88.28】顶栏固定 30，不在恢复之列）。
+        /// 恢复默认：把两个可调值重置为内置默认并刷新（顶栏固定 30，不在恢复之列）。
         /// 注意：右侧宽度默认值写死在 <see cref="MainForm.DefaultRightPanelWidth"/>（240），
         /// 其余区域用 <see cref="HomeLayoutConfig"/> 的类默认，与主窗体未配置时的
         /// 生效值保持一致，避免"恢复默认"反而变成另一套尺寸。
@@ -175,7 +171,7 @@ namespace AgingTestSystem.Dialogs
             _layout.RightPanelWidth = MainForm.DefaultRightPanelWidth;
             _layout.StatusBarHeight = def.StatusBarHeight;
             _syncing = true;
-            // 【V1.72.16】同上钳制：缺省值理论上都在范围内，但钳一下零成本，
+            // 同上钳制：缺省值理论上都在范围内，但钳一下零成本，
             // 万一将来改了 Range 常量忘同步 Designer，这里就是最后一道闸。
             _nudRight.Value = ClampNud(_nudRight, _layout.RightPanelWidth);
             _nudStatus.Value = ClampNud(_nudStatus, _layout.StatusBarHeight);
@@ -199,17 +195,15 @@ namespace AgingTestSystem.Dialogs
 
     /// <summary>
     /// 主页布局预览自绘控件。
-    ///
     /// 【坐标系】
     /// 内部固定使用 1280×900 逻辑坐标系（与主窗体 tableLayoutPanelMain 设计尺寸一致），
     /// 绘制前先把客户区等比缩放到 1280×900 的视口（居中留白），
     /// 所有区域坐标/鼠标命中判断都在逻辑坐标系里做，天然适配任意窗口大小与 DPI。
-    ///
     /// 【可拖动边缘】共 2 条，拖动时通过 <see cref="Layout"/> 属性实时改值并触发
     /// <see cref="LayoutChanged"/> 事件：
     /// 1. 右侧区域左边（x = 1280 - RightPanelWidth）→ 调 RightPanelWidth
     /// 2. 状态栏上边（y = 900 - StatusBarHeight）→ 调 StatusBarHeight
-    /// （【V1.88.28】顶栏下边已删：顶栏锁死 FixedHeaderHeight，不可拖）。
+    /// （顶栏下边已删：顶栏锁死 FixedHeaderHeight，不可拖）。
     /// </summary>
     internal class HomeLayoutPreviewControl : Control
     {
@@ -223,7 +217,7 @@ namespace AgingTestSystem.Dialogs
         private const int HIT_TOLERANCE = 6;
 
         /// <summary>当前编辑的布局配置</summary>
-        /// 【V1.64.3】加 new 显式声明有意隐藏基类 Control.Layout 事件（CS0108）：
+        /// 加 new 显式声明有意隐藏基类 Control.Layout 事件（CS0108）：
         /// 基类那个 Layout 是布局事件，本预览控件从不用它（类内 18 处 Layout. 全指本属性），
         /// 不改名是为少动调用方（_preview = new ... { Layout = _layout } 等），加 new 即零警告。
         public new HomeLayoutConfig Layout { get; set; }
@@ -243,7 +237,7 @@ namespace AgingTestSystem.Dialogs
         /// <summary>鼠标当前悬停的高亮边缘（None=无）</summary>
         private DragEdge _hoverEdge;
 
-        /// <summary>可拖动的边缘类型（【V1.88.28】顶栏下边已删：顶栏锁死，不可拖）</summary>
+        /// <summary>可拖动的边缘类型（顶栏下边已删：顶栏锁死，不可拖）</summary>
         private enum DragEdge
         {
             None,
@@ -322,8 +316,8 @@ namespace AgingTestSystem.Dialogs
             int bodyTop = header;
             int bodyH = LOGIC_H - status - bodyTop;    // 主体区高度
 
-            // ① 顶栏（天蓝；【V1.88.23】标题栏+菜单栏并单行，一块画；
-            // 【V1.88.28】固定 30 不可调，块上明示"固定"防误拖）
+            // ① 顶栏（天蓝；标题栏+菜单栏并单行，一块画；
+            // 固定 30 不可调，块上明示"固定"防误拖）
             DrawBlock(g, v.Left, v.Top,
                 LOGIC_W, header, "顶栏（固定 30，不可调）  " + header + "px",
                 Color.FromArgb(230, 240, 255), Color.FromArgb(70, 110, 180));

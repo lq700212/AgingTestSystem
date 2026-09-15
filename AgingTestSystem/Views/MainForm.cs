@@ -7,48 +7,35 @@ using AgingTestSystem.Dialogs;
 using AgingTestSystem.Models;
 using AgingTestSystem.Services;
 
-// 【说明】
-// 本文件新增了"用户权限管理"功能：
-// - 引入 UserManager（用户管理服务）
-// - 引入 UserRole（用户角色枚举）
-// - 引入 LoginForm 和 UserManagementForm（对话框）
-// 实现：
-// - 点击"用户权限"按钮 → 显示下拉菜单（操作员/技术员/管理员）
-// - 选择菜单项 → 弹出 LoginForm 输入用户名密码
-// - 登录成功 → 切换权限，更新顶部标签
-// - 登录失败 → 弹出错误提示窗口
-// - 管理员权限下，下拉菜单额外显示"用户管理"选项
-// - 参数设置按钮需要技术员或管理员权限才能操作
+// 本文件是主窗体的业务逻辑部分（设备管理、数据更新、事件处理），
+// 界面布局见 MainForm.Designer.cs。用户权限：点"用户权限"下拉选角色→LoginForm 登录→
+// 切换顶栏显示；无权限点"参数设置"弹提示（按钮常亮可点，点了才拦）。
 
 namespace AgingTestSystem.Views
 {
     /// <summary>
     /// 主窗体（主视图）—— 业务逻辑部分
     /// 整个软件的界面框架
-    ///
     /// 【说明】
     /// 本文件只包含业务逻辑（设备管理、数据更新、事件处理）。
     /// 界面控件的创建和布局代码在 <see cref="MainForm.Designer.cs"/> 文件中，
     /// 由 Visual Studio 设计器自动维护，请勿手动修改 Designer.cs 中的控件布局。
-    ///
-    /// 窗体布局说明：
-    /// ┌─────────────────────────────────────────────────────────┐
-    /// │ 当前项目:烧屏测试 │ 当前操作权限: 操作员 │ 通讯模块状态: 已连接/未连接 │
-    /// │ (前缀常规+名加粗)  │ (前缀常规+角色名加粗) │ (标签常规+状态值加粗，=IO耦合器，V1.16.1) │
-    /// ├─────────────────────────────────────────────────────────┤
-        /// │ 项目/权限/通讯＋[用户权限] [参数设置] [日志记录] [关于] │（V1.64 深色按钮收进关于下拉仅dev可见；V1.88.23 两行并单行36px）
+    /// 窗体布局说明（无系统标题栏：Sunny 蓝标题整体藏掉，纵向 35px 全还给工作站区；
+    /// 最小化/最大化/关闭进顶栏最右，自绘字形，行为见 InitWindowChrome）：
+    /// ┌──────────────────────────────────────────────────────────────────┐
+    /// │顶栏30: 项目 │ 权限 │ 通讯状态 │ …弹性… │4按钮│[—][□][×]│自绘40×3│
+    /// │ (前缀常规+值加粗，9pt)                    (9pt)  (悬停：灰/红)      │
     /// ├──────────────────────────────┬──────────────────────────┤
     /// │                              │ 运行状态                 │
     /// │                              │ ┌────────────────────┐   │
-    /// │   工位显示区域               │ │ 空闲/测试中(D4204)  │   │
-    /// │   (动态加载72个工位面板)      │ └────────────────────┘   │
+    /// │   工位显示区域               │ │ 空闲/测试中        │   │
+    /// │   (72 面板自绘一屏铺满)       │ └────────────────────┘   │
     /// │                              │                         │
     /// │   自绘大画布                 │ 监视                    │
-    /// │   WorkstationGridView       │ 设置温度: [D4700]       │
-    /// │   (9列 × 8行布局)           │ 上部温度: [D4702]       │
-    /// │   (V1.50 单窗口滚动容器)    │ 下部温度: [D4704]       │
+    /// │   WorkstationGridView       │ 当前温度 / 设置温度 /    │
+    /// │   (8列 × 9行，无滚动条)      │ 送风机状态              │
     /// │                              │                         │
-    /// │                              │ 操作（V1.59.1 精简版，V1.67 加下料判定）  │
+    /// │                              │ 操作（7按钮）           │
     /// │                              │ [批量设置配方]          │
     /// │                              │ [录入批号]             │
     /// │                              │ [启动运行（选中台）]    │
@@ -61,60 +48,33 @@ namespace AgingTestSystem.Views
     /// └─────────────────────────────────────────────────────────┘
     /// </summary>
     /// <remarks>
-    /// 【修复 H10】设计器报错"未能加载基类 System.Windows.Forms.Form"
-    ///
-    /// 【问题原因】
-    /// 与 WorkstationPanelView.cs 同样的问题：.cs 文件包含中文字符但没有 UTF-8 BOM，
-    /// VS 设计器的 CodeDom 解析器无法正确识别文件编码，
-    /// 导致中文注释乱码，进而无法正确解析类声明和 using 语句，
-    /// 设计器找不到 System.Windows.Forms.Form 基类，报"未能加载基类"错误。
-    ///
-    /// 【修复方法】
-    /// 1. 将基类声明从 `: Form` 改为 `: System.Windows.Forms.Form`
-    ///    使用完整命名空间路径，避免设计器因 using 语句解析失败而找不到基类
-    /// 2. 将所有 .cs 文件保存为 UTF-8 with BOM 编码（见编码转换脚本）
+    /// 基类写完整路径（Sunny.UI.UIForm）：含中文注释的文件在某些 VS 设计器编码识别下会
+    /// 报"未能加载基类"，完整路径可避开；所有 .cs 保持 UTF-8 编码。
     /// </remarks>
     public partial class MainForm : Sunny.UI.UIForm
     {
         /// <summary>
-        /// 【V1.58.1】右侧状态按钮区宽度的兜底绝对值（写死在本窗体，不放在 HomeLayoutConfig）。
-        ///
-        /// 【V1.65】右侧宽度改由 <see cref="RightPanelRatio"/> 按比例自适应（默认跟随窗口，
-        /// 只有现场在"主页区域调整"编辑器里保存过 HomeLayout.json 才用文件里的绝对值）。
-        /// 本常量退为两处兜底：①窗体构造极早期分隔容器宽还不可读时；②编辑器"恢复默认"
-        /// 按钮的右侧值。平时不要直接拿它当右侧宽度，用 <see cref="ComputeRightPanelWidth"/>
-        /// 算出来的才是当前生效值。
+        /// 右侧区宽度兜底值（构造极早期容器宽不可读、编辑器"恢复默认"两处用；
+        /// 平时生效值走 <see cref="ComputeRightPanelWidth"/>：无用户配置文件按窗口比例，
+        /// 有则用文件里的绝对值）。
         /// </summary>
         public const int DefaultRightPanelWidth = 240;
 
         /// <summary>
-        /// 【V1.65】右侧状态按钮区宽度占分隔容器（splitContainerMain）总宽的比例。
-        ///
-        /// 为什么用比例而不用写死像素（用户要求，血泪原则）：
-        /// - 写死 300px 在 1400 宽设计屏上正好（占 23.4%），到 1366 宽工控机上右侧纹丝不动，
-        ///   全靠左侧网格区压缩，换一台设备就得改一次代码；
-        /// - 0.234 就是现状比例（326 ÷ 1394），按此比例换算：1366 屏右侧≈318、1080p 屏≈448→
-        ///   被 <see cref="RightPanelMaxWidth"/> 钳到 340。正常屏上看起来和以前一模一样，
-        ///   只是分母从"写死的设计宽"变成了"窗口实际宽"，换设备自动等比。
+        /// 右侧区宽度占分隔容器总宽的比例（写死像素换台工控机就溢出/留白，所以按窗口实际宽等比；
+        /// 0.234 即现状比例，大小屏分别由 <see cref="RightPanelMinWidth"/>/<see cref="RightPanelMaxWidth"/> 钳住）。
         /// </summary>
         public const double RightPanelRatio = 0.234;
 
-        /// <summary>【V1.65】比例算出的右侧宽度下限：再窄操作按钮文字（"启动运行（选中台）"）放不下。与编辑器钳制下限对齐。</summary>
+        /// <summary>比例算出的右侧宽度下限：再窄操作按钮文字（"启动运行（选中台）"）放不下。与编辑器钳制下限对齐。</summary>
         public const int RightPanelMinWidth = 180;
 
-        /// <summary>【V1.65】比例算出的右侧宽度上限：大屏上按 23.4% 会算出 400+，右侧用不了那么多，省给左侧网格。</summary>
+        /// <summary>比例算出的右侧宽度上限：大屏上按 23.4% 会算出 400+，右侧用不了那么多，省给左侧网格。</summary>
         public const int RightPanelMaxWidth = 340;
 
         /// <summary>
-        /// 【V1.88.17】工作站列表区（splitContainerMain.Panel1）最小宽度（像素）。
-        ///
-        /// 【为什么要保 Panel1】"关于 → 主页区域调整"允许用户把右侧拖到 600 宽；
-        /// 小屏上 600 右侧会把 Panel1 挤到 500 不到，72 站被压成小方块、字全叠在一起
-        /// （无崩溃，但没法看）。本常量是最后一道闸：右侧再宽也不能吃掉 Panel1 这 640px。
-        /// 取值依据：紧凑后面板列宽 209，640 / 8 列 ≈ 每列 80px，zoomX ≈ 0.37，
-        /// 【V1.88.21】4pt 字可辨认（字号下限 6→4跟随缩小，小屏不挤叠；见 WorkstationGridView.MinFontSize）；
-        /// 再小就真没法用了，此时宁可让右侧不听话（被钳住），也不能丢显示。
-        /// 生效点见 <see cref="ClampRightPanelWidthForWorkstation"/>（纯函数，可单测）。
+        /// 工作站列表区最小宽度（像素）。右侧再宽也不能吃掉这 640px（否则 72 站被压成小方块没法看；
+        /// 640/8 列≈每列 80px，4pt 字可辨认的底线），不够时右侧被钳住。见 <see cref="ClampRightPanelWidthForWorkstation"/>。
         /// </summary>
         public const int MinWorkstationPanelWidth = 640;
 
@@ -131,25 +91,19 @@ namespace AgingTestSystem.Views
         private readonly DeviceManager _deviceManager;
 
         /// <summary>
-        /// 主窗正在关闭标记（V1.72.15 新增，全仓关窗竞态排查：退出瞬间后台采集/扫码/重连线程的
-        /// BeginInvoke 排队回调会在句柄销毁后执行。FormClosing 首行置位，RunOnUi 与各事件入口双查，
-        /// 退出期回调静默丢弃；volatile 保证采集线程立即可见）。
+        /// 主窗正在关闭标记（FormClosing 首行置位：后台线程已排队的 UI 回调在入口自查丢弃，
+        /// 防句柄销毁后执行崩溃；volatile 保证采集线程立即可见）。
         /// </summary>
         private volatile bool _mainClosing;
 
         /// <summary>
-        /// 【新增】用户管理器
-        /// 负责用户登录验证、用户名密码修改等功能
-        /// 默认账号：
-        /// - 管理员: admin / 123456
-        /// - 技术员: technician / 123456
-        /// - 操作员: operator / 123456
-        /// - 最高权限: dev / dev123（V1.64：走"用户权限→管理员"登录框进入，界面无提示，隐藏入口）
+        /// 用户管理器（登录验证/改密；默认 admin/technician/operator 均 123456；
+        /// 隐藏最高权限 dev/dev123，走"用户权限→管理员"登录框进入，界面无提示）。
         /// </summary>
         private readonly UserManager _userManager = new UserManager();
 
         /// <summary>
-        /// 【V1.16 新增】扫码枪服务（真实扫码枪接入）
+        /// 扫码枪服务（真实扫码枪接入）
         /// 参考 SerialScannerTest Demo 实现：WMI 自动识别串口 + 串口读码。
         /// 作用：
         /// - 扫码结果写入 LOG 日志
@@ -159,7 +113,7 @@ namespace AgingTestSystem.Views
         private ScannerService _scanner;
 
         /// <summary>
-        /// 工位网格（自绘大画布，【V1.50】）。
+        /// 工位网格（自绘大画布，）。
         /// 整个工位区域 = 1 个自绘 UserControl（含全部面板 + 行全选按钮列），
         /// 由 <see cref="CreateWorkstationPanels"/> 创建并放入外层 Panel 容器（一屏铺满，无滚动）。
         /// </summary>
@@ -171,11 +125,7 @@ namespace AgingTestSystem.Views
         /// </summary>
         private string _currentPermission = "操作员";
 
-        /// <summary>
-        /// 通讯模块状态（V1.16 更名：现场无 PLC，改为通讯连接状态；V1.80 再更名：用户点名）
-        /// true=已连接，false=未连接
-        /// 语义：气压表主链路是否连通（耦合器/送风机断开时单独在 LOG 诊断，不影响本状态）
-        /// </summary>
+        /// <summary>通讯模块状态（true=已连接：只反映 IO 耦合器，气压表/送风机断开只记 LOG 诊断）</summary>
         private bool _commConnected = false;
 
         /// <summary>
@@ -190,11 +140,9 @@ namespace AgingTestSystem.Views
         /// </summary>
         private readonly List<RecipeConfig> _recipes = new List<RecipeConfig>();
 
-        // 注意：原 ContextMenuStrip 字段已删除
-        // 改用 ShowDropdownPopup 方法在按钮点击时动态创建无边框弹出窗体
-        // 这样下拉菜单项的尺寸可以和主按钮完全一致
+        // 下拉菜单走 ShowDropdownPopup 动态建无边框弹出窗体（选项尺寸与主按钮对齐），无常驻字段
 
-        /// <summary>日志文本框的最大字符数，超过时自动裁剪旧内容（修复 M8）</summary>
+        /// <summary>日志文本框的最大字符数，超过时自动裁剪旧内容</summary>
         private const int MaxLogTextLength = 100_000;
         /// <summary>日志裁剪后保留的字符数（保留最近一半内容）</summary>
         private const int LogTrimKeepLength = MaxLogTextLength / 2;
@@ -204,72 +152,52 @@ namespace AgingTestSystem.Views
         /// </summary>
         public MainForm()
         {
-            // 1. 先初始化界面控件（Designer.cs 中的 InitializeComponent）
-            //    必须最先调用，否则其他代码访问控件会报空引用
+            // 界面控件最先初始化，后续代码才能碰控件
             InitializeComponent();
 
-            // 【V1.78】顶栏/状态区加粗（用户点名：项目/权限/通讯/运行状态/监视全加粗）。
-            // 放构造里按当前字号原样加粗，详见 ApplyHeaderBoldFonts 注释（为什么不动 Designer）。
+            // 顶栏加粗/字号走代码（Sunny 继承样式字号，Designer 写死会分叉；见两方法注释）
             ApplyHeaderBoldFonts();
-
-            // 【V1.88.25】顶栏 4 按钮字号 12→9pt（用户点名：标题字小一点）。
-            // 【V1.88.26】左边 6 个状态字同步收到 9pt（用户点名：和右边按钮一样大）。
-            // 对齐：Sunny 缺省即 MiddleCenter/MiddleLeft（harness 实测），配合全高 Dock 自然居中。
-            // 都与加粗同路走代码，不进 Designer（见 ApplyHeaderFonts 注释）。
             ApplyHeaderFonts();
 
-            // 【V1.79】项目前缀标签定宽：Designer 里 AutoSize=false + Dock=Left（撑满高度居中），
-            // 宽度这里按 PreferredWidth 收——"当前项目："五个字刚好包住，跟运行字号/DPI 走，
-            // 写死像素换字号就夹字、多留又挤项目名。必须在加粗之后收（粗体比常规体宽）。
-            // 【V1.88.27】权限前缀同理定宽：与 pnlProject 同构 Panel+Dock，上下居中天然成立，
-            // 不再靠 FlowLayoutPanel+Padding.Top 硬垫（行高一变就偏，血泪）。
+            // 去标题栏：任务栏标题带着版本号，顶栏三按钮接线
+            InitWindowChrome();
+
+            // 前缀标签按实际字宽定宽（写死像素换字号就夹字；放加粗之后，粗体更宽）
             lblProjectPrefix.Width = lblProjectPrefix.PreferredWidth;
             lblPermissionPrefix.Width = lblPermissionPrefix.PreferredWidth;
 
-            // 【V1.60 深色/浅色主题】读出上次保存的主题并给主窗体着色（按钮等语义色原样保留，
-            // 详见 ThemeManager 类头"配色约定"）。
-            // 工位大画布在 MainForm_Load → CreateWorkstationPanels 里同步主题；
-            // 各子窗体在每次打开前 ApplyTo（见各 ShowDialog/Show 调用处），切换时 ApplyToAllOpenForms 全刷。
+            // 主题：读配置→刷主窗（含操作按钮与窗口三按钮）；大画布在 Load 里跟随，子窗打开前各刷一次
             ThemeManager.LoadFromConfig();
             ThemeManager.ApplyTo(this);
             ApplyOperationButtonsTheme();
+            SyncWindowChromeTheme();
 
-            // 【V1.49】主窗体开启双缓冲，与工位面板/网格双缓冲配合，消除滚动撕裂
             this.DoubleBuffered = true;
 
-            // 【V1.67】项目档案就位（必须在 ApplyHomeLayout/LoadConfig/LoadRecipes 之前：
-            // HomeLayout/配方/策略文件的路径都依赖当前项目目录）。
-            // 首跑自动建"烧屏测试"；【V1.68 改干净】不认程序目录下的散文件（无老用户，不搬家）；
-            // 【V1.72.10】EnsureActiveProfile 顺手清掉遗留的 Default 目录（列表里不再有 Default）。
+            // 项目档案就位（HomeLayout/配方/策略路径都依赖它，必须在 LoadConfig 之前；首跑自动建"烧屏测试"）
             string activeProject = ProjectProfile.EnsureActiveProfile();
             System.Diagnostics.Debug.WriteLine($"[项目档案] 当前项目: {activeProject}");
             UpdateProjectDisplay(activeProject);
 
-            // 1.5 应用主页布局（从 HomeLayout.json 读取各区域尺寸；文件不存在则用内置默认）
-            // 【V1.58】原来这里调用 AdjustRightPanelWidth 按内容自动算右侧宽度，
-            // 改为布局配置驱动：右侧宽度 / 顶部标题栏高 / 菜单栏高 / 状态栏高都可在
-            // "关于 → 主页区域调整"可视化编辑器里拖动矩形块边缘调整。
+            // 应用主页布局（右侧宽/状态栏高；顶栏锁 30，文件旧值作废）
             ApplyHomeLayout();
 
-            // 【V1.58】右侧面板被用户手动拖动分隔条改宽/改窄时，"操作"分组里的按钮
-            // 宽度也要跟着缩放，否则按钮会溢出分组框。订阅 SizeChanged 每次自动同步。
+            // 右侧分组宽变时操作按钮跟着缩放，防溢出
             groupBoxOperation.SizeChanged += (s, e) => ResizeOperationButtons();
 
             // 2. 加载配置（从 App.config 读取设备数量、采集间隔等）
             _config = LoadConfig();
 
-            // 2.5 【配方持久化】启动时从本地 Recipes.json 加载配方列表
+            // 2.5 启动时从本地 Recipes.json 加载配方列表
             LoadRecipes();
 
             // 3. 初始化设备管理器（连接硬件、启动数据采集）
             _deviceManager = new DeviceManager(_config);
 
-            // 【V1.88.9 调试部署】启动水印必须是第一行日志：版本/构建时间/混淆标记/进程位数/OS，
-            // 客户拷回 Logs 时先看这行定版本（调试期一天可能发多个包），崩溃堆栈反解也靠它对 mapping。
-            // WriteLog 同时进 UI 文本框和 AppLog 文件；构造期 txtLog 已建好（InitializeComponent 在前），可安全调用。
+            // 启动水印必须是第一行日志（定版本用；UI 文本框与文件双写，构造期可安全调用）
             WriteLog(Services.BuildWatermark.GetStartupLine());
 
-            // 【V1.68】MES 状态首屏可见（出差联调第一眼：开没开、往哪发、Mock 还是真发）
+            // MES 开了的话首屏可见（开没开、往哪发、Mock 还是真发）
             if (_config.MesEnabled)
             {
                 string mesWhere = string.IsNullOrWhiteSpace(_config.MesEndpoint)
@@ -277,50 +205,26 @@ namespace AgingTestSystem.Views
                 WriteLog("[MES] 上报已启用" + (_config.MesMockEnabled ? "（Mock：只记 CSV 不发 HTTP）" : mesWhere));
             }
 
-            // 4. 订阅设备管理器事件（批量数据更新、连接状态变更、送风机数据更新）
-            // 【修复 M2】改为订阅批量数据更新事件，一次更新所有面板
+            // 4. 订阅设备管理器事件（批量更新一次刷全部门板；快速跟踪只刷触发那台；诊断走后台线程，内部切回 UI 写 LOG）
             _deviceManager.OnBatchDataUpdated += DeviceManager_OnBatchDataUpdated;
-            // 【V1.30】订阅 IO 触发后快速跟踪增量更新事件（只刷新触发的那台面板）
             _deviceManager.OnQuickTrackDataUpdated += DeviceManager_OnQuickTrackDataUpdated;
             _deviceManager.OnConnectionStatusChanged += DeviceManager_OnConnectionStatusChanged;
-            // 【V1.10 新增】订阅送风机数据更新事件（独立定时器触发）
             _deviceManager.OnFanDataUpdated += DeviceManager_OnFanDataUpdated;
-
-            // 【V1.16 新增】订阅启动/连接诊断事件（气压表串口、耦合器、送风机连接结果）
-            // 后台线程触发，处理器内部用 BeginInvoke 切回 UI 线程写 LOG
             _deviceManager.OnDiagnostic += DeviceManager_OnDiagnostic;
 
-            // 4.5 【V1.16 新增】初始化扫码枪服务（真实扫码枪接入，参考 SerialScannerTest Demo）
-            // 注意：必须在 UI 线程创建，这样扫码事件会自动封送到 UI 线程，订阅者可直接更新控件
+            // 4.5 初始化扫码枪服务（必须在 UI 线程创建，事件才能直接更新控件）
             _scanner = new ScannerService(_config);
-            // 扫码完成 → 写日志；ID绑定窗体打开时由其自行订阅同一服务（见 IdBindingForm）
             _scanner.OnBarcodeScanned += Scanner_OnBarcodeScanned;
-            // 连接状态变化（连接成功/未找到端口/错误）→ 写日志
             _scanner.OnStatusChanged += Scanner_OnStatusChanged;
 
-            // 5. 更新权限显示（V1.19.7：角色名着色——管理员=红/技术员=蓝/操作员=绿；V1.47 技术员蓝色加深）
+            // 5. 更新权限显示（角色名按权限着色）、状态栏、按钮权限态（常亮可点，无权限点时提示）
             UpdatePermissionDisplay(_currentPermission);
-
-            // 6. 更新状态栏信息
             UpdateStatusBar();
-
-            // 【新增】7. 初始化按钮权限状态
-            // 默认未登录（操作员权限），参数设置按钮不可用
             UpdateButtonPermissionStates();
-
-            // 注意：下拉菜单不再需要预先初始化
-            // 改为在按钮点击事件中动态创建弹出窗体（见 ShowDropdownPopup 方法）
         }
 
         /// <summary>
-        /// 计算右侧操作面板的目标宽度（【V1.65】纯函数，可单元测试，不碰任何控件）。
-        ///
-        /// 规则：
-        /// - 现场保存过 HomeLayout.json（hasCustomLayout=true）→ 用户自定义优先，原样返回
-        ///   文件里的绝对值，不做比例换算（用户在编辑器里拖的就是像素，所见即所得）；
-        /// - 否则 → 分隔容器宽 × <see cref="RightPanelRatio"/>（0.234，现状比例），再用
-        ///   <see cref="RightPanelMinWidth"/>（180）/ <see cref="RightPanelMaxWidth"/>（340）
-        ///   钳制：小屏不挤坏按钮文字，大屏不浪费网格空间。
+        /// 右侧区目标宽度（纯函数）：有用户配置文件用文件绝对值；否则按窗口宽×比例算，上下限钳住。
         /// </summary>
         /// <param name="containerWidth">分隔容器当前总宽（像素）；≤0 时按设计宽 1400 兜底</param>
         /// <param name="hasCustomLayout">现场是否保存过 HomeLayout.json</param>
@@ -336,15 +240,9 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 按工作站列表区最小宽度钳制右侧宽度（【V1.88.17 新增】纯函数，可单元测试，不碰任何控件）。
-        ///
-        /// 【为什么要第二道钳】<see cref="ComputeRightPanelWidth"/> 只管"右侧想要多宽"
-        /// （比例 180~340，或 json 自定义原样返回，最大可到 600）；不管"左侧还剩多少"。
-        /// 小屏 + 右侧 600 的组合下 Panel1 会被挤扁，72 站压成小方块。
-        /// 本函数保证 Panel1 = containerWidth - right - splitterWidth ≥ minWorkstationWidth：
-        /// 超了就把右侧压回来（右侧将就，显示优先）；容器本身太窄（连 右侧下限+左侧下限 都放不下，
-        /// 如构造极早期宽不可读）时保右侧下限（右侧按钮文字不能截断），左侧听天由命
-        /// （窗口 MinimumSize 1150 兜底，正常走不到这）。
+        /// 按工作站列表区最小宽度钳制右侧宽度（纯函数，不碰控件）。
+        /// 上一道只管"右侧想要多宽"，不管"左侧还剩多少"：小屏＋右侧 600 会把 72 站挤成小方块，
+        /// 这里保证 Panel1 ≥ 最小宽（超了右侧压回来，显示优先）；容器本身太窄时保右侧下限（按钮字不断）。
         /// </summary>
         /// <param name="targetRight">ComputeRightPanelWidth 算出的右侧期望宽度</param>
         /// <param name="containerWidth">分隔容器当前总宽（≤0 时不钳直接返回，构造早期宽不可读）</param>
@@ -363,18 +261,12 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 窗口宽度变化记忆（SplitContainer.Resize 防重复入口）：
-        /// - 只有总宽变了才按比例重算右侧（高度变化不重算，避免无谓抖动）；
-        /// - 用户手动拖分隔条只改 SplitterDistance、不改总宽，不会触发重算，
-        ///   手动拖动不会被比例覆盖；但下次窗口宽度变化时仍会按比例重算
-        ///   （想永久固定就去"主页区域调整"编辑器保存，json 绝对值优先）。
+        /// 上次分隔容器总宽（Resize 防重复：只有总宽变了才按比例重算右侧；
+        /// 手动拖分隔条不改总宽，不会被比例覆盖；有 json 时绝对值优先，直接返回）。
         /// </summary>
         private int _lastSplitWidth = -1;
 
-        /// <summary>
-        /// 分隔容器尺寸变化 → 窗口宽度变了且无自定义 json 时，按比例重算右侧宽度。
-        /// 有 json 时直接返回（绝对值优先，窗口缩放右侧保持不动，符合 FixedPanel=Panel2 语义）。
-        /// </summary>
+        /// <summary>分隔容器尺寸变化 → 总宽变了且无自定义 json 时按比例重算右侧宽度</summary>
         private void SplitContainerMain_Resize(object sender, EventArgs e)
         {
             if (splitContainerMain.Width == _lastSplitWidth) return;
@@ -384,23 +276,8 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 自适应调整右侧操作面板（tableLayoutPanelRight）的宽度
-        ///
-        /// 【V1.58 改造】原实现用"临时 AutoSize 测量内容最小宽度"来自动定右侧宽度；
-        /// 现在右侧宽度由 <see cref="HomeLayoutConfig.RightPanelWidth"/> 驱动（可在
-        /// "关于 → 主页区域调整"编辑器里拖边缘调整）。本方法改为：
-        /// 1. 设置 splitContainerMain.SplitterDistance，使 Panel2 宽度 = 配置的右侧宽度；
-        /// 2. 同步缩放"操作"分组里的按钮宽度（按钮原设计宽 256，若右侧被调窄则按比例缩，
-        ///    避免按钮溢出分组框）。
-        /// FixedPanel=Panel2（已在 Designer 中设置）确保窗口缩放时右侧宽度不变。
-        ///
-        /// 【V1.65】"配置的右侧宽度"语义变化：无 json 时不再是写死的
-        /// <see cref="DefaultRightPanelWidth"/>，而是 <see cref="ComputeRightPanelWidth"/>
-        /// 按窗口实际宽度 × 0.234 算出的比例值（180~340 钳制），窗口缩放由
-        /// <see cref="SplitContainerMain_Resize"/> 自动跟进。有 json 时仍是文件绝对值优先。
-        ///
-        /// 【注意】右侧宽度并非随便能调：若窄到按钮文字放不下会被截断，编辑器里有
-        /// 180~600 的下限保护；现场不满意可在编辑器里再拖回来。
+        /// 按目标宽度摆右侧区：设 SplitterDistance 让 Panel2 等于目标宽，再同步操作按钮宽防溢出。
+        /// 目标宽：无 json 按窗口比例算（<see cref="ComputeRightPanelWidth"/>），有 json 用文件绝对值。
         /// </summary>
         private void AdjustRightPanelWidth()
         {
@@ -413,18 +290,12 @@ namespace AgingTestSystem.Views
                 custom = HomeLayoutConfig.LoadOrDefault().RightPanelWidth;
             }
             int targetRight = ComputeRightPanelWidth(splitContainerMain.Width, hasCustom, custom);
-            // 【V1.88.17】第二道钳：右侧再宽也不能吃掉 Panel1 的最小宽度（json 自定义 600
-            // 在小屏上会把 72 站挤成小方块；钳后右侧将就、显示优先，见 ClampRightPanelWidthForWorkstation）。
+            // 第二道钳：保左侧最小宽（见 ClampRightPanelWidthForWorkstation）
             targetRight = ClampRightPanelWidthForWorkstation(targetRight, splitContainerMain.Width,
                 splitContainerMain.SplitterWidth, MinWorkstationPanelWidth);
             _lastSplitWidth = splitContainerMain.Width;
 
-            // 1. 设置 SplitterDistance，让 Panel2 宽度 = 目标右侧宽度
-            //    Panel2 宽度 = splitContainerMain 总宽 - SplitterDistance - 分隔条宽度
-            //    => SplitterDistance = 总宽 - 右侧宽度 - 分隔条宽度
-            // 【V1.88.17】try/catch：窗口拖动极端尺寸瞬间 SplitterDistance 可能越界抛
-            // ArgumentOutOfRangeException（如 Panel1MinSize 约束），吞掉等下一次 Resize 再算，
-            // 不能因为调个布局把主窗拖崩。
+            // SplitterDistance = 总宽 - 右侧宽 - 分隔条宽；极端尺寸瞬间可能越界抛，吞掉等下次 Resize
             int distance = splitContainerMain.Width - targetRight - splitContainerMain.SplitterWidth;
             if (distance > 0)
             {
@@ -436,27 +307,18 @@ namespace AgingTestSystem.Views
                 catch (InvalidOperationException) { /* 同上 */ }
             }
 
-            // 2. 同步缩放"操作"分组里的按钮宽度（按钮 X=15、宽 256 是设计值，
-            //    右侧变窄后按分组可用宽度重新计算，保证按钮不溢出、文字尽量完整）
+            // 2. 同步操作按钮宽（按分组可用宽重算，防溢出）
             ResizeOperationButtons();
         }
 
         /// <summary>
-        /// 【V1.58】应用主页布局：按 HomeLayoutConfig 设置顶栏高 /
-        /// 右侧区域宽 / 状态栏高。入口有二：
-        /// - 程序启动（构造函数调用，读取 json 或默认值）；
-        /// - "主页区域调整"编辑器保存后调用，让新布局立即生效。
-        /// 【V1.88.23】顶栏菜单并单行：第 0 行高恒为固定值（【V1.88.28】锁死 30，不读文件：
-        /// 用户点名顶栏高度固定，文件里残留的旧值（34 等）直接作废）；
-        /// 4 按钮 Dock=Fill 自动填满格子，不再需要按行高同步按钮高度
-        /// （旧"MenuHeight-12"整段删除，留着就是死代码）。
+        /// 应用主页布局：顶栏锁 30（不读文件旧值）、状态栏读配置、右侧调宽。
+        /// 入口：构造启动、"主页区域调整"编辑器保存后（热生效）。
         /// </summary>
         private void ApplyHomeLayout()
         {
             var layout = HomeLayoutConfig.LoadOrDefault();
 
-            // 顶栏高度（tableLayoutPanelMain 第 0 行；第 1 行是 splitContainerMain，用 Percent 自动占剩余）
-            // 【V1.88.28】锁死 FixedHeaderHeight：编辑器已删顶栏输入行/拖动边，这里不认文件旧值。
             tableLayoutPanelMain.RowStyles[0].Height = HomeLayoutConfig.FixedHeaderHeight;
             // 底部状态栏高度（第 2 行）
             tableLayoutPanelMain.RowStyles[2].Height = layout.StatusBarHeight;
@@ -466,21 +328,17 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 【V1.58】把"操作"分组里的 7 个按钮宽度同步为分组可用宽度 - 左右边距（V1.67 加下料判定）。
-        /// 原设计按钮宽 256（groupBox 宽 292）；右侧区域可调后，分组框宽度随之变化，
-        /// 若仍用固定宽会导致按钮溢出分组框或被截断。宽度 = 分组客户区宽 - 30（左右各 15）。
+        /// 操作分组按钮宽同步为分组客户区宽 - 30（左右各留 15；下限 80防截断；只动 Sunny 按钮）。
         /// </summary>
         private void ResizeOperationButtons()
         {
             if (groupBoxOperation == null) return;
 
-            // 分组客户区宽度（已扣除分组框边框），按钮左右各留 15px 边距
             int buttonWidth = groupBoxOperation.ClientSize.Width - 30;
-            if (buttonWidth < 80) buttonWidth = 80;   // 下限保护：按钮不能窄到没法看
+            if (buttonWidth < 80) buttonWidth = 80;
 
             foreach (Control ctl in groupBoxOperation.Controls)
             {
-                // 只处理操作按钮（【V1.71】已换 Sunny UIButton；若以后加入非按钮控件需排除）
                 if (ctl is Sunny.UI.UIButton btn && btn != null)
                 {
                     btn.Width = buttonWidth;
@@ -488,23 +346,261 @@ namespace AgingTestSystem.Views
             }
         }
 
+        #region 窗口标题栏（无系统标题栏，三按钮进顶栏）
+
+        // 主窗是 Sunny UIForm（本身 FormBorderStyle=None），标题栏用 ShowTitle=false 整体藏掉，
+        // 省出的 35px 纵向全还给工作站区。最小化/最大化/关闭三个按钮做到顶栏最右（40px 列×3），
+        // 行为与原来标题栏按钮一致：最小化进任务栏、最大化铺满工作区（不盖任务栏）、关闭走正常
+        // FormClosing 流程（后台停采集、退订事件不断）。Alt+F4 照常用（Sunny 默认不禁）。
+        // 拖动：顶栏空白/标签区按住即拖窗口（按钮不抢，见 IsWindowChromePassthrough）；
+        // 双击顶栏空白切换最大化/还原；Normal 下边缘 6px 可拖边缩放（最大化时不给边码）。
+
+        /// <summary>无边框窗口边缘拖动厚度（逻辑像素，只在 Normal 下生效）</summary>
+        private const int WindowEdgeGrip = 6;
+
+        private const int WM_NCHITTEST = 0x0084;
+        private const int WM_NCLBUTTONDBLCLK = 0x00A3;
+        private const int HTCLIENT = 1;
+        private const int HTCAPTION = 2;
+        private const int HTLEFT = 10;
+        private const int HTRIGHT = 11;
+        private const int HTTOP = 12;
+        private const int HTTOPLEFT = 13;
+        private const int HTTOPRIGHT = 14;
+        private const int HTBOTTOM = 15;
+        private const int HTBOTTOMLEFT = 16;
+        private const int HTBOTTOMRIGHT = 17;
+
+        /// <summary>当前悬停的窗口按钮（null=都没悬停；Paint 按它画悬停底）</summary>
+        private Button _hoverWinBtn;
+
         /// <summary>
-        /// 在指定主按钮下方显示下拉菜单（使用无边框弹出窗体实现）
-        ///
-        /// 【设计说明】
-        /// 不使用 ContextMenuStrip（系统菜单项高度由系统绘制，无法和主按钮对齐），
-        /// 改用无边框 Form + TableLayoutPanel + Button 列表方案：
-        /// - 每个菜单项是一个独立的 Button
-        /// - 菜单项宽度 = max(主按钮宽度， 最长选项文本实测宽＋横向内边距)
-        /// - 菜单项高度 = max(主按钮高度，选项文本实测高＋纵向内边距)
-        ///   （【V1.88.28】等尺寸硬套会裁字：原生 Button chrome 比 Sunny 厚，
-        ///   18px 行装 9pt 字上下顶格，见 ComputePopupItemSize）
-        /// - 菜单项字体与主按钮同源（Font = hostButton.Font，字号一处调、两处跟，
-        ///   不许给弹窗另起字号）
-        /// - 菜单项样式（背景色、文字色）和主按钮完全一致
-        /// - 点击任意菜单项后自动关闭弹出窗体
-        /// - 失去焦点时自动关闭（点击窗体外任何地方）
-        /// - 按 Esc 键关闭
+        /// 接线窗口三按钮：自绘字形＋悬停底＋点击行为＋提示＋任务栏标题。
+        /// 字形用 GDI 线条画（横线/方框/叉），不用 Unicode 符号（老工控机字体回退显示方块）。
+        /// 三个是原生 Button：ThemeManager 按语义色保护跳过按钮类，换肤后这里手动 Invalidate
+        /// 重画一次即可（底色按当前主题现算，不存快照）。
+        /// </summary>
+        private void InitWindowChrome()
+        {
+            this.Text = "老化测试系统 " + BuildWatermark.ReleaseLabel;
+            if (btnWinMin == null || btnWinMax == null || btnWinClose == null) return;
+            Button[] wins = { btnWinMin, btnWinMax, btnWinClose };
+            foreach (Button b in wins)
+            {
+                b.Paint += WinBtn_Paint;
+                b.MouseEnter += WinBtn_HoverEnter;
+                b.MouseLeave += WinBtn_HoverLeave;
+                b.Click += WinBtn_Click;
+            }
+            ToolTip tip = new ToolTip(this.components);
+            tip.SetToolTip(btnWinMin, "最小化");
+            tip.SetToolTip(btnWinMax, "最大化/还原");
+            tip.SetToolTip(btnWinClose, "关闭");
+            // 最大化↔还原切换时方框字形跟着换（画还原叠框），状态变即重画
+            this.SizeChanged += (s, e) =>
+            {
+                if (btnWinMax != null && !btnWinMax.IsDisposed) btnWinMax.Invalidate();
+            };
+        }
+
+        /// <summary>
+        /// 顶栏命中传递判定（纯函数，回归可直接断言）：按钮类一律自己吃点击，
+        /// 调用方别把它抢成标题拖动，否则按钮点不动；其余（标签/面板/空白）归拖动。
+        /// Sunny UIButton 不是原生 Button 子类，按类型名认；顶栏以后加新按钮零改动。
+        /// </summary>
+        /// <param name="child">顶栏格子里命中的直接子控件（null=空白）</param>
+        /// <returns>true=按钮自己处理，false=可当标题拖</returns>
+        public static bool IsWindowChromePassthrough(Control child)
+        {
+            if (child == null) return false;
+            if (child is ButtonBase) return true;
+            string tn = child.GetType().FullName ?? "";
+            return string.Equals(tn, "Sunny.UI.UIButton", StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// 窗口按钮配色（纯函数，回归可直接断言）：底色与顶栏同色（浅=Control/深=深灰），
+        /// 悬停 min/max 加深一档提示可点，关闭悬停走标准红底白字。
+        /// </summary>
+        /// <param name="dark">当前是否为深色主题</param>
+        /// <param name="hover">鼠标是否悬停在本按钮上</param>
+        /// <param name="isClose">是否为关闭按钮</param>
+        /// <param name="back">按钮底色</param>
+        /// <param name="fore">字形颜色</param>
+        public static void GetWindowChromeColors(bool dark, bool hover, bool isClose,
+            out Color back, out Color fore)
+        {
+            if (isClose && hover)
+            {
+                back = Color.FromArgb(232, 17, 35);
+                fore = Color.White;
+                return;
+            }
+            back = dark ? Color.FromArgb(45, 45, 48) : SystemColors.Control;
+            if (hover) back = dark ? Color.FromArgb(70, 70, 74) : Color.FromArgb(210, 210, 210);
+            fore = dark ? Color.FromArgb(220, 220, 220) : Color.FromArgb(60, 60, 60);
+        }
+
+        /// <summary>窗口按钮自绘：底色＋居中字形（2px 线：横线/方框/叉）</summary>
+        private void WinBtn_Paint(object sender, PaintEventArgs e)
+        {
+            Button b = sender as Button;
+            if (b == null) return;
+            Color back;
+            Color fore;
+            GetWindowChromeColors(ThemeManager.IsDark, b == _hoverWinBtn, b == btnWinClose,
+                out back, out fore);
+            using (var bg = new SolidBrush(back))
+            {
+                e.Graphics.FillRectangle(bg, b.ClientRectangle);
+            }
+            int cx = b.ClientRectangle.Width / 2;
+            int cy = b.ClientRectangle.Height / 2;
+            using (var pen = new Pen(fore, 2f))
+            {
+                if (b == btnWinMin)
+                {
+                    e.Graphics.DrawLine(pen, cx - 5, cy, cx + 5, cy);
+                }
+                else if (b == btnWinMax)
+                {
+                    if (this.WindowState == FormWindowState.Maximized)
+                    {
+                        // 还原叠框：前框左下＋后框右上各画一个，后框被盖的边不管（小尺寸示意即可）
+                        e.Graphics.DrawRectangle(pen, cx - 4, cy - 1, 8, 7);
+                        e.Graphics.DrawRectangle(pen, cx - 1, cy - 4, 8, 7);
+                    }
+                    else
+                    {
+                        e.Graphics.DrawRectangle(pen, cx - 5, cy - 4, 10, 9);
+                    }
+                }
+                else
+                {
+                    e.Graphics.DrawLine(pen, cx - 5, cy - 5, cx + 5, cy + 5);
+                    e.Graphics.DrawLine(pen, cx + 5, cy - 5, cx - 5, cy + 5);
+                }
+            }
+        }
+
+        /// <summary>悬停进入：记下是谁＋重画（画悬停底）</summary>
+        private void WinBtn_HoverEnter(object sender, EventArgs e)
+        {
+            _hoverWinBtn = sender as Button;
+            if (_hoverWinBtn != null) _hoverWinBtn.Invalidate();
+        }
+
+        /// <summary>悬停离开：清掉＋重画（恢复常态底）</summary>
+        private void WinBtn_HoverLeave(object sender, EventArgs e)
+        {
+            Button b = sender as Button;
+            if (_hoverWinBtn == b) _hoverWinBtn = null;
+            if (b != null && !b.IsDisposed) b.Invalidate();
+        }
+
+        /// <summary>三按钮点击：最小化进任务栏／最大化还原互切／关闭走正常 FormClosing 流程</summary>
+        private void WinBtn_Click(object sender, EventArgs e)
+        {
+            if (sender == btnWinMin)
+            {
+                this.WindowState = FormWindowState.Minimized;
+            }
+            else if (sender == btnWinMax)
+            {
+                ToggleMaxRestore();
+            }
+            else if (sender == btnWinClose)
+            {
+                this.Close();
+            }
+        }
+
+        /// <summary>最大化↔还原互切（顶栏双击与方框按钮共用）</summary>
+        private void ToggleMaxRestore()
+        {
+            if (this.WindowState == FormWindowState.Maximized)
+            {
+                this.WindowState = FormWindowState.Normal;
+            }
+            else
+            {
+                this.WindowState = FormWindowState.Maximized;
+            }
+        }
+
+        /// <summary>换肤后窗口按钮重画（底色按新主题现算；调一次即可，入口只有主题切换一处）</summary>
+        private void SyncWindowChromeTheme()
+        {
+            Button[] wins = { btnWinMin, btnWinMax, btnWinClose };
+            foreach (Button b in wins)
+            {
+                if (b != null && !b.IsDisposed) b.Invalidate();
+            }
+        }
+
+        /// <summary>
+        /// 无边框窗口命中改写：先让 Sunny 走完它自己的，再把三类改成系统行为。
+        /// 边缘 6px（Normal 下）回缩放码实现拖边缩放；顶栏非按钮区回 HTCAPTION 实现按住拖窗口；
+        /// 按钮上保持 HTCLIENT 保证点得动。最大化下不给边码（给了也拖不动）。
+        /// LParam 取屏坐标要按 short 拆（负坐标直接截断会错位）。
+        /// </summary>
+        protected override void WndProc(ref Message m)
+        {
+            // 顶栏空白双击：最大化↔还原。必须拦在 base 之前自己切完直接返回：
+            // DefWindowProc 收到 HTCAPTION 双击也会切一次，两边各切一次正好抵消（harness 实锤两次都纹丝不动）。
+            if (m.Msg == WM_NCLBUTTONDBLCLK && m.WParam == (IntPtr)HTCAPTION)
+            {
+                ToggleMaxRestore();
+                m.Result = IntPtr.Zero;
+                return;
+            }
+            base.WndProc(ref m);
+            if (m.Msg == WM_NCHITTEST && m.Result == (IntPtr)HTCLIENT
+                && !this.IsDisposed && !this.Disposing && this.IsHandleCreated)
+            {
+                int l = m.LParam.ToInt32();
+                Point screen = new Point((short)(l & 0xFFFF), (short)((l >> 16) & 0xFFFF));
+                Point pt = this.PointToClient(screen);
+                if (this.WindowState == FormWindowState.Normal)
+                {
+                    bool left = pt.X < WindowEdgeGrip;
+                    bool right = pt.X >= this.ClientSize.Width - WindowEdgeGrip;
+                    bool top = pt.Y < WindowEdgeGrip;
+                    bool bottom = pt.Y >= this.ClientSize.Height - WindowEdgeGrip;
+                    int edge = 0;
+                    if (left && top) edge = HTTOPLEFT;
+                    else if (right && top) edge = HTTOPRIGHT;
+                    else if (left && bottom) edge = HTBOTTOMLEFT;
+                    else if (right && bottom) edge = HTBOTTOMRIGHT;
+                    else if (left) edge = HTLEFT;
+                    else if (right) edge = HTRIGHT;
+                    else if (top) edge = HTTOP;
+                    else if (bottom) edge = HTBOTTOM;
+                    if (edge != 0)
+                    {
+                        m.Result = (IntPtr)edge;
+                        return;
+                    }
+                }
+                if (tableLayoutPanelHeader != null && !tableLayoutPanelHeader.IsDisposed
+                    && tableLayoutPanelHeader.Visible)
+                {
+                    Point inHeader = tableLayoutPanelHeader.PointToClient(screen);
+                    if (tableLayoutPanelHeader.ClientRectangle.Contains(inHeader)
+                        && !IsWindowChromePassthrough(tableLayoutPanelHeader.GetChildAtPoint(inHeader)))
+                    {
+                        m.Result = (IntPtr)HTCAPTION;
+                    }
+                }
+            }
+        }
+
+        #endregion
+
+        /// <summary>
+        /// 主按钮下方弹下拉菜单（无边框窗体＋Button 列表；不用系统菜单是为了和主按钮对齐）。
+        /// 选项格取 max(主按钮，下限)＋文本实测（原生按钮 chrome 厚，等尺寸硬套会裁字）；
+        /// 字体与主按钮同源（改字号只改 ApplyHeaderFonts 一处）；点选项/失焦/Esc 关窗。
         /// </summary>
         /// <param name="hostButton">触发下拉的主按钮，菜单将显示在按钮下方（兼选项字体唯一来源）</param>
         /// <param name="items">菜单项数组，每项包含文本和点击处理程序</param>
@@ -517,12 +613,12 @@ namespace AgingTestSystem.Views
                 StartPosition = FormStartPosition.Manual,      // 手动指定位置
                 ShowInTaskbar = false,                         // 不在任务栏显示
                 KeyPreview = true,                             // 允许接收按键事件（按 Esc 关闭）
-                // 【V1.88.25】禁自动缩放：下面 ClientSize/行高列宽全是运行时物理像素
+                // 禁自动缩放：下面 ClientSize/行高列宽全是运行时物理像素
                 // （hostButton.Width/Height），再跟缩一次就和主按钮对不上——
                 // 实锤：12pt 时下拉窗被撑到 136 宽（主按钮 114），选项字还被夹掉一半。
                 // 纯代码窗体 + 全显式尺寸，AutoScaleMode.None 即正确值（与网格自绘同理）。
                 AutoScaleMode = AutoScaleMode.None,
-                // 【V1.88.25】MinimumSize 破 Windows 最小跟踪宽度（min-track 136px）：
+                // MinimumSize 破 Windows 最小跟踪宽度（min-track 136px）：
                 // 边框 None 的窗体窄于 136 会被系统钳到 136（harness 二分实锤：裸窗 ClientSize
                 // 114×66 显示出来 136×66，与 TLP/按钮/主题全无关），MinimumSize=(1,1)
                 // 让 WinForms 接管 MINMAXINFO（(0,0) 不接管，照样被钳），114 宽弹窗得以精确落地。
@@ -530,7 +626,7 @@ namespace AgingTestSystem.Views
             };
 
             // ===== 2. 计算弹出窗体尺寸 =====
-            // 【V1.88.28】选项格按文本实测撑开（ComputePopupItemSize）：主按钮尺寸只当下限——
+            // 选项格按文本实测撑开（ComputePopupItemSize）：主按钮尺寸只当下限——
             // 选项字比主按钮字长是常态（"主页区域调整" vs "关于"），等尺寸硬套即裁字；
             // 字体与主按钮同源（下面 Font = hostButton.Font），字号一处调、两处跟。
             int maxTextW = 0;
@@ -566,7 +662,7 @@ namespace AgingTestSystem.Views
             }
 
             // ===== 4. 创建每个菜单项按钮（样式和主按钮一致） =====
-            // 【V1.71】宿主已换 Sunny UIButton：BackColor 读出来是底衬不是显示色，
+            // 宿主已换 Sunny UIButton：BackColor 读出来是底衬不是显示色，
             // 用 ThemeManager.GetEffectiveButtonColors 读真实显示色（FillColor）。
             Color hostBack;
             Color hostFore;
@@ -632,13 +728,13 @@ namespace AgingTestSystem.Views
             {
                 popup.Deactivate -= deactivateHandler;
                 popup.KeyDown -= keyDownHandler;
-                // 【V1.72.13】非模态关闭后释放（与设置窗三 popup 同病根：Close 不释放
+                // 非模态关闭后释放（与设置窗三 popup 同病根：Close 不释放
                 // 非模态窗体；这里虽是原生 Button 不炸跨线程，不释放就是纯泄漏，顺手收掉）
                 popup.Dispose();
             };
 
             // ===== 7. 显示弹出窗体（非模态，不阻塞主窗体） =====
-            // 【V1.60】弹出窗体跟随当前主题（菜单项按钮继承主按钮绿配色不动，只换窗体底）
+            // 弹出窗体跟随当前主题（菜单项按钮继承主按钮绿配色不动，只换窗体底）
             ThemeManager.ApplyTo(popup);
             popup.Show(this);
         }
@@ -724,7 +820,7 @@ namespace AgingTestSystem.Views
 
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["BaudRate"], out int baudRate))
             {
-                // 【V1.63】手改配置可能写出 0/负数（设置窗下拉造不出来，但记事本手改能绕过校验）：
+                // 手改配置可能写出 0/负数（设置窗下拉造不出来，但记事本手改能绕过校验）：
                 // SerialPort 赋值时直接抛异常，被 Connect 的 try/catch 吃成"连不上"，排查方向误导。
                 // 这里钳制 + 记警告，非法值启动日志里一眼可见（与下方 TotalInputs 纠错同模式）。
                 int clampedBaud = SerialPortHelper.ClampBaudRate(baudRate, config.BaudRate);
@@ -738,7 +834,7 @@ namespace AgingTestSystem.Views
 
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["DataBits"], out int dataBits))
             {
-                // 【V1.63】DataBits 只认 5~8（同上，非法配了就是"连不上"误导）。
+                // DataBits 只认 5~8（同上，非法配了就是"连不上"误导）。
                 int clampedBits = SerialPortHelper.ClampDataBits(dataBits);
                 if (clampedBits != dataBits)
                 {
@@ -766,7 +862,7 @@ namespace AgingTestSystem.Views
 
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["SerialReadTimeoutMs"], out int serialReadTimeoutMs))
             {
-                // 【V1.63】超时必须为正数（同上，非法配了也是"连不上"误导）。
+                // 超时必须为正数（同上，非法配了也是"连不上"误导）。
                 int clampedReadTimeout = SerialPortHelper.ClampTimeoutMs(serialReadTimeoutMs, config.SerialReadTimeoutMs);
                 if (clampedReadTimeout != serialReadTimeoutMs)
                 {
@@ -927,7 +1023,7 @@ namespace AgingTestSystem.Views
                 config.FanTempAlarmLimitC = fanTempAlarmLimitC;
             }
 
-            // 【V1.66】超温全线联停开关：默认 false（只记日志不停机=现状），现场确认后置 true。
+            // 超温全线联停开关：默认 false（只记日志不停机=现状），现场确认后置 true。
             if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["FanTempShutdownEnabled"], out bool fanTempShutdown))
             {
                 config.FanTempShutdownEnabled = fanTempShutdown;
@@ -956,7 +1052,7 @@ namespace AgingTestSystem.Views
 
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["ScannerBaudRate"], out int scannerBaudRate))
             {
-                // 【V1.63】扫码枪串口同气压表串口：非法值钳制 + 记警告（回退 115200）。
+                // 扫码枪串口同气压表串口：非法值钳制 + 记警告（回退 115200）。
                 int clampedScannerBaud = SerialPortHelper.ClampBaudRate(scannerBaudRate, config.ScannerBaudRate);
                 if (clampedScannerBaud != scannerBaudRate)
                 {
@@ -988,13 +1084,13 @@ namespace AgingTestSystem.Views
                 config.ScannerParity = scannerParity;
             }
 
-            // 【V1.16.3】扫码枪心跳调试日志开关（排查"断连识别不到"用）
+            // 扫码枪心跳调试日志开关（排查"断连识别不到"用）
             if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["ScannerDebugLog"], out bool scannerDebugLog))
             {
                 config.ScannerDebugLog = scannerDebugLog;
             }
 
-            // 【V1.67】工艺策略（机器级缺省；随后 ProjectPolicyStore.ApplyOverlay 用
+            // 工艺策略（机器级缺省；随后 ProjectPolicyStore.ApplyOverlay 用
             // 当前项目的 Policy.json 覆盖——项目没配过的项保持这里的缺省=现状行为）。
             // 枚举非法/缺省一律回"现状值"，不抛异常（手改配置文件写错也不炸，见 ParsePolicyEnum）。
             config.ZeroDurationPolicy = ParsePolicyEnum(
@@ -1013,25 +1109,25 @@ namespace AgingTestSystem.Views
                 System.Configuration.ConfigurationManager.AppSettings["AgingPressureLossPolicy"], AgingPressureLossPolicy.StopOnLoss);
             config.CompletionAction = ParsePolicyEnum(
                 System.Configuration.ConfigurationManager.AppSettings["CompletionAction"], CompletionAction.PowerOffOnly);
-            // 【V1.76】事件行SN/配方取值（Q8 追溯口径；随后 Policy.json 可按项目覆盖）
+            // 事件行SN/配方取值（Q8 追溯口径；随后 Policy.json 可按项目覆盖）
             config.EventIdentityMode = ParsePolicyEnum(
                 System.Configuration.ConfigurationManager.AppSettings["EventIdentityMode"], EventIdentityMode.RecordTime);
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["VentValveDoPoint"], out int ventPoint))
             {
                 config.VentValveDoPoint = Math.Max(0, ventPoint);
             }
-            // 【V1.73】本机破空阀开关（无阀=false 现状：手动按钮隐藏+泄压保存即拦）
+            // 本机破空阀开关（无阀=false 现状：手动按钮隐藏+泄压保存即拦）
             if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["VentValveEnabled"], out bool ventEnabled))
             {
                 config.VentValveEnabled = ventEnabled;
             }
-            // 【V1.74】载台电流总开关（无表=false 现状：不断任何线、不读数，电流恒 NaN）
+            // 载台电流总开关（无表=false 现状：不断任何线、不读数，电流恒 NaN）
             if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["UsePowerMeter"], out bool usePower))
             {
                 config.UsePowerMeter = usePower;
             }
 
-            // 【V1.68】MES 对接（机器级：开关/URL/超时/鉴权/重试；触发器/映射/静态字段跟项目，
+            // MES 对接（机器级：开关/URL/超时/鉴权/重试；触发器/映射/静态字段跟项目，
             // 由下面的 ApplyOverlay 从 Policy.json 覆盖——非法字符串同样兜底缺省）。
             if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["MesEnabled"], out bool mesEnabled))
             {
@@ -1068,34 +1164,34 @@ namespace AgingTestSystem.Views
             {
                 config.MesRetryIntervalMs = Math.Max(0, mesRetryIv);
             }
-            // 【V1.68】自定义头 + 按事件分地址（机器级，自由文本；格式错误保存时拦，
+            // 自定义头 + 按事件分地址（机器级，自由文本；格式错误保存时拦，
             // 这里只做"读得到"，脏值上报时跳过——MesMapping 兜底）
             string mesHeaders = System.Configuration.ConfigurationManager.AppSettings["MesCustomHeaders"];
             if (mesHeaders != null) config.MesCustomHeaders = mesHeaders;
             string mesEpMap = System.Configuration.ConfigurationManager.AppSettings["MesEndpointMap"];
             if (mesEpMap != null) config.MesEndpointMap = mesEpMap;
-            // 【V1.68】密钥解密进内存（文件里必须是 DPAPI 密文；明文=配错了，
+            // 密钥解密进内存（文件里必须是 DPAPI 密文；明文=配错了，
             // 解密失败按空处理 + 记日志，绝不带着密文去当 token 发）
             string rawToken = System.Configuration.ConfigurationManager.AppSettings["MesAuthToken"];
             string rawPass = System.Configuration.ConfigurationManager.AppSettings["MesAuthPassword"];
             config.MesAuthToken = DecryptMesSecret("MesAuthToken", rawToken);
             config.MesAuthPassword = DecryptMesSecret("MesAuthPassword", rawPass);
 
-            // 【V1.69】规则流程（机器缺省；项目 Policy.json 随后叠加覆盖）。
+            // 规则流程（机器缺省；项目 Policy.json 随后叠加覆盖）。
             // 字符串默认空（=禁用）；SkipVacuum 默认 false（=现状三阶段）。
             if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["SkipVacuum"], out bool skipVacuum))
             {
                 config.SkipVacuum = skipVacuum;
             }
 
-            // 【V1.75】显示模式维度开关（机器缺省 false=三窗隐藏；项目 Policy.json 随后叠加）。
+            // 显示模式维度开关（机器缺省 false=三窗隐藏；项目 Policy.json 随后叠加）。
             // DisplayModes 字典本身无机器读取（与 MesTriggers 同口径：缺省空+叠加）。
             if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["DisplayModeEnabled"], out bool dmEnabled))
             {
                 config.DisplayModeEnabled = dmEnabled;
             }
 
-            // 【V1.67】项目策略叠加（Projects/<当前项目>/Policy.json 覆盖同名机器缺省）
+            // 项目策略叠加（Projects/<当前项目>/Policy.json 覆盖同名机器缺省）
             ProjectPolicyStore.ApplyOverlay(config);
 
             if (config.TotalInputs < config.TotalBarometers)
@@ -1126,7 +1222,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 解密 MES 密钥配置（【V1.68 新增】 MesAuthToken/MesAuthPassword 专用）：
+        /// 解密 MES 密钥配置（ MesAuthToken/MesAuthPassword 专用）：
         /// DPAPI 密文（"DPAPI:" 前缀）→ 明文进内存；无前缀的明文=配错，按空处理
         /// （项目未上线，不兼容明文——PasswordHasher 同先例）；
         /// 解密失败 → "" + Debug 日志（带着密文当 token 发一定 401，不如空着让问题浮现）。
@@ -1153,7 +1249,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 解析工艺策略枚举（【V1.67 新增】）：
+        /// 解析工艺策略枚举（）：
         /// 大小写不敏感（"warn"/"Warn" 都认）；空/非法/未定义值一律回 fallback
         /// （= 现状行为）——手改配置文件写错也不炸，SettingsForm 下拉选项保证正常路径全合法。
         /// </summary>
@@ -1172,7 +1268,6 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 从 App.config 的 appSettings 读取 ushort
-        /// 
         /// 给新手的说明：
         /// - 有些寄存器地址习惯用十六进制表示（例如 0x1000）
         /// - 但 ConfigurationManager 读出来一定是字符串，所以这里同时支持：
@@ -1203,7 +1298,7 @@ namespace AgingTestSystem.Views
             // 动态创建工位显示面板（根据配置的设备数量）
             CreateWorkstationPanels();
 
-            // 【V1.65】窗口宽度变化时右侧按比例跟进（无自定义 json 才跟进，有则保持绝对值）。
+            // 窗口宽度变化时右侧按比例跟进（无自定义 json 才跟进，有则保持绝对值）。
             // 挂在分隔容器 Resize 上：只关心总宽变化（见 SplitContainerMain_Resize 内部防重复），
             // 用户手动拖分隔条不触发重算。先记当前宽为基准。
             _lastSplitWidth = splitContainerMain.Width;
@@ -1223,13 +1318,13 @@ namespace AgingTestSystem.Views
             // 启动定时器更新状态栏时间显示
             timerTime.Start();
 
-            // 【V1.87】授权计时器（与 HJVision 的 HashTimer 一致：1 小时一格，
+            // 授权计时器（与 HJVision 的 HashTimer 一致：1 小时一格，
             // 新设备/过期弹框 + 置灰用户权限入口，不阻断启动与生产）。
             // 先补空模板（缺文件才建，已有激活绝不覆盖）：厂商只填值，不用记文件名。
             Services.SoftwareActivation.EnsureIniTemplate();
             hashTimer.Start();
 
-            // 【V1.88.26】顶栏状态列按内容定宽（首显即对；行高/字体此时就绪，
+            // 顶栏状态列按内容定宽（首显即对；行高/字体此时就绪，
             // 文本变更三处各自重算，这里只管首显）。
             LayoutHeaderColumns();
         }
@@ -1245,7 +1340,7 @@ namespace AgingTestSystem.Views
             Task.Run(() =>
             {
                 // 启动设备管理器（开始数据采集）
-                // 【V1.16】Start 只要求"气压表串口"连通；耦合器/送风机断开不影响压力采集，
+                // Start 只要求"气压表串口"连通；耦合器/送风机断开不影响压力采集，
                 // 具体哪一步连不上会通过 OnDiagnostic 事件写进 LOG。
                 bool started = false;
                 try
@@ -1263,7 +1358,7 @@ namespace AgingTestSystem.Views
                     WriteLogOnUi($"设备启动失败：{_deviceManager.LastStartupError}");
                 }
 
-                // 【V1.16 新增】启动扫码枪服务（自动识别串口并连接；未启用/未插入时定时重连）
+                // 启动扫码枪服务（自动识别串口并连接；未启用/未插入时定时重连）
                 // 扫码枪是可选设备，内部已做"ScannerEnabled=false 直接跳过"处理，不影响整机启动。
                 // 注意：ScannerService 的 Start() 必须在 UI 线程执行——它内部会创建
                 // System.Windows.Forms.Timer（重连/心跳）和 DeviceChangeWindow（NativeWindow，
@@ -1282,7 +1377,7 @@ namespace AgingTestSystem.Views
                     }
                 });
 
-                // 【V1.16.1】顶部"通讯模块状态"只反映 IO 耦合器（阀/载台电控制）是否连接，
+                // 顶部"通讯模块状态"只反映 IO 耦合器（阀/载台电控制）是否连接，
                 // 不再用"气压表串口是否连上"冒充。Start() 内部已同步触发
                 // OnConnectionStatusChanged 事件（数据源 = 耦合器），这里再按实际状态兜底刷新一次。
                 // 同时刷新状态栏"扫码枪"连接状态（已连接/未连接/未启用）。
@@ -1294,7 +1389,7 @@ namespace AgingTestSystem.Views
                     RefreshScannerStatus();
                 });
 
-                // 【V1.59】断电恢复：启动完成后检查有没有上次未完成的老化任务，
+                // 断电恢复：启动完成后检查有没有上次未完成的老化任务，
                 // 有则切回 UI 线程弹窗询问"整台重测 / 放弃"。
                 RunOnUi(() =>
                 {
@@ -1305,8 +1400,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 断电恢复检查（【V1.59 新增】，UI 线程调用）
-        ///
+        /// 断电恢复检查（，UI 线程调用）
         /// 【场景】异常断电/程序崩溃时，在测工位的阀与电源在耦合器上还保持最后状态，
         /// 任务参数快照存在 TestSession.json。重启后在这里发现快照并询问操作员：
         /// - 选"是"：对每台按中断前的定格参数【整台重测】（重新开阀→抽真空→延时→
@@ -1320,7 +1414,7 @@ namespace AgingTestSystem.Views
             if (session?.Stations == null || session.Stations.Count == 0) return;
 
             var idList = string.Join("、", session.Stations.ConvertAll(s => s.DeviceId));
-            // 【V1.67】恢复文案跟随 PowerLossPolicy：续跑（重抽真空+补剩余）/ 整台重测
+            // 恢复文案跟随 PowerLossPolicy：续跑（重抽真空+补剩余）/ 整台重测
             bool resume = (_config.PowerLossPolicy == PowerLossPolicy.ResumeRemaining);
             string resumeLine = resume
                 ? "【是】恢复测试 —— 这些台将重抽真空，按中断时刻的剩余时长补足老化（断电期间不计）\n"
@@ -1356,10 +1450,7 @@ namespace AgingTestSystem.Views
             RunOnUi(() => WriteLog(message));
         }
 
-        /// <summary>切换到 UI 线程执行（窗体已释放时安全跳过）
-        /// 【V1.72.15】加 _mainClosing + 句柄查：退出期排队回调此时最密，旧版只查释放状态，
-        /// BeginInvoke 进销毁中句柄仍抛 InvalidOperationException（catch 能吞，但高频刷异常埋单；
-        /// 先查直接丢弃，一个异常都不抛）。action 本体包 try，防投递后关闭的竞态。</summary>
+        /// <summary>切 UI 线程执行（退出期/已释放直接丢弃，一个异常都不抛；只用 BeginInvoke，禁同步 Invoke）</summary>
         private void RunOnUi(Action action)
         {
             if (action == null) return;
@@ -1375,56 +1466,30 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 创建工位网格（【V1.50】自绘大画布替代 72 面板 + TableLayoutPanel）
-        ///
-        /// 【布局说明】
-        /// - 整个工位区域（8列×9行面板 + 行全选按钮列）合并为 1 个自绘
-        ///   <see cref="WorkstationGridView"/>，尺寸 = 显示区尺寸（双向铺满一屏）；
-        /// - 外层用普通 Panel 容器托管（AutoScroll=false，无任何滚动条）；
-        /// - 单窗口自绘（而非 V1.49 的 72 个），无撕裂。
-        /// 【V1.88.24】上下滑动/大字版/FitWidth/FillScreen 切换全部删除：
-        /// 用户确认一屏看全够了，只留双向铺满一路。
-        /// 【注意】不能放在 FlowLayoutPanel 中，因为 FlowLayoutPanel
-        /// 不尊重子控件的 Dock=Fill 属性。
+        /// 装配工位网格：8列×9行＋行全选列合并为 1 个自绘 <see cref="WorkstationGridView"/>
+        /// （双向铺满一屏），外层普通 Panel 托管（无滚动条；别用 FlowLayoutPanel，它不认 Dock=Fill）。
         /// </summary>
         private void CreateWorkstationPanels()
         {
-            // 【修复 H5】清空前先 Dispose 旧控件，避免控件资源泄漏
-            // Controls.Clear() 只移除父子关系，不会释放控件资源
-            // 旧控件（含子控件）会成为孤儿，等待 GC 回收，可能耗尽 GDI 句柄
-            // 【V1.72.16】foreach 直接枚举逐个 Dispose 是错的：Dispose 会把自己从父集合摘除，
-            // 枚举中集合被改会导致跳过（漏释放→孤儿→终结器跨线程炸，工艺策略窗已实锤），
-            // 一律走 ControlDisposeHelper（快照数组后释放，最后 Clear），不要手写 foreach。
+            // 先释放旧控件再清集合：Clear 只摘父子关系，孤儿进终结器线程会炸；
+            // 逐个 Dispose 会改集合致枚举跳过，一律走 ControlDisposeHelper（快照后释放）。
             ControlDisposeHelper.DisposeAllAndClear(splitContainerMain.Panel1.Controls);
 
-            // 外层容器：只管装画布（Dock=Fill 填满左侧区域），不滚动——
-            // 【V1.88.24】AutoScroll=false：画布恒等于显示区（双向铺满一屏），
-            // 滚动条/拖拽/横向压制/V1.88.15 事后校正全部随滚动移除。
             var scrollContainer = new Panel();
-            scrollContainer.Dock = DockStyle.Fill;      // 填满整个左侧区域
-            scrollContainer.AutoScroll = false;         // 无任何滚动条（一屏看全）
-            // 【V1.50】容器开启双缓冲，配合自绘网格消除重绘闪烁
+            scrollContainer.Dock = DockStyle.Fill;
+            scrollContainer.AutoScroll = false;
             EnableDoubleBuffering(scrollContainer);
 
-            // 自绘工位网格（1 个 UserControl 画全部面板 + 行全选按钮列；
-            // 【V1.88.24】只留双向铺满一屏：网格缺省即铺满，主窗不再设模式、不再提供切换）。
             _gridView = new WorkstationGridView();
             _gridView.Configure(_config.PanelColumns, _config.PanelRows, _config.TotalBarometers);
-            // 【V1.77】电流行直绘开关：UsePowerMeter 开=每面板压力框下方加"电流："行
-            // （【V1.88.17】面板 170→188、行 182→200，下游下移 18 间距不变）；关=原来布局逐像素不动。
-            // 结构型开关（改后重启生效），这里 startup 装配一次即可（_config 已 LoadConfig 就绪）。
+            // 电流行开关（UsePowerMeter；改后重启生效）：开=面板加"电流："行（170→188），关=原布局
             _gridView.ShowCurrentRow = _config.UsePowerMeter;
 
-            // 【V1.60】自绘画布跟随全局主题（浅色=PanelLayout.json 原色，深色=深灰系；
-            // 上电绿/故障红等语义状态色两边都不动，见 WorkstationGridView.SetDarkMode 注释）
+            // 画布跟随主题（语义状态色两边不动，见 SetDarkMode）
             _gridView.SetDarkMode(ThemeManager.IsDark);
 
-            // 订阅"设置"按钮点击事件（V1.18：打开工位设置窗口；本次需求：点哪台开哪台，不看选中集；
-            // 批量入口只走右侧"批量设置配方"按钮 ShowBatchRecipeForm）
+            // 点哪台开哪台设置窗（不看选中集）；行全选等内部动作转 LOG（具名方法，可退订）
             _gridView.OnSetClicked += Panel_OnSetClicked;
-
-            // 订阅网格内部动作日志（如行全选/取消全选），写入主窗体 LOG
-            // 【大扫荡】具名方法（以前匿名 lambda 永不可退订；网格重建时旧画布被事件拽住）。
             _gridView.OnLog += GridView_OnLog;
 
             scrollContainer.Controls.Add(_gridView);
@@ -1432,13 +1497,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 通过反射给控件开启双缓冲（OptimizedDoubleBuffer + AllPaintingInWmPaint）（【V1.49】）
-        /// Control.DoubleBuffered 是受保护属性，TableLayoutPanel 等 ScrollableControl 子类
-        /// 无法直接访问，故用反射统一开启。开启后控件绘制先在离屏缓冲完成，再一次性
-        /// 复制到屏幕，消除滚动/重绘时的闪烁与撕裂。
-        /// 【V1.50】网格自身的行全选按钮列、选中交互、按钮文字刷新已全部移入
-        /// <see cref="WorkstationGridView"/> 内部（OnLog 通知主窗体写日志），
-        /// 本方法仅保留给外层工作站容器开启双缓冲。
+        /// 反射开双缓冲（DoubleBuffered 是受保护属性，直接访问不到；消重绘闪烁）。
         /// </summary>
         /// <param name="control">目标控件</param>
         private static void EnableDoubleBuffering(Control control)
@@ -1453,31 +1512,17 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 设备管理器批量数据更新事件处理
-        /// 当一次采集周期完成时触发，参数为本次采集的所有数据数组
-        ///
-        /// 【修复 H1】增加 IsDisposed/Disposing 检查，避免窗体释放时 Invoke 抛异常
-        /// 【修复 M2】改为批量事件，一次更新所有面板，避免 72 次单条事件触发的性能问题
-        ///
-        /// 【注意】此方法由后台线程（定时器）调用，不能直接更新UI控件，
-        /// 必须使用 BeginInvoke 异步切换到 UI 线程执行
-        /// 使用 BeginInvoke 而非 Invoke，避免阻塞后台采集线程
+        /// 采集周期完成 → 一次刷全部面板（后台线程回调，入口先拦释放/退出期，再 BeginInvoke 上 UI）。
         /// </summary>
         private void DeviceManager_OnBatchDataUpdated(object sender, BarometerData[] allData)
         {
-            // 窗体已释放或正在释放时直接返回，避免 Invoke 抛 ObjectDisposedException
-            // 【V1.72.15】加 _mainClosing：退出期排队最密，先拦少抛异常。
             if (_mainClosing || this.IsDisposed || this.Disposing) return;
-
-            // 防御性检查：数据为空时直接返回
             if (allData == null || allData.Length == 0) return;
 
             try
             {
                 // 使用 BeginInvoke 异步投递到 UI 线程（不阻塞后台采集线程）
-                //
                 // 【修复 H9】TargetParameterCountException 参数计数不匹配
-                //
                 // 【问题原因】
                 // Control.BeginInvoke 的签名是：BeginInvoke(Delegate method, params object[] args)
                 // 当传入的第二个参数 allData 是 BarometerData[] 类型时，
@@ -1487,7 +1532,6 @@ namespace AgingTestSystem.Views
                 // 这导致委托被调用时实际收到 N 个参数（N=allData.Length，如72个），
                 // 而 Action<BarometerData[]> 只接受 1 个参数（一个 BarometerData[]），
                 // 参数个数不匹配 → 抛出 TargetParameterCountException。
-                //
                 // 【修复方法】
                 // 显式构造一个 object[] 数组，把 allData 作为它的唯一元素传入：
                 //   new object[] { allData }
@@ -1519,7 +1563,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 单台快速跟踪增量更新事件处理（【V1.30 新增】）
+        /// 单台快速跟踪增量更新事件处理（）
         /// IO 触发后高频补读指定工位，每读到一次触发一次。
         /// 【注意】此方法由快速跟踪定时器的后台线程调用，必须用 BeginInvoke
         /// 切到 UI 线程更新对应面板；仅刷新该台，不影响其它面板。
@@ -1527,7 +1571,7 @@ namespace AgingTestSystem.Views
         private void DeviceManager_OnQuickTrackDataUpdated(object sender, BarometerData data)
         {
             // 窗体已释放或正在释放时直接返回，避免 Invoke 抛 ObjectDisposedException
-            // 【V1.72.15】加 _mainClosing（同 BatchData）。
+            // 加 _mainClosing（同 BatchData）。
             if (_mainClosing || this.IsDisposed || this.Disposing) return;
 
             // 防御性检查：数据为空时直接返回
@@ -1558,14 +1602,14 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 更新单个面板显示（【V1.30 新增】，快速跟踪专用）
+        /// 更新单个面板显示（，快速跟踪专用）
         /// 按设备编号找到对应面板并调用其 UpdateData 方法，只刷新触发 IO 的那台。
         /// </summary>
         /// <param name="data">该工位最新数据</param>
         private void UpdateSinglePanel(BarometerData data)
         {
             // 窗体已释放则不更新
-            // 【V1.72.15】加 _mainClosing/Disposing（排队回调关后丢弃）。
+            // 加 _mainClosing/Disposing（排队回调关后丢弃）。
             if (_mainClosing || this.IsDisposed || this.Disposing || data == null) return;
 
             if (_gridView != null)
@@ -1582,7 +1626,7 @@ namespace AgingTestSystem.Views
         private void UpdateAllPanels(BarometerData[] allData)
         {
             // 窗体已释放则不更新
-            // 【V1.72.15】加 _mainClosing/Disposing（同上）。
+            // 加 _mainClosing/Disposing（同上）。
             if (_mainClosing || this.IsDisposed || this.Disposing || allData == null) return;
 
             if (_gridView != null)
@@ -1590,16 +1634,14 @@ namespace AgingTestSystem.Views
                 _gridView.UpdateAll(allData);
             }
 
-            // 【V1.10 新增】顺便更新右侧整机状态汇总（测试中 N 台 / 在线 M / 报警 Z）
+            // 顺便更新右侧整机状态汇总（测试中 N 台 / 在线 M / 报警 Z）
             UpdateRunStatusSummary();
         }
 
         /// <summary>
-        /// 送风机数据更新事件处理（【V1.10 新增】）
-        ///
+        /// 送风机数据更新事件处理（）
         /// 【线程安全】此事件在送风机独立定时器的后台线程触发，
         /// 必须用 BeginInvoke 切到 UI 线程更新控件。
-        ///
         /// 【易踩的坑（H9）】BeginInvoke(Delegate, params object[] args) 会把参数数组展开。
         /// 如果直接传 data（FanData 类型），会按数组协变规则被当成 object[] 展开，
         /// 导致"参数个数不匹配"异常。必须显式包成 new object[] { data }。
@@ -1607,7 +1649,7 @@ namespace AgingTestSystem.Views
         private void DeviceManager_OnFanDataUpdated(object sender, FanData data)
         {
             // 窗体已释放或正在释放时直接返回
-            // 【V1.72.15】加 _mainClosing（同 BatchData）。
+            // 加 _mainClosing（同 BatchData）。
             if (_mainClosing || this.IsDisposed || this.Disposing) return;
 
             try
@@ -1635,11 +1677,10 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 更新送风机监视区显示（【V1.10 新增】【V1.16 调整显示项】【V1.16.1 再调整】）
+        /// 更新送风机监视区显示（）
         /// 显示：运行状态 / 设置温度（控制屏设定值） / 当前温度（控制屏当前温度，唯一探头）。
         /// 下部温度已按需求删除（后续加装下部探头再加）。送风机这边不关注湿度。
         /// data 为 null 表示通讯失败/离线。
-        ///
         /// 【运行状态文字颜色约定（V1.16.1）】
         /// - 未连接（通讯失败/离线）= 红
         /// - 定值启动 / 程式运行中 / 已连接 = 绿（在转/在线都是绿色）
@@ -1706,7 +1747,7 @@ namespace AgingTestSystem.Views
             // 当前温度 = 控制屏当前温度（目前唯一探头，数据源就是设备的当前温度寄存器）
             lblUpperTemp.Text = $"{data.Temperature:F2} °C";
 
-            // 【V1.16.3】当前温度颜色按"与设置温度的偏差"显示（控件由 TextBox 改为 Label，
+            // 当前温度颜色按"与设置温度的偏差"显示（控件由 TextBox 改为 Label，
             // 避免 ReadOnly 文本框获得焦点/文字选中时 ForeColor 被高亮色覆盖而不生效）：
             // 高于设置温度（lblSetTemp）→ 红（偏热，风扇需加强降温）；不高于 → 绿（正常/已到温）。
             // 原来按固定告警上限 FanTempAlarmLimitC 判断，现场更关心相对"设置温度"的高低。
@@ -1719,7 +1760,7 @@ namespace AgingTestSystem.Views
                 lblUpperTemp.ForeColor = Color.Green;
             }
 
-            // 【V1.10 保留】送风机温度安全告警：超过配置上限 FanTempAlarmLimitC →
+            // 送风机温度安全告警：超过配置上限 FanTempAlarmLimitC →
             // 仅记日志提示（不覆盖上面按设置温度显示的颜色）。
             // 【大扫荡】探头失效（NaN）边沿记"传感器无效"：以前 NaN 比较恒 false，
             // 超温保护静默致盲，全程无任何一行说明。NaN 不当超温（误停产线更糟），
@@ -1749,7 +1790,7 @@ namespace AgingTestSystem.Views
                 }
             }
 
-            // 【V1.66】超温全线联停：烧屏架 72 台 24h 点亮，超温是火灾级风险。
+            // 超温全线联停：烧屏架 72 台 24h 点亮，超温是火灾级风险。
             // 开关 FanTempShutdownEnabled 默认 false = 现状（只记日志）；现场答完 Q16 打开即生效，
             // 不用二次开发。边沿触发：停过一次后必须回温（≤上限）才允许再停，避免每秒重复停；
             // StopTesting 空数组是 no-op，无在测时只记一行日志。
@@ -1782,13 +1823,13 @@ namespace AgingTestSystem.Views
         private bool _fanTempInvalidLogged = false;
 
         /// <summary>
-        /// 超温全线联停边沿锁（【V1.66】）：true=本次超温已停过，回温（≤上限）后自动复位 false。
+        /// 超温全线联停边沿锁（）：true=本次超温已停过，回温（≤上限）后自动复位 false。
         /// 避免超温期间每秒重复执行 StopTesting + 刷屏写日志。
         /// </summary>
         private bool _fanShutdownTriggered = false;
 
         /// <summary>
-        /// 更新右侧整机状态汇总（【V1.10 新增】）
+        /// 更新右侧整机状态汇总（）
         /// 在批量数据更新后调用（UI 线程）：
         /// - 顶部运行状态：空闲 / 测试中(N台) / 有报警
         /// - 状态栏：测试中 N 台、在线 M/72 台
@@ -1841,7 +1882,7 @@ namespace AgingTestSystem.Views
             toolStripStatusLabelTesting.Text = $"测试中: {testingCount}";
             toolStripStatusLabelOnline.Text = $"在线: {onlineCount}/{_config.TotalBarometers}";
 
-            // 【V1.24】全部离线（在线 0/N）时"在线"文本标红，其余情况恢复默认颜色
+            // 全部离线（在线 0/N）时"在线"文本标红，其余情况恢复默认颜色
             toolStripStatusLabelOnline.ForeColor = onlineCount == 0
                 ? Color.Red
                 : SystemColors.ControlText;
@@ -1852,7 +1893,7 @@ namespace AgingTestSystem.Views
         /// </summary>
         private void DeviceManager_OnConnectionStatusChanged(object sender, bool isConnected)
         {
-            // 【V1.72.15】退出期丢弃（此回调无 try，关后 UpdateConnectionStatus 虽自拦，
+            // 退出期丢弃（此回调无 try，关后 UpdateConnectionStatus 虽自拦，
             // 但 _commConnected 写脏无妨，直接早退最干净）。
             if (_mainClosing || this.IsDisposed || this.Disposing) return;
             _commConnected = isConnected;
@@ -1860,7 +1901,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 设备管理器启动/连接诊断事件处理（【V1.16 新增】）
+        /// 设备管理器启动/连接诊断事件处理（）
         /// 把连接诊断（实际气压表串口、耦合器连接结果、送风机连接结果、自动重连成功等）
         /// 写到 LOG 面板，让现场一眼看到"到底哪一步连不上"。
         /// 【线程安全】后台线程触发，用 BeginInvoke 切回 UI 线程写日志。
@@ -1868,7 +1909,7 @@ namespace AgingTestSystem.Views
         private void DeviceManager_OnDiagnostic(object sender, string message)
         {
             // 窗体已释放或正在释放时直接返回
-            // 【V1.72.15】加 _mainClosing（同 BatchData）。
+            // 加 _mainClosing（同 BatchData）。
             if (_mainClosing || this.IsDisposed || this.Disposing) return;
 
             try
@@ -1894,14 +1935,14 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 更新顶部"通讯模块状态"显示
-        /// 【V1.16.1】语义 = IO 耦合器（阀 / 载台电控制）是否连接，不再反映气压表串口。
+        /// 语义 = IO 耦合器（阀 / 载台电控制）是否连接，不再反映气压表串口。
         /// 数据来源 _commConnected（由 DeviceManager.OnConnectionStatusChanged 事件驱动）。
         /// 【修复 H1】增加 IsDisposed 检查，使用 BeginInvoke 异步切换
         /// </summary>
         private void UpdateConnectionStatus()
         {
             // 窗体已释放或正在释放时直接返回
-            // 【V1.72.15】加 _mainClosing（排队回调关后丢弃，与通讯窗 SetConnected 同因）。
+            // 加 _mainClosing（排队回调关后丢弃，与通讯窗 SetConnected 同因）。
             if (_mainClosing || this.IsDisposed || this.Disposing) return;
 
             try
@@ -1915,7 +1956,7 @@ namespace AgingTestSystem.Views
 
                 lblCommStatus.Text = _commConnected ? "已连接" : "未连接";
                 lblCommStatus.ForeColor = _commConnected ? Color.Green : Color.Red;
-                // 【V1.88.26】文本变了列宽即重算（"已连接/未连接"同长，但以后文案变了自动跟）。
+                // 文本变了列宽即重算（"已连接/未连接"同长，但以后文案变了自动跟）。
                 LayoutHeaderColumns();
             }
             catch (ObjectDisposedException)
@@ -1941,13 +1982,13 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 面板"设置"按钮点击事件处理（【V1.18】由单台手动控制改为工位设置窗口）
+        /// 面板"设置"按钮点击事件处理（由单台手动控制改为工位设置窗口）
         /// 【本次需求】点哪个工位的"设置"按钮，就弹该工位的工位设置窗口（StationSettingsForm），
         /// 不看页面上勾选了几个工位、也不改任何选中状态：
         /// 以前按选中数量分流（≥2 个弹批量窗）容易误触——只想看 1 号参数，
         /// 却因之前勾了别的工位而弹成批量窗。批量入口只走右侧"批量设置配方"按钮
         /// （见 ShowBatchRecipeForm，按当前选中集批量下发）。
-        /// 【V1.50】选中状态统一由 <see cref="WorkstationGridView"/> 内部维护，本方法不碰选中集。
+        /// 选中状态统一由 <see cref="WorkstationGridView"/> 内部维护，本方法不碰选中集。
         /// </summary>
         private void Panel_OnSetClicked(object sender, int deviceId)
         {
@@ -1956,27 +1997,27 @@ namespace AgingTestSystem.Views
             // 传入共享配方列表 _recipes，供"保存/加入对列"把当前配方写入本地配方存储
             using (var form = new StationSettingsForm(_deviceManager, _config, _recipes, deviceId))
             {
-                // 【V1.60】子窗体打开前按当前主题着色（以下各 ShowDialog/Show 处同，不再重复解释）
+                // 子窗体打开前按当前主题着色（以下各 ShowDialog/Show 处同，不再重复解释）
                 ThemeManager.ApplyTo(form);
                 form.ShowDialog(this);
             }
         }
 
         /// <summary>
-        /// "连接中..."提示窗体（【V1.16.2 新增】）
+        /// "连接中..."提示窗体（）
         /// 异步按需重连期间显示：告诉操作员正在连接哪个设备，同时禁用主窗体，
         /// 防止连接期间重复点击其它按钮造成并发连接。
         /// </summary>
         private Form _connectingForm;
 
         /// <summary>
-        /// 显示"连接中..."提示并禁用主窗体（【V1.16.2 新增】）
+        /// 显示"连接中..."提示并禁用主窗体（）
         /// 仅在异步重连开始时调用；结束时由 <see cref="HideConnecting"/> 恢复。
         /// </summary>
         /// <param name="deviceName">设备名（如"耦合器"/"送风机"），用于提示文案</param>
         private void ShowConnecting(string deviceName)
         {
-            // 【V1.72.15】退出中不再建提示窗（异步重连收尾与退出并行时，建了即孤儿）。
+            // 退出中不再建提示窗（异步重连收尾与退出并行时，建了即孤儿）。
             if (_mainClosing || this.IsDisposed || this.Disposing) return;
             if (_connectingForm != null) return;
 
@@ -2002,13 +2043,13 @@ namespace AgingTestSystem.Views
 
             // 禁用主窗体，防止连接期间重复点击（连接只影响自身，后台采集照常进行）
             this.Enabled = false;
-            // 【V1.60】提示窗跟随当前主题
+            // 提示窗跟随当前主题
             ThemeManager.ApplyTo(_connectingForm);
             _connectingForm.Show(this);
         }
 
         /// <summary>
-        /// 关闭"连接中..."提示并恢复主窗体（【V1.16.2 新增】）
+        /// 关闭"连接中..."提示并恢复主窗体（）
         /// 在 async 方法的 finally 中调用，保证无论成功失败都恢复。
         /// </summary>
         private void HideConnecting()
@@ -2016,7 +2057,7 @@ namespace AgingTestSystem.Views
             if (_connectingForm != null)
             {
                 try { _connectingForm.Close(); } catch { /* 窗体已关闭则忽略 */ }
-                // 【V1.72.15】Dispose 包 try：Close 竞态后 Dispose 再抛会连带炸 finally 链。
+                // Dispose 包 try：Close 竞态后 Dispose 再抛会连带炸 finally 链。
                 try { _connectingForm.Dispose(); } catch { }
                 _connectingForm = null;
             }
@@ -2029,7 +2070,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 确保 IO 耦合器已连接（【V1.16.2】完全异步版，替代原同步 EnsureIoReady）
+        /// 确保 IO 耦合器已连接（完全异步版，替代原同步 EnsureIoReady）
         /// 用户操作需要耦合器时先调用：未连接则后台异步重连一次，
         /// 期间弹"正在连接耦合器..."提示（不卡界面）；连不上则弹窗提示并返回 false。
         /// </summary>
@@ -2066,7 +2107,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 确保送风机已连接（【V1.16.2】异步版）
+        /// 确保送风机已连接（异步版）
         /// 需要送风机的操作（定值启动/停止、启动测试）先调用：未连接则后台异步重连一次，
         /// 期间弹"正在连接送风机..."提示；连不上返回 false（由调用方决定是否阻断/提示）。
         /// </summary>
@@ -2130,8 +2171,7 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 参数设置按钮点击 → 显示参数设置下拉菜单
-        /// 菜单项：公共参数 / 配方管理 / 项目切换（【V1.67 新增】管理员限定，见 MenuParamProject_Click）
-        ///
+        /// 菜单项：公共参数 / 配方管理 / 项目切换（管理员限定，见 MenuParamProject_Click）
         /// 【无权限点后提示】按钮常亮可点（见 UpdateButtonPermissionStates）：
         /// 操作员点了不直接弹菜单，先拦一道"权限不够"明示去哪提权，
         /// 现场不再是"点了没反应、以为卡死"。下拉里的敏感项（项目切换仅管理员）
@@ -2159,7 +2199,6 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 参数设置入口权限文案（【新增】纯函数，可单测，不碰任何控件）。
-        ///
         /// 【为什么抽出来】权限判定本身只有一句话（有技术员及以上放行），
         /// 但"无权限时说什么"值得锁死：必须含"权限不够"四字（用户原话），
         /// 并指明去【用户权限】提权，现场才知道下一步干什么。
@@ -2174,7 +2213,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 工艺策略 → 弹出可视化工艺配置窗体（【V1.70 新增为"流程驾驶舱"，V1.73 改名】点节点改配置，
+        /// 工艺策略 → 弹出可视化工艺配置窗体（点节点改配置，
         /// 与系统设置同一条保存路； savedKeys 非空走同样的热生效分发）。
         /// 入口挂在参数设置下拉下（技术员及以上可见；编辑限管理员——
         /// 只读看图所有人可看，改配置与系统设置同级，不开后门）。
@@ -2194,9 +2233,9 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 项目切换 → 弹出项目档案窗体（【V1.67 新增】仅管理员：项目=工艺归属，
+        /// 项目切换 → 弹出项目档案窗体（仅管理员：项目=工艺归属，
         /// 切错项目=跑错工艺，所以与系统设置同级管控；技术员/操作员点此直接提示）。
-        /// 【V1.72.10 热更】窗体只改指针并带回项目名，真正的换装在这里做
+        /// 窗体只改指针并带回项目名，真正的换装在这里做
         /// （ReloadActiveProject：配方/工位设置/策略/布局即时生效，无需重启）。
         /// </summary>
         private void MenuParamProject_Click(object sender, EventArgs e)
@@ -2218,8 +2257,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 项目热加载（【V1.72.10 新增】切换项目后即时生效，无需重启）。
-        ///
+        /// 项目热加载（切换项目后即时生效，无需重启）。
         /// 【为什么以前必须重启】跟项目走的四个文件（配方/工位设置/主页布局/策略）
         /// 在启动时一次性读进内存（_recipes 列表/StationSettingsCache/DeviceConfig/
         /// 当前布局），运行中只改 ActiveProject 指针，内存还是旧项目的数据，
@@ -2340,24 +2378,24 @@ namespace AgingTestSystem.Views
         /// - 设置：仅管理员可见（V1.17 权限控制，非管理员自动隐藏）
         /// - 版本说明：所有权限可见（V1.19.12 更名：关于 → 版本说明）
         /// - 深浅模式切换：仅 dev 最高权限可见（V1.64 起从顶部独立按钮收进这里）
-        /// - 【V1.88.24 已删】大字/铺满切换（只留一屏铺满，不再提供入口）。
+        /// - 大字/铺满切换（只留一屏铺满，不再提供入口）。
         /// </summary>
         private void btnAbout_Click(object sender, EventArgs e)
         {
             var items = new List<(string Text, EventHandler ClickHandler)>();
 
-            // 【V1.17 权限控制】"系统设置"只对管理员开放，非管理员时该菜单项直接隐藏
+            // "系统设置"只对管理员开放，非管理员时该菜单项直接隐藏
             if (_userManager.HasPermission(UserRole.Administrator))
             {
                 items.Add(("设置", MenuHelpSettings_Click));
             }
 
-            // 【V1.58】"主页区域调整"：可视化拖动矩形块边缘调整主界面各区域尺寸。
-            // 【V1.58.3】权限放开：所有登录用户可见可用（布局微调属非关键操作，
+            // "主页区域调整"：可视化拖动矩形块边缘调整主界面各区域尺寸。
+            // 权限放开：所有登录用户可见可用（布局微调属非关键操作，
             // 现场操作员也可能需要按自己习惯微调右侧宽度/行高，故不再限制管理员）。
             items.Add(("主页区域调整", MenuHelpHomeLayout_Click));
 
-            // 【V1.88.24 已删】"工作站大字/铺满"切换：只留一屏铺满，不再提供入口。
+            // "工作站大字/铺满"切换：只留一屏铺满，不再提供入口。
 
             // 【通讯测试】仅技术员及以上权限可见（操作员不可见）
             if (_userManager.HasPermission(UserRole.Technician))
@@ -2373,10 +2411,10 @@ namespace AgingTestSystem.Views
 
             items.Add(("版本说明", MenuHelpVersionInfo_Click));
 
-            // 【V1.83】软件授权：所有人可看状态，导入仅管理员（窗体内二次限）。
+            // 软件授权：所有人可看状态，导入仅管理员（窗体内二次限）。
             items.Add(("软件授权", MenuHelpLicense_Click));
 
-            // 【V1.64】深浅模式切换收进"关于"下拉，只给 dev 看：
+            // 深浅模式切换收进"关于"下拉，只给 dev 看：
             // 普通用户菜单里根本没这一项（隐藏效果）；文字永远表示"下一次去哪"，
             // 菜单每次打开现拼，天然就是最新状态，不用像以前的顶部按钮那样同步文字
             if (_userManager.IsDevLoggedIn)
@@ -2387,11 +2425,10 @@ namespace AgingTestSystem.Views
             ShowDropdownPopup(btnAbout, items.ToArray());
         }
 
-        // 【V1.88.24 已删】MenuHelpWorkstationFit_Click（大字/铺满切换，随双模式开关移除）。
+        // MenuHelpWorkstationFit_Click（大字/铺满切换，随双模式开关移除）。
 
         /// <summary>
-        /// 深色/浅色主题切换（【V1.64】入口从顶部独立按钮收进"关于"下拉，仅 dev 可见）。
-        ///
+        /// 深色/浅色主题切换（入口从顶部独立按钮收进"关于"下拉，仅 dev 可见）。
         /// 【流程】ThemeManager.Toggle（内存切换 + 写 App.config 下次启动接着用）
         /// → ApplyToAllOpenForms（主窗体 + 所有已打开的子窗体/自绘画布当场换肤）
         /// → 停止/复位按钮配色跟上 → 写 LOG。
@@ -2403,14 +2440,12 @@ namespace AgingTestSystem.Views
             AppThemeMode mode = ThemeManager.Toggle();
             ThemeManager.ApplyToAllOpenForms();
             ApplyOperationButtonsTheme();
+            SyncWindowChromeTheme();
             WriteLog(mode == AppThemeMode.Dark ? "已切换为深色模式" : "已切换为浅色模式");
         }
 
         /// <summary>
-        /// 停止/复位两按钮的主题配色（【V1.60.1】纯函数，方便回归直接断言）。
-        /// 这两个按钮浅色下是系统默认灰底黑字；深色下按需求走深灰底白字
-        /// （DimGray + White，跟登录窗/改密窗"取消"按钮同款，全软件统一）。
-        /// 其它语义按钮（绿/蓝/红）两边都不动，不走这里。
+        /// 无语义灰按钮的主题配色（纯函数）：浅色默认灰底黑字，深色深灰底白字（与各窗取消钮同款）。
         /// </summary>
         /// <param name="dark">true=深色配色，false=浅色配色</param>
         /// <param name="back">按钮底色</param>
@@ -2422,10 +2457,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 把主题配色应用到"停止运行/报警复位/下料判定"三个无语义灰按钮（【V1.60.1】，V1.67 加下料判定）。
-        /// 为什么只有它俩特殊：ThemeManager 对按钮一律不动（语义色保护），
-        /// 但它俩浅色是"无语义的默认灰"，深色下黑字偏弱，才单独提出来处理。
-        /// 启动与每次主题切换后调用（切换入口只有 MenuThemeToggle_Click 一处，不会漏）。
+        /// 三个无语义灰按钮换肤（ThemeManager 跳过按钮类，这里手动跟；启动＋每次切换后调用）。
         /// </summary>
         private void ApplyOperationButtonsTheme()
         {
@@ -2440,10 +2472,10 @@ namespace AgingTestSystem.Views
             {
                 ThemeManager.ApplyButtonColors(btnResetAlarm, back, fore);
             }
-            // 【V1.67】下料判定同为无语义默认灰，随它俩一起换肤
+            // 下料判定同为无语义默认灰，随它俩一起换肤
             if (btnUnloadJudge != null)
             {
-                // 【V1.71】按钮已换 Sunny：BackColor 画不出来，走 ApplyButtonColors。
+                // 按钮已换 Sunny：BackColor 画不出来，走 ApplyButtonColors。
                 ThemeManager.ApplyButtonColors(btnUnloadJudge, back, fore);
             }
         }
@@ -2513,14 +2545,12 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 【新增】尝试登录并切换权限
-        ///
         /// 【流程】
         /// 1. 弹出 LoginForm 让用户输入用户名和密码
         /// 2. 用户点击"确认"后，UserManager 校验账号密码
         /// 3. 校验成功：切换权限标签，更新按钮可用状态，写入日志
         /// 4. 校验失败：LoginForm 内部弹出错误提示，用户可重试
         /// 5. 用户点击"取消"：不做任何操作
-        ///
         /// 【特别说明 - 操作员权限】
         /// 操作员权限允许任意用户切换（视为"注销当前用户"），
         /// 因此选择"操作员"时不强制要求登录，直接弹出登录框但允许取消。
@@ -2538,7 +2568,7 @@ namespace AgingTestSystem.Views
                 {
                     // 登录成功，更新权限显示
                     string roleName = GetRoleDisplayName(targetRole);
-                    // 【V1.64】dev 登录成功后顶栏明示最高身份（红色），和普通管理员一眼区分
+                    // dev 登录成功后顶栏明示最高身份（红色），和普通管理员一眼区分
                     if (_userManager.IsDevLoggedIn)
                     {
                         roleName = "最高权限(dev)";
@@ -2582,20 +2612,13 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 顶栏与右侧状态区文本加粗（【V1.78 新增】用户点名：顶栏项目/权限/通讯、
-        /// 运行状态组、监视组全部加粗，更醒目）。
-        ///
-        /// 【为什么放代码里而不写 Designer】Sunny 控件默认 Style=Inherited，吃样式字体：
-        /// 名/值两套标签要么都不写 Font（同源永不分叉），要么两边写死同一套——只写一边必大小眼
-        /// （V1.72.8 血泪：lblRunStatus 单写微软雅黑 10F，删字解决；V1.72.9 顶栏五段字体全删回默认）。
-        /// 这里按各控件"当前实际字号"原样加粗（字族/字号一个不动，只或上 Bold），
-        /// 成对的名/值标签永远同源同尺寸，不会分叉。ThemeManager 不碰 Font，加粗一次永久有效，
-        /// 深色/浅色切换不影响粗细。
+        /// 顶栏与状态区文本加粗（前缀常规、值加粗）。放代码里按当前字号原样或 Bold：
+        /// Sunny 继承样式字体，Designer 写死字号即与样式分叉；名/值两套必须同源，否则大小眼。
         /// </summary>
         private void ApplyHeaderBoldFonts()
         {
             // 顶栏：项目名（值加粗） + 权限角色名 + 通讯状态值。
-            // 【V1.79】三个前缀/标签（lblProjectPrefix/lblPermissionPrefix/lblCommStatusLabel）
+            // 三个前缀/标签（lblProjectPrefix/lblPermissionPrefix/lblCommStatusLabel）
             // 保持常规体——"前缀常规、值加粗"，主次分明（用户点名）。
             SetBold(lblProject);
             SetBold(lblPermissionRole);
@@ -2627,20 +2650,8 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 顶栏字号统一收小（【V1.88.25】4 按钮 12→9pt，用户点名"标题字小一点"；
-        /// 【V1.88.26】左边 6 个状态字同步 9pt，用户点名"和右边按钮一样大"）。
-        ///
-        /// 【为什么放代码里而不写 Designer】同 ApplyHeaderBoldFonts：Sunny 控件 Style=Inherited
-        /// 吃样式字体，顶栏 10 个控件统一按"当前实际字族/风格"只改字号，相互不分叉；
-        /// Designer 写死字号即与样式字号分叉（以后样式变了这边悄悄过期；且 VS 重写
-        /// Designer 会把样式字号显式序列化进来，更不能信 Designer 的值）。
-        /// 字族/风格一个不动（只换 size），粗细/颜色/主题都不受影响。
-        /// 下拉选项按钮自动同步：ShowDropdownPopup 里选项按钮 Font = hostButton.Font（唯一字号源，
-        /// 【V1.88.28】用户点名"按钮和选项栏字体保持一致、要调一起调"：以后改字号只改
-        /// ApplyHeaderFonts 的 HeaderFontPt 一处，弹窗自动跟随，不许给弹窗另起字号）；
-        /// 尺寸按选项文本实测撑开（见 ComputePopupItemSize：主按钮尺寸只当下限）。
-        /// 用 SizeInPoints 比（pt 与 DPI 无关，同屏同视觉大小，不用管 96/120/144DPI）。
-        /// 用 SizeInPoints 比（pt 与 DPI 无关，同屏同视觉大小，不用管 96/120/144DPI）。
+        /// 顶栏 10 个控件统一 9pt（字族/风格不动；下拉选项字体与主按钮同源，改字号只改此处常量）。
+        /// 比较用 SizeInPoints（pt 与 DPI 无关）。
         /// </summary>
         private void ApplyHeaderFonts()
         {
@@ -2671,27 +2682,18 @@ namespace AgingTestSystem.Views
             c.Font = new Font(c.Font.FontFamily, sizePt, c.Font.Style);
         }
 
-        /// <summary>项目列总宽上限（【V1.88.26】长名再长也只给 320，超的省略号；短名按实测紧凑）。</summary>
+        /// <summary>项目列总宽上限（长名再长也只给 320，超的省略号；短名按实测紧凑）。</summary>
         private const int MaxHeaderProjectColWidth = 320;
 
         /// <summary>
-        /// 每个标签绘制时预留的内边距（【V1.88.26】Sunny 标签绘制内边距经验值：
-        /// V1.88.14 实测"AutoSize 标签实占比 MeasureText 纯文本宽大 3px"，取整 4px/标签；
-        /// 不留这几 px，列宽与文本严丝合缝，绘制一抖就进省略号——hdr26 首版"烧屏测试"
-        /// 只剩"烧…"即此因）。
+        /// 标签绘制预留内边距（Sunny 标签实占总比纯文本宽一点；不留绘制一抖就进省略号）。
         /// </summary>
         private const int HeaderLabelPaintSlack = 4;
 
         /// <summary>
-        /// 按六段首选宽度算顶栏 4 个状态列的内容宽（【V1.88.26】纯函数，回归可直接断言）。
-        ///
-        /// 【为什么要代码算】V1.88.24 的 AutoSize 列翻车：Sunny 容器/标签的首选尺寸
-        /// 不可靠——项目名 Fill 标签关着 AutoSize 只报 0 宽（Sunny 缺省 false），
-        /// 整列被压成前缀宽 88、项目名直接看不见（harness 实锤 pnl=88 纹丝不动）。
-        /// 改回"控件 Dock=Fill 全高（垂直居中天然成立）＋列宽按首选尺寸实测"：
-        /// 每个标签问它自己要多宽（GetPreferredSize，自带 Sunny 内边距，再补
-        /// HeaderLabelPaintSlack），最后调用方按各控件 Margin.Horizontal 把单元格
-        /// 边距加上（V1.88.26 血泪二：列宽忘了加 Margin，内容又被单元格边距吃掉 15px）。
+        /// 按六段首选宽度算顶栏 4 个状态列的内容宽（纯函数）。
+        /// 列宽=各标签 GetPreferredSize 实测＋内边距，落列时调用方再加控件 Margin（忘加会被单元格边距吃掉）。
+        /// 注意 Sunny 标签缺省 AutoSize=false，AutoSize 列的填充子必须显式打开，否则首选宽报 0。
         /// </summary>
         /// <param name="prefixW">项目前缀首选宽</param>
         /// <param name="nameW">项目名首选宽</param>
@@ -2713,25 +2715,17 @@ namespace AgingTestSystem.Views
             return new int[] { c0, c1, c2, c3 };
         }
 
-        /// <summary>下拉选项横向内边距（原生 Button 边框＋聚焦框＋左右留白经验值，harness 实测）</summary>
+        /// <summary>下拉选项横向内边距（原生 Button chrome＋留白，实测值）</summary>
         public const int PopupItemHPad = 16;
 
         /// <summary>
-        /// 下拉选项纵向内边距（原生 Button 上下边框＋聚焦框经验值）。
-        /// 【为什么要 10】9pt 字文本实测高 12px，主按钮高 18px：18-12=6px 余量看似够，
-        /// 但原生 Button 自带约 4px 上下 chrome（边框＋聚焦内衬），字贴边即被裁
-        /// （V1.88.28 harness 6 倍放大实锤"主页区域调整"上下顶格）；12+10=22 行高才有呼吸感。
+        /// 下拉选项纵向内边距（原生 Button 上下 chrome 约 4px，余量不足字贴边即被裁）。
         /// </summary>
         public const int PopupItemVPad = 10;
 
         /// <summary>
-        /// 按选项文本实测算下拉选项格尺寸（【V1.88.28】纯函数，回归可直接断言）。
-        ///
-        /// 【为什么不直接用主按钮尺寸】选项字普遍比主按钮字长（"主页区域调整"6 字 vs
-        /// "关于"2 字），且原生 Button 比 Sunny 自绘按钮多一圈 chrome：等尺寸硬套，
-        /// 高 18px 行装 9pt 字即上下顶格被裁。规则：主按钮尺寸只当下限，
-        /// 文本实测（调用方用主按钮字体逐项 MeasureText 取最大）＋内边距才是实际尺寸；
-        /// 字体仍与主按钮同源（调用方 Font = hostButton.Font），字号一处调、两处跟。
+        /// 下拉选项格尺寸（纯函数）：主按钮尺寸只当下限，文本实测＋内边距才是实际尺寸；
+        /// 字体与主按钮同源（调用方 Font = hostButton.Font）。
         /// </summary>
         /// <param name="hostW">主按钮宽（下限）</param>
         /// <param name="hostH">主按钮高（下限）</param>
@@ -2748,13 +2742,9 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 顶栏状态列按内容定宽（【V1.88.26】执行侧，见 ComputeHeaderColumnWidths；
-        /// 【V1.88.27】垂直居中不再靠代码垫：三段状态（项目/权限/通讯）统一 Panel＋Dock=Fill 全高＋
-        /// MiddleLeft，居中由 Dock 天然保证，不靠 Padding.Top 硬垫——硬垫用 RowStyle 高（30）
-        /// 算，实际容器只有 22（扣掉表头边距），多垫 2px 反而偏下，且 Flow 子标签 TopLeft
-        /// 与 MiddleLeft 混用，改一行高全散）。
-        /// 口径统一走各控件 GetPreferredSize（自带 Sunny 内边距，无句柄也能跑，
-        /// 所以构造期调用也安全）。调用点：MainForm_Load 末尾（行高/字体就绪，首显即对）＋
+        /// 顶栏状态列按内容定宽（执行侧，见 ComputeHeaderColumnWidths）。
+        /// 三段状态统一 Panel＋Dock 全高＋MiddleLeft，居中由 Dock 保证（禁 Padding.Top 硬垫）。
+        /// 口径走 GetPreferredSize（无句柄可跑，构造期调用安全）。调用点：Load 末尾＋
         /// UpdateProjectDisplay / UpdatePermissionDisplay / UpdateConnectionStatus
         /// （文本变即重算）。窗口 Resize 不用跟（行高固定由配置定，内容宽与窗宽无关）。
         /// </summary>
@@ -2785,9 +2775,9 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 更新权限显示（【V1.19.7】）
+        /// 更新权限显示（）
         /// 拆为"前缀 + 角色名"两个标签（panelPermission 内 Panel 横排：前缀 Dock=Left＋角色名 Dock=Fill，
-        /// 【V1.88.27】与 pnlProject 同构，全高 Dock＋MiddleLeft 上下居中天然成立）：
+        /// 与 pnlProject 同构，全高 Dock＋MiddleLeft 上下居中天然成立）：
         /// 前缀 lblPermissionPrefix 固定默认黑字；角色名 lblPermissionRole 按权限设置 ForeColor：
         /// - 管理员 → 红色（Red）
         /// - 最高权限(dev) → 红色（Red，V1.64：dev 登录后的顶栏身份，和普通管理员区分）
@@ -2818,19 +2808,13 @@ namespace AgingTestSystem.Views
 
             lblPermissionRole.Text = roleName;
             lblPermissionRole.ForeColor = roleColor;
-            // 【V1.88.26】角色名长短差很多（"操作员"3字 vs "最高权限(dev)"9字），列宽即重算。
+            // 角色名长短差很多（"操作员"3字 vs "最高权限(dev)"9字），列宽即重算。
             LayoutHeaderColumns();
         }
 
         /// <summary>
-        /// 顶栏显示当前项目（【V1.72.7 新增】切错项目=跑错工艺，首屏可见防呆）。
-        /// 【V1.79】拆为"前缀 + 项目名"两个标签（pnlProject 内横排：lblProjectPrefix 固定"当前项目："
-        /// 常规体，lblProject 只装项目名、加粗；与权限"前缀常规、值加粗"同口径）。
-        /// 【V1.88.27】权限区与项目区同构（普通 Panel＋前缀 Dock=Left＋值 Dock=Fill＋MiddleLeft）——
-        /// 两段都要 AutoEllipsis 约束宽度，流式布局给不出，FlowLayoutPanel 已删。
-        /// 构造时设一次 + 每次热加载后刷新一次（两处调用，无需订阅事件）。
-        /// 超长项目名由 lblProject.AutoEllipsis 省略号收尾不断行。
-        /// 【V1.88.26】文本变了列宽即重算（LayoutHeaderColumns：短名紧凑、长名封顶 320）。
+        /// 顶栏显示当前项目（切错项目=跑错工艺，首屏防呆）。
+        /// 前缀常规＋项目名加粗，超长省略号；文本变即重算列宽（短名紧凑、长名封顶 320）。
         /// </summary>
         /// <param name="projectName">生效的项目名（EnsureActiveProfile/热加载传入，null 兜底烧屏测试）</param>
         private void UpdateProjectDisplay(string projectName)
@@ -2841,16 +2825,8 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 【新增】根据当前权限更新按钮可用状态
-        ///
-        /// 【权限规则】
-        /// - 参数设置（btnParameter）：技术员或管理员可操作（包含配方管理）
-        /// - 其他按钮：所有权限均可操作
-        ///
-        /// 【视觉效果→改为常亮可点】
-        /// 以前操作员下 Enabled=false：禁用的 Sunny 按钮吞掉 Click，点了零反馈，
-        /// 现场以为程序卡死。现改为常亮（Enabled=true），无权限点后弹"权限不够"
-        /// （见 btnParameter_Click 首行拦截），有明确反馈；敏感子项各自二次校验。
+        /// 按钮权限态：常亮可点（禁用按钮吞 Click 零反馈，现场以为卡死），
+        /// 无权限点后弹提示；参数设置要技术员以上，敏感子项各自二次校验。
         /// </summary>
         private void UpdateButtonPermissionStates()
         {
@@ -2868,8 +2844,7 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 公共参数窗口 → 弹出"设置所有气压表负压阈值"窗口
-        ///
-        /// 【V1.16 更新】公共参数窗口从"采集间隔+报警阈值"简化为"设置所有气压表负压阈值"：
+        /// 公共参数窗口从"采集间隔+报警阈值"简化为"设置所有气压表负压阈值"：
         /// 传入 _deviceManager，由窗体在后台线程逐台写入气压表阈值寄存器（0x0010），
         /// 写入期间 DeviceManager 会暂停主采集定时器（避免与批量写争抢串口总线），
         /// 写入完成汇总成功/失败台数后返回。
@@ -2878,7 +2853,7 @@ namespace AgingTestSystem.Views
         {
             using (var form = new CommonParameterForm(_deviceManager))
             {
-                // 【V1.60.4】走窗体自己的 ApplyTheme：整窗着色 + 保存按钮深色换灰底白字
+                // 走窗体自己的 ApplyTheme：整窗着色 + 保存按钮深色换灰底白字
                 form.ApplyTheme();
                 if (form.ShowDialog(this) == DialogResult.OK)
                 {
@@ -2889,7 +2864,7 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 配方管理 → 弹出配方管理窗体
-        /// 【V1.75】把生效配置传进去：显示模式开关与字典走它（开关关=该行隐藏）
+        /// 把生效配置传进去：显示模式开关与字典走它（开关关=该行隐藏）
         /// </summary>
         private void MenuParamRecipe_Click(object sender, EventArgs e)
         {
@@ -2910,8 +2885,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 把刚从文件读到的配方列表换装进内存（【V1.72.12 纯函数】启动与热加载共用）。
-        ///
+        /// 把刚从文件读到的配方列表换装进内存（启动与热加载共用）。
         /// 【修什么 bug】原来这里是 `loaded != null && loaded.Count > 0` 才换：
         /// 用户在 B 项目把配方删光（文件变成空数组 `[]`，Load 返回"非 null 空列表"），
         /// 切到别的项目再切回，空列表被条件拦掉、内存还留着上个项目的数据——
@@ -2934,7 +2908,7 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 历史记录 → 弹出历史记录查询窗体
-        /// 【V1.75】报表列按钮按管理员权限传入（与系统设置同口径：操作员看不见按钮）
+        /// 报表列按钮按管理员权限传入（与系统设置同口径：操作员看不见按钮）
         /// </summary>
         private void MenuLogHistory_Click(object sender, EventArgs e)
         {
@@ -2954,8 +2928,7 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 设置 → 弹出"系统设置"窗口，查看并编辑 App.config 中的全部配置项
-        ///
-        /// 【V1.17 权限控制】仅管理员可打开。菜单项在非管理员下已隐藏，
+        /// 仅管理员可打开。菜单项在非管理员下已隐藏，
         /// 这里再加一道兜底校验，防止权限被绕过（如权限刚降级时窗口仍在）。
         /// </summary>
         private void MenuHelpSettings_Click(object sender, EventArgs e)
@@ -2967,7 +2940,7 @@ namespace AgingTestSystem.Views
                 return;
             }
 
-            // 【V1.65】把当前生效的右侧宽度传给设置窗体，供"主页区域"行显示/编辑用
+            // 把当前生效的右侧宽度传给设置窗体，供"主页区域"行显示/编辑用
             // （无 json 时为按窗口比例算出的值，有 json 时为文件绝对值，与主界面一致）。
             bool hasHomeCustom = System.IO.File.Exists(HomeLayoutConfig.GetConfigPath());
             int homeCustomWidth = hasHomeCustom ? HomeLayoutConfig.LoadOrDefault().RightPanelWidth : 0;
@@ -2981,7 +2954,7 @@ namespace AgingTestSystem.Views
                     ApplySettingsHotReload(form.SavedKeys);
                 }
 
-                // 【V1.58】若在设置里改了主页布局（HomeLayout.json 已更新），立即重新应用
+                // 若在设置里改了主页布局（HomeLayout.json 已更新），立即重新应用
                 if (form.HomeLayoutChanged)
                 {
                     ApplyHomeLayout();
@@ -2992,12 +2965,10 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 主页区域调整 → 弹出可视化编辑器，拖动矩形块边缘调整主界面各区域尺寸。
-        ///
-        /// 【V1.58】
         /// - 编辑器基于当前 HomeLayout.json（或默认值）创建，拖动/输入实时改内存配置；
         /// - 点击【保存】后 HomeLayout.json 已写入，这里调用 ApplyHomeLayout 让新布局
         ///   立即生效（无需重启，工作站列表/右侧区域/菜单栏/状态栏当场重排）。
-        /// - 【V1.58.3】权限放开：所有登录用户可用（菜单项不再限制管理员）。
+        /// - 权限放开：所有登录用户可用（菜单项不再限制管理员）。
         /// </summary>
         private void MenuHelpHomeLayout_Click(object sender, EventArgs e)
         {
@@ -3015,7 +2986,7 @@ namespace AgingTestSystem.Views
 
             using (var form = new HomeLayoutEditorForm(layout))
             {
-                // 【V1.60.4】走窗体自己的 ApplyTheme：整窗着色 + 预览画布深色换纯黑底
+                // 走窗体自己的 ApplyTheme：整窗着色 + 预览画布深色换纯黑底
                 form.ApplyTheme();
                 if (form.ShowDialog(this) == DialogResult.OK)
                 {
@@ -3087,7 +3058,7 @@ namespace AgingTestSystem.Views
         /// 用于手动测试负压开关与载台上电的 Modbus TCP 输出（直接操作 PLC DO 寄存器）
         /// V1.21：改为非模态（Show 替代 ShowDialog），打开测试窗体的同时仍可点击操作主窗体
         /// 及其它窗体（测试窗体关闭时自动 Dispose 释放资源）。
-        /// 【V1.72.14】FormClosed 里包 try：Dispose 偶发竞态抛一次即够炸框，吞掉保主窗不连带。
+        /// FormClosed 里包 try：Dispose 偶发竞态抛一次即够炸框，吞掉保主窗不连带。
         /// </summary>
         private void MenuHelpCommunicationTest_Click(object sender, EventArgs e)
         {
@@ -3101,7 +3072,7 @@ namespace AgingTestSystem.Views
         /// 送风机测试 → 弹出冷却送风机通讯测试窗体（技术员及以上权限）
         /// 用于手动测试送风机控制屏的 Modbus TCP 通讯与定值启动/停止（直接读写设备寄存器）
         /// 非模态（Show 替代 ShowDialog），打开测试窗体的同时仍可点击操作主窗体。
-        /// 【V1.72.14】同上，释放包 try。
+        /// 同上，释放包 try。
         /// </summary>
         private void MenuHelpFanTest_Click(object sender, EventArgs e)
         {
@@ -3112,16 +3083,8 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 版本说明 → 弹出版本信息对话框
-        /// （V1.19.12 更名：MenuHelpAbout_Click → MenuHelpVersionInfo_Click，菜单项"关于"改"版本说明"；
-        ///  V1.58.4 起按商用软件"关于/版本说明"通用规范重写内容：
-        ///  软件全称 → 版本号 → 用途简介 → 运行环境 → 功能特性（按业务分类）→ 版权声明）
-        /// 【发版提醒】版本号 V1.58.4 与窗体标题一致后，这里也要同步手改，
-        ///  否则版本说明会与实际版本脱节（曾长期停留在 V1.16 的教训）。
-        ///  （V1.72.8 顶栏 lblTitle 已删，标题只剩窗体标题栏，不用两处同步了）
-        /// 【V1.60.4】MessageBox 换成普通窗体：系统弹窗跟不了深色主题，自定义窗才能 ApplyTo。
-        /// 【V1.72.14】普通窗再换 SunnyUI：UIForm 蓝标题 + UITextBox + UIButton 确认蓝，
-        /// 与全窗 SunnyUI 换肤同口径（用户点名"关于按钮弹窗也要 SunnyUI 风格"）。
+        /// 版本说明弹窗（内容口径：全称→版本号→简介→环境→功能→版权；版本号取水印常量，改版零维护）。
+        /// 不用 MessageBox：系统弹窗跟不了深色主题；弹窗走 SunnyUI 风格（蓝标题＋确认蓝钮）。
         /// </summary>
         private void MenuHelpVersionInfo_Click(object sender, EventArgs e)
         {
@@ -3133,9 +3096,9 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 软件授权 → 弹出激活窗（【V1.87】与 HJVision 一致：设备ID/设备码/激活码，
+        /// 软件授权 → 弹出激活窗（与 HJVision 一致：设备ID/设备码/激活码，
         /// 同一套《获取激活码》工具通用；激活无需权限，人人可开）。
-        /// 【V1.88.1】付费即恢复：弹窗里输对一次码关闭后，重读一次 ini，
+        /// 付费即恢复：弹窗里输对一次码关闭后，重读一次 ini，
         /// 状态有效就把用户权限按钮解灰，不用重启（打开看看/输错不触发重查）。
         /// </summary>
         private void MenuHelpLicense_Click(object sender, EventArgs e)
@@ -3152,7 +3115,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 激活成功后重查并解灰（【V1.88.1 新增】付费即恢复的落点）。
+        /// 激活成功后重查并解灰（付费即恢复的落点）。
         /// <para>做什么：重读 RunHash 双键 + 重算状态，有效（永久/试用中）就解灰用户权限按钮。</para>
         /// <para>为什么这么写：计时器置灰后本轮不自动恢复，之前要重启；
         /// 这里只认重算出的状态（不认弹窗的标记本身），新设备即使写过 RunHash2
@@ -3181,7 +3144,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 授权计时器（【V1.87】与 HJVision 的 HashTimer_Tick 对齐：每小时推一格）。
+        /// 授权计时器（与 HJVision 的 HashTimer_Tick 对齐：每小时推一格）。
         /// 先对 RunHash1（设备不对=新设备），再看 RunHash2（永久跳过，否则在
         /// 0..839 格里找当前格：找到且小于 768 就写下一格；大于等于 768 或
         /// 找不到=过期）。新设备/过期只弹框 + 置灰用户权限入口（= HJVision 置灰
@@ -3228,8 +3191,8 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 构建版本说明对话框（【V1.60.4 新增】，纯界面搭建，方便探针反射直调验证）。
-        /// 【V1.72.14】原生 Form+TextBox+Button 改 SunnyUI：UIForm 蓝标题 + UITextBox 只读多行 +
+        /// 构建版本说明对话框（，纯界面搭建，方便探针反射直调验证）。
+        /// 原生 Form+TextBox+Button 改 SunnyUI：UIForm 蓝标题 + UITextBox 只读多行 +
         /// UIButton 确认蓝（DodgerBlue 白字 Custom，与登录确认/各弹窗确认同色，V1.72.1 收敛）。
         /// 布局：UIForm 自绘标题占 35px，内容从 y=47 起排（txt 12→47，btn 386→421，窗高 430→465），
         /// MinimumSize=ClientSize 锁缩小；只读框 TabStop=false，焦点落"确定"上，不全文蓝底选中。
@@ -3242,7 +3205,7 @@ namespace AgingTestSystem.Views
             string[] lines =
             {
                 "老化测试系统（AgingTestSystem）",
-                "版本 V1.58.4（Build 2026-08-10）",
+                "版本 " + BuildWatermark.ReleaseLabel + "（与 CHANGELOG 顶部小节同值，改版只改常量）",
                 "",
                 "真空老化产线专用上位机监控软件：实时监控 72 路真空压力，控制真空电磁阀与",
                 "载台上电，完成老化测试全流程及报警联动保护。",
@@ -3335,11 +3298,9 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 弹出批量设置配方窗口（【V1.24】抽取为公共方法；本次需求后唯一入口是右侧
+        /// 弹出批量设置配方窗口（抽取为公共方法；本次需求后唯一入口是右侧
         /// "批量设置配方"按钮，不再被面板"设置"按钮多选分流调用；
-        /// 【V1.26】加入队列=保存配方+应用到选中工位）
-        ///
-        /// 【V1.26 说明】
+        /// 加入队列=保存配方+应用到选中工位）
         /// - 传入当前选中的工位编号（允许为 0 个）：若一个工位都没选中，
         ///   "加入队列"时批量窗口先把配方保存到本地配方列表，再提示用户先选择工位；
         /// - 传入共享配方列表 _recipes 与设备管理器，供批量窗口保存配方 / 应用到选中工位。
@@ -3365,9 +3326,9 @@ namespace AgingTestSystem.Views
         /// </summary>
         private void btnInputLot_Click(object sender, EventArgs e)
         {
-            // 【V1.16.1】扫码枪按需重连：打开"录入批号"前重连一次；
+            // 扫码枪按需重连：打开"录入批号"前重连一次；
             // 仍连不上则提示（扫码枪是可选设备，不影响手动输入批号/SN）。
-            // 【V1.16.2】重连后刷新状态栏扫码枪状态。
+            // 重连后刷新状态栏扫码枪状态。
             if (_config.ScannerEnabled && _scanner != null && !_scanner.IsConnected)
             {
                 bool scannerOk = _scanner.TryReconnectNow();
@@ -3380,14 +3341,14 @@ namespace AgingTestSystem.Views
                 }
             }
 
-            // 【V1.16】传入扫码枪服务：ID绑定窗体打开时，扫码结果自动填充 SN 输入框
-            // 【V1.19.11】传入设备管理器：ID绑定保存时把"工位 → SN"写入工位静态信息，工位面板 SN 同步显示
+            // 传入扫码枪服务：ID绑定窗体打开时，扫码结果自动填充 SN 输入框
+            // 传入设备管理器：ID绑定保存时把"工位 → SN"写入工位静态信息，工位面板 SN 同步显示
             using (var form = new InputLotForm(_scanner, _deviceManager))
             {
                 // 订阅批号录入完成事件：记录日志 + 通知设备管理器（用于事件落盘追溯）
                 form.OnLotInputCompleted += (sender2, lotNumber) =>
                 {
-                    // 【V1.10】批号写入设备管理器，后续启动/报警/停止日志都会带上批号
+                    // 批号写入设备管理器，后续启动/报警/停止日志都会带上批号
                     _deviceManager.CurrentLotNumber = lotNumber;
                     WriteLog($"[录入批号] 用户录入批号: {lotNumber}");
                 };
@@ -3415,18 +3376,18 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 启动运行按钮点击（【V1.10】接真实业务）
+        /// 启动运行按钮点击（接真实业务）
         /// 对选中的面板执行（V1.59 三阶段状态机）：开真空阀 → 真空到位+延时时间到自动载台上电
-        /// （【V1.88.14】延时=0 的台启动时阀电同开、直接计时并保持常开）
+        /// （延时=0 的台启动时阀电同开、直接计时并保持常开）
         /// → 按配方烧屏时间老化计时（到时自动下电关阀标完成）；送风机由生命周期自动定值启动（首台）
-        /// 【V1.16.2】异步：连接耦合器/送风机时弹"连接中"，不卡界面
+        /// 异步：连接耦合器/送风机时弹"连接中"，不卡界面
         /// </summary>
         private async void btnStartRun_Click(object sender, EventArgs e)
         {
             int[] ids = GetSelectedDeviceIds();
             if (ids == null) return;
 
-            // 【V1.66】启动前风险提示（烧屏场景）：0 时长=不限时长永不自动完成（无限点亮），
+            // 启动前风险提示（烧屏场景）：0 时长=不限时长永不自动完成（无限点亮），
             // 空 SN=完成后无法追溯到单体。只警告不拦截——点"是"照跑、点"否"取消，
             // 是否允许是现场工艺权，软件只负责把丑话说在前面（文案见 AgingSequencer）。
             var zeroDurationIds = new List<int>();
@@ -3443,7 +3404,7 @@ namespace AgingTestSystem.Views
             string riskWarning = AgingSequencer.BuildStartWarningText(
                 zeroDurationIds.ToArray(), emptySnIds.ToArray());
 
-            // 【V1.67】Q13 硬拦截：策略=Block 且命中 0 时长/空 SN 工位时直接阻断，
+            // Q13 硬拦截：策略=Block 且命中 0 时长/空 SN 工位时直接阻断，
             // 连确认框都不进（Warn 走上面的警告拼框，点"是"照跑）。
             string blockText = AgingSequencer.BuildStartBlockText(
                 zeroDurationIds.ToArray(), emptySnIds.ToArray(),
@@ -3478,12 +3439,12 @@ namespace AgingTestSystem.Views
                 "启动运行",
                 Sunny.UI.UIStyle.Orange, Sunny.UI.UIMessageBoxButtons.OKCancel, true, 0)) return;
 
-            // 【V1.16.2】启动测试需要耦合器（开阀+载台上电）：先异步连接（弹"连接中"），连不上弹窗提示
+            // 启动测试需要耦合器（开阀+载台上电）：先异步连接（弹"连接中"），连不上弹窗提示
             if (!await EnsureIoReadyAsync()) return;
 
-            // 【V1.16.2】启动测试依赖送风机保持温控：送风机没连上时给一次异步按需重连
+            // 启动测试依赖送风机保持温控：送风机没连上时给一次异步按需重连
             //（弹"连接中"），仍连不上则提示（不阻断测试，但操作员要知道没有温控）。
-            // 【V1.67】Q16：FanDisconnectPolicy=BlockStart 时改为阻断启动（先修风机再点火）。
+            // Q16：FanDisconnectPolicy=BlockStart 时改为阻断启动（先修风机再点火）。
             if (_deviceManager.IsFanEnabled && !_deviceManager.IsFanConnected)
             {
                 bool fanOk = await EnsureFanReadyAsync();
@@ -3507,7 +3468,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 停止运行按钮点击（【V1.10 新增】）
+        /// 停止运行按钮点击（）
         /// 对选中的面板执行：关真空阀 + 断载台上电 + 退出测试中
         /// （最后一台停止时送风机自动停止）
         /// </summary>
@@ -3522,7 +3483,7 @@ namespace AgingTestSystem.Views
                 "停止运行",
                 Sunny.UI.UIStyle.Orange, Sunny.UI.UIMessageBoxButtons.OKCancel, true, 0)) return;
 
-            // 【V1.16.2】停止测试需要耦合器（关阀+断载台电）：先异步连接，连不上弹窗提示
+            // 停止测试需要耦合器（关阀+断载台电）：先异步连接，连不上弹窗提示
             if (!await EnsureIoReadyAsync()) return;
 
             // 【大扫荡】下发失败明示（async void 不接住即崩溃；状态不清=台还显示在测）。
@@ -3542,7 +3503,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 报警复位按钮点击（【V1.10 新增】【V1.59 兼容完成态】）
+        /// 报警复位按钮点击（）
         /// 对选中的报警/故障/已完成·待取料面板执行人工复位：清除故障标记，
         /// 回到空闲，可重新启动。
         /// 【设计说明】报警后不自动恢复，必须人工确认（防止真空失效原因未确认就重启）；
@@ -3565,7 +3526,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 下料判定按钮点击（【V1.67 新增】Q22 PendingReview 配套）。
+        /// 下料判定按钮点击（Q22 PendingReview 配套）。
         /// 选中已完成·待取料的台 → 弹窗录 PASS/FAIL + 不良代码 + 处置 → 写 CSV 追溯 → 回空闲。
         /// AutoPass 模式下点它只提示（无需判定），不做任何事——操作员误触零风险。
         /// </summary>
@@ -3592,7 +3553,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 全部停止（急停）按钮点击（【V1.10 新增】）
+        /// 全部停止（急停）按钮点击（）
         /// 一键关闭所有真空阀 + 断开所有载台上电 + 停止送风机，带防误触确认。
         /// </summary>
         private async void btnStopAll_Click(object sender, EventArgs e)
@@ -3609,7 +3570,7 @@ namespace AgingTestSystem.Views
                 "全部停止（急停）",
                 Sunny.UI.UIStyle.Orange, Sunny.UI.UIMessageBoxButtons.OKCancel, true, 0)) return;
 
-            // 【V1.16.2】急停需要耦合器（关阀+断载台电）：先异步连接；连不上要明确告诉
+            // 急停需要耦合器（关阀+断载台电）：先异步连接；连不上要明确告诉
             // 操作员，否则可能误以为阀门已关闭（安全提示）。
             if (!await EnsureIoReadyAsync()) return;
 
@@ -3633,7 +3594,7 @@ namespace AgingTestSystem.Views
         #endregion
 
         /// <summary>
-        /// 获取当前选中的设备编号数组（【V1.10 新增】）
+        /// 获取当前选中的设备编号数组（）
         /// 从工位网格读取所有选中工位。
         /// 一个都没选时弹提示并返回 null。
         /// </summary>
@@ -3676,7 +3637,7 @@ namespace AgingTestSystem.Views
         /// <param name="barcode">扫到的条码内容</param>
         private void Scanner_OnBarcodeScanned(object sender, string barcode)
         {
-            // 【V1.72.15】退出期丢弃（WriteLog 虽自拦，早退少一次排队）。
+            // 退出期丢弃（WriteLog 虽自拦，早退少一次排队）。
             if (_mainClosing || this.IsDisposed || this.Disposing) return;
             // 写日志（条码内容可能含敏感字符，仅记录内容即可）
             WriteLog($"[扫码枪] 读码成功: {barcode}");
@@ -3693,16 +3654,16 @@ namespace AgingTestSystem.Views
         /// <param name="message">状态描述文本</param>
         private void Scanner_OnStatusChanged(object sender, string message)
         {
-            // 【V1.72.15】退出期丢弃（同上）。
+            // 退出期丢弃（同上）。
             if (_mainClosing || this.IsDisposed || this.Disposing) return;
             WriteLog($"[扫码枪] {message}");
 
-            // 【V1.16.2】扫码枪连接状态变化 → 刷新状态栏显示（已连接/未连接/未启用）
+            // 扫码枪连接状态变化 → 刷新状态栏显示（已连接/未连接/未启用）
             RefreshScannerStatus();
         }
 
         /// <summary>
-        /// 刷新状态栏"扫码枪"连接状态（【V1.16.2 新增】）
+        /// 刷新状态栏"扫码枪"连接状态（）
         /// 让操作员在底部状态栏一眼看到扫码枪当前连接状态：
         /// - 已连接 = 绿；未连接 = 红；未启用（App.config 关掉）= 灰。
         /// 与顶部"通讯模块状态"（耦合器）、送风机状态标签一起，
@@ -3710,7 +3671,7 @@ namespace AgingTestSystem.Views
         /// </summary>
         private void RefreshScannerStatus()
         {
-            // 【V1.72.15】加 _mainClosing（排队回调关后丢弃）。
+            // 加 _mainClosing（排队回调关后丢弃）。
             if (_mainClosing || this.IsDisposed || this.Disposing) return;
 
             try
@@ -3750,8 +3711,6 @@ namespace AgingTestSystem.Views
         /// <summary>
         /// 写入日志到右侧 LOG 文本框
         /// 自动添加时间戳，最新日志显示在末尾并自动滚动
-        ///
-        /// 【V1.58.21 持久化】
         /// 日志不只显示在 UI 文本框（内存）里，同时由 <see cref="AgingTestSystem.Services.AppLogFileWriter"/>
         /// 追加写入本地文件 Logs\AppLog_yyyyMMdd.log（按日期分文件）。程序重启后日志不丢失，
         /// 可离线追溯。写文件失败静默处理，不影响界面显示。
@@ -3759,7 +3718,7 @@ namespace AgingTestSystem.Views
         /// <param name="message">日志消息</param>
         private void WriteLog(string message)
         {
-            // 【V1.72.15】退出/释放期 UI 丢弃、文件照写：此方法此前零守卫，退出瞬间排队回调
+            // 退出/释放期 UI 丢弃、文件照写：此方法此前零守卫，退出瞬间排队回调
             // 直碰 txtLog 即炸（UI 线程 ObjectDisposedException 弹框）；文件写无窗口依赖，照写。
             string logLine = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}\r\n";
             try
@@ -3780,40 +3739,28 @@ namespace AgingTestSystem.Views
             }
             catch { }
 
-            // 【V1.58.21 持久化】同一行日志同时写入本地文件（Logs\AppLog_yyyyMMdd.log），
+            // 同一行日志同时写入本地文件（Logs\AppLog_yyyyMMdd.log），
             // 与 UI 显示内容一致；内部有 lock 线程安全 + 写失败静默，不影响主流程
             AgingTestSystem.Services.AppLogFileWriter.Write(logLine);
         }
 
         /// <summary>
-        /// 窗体关闭事件
-        /// 释放设备管理器资源（停止定时器、断开硬件连接）
-        /// DeviceManager 实现了 IDisposable，调用 Dispose 释放所有资源
+        /// 窗体关闭：首行置退出标记 → 先退订事件 → 再 Dispose（顺序不可反，
+        /// 否则 Dispose 中事件回调已释放 UI；退订拦不住已排队回调，靠入口 _mainClosing 拦）。
         /// </summary>
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
         {
-            // 【V1.72.15】首行置退出标记：后台采集/扫码/重连线程的排队回调即刻开始丢弃，
-            // 再退订事件、再 Dispose（退订拦不住已排队的 Post，靠入口 _mainClosing 拦）。
             _mainClosing = true;
-            // 【修复 H4】先取消事件订阅，避免 Dispose 过程中事件回调到已释放的 UI
-            // 顺序很重要：必须先取消订阅，再 Dispose
             if (_deviceManager != null)
             {
                 _deviceManager.OnBatchDataUpdated -= DeviceManager_OnBatchDataUpdated;
-                // 【V1.30】退订快速跟踪增量更新事件
                 _deviceManager.OnQuickTrackDataUpdated -= DeviceManager_OnQuickTrackDataUpdated;
                 _deviceManager.OnConnectionStatusChanged -= DeviceManager_OnConnectionStatusChanged;
-                // 【V1.10】退订送风机数据更新事件
                 _deviceManager.OnFanDataUpdated -= DeviceManager_OnFanDataUpdated;
-                // 【V1.16】退订启动/连接诊断事件
                 _deviceManager.OnDiagnostic -= DeviceManager_OnDiagnostic;
             }
-
-            // 释放设备管理器（内部会调用 Stop 停止定时器和断开连接）
             _deviceManager?.Dispose();
 
-            // 【V1.16 新增】释放扫码枪服务（停止重连定时器 + 关闭串口）
-            // 顺序很重要：先取消事件订阅，再 Dispose，避免回调到已释放的 UI
             if (_scanner != null)
             {
                 _scanner.OnBarcodeScanned -= Scanner_OnBarcodeScanned;
@@ -3822,11 +3769,7 @@ namespace AgingTestSystem.Views
                 _scanner = null;
             }
 
-            // 注意：下拉菜单改为动态创建的弹出窗体（Form），点击菜单项或失去焦点后自动关闭
-            // 不需要在这里手动释放，Form.Close 会触发 Dispose
-
-            // 【大扫荡】网格事件退订：主窗单例本次只建一次掩盖了问题，一旦重建网格
-            //（热更扩列/测试），旧画布被 OnSetClicked/OnLog 拽住不释放。
+            // 下拉弹窗失焦自关，无需手动释放；网格事件退订防重建时旧画布被拽住
             if (_gridView != null)
             {
                 _gridView.OnSetClicked -= Panel_OnSetClicked;

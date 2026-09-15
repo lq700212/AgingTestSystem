@@ -13,15 +13,14 @@ namespace AgingTestSystem.Models
         /// IO点内部编号（全局唯一，连续编号）
         /// 输入范围：1 ~ TotalInputs（默认 1 ~ 72）
         /// 输出范围：TotalInputs+1 ~ TotalInputs+TotalOutputs（默认 73 ~ 216）
-        ///
-        /// 【V1.09 更新】内部连续编号仅作为程序内部使用的索引，
+        /// 内部连续编号仅作为程序内部使用的索引，
         /// 实际硬件地址请通过 <see cref="PhysicalAddress"/> 字段获取（如 X000 / Y107）。
         /// </summary>
         public int IoId { get; set; }
 
         /// <summary>
         /// 物理地址（三菱PLC八进制编址，如 X000 / Y107）
-        /// 【V1.09 新增】与 <see cref="IoId"/> 的十进制内部编号不同，
+        /// 与 <see cref="IoId"/> 的十进制内部编号不同，
         /// 此字段对应现场IO模块/PLC的实际物理点位地址。
         /// </summary>
         public string PhysicalAddress { get; set; }
@@ -44,13 +43,12 @@ namespace AgingTestSystem.Models
 
         /// <summary>
         /// IO功能类型（真空负压表/真空电磁阀/载台上电）
-        /// 【V1.09 新增】用于区分该IO点的业务功能
+        /// 用于区分该IO点的业务功能
         /// </summary>
         public IoFunction Function { get; set; }
 
         /// <summary>
         /// 电气类型（NPN / PNP）
-        /// 【V1.09 新增】
         /// - 输入采用 NPN 型（漏型/灌入式）：传感器导通时将信号拉低到 0V
         /// - 输出采用 PNP 型（源型/拉出式）：输出导通时输出 +24V 高电平
         /// </summary>
@@ -97,7 +95,7 @@ namespace AgingTestSystem.Models
 
     /// <summary>
     /// IO功能类型枚举
-    /// 【V1.09 新增】依据"IO分配表"定义每个IO点的业务功能
+    /// 依据"IO分配表"定义每个IO点的业务功能
     /// </summary>
     public enum IoFunction
     {
@@ -127,7 +125,7 @@ namespace AgingTestSystem.Models
 
     /// <summary>
     /// IO电气类型枚举
-    /// 【V1.09 新增】区分现场IO模块的输入输出电气特性
+    /// 区分现场IO模块的输入输出电气特性
     /// </summary>
     public enum ElectricalType
     {
