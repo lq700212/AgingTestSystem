@@ -49,8 +49,8 @@
             this.tableLayoutPanelMain = new System.Windows.Forms.TableLayoutPanel();
             this.tableLayoutPanelHeader = new System.Windows.Forms.TableLayoutPanel();
             this.pnlProject = new System.Windows.Forms.Panel();
-            this.lblProjectPrefix = new Sunny.UI.UILabel();
             this.lblProject = new Sunny.UI.UILabel();
+            this.lblProjectPrefix = new Sunny.UI.UILabel();
             this.panelPermission = new System.Windows.Forms.FlowLayoutPanel();
             this.lblPermissionPrefix = new Sunny.UI.UILabel();
             this.lblPermissionRole = new Sunny.UI.UILabel();
@@ -94,6 +94,7 @@
             this.tableLayoutPanelMain.SuspendLayout();
             this.tableLayoutPanelHeader.SuspendLayout();
             this.pnlProject.SuspendLayout();
+            this.panelPermission.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainerMain)).BeginInit();
             this.splitContainerMain.Panel2.SuspendLayout();
             this.splitContainerMain.SuspendLayout();
@@ -108,15 +109,12 @@
             // rootScrollPanel
             // 
             this.rootScrollPanel.AutoScroll = true;
-            // 【V1.65】窗体级最小尺寸 1400×900 → 1150×800：原来 1400 宽在 1366 宽工控机上
-            // 一最大化就出现窗体级横向滚动条（就差 34px）。1150 保证 1366/1280 屏一屏显示；
-            // 右侧按 23.4% 比例自适应（见 MainForm.ComputeRightPanelWidth），不再靠最小宽撑布局。
             this.rootScrollPanel.AutoScrollMinSize = new System.Drawing.Size(1150, 800);
             this.rootScrollPanel.Controls.Add(this.tableLayoutPanelMain);
             this.rootScrollPanel.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.rootScrollPanel.Location = new System.Drawing.Point(0, 0);
+            this.rootScrollPanel.Location = new System.Drawing.Point(0, 38);
             this.rootScrollPanel.Name = "rootScrollPanel";
-            this.rootScrollPanel.Size = new System.Drawing.Size(1280, 900);
+            this.rootScrollPanel.Size = new System.Drawing.Size(1280, 862);
             this.rootScrollPanel.TabIndex = 0;
             // 
             // tableLayoutPanelMain
@@ -133,23 +131,20 @@
             this.tableLayoutPanelMain.MinimumSize = new System.Drawing.Size(1150, 800);
             this.tableLayoutPanelMain.Name = "tableLayoutPanelMain";
             this.tableLayoutPanelMain.RowCount = 3;
-            this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 36F));
+            this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 30F));
             this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanelMain.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 25F));
-            this.tableLayoutPanelMain.Size = new System.Drawing.Size(1280, 900);
+            this.tableLayoutPanelMain.Size = new System.Drawing.Size(1280, 862);
             this.tableLayoutPanelMain.TabIndex = 0;
             // 
             // tableLayoutPanelHeader
-            // 【V1.88.23】顶栏菜单并单行（用户嫌 4 按钮太占位置）：项目/权限/通讯＋
-            // 用户权限/参数设置/日志记录/关于 同行 36px，省 34px 纵向还给工作站区。
-            // 列：项目 Percent34 / 权限 Percent16 / 通讯标签 Absolute100 /
-            // 通讯值 Absolute70 / 4 按钮各 Absolute120（小屏按钮定宽不挤，项目名省略号吸收）。
-            //
-            this.tableLayoutPanelHeader.ColumnCount = 8;
-            this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 34F));
-            this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 16F));
-            this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 100F));
-            this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 70F));
+            // 
+            this.tableLayoutPanelHeader.ColumnCount = 9;
+            this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 180F));
+            this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 180F));
+            this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 110F));
+            this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 80F));
+            this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 120F));
             this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 120F));
             this.tableLayoutPanelHeader.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Absolute, 120F));
@@ -158,10 +153,10 @@
             this.tableLayoutPanelHeader.Controls.Add(this.panelPermission, 1, 0);
             this.tableLayoutPanelHeader.Controls.Add(this.lblCommStatusLabel, 2, 0);
             this.tableLayoutPanelHeader.Controls.Add(this.lblCommStatus, 3, 0);
-            this.tableLayoutPanelHeader.Controls.Add(this.btnUserPermission, 4, 0);
-            this.tableLayoutPanelHeader.Controls.Add(this.btnParameter, 5, 0);
-            this.tableLayoutPanelHeader.Controls.Add(this.btnLog, 6, 0);
-            this.tableLayoutPanelHeader.Controls.Add(this.btnAbout, 7, 0);
+            this.tableLayoutPanelHeader.Controls.Add(this.btnUserPermission, 5, 0);
+            this.tableLayoutPanelHeader.Controls.Add(this.btnParameter, 6, 0);
+            this.tableLayoutPanelHeader.Controls.Add(this.btnLog, 7, 0);
+            this.tableLayoutPanelHeader.Controls.Add(this.btnAbout, 8, 0);
             this.tableLayoutPanelHeader.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tableLayoutPanelHeader.Location = new System.Drawing.Point(3, 3);
             this.tableLayoutPanelHeader.Name = "tableLayoutPanelHeader";
@@ -169,154 +164,164 @@
             this.tableLayoutPanelHeader.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.tableLayoutPanelHeader.Size = new System.Drawing.Size(1274, 30);
             this.tableLayoutPanelHeader.TabIndex = 0;
-            //
-            //
-            // pnlProject - 当前项目显示容器（【V1.79】原单个 lblProject 拆为"前缀 + 项目名"两个标签：
-            // 前缀 lblProjectPrefix 常规体、项目名 lblProject 加粗，与权限/通讯"前缀常规、值加粗"同口径）。
-            // 不用 FlowLayoutPanel 装：项目名要 AutoEllipsis（超长省略号不断行），流式布局给不出
-            // 约束宽度；普通 Panel + 前缀 Dock=Left + 项目名 Dock=Fill，Fill 拿到剩余宽度后省略号正常工作。
-            // 背景 SystemColors.Control 与顶栏一致，观感与原来单个标签相同。
-            //
+            // 
+            // pnlProject
+            // 
             this.pnlProject.BackColor = System.Drawing.SystemColors.Control;
             this.pnlProject.Controls.Add(this.lblProject);
             this.pnlProject.Controls.Add(this.lblProjectPrefix);
             this.pnlProject.Dock = System.Windows.Forms.DockStyle.Fill;
             this.pnlProject.Location = new System.Drawing.Point(3, 0);
-            this.pnlProject.Margin = new System.Windows.Forms.Padding(3, 0, 3, 0);
+            this.pnlProject.Margin = new System.Windows.Forms.Padding(3, 0, 12, 0);
             this.pnlProject.Name = "pnlProject";
-            this.pnlProject.Size = new System.Drawing.Size(503, 24);
+            this.pnlProject.Size = new System.Drawing.Size(148, 30);
             this.pnlProject.TabIndex = 4;
-            //
-            // lblProjectPrefix - 固定前缀"当前项目："（常规体不加粗，【V1.79】用户点名；
-            // 必须 AutoSize=false：AutoSize + Dock=Left 只取首选高度（与 Fill 的项目名差约 10px 错位），
-            // 关掉后 Dock=Left 撑满容器高度 + MiddleLeft 垂直居中；宽度由构造按 PreferredWidth 收，
-            // 跟字号/DPI 走，不写死像素）。
-            //
-            this.lblProjectPrefix.AutoSize = false;
-            this.lblProjectPrefix.Dock = System.Windows.Forms.DockStyle.Left;
-            this.lblProjectPrefix.Location = new System.Drawing.Point(0, 0);
-            this.lblProjectPrefix.Margin = new System.Windows.Forms.Padding(0);
-            this.lblProjectPrefix.Name = "lblProjectPrefix";
-            this.lblProjectPrefix.Size = new System.Drawing.Size(77, 24);
-            this.lblProjectPrefix.TabIndex = 0;
-            this.lblProjectPrefix.Text = "当前项目：";
-            this.lblProjectPrefix.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            //
-            // lblProject - 项目名（【V1.72.7 新增】切错项目=跑错工艺，顶栏首屏可见防呆；
-            // 项目名由 UpdateProjectDisplay 回填（构造一次 + 每次热加载刷新一次，【V1.72.10】切换无需重启）；
-            // Dock=Fill 占容器剩余宽度（【V1.72.8】标题删后项目移到第 1 列，40% 宽），
-            // 超长项目名 AutoEllipsis 省略号不断行）。
-            //
+            // 
+            // lblProject
+            // 
             this.lblProject.AutoEllipsis = true;
             this.lblProject.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblProject.Location = new System.Drawing.Point(0, 0);
+            this.lblProject.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblProject.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this.lblProject.Location = new System.Drawing.Point(77, 0);
             this.lblProject.Margin = new System.Windows.Forms.Padding(0);
             this.lblProject.Name = "lblProject";
-            this.lblProject.Size = new System.Drawing.Size(426, 24);
+            this.lblProject.Size = new System.Drawing.Size(71, 16);
             this.lblProject.TabIndex = 1;
             this.lblProject.Text = "烧屏测试";
             this.lblProject.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            //
-            // panelPermission - 当前操作权限显示容器（V1.19.7：拆为"前缀 + 角色名"两个标签）
-            // FlowLayoutPanel 水平排列：前缀标签固定黑色，角色名标签由
-            // MainForm.UpdatePermissionDisplay 按权限设置 ForeColor（管理员=红/技术员=蓝/操作员=绿）。
-            // 背景色与顶栏一致，观感与普通标签相同。
+            // 
+            // lblProjectPrefix
+            // 
+            this.lblProjectPrefix.Dock = System.Windows.Forms.DockStyle.Left;
+            this.lblProjectPrefix.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblProjectPrefix.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this.lblProjectPrefix.Location = new System.Drawing.Point(0, 0);
+            this.lblProjectPrefix.Margin = new System.Windows.Forms.Padding(0);
+            this.lblProjectPrefix.Name = "lblProjectPrefix";
+            this.lblProjectPrefix.Size = new System.Drawing.Size(77, 30);
+            this.lblProjectPrefix.TabIndex = 0;
+            this.lblProjectPrefix.Text = "当前项目：";
+            this.lblProjectPrefix.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
+            // panelPermission
             // 
             this.panelPermission.BackColor = System.Drawing.SystemColors.Control;
             this.panelPermission.Controls.Add(this.lblPermissionPrefix);
             this.panelPermission.Controls.Add(this.lblPermissionRole);
             this.panelPermission.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.panelPermission.FlowDirection = System.Windows.Forms.FlowDirection.LeftToRight;
-            this.panelPermission.Location = new System.Drawing.Point(560, 0);
-            this.panelPermission.Margin = new System.Windows.Forms.Padding(0);
+            this.panelPermission.Location = new System.Drawing.Point(163, 0);
+            this.panelPermission.Margin = new System.Windows.Forms.Padding(0, 0, 12, 0);
             this.panelPermission.Name = "panelPermission";
-            this.panelPermission.Padding = new System.Windows.Forms.Padding(0);
-            this.panelPermission.Size = new System.Drawing.Size(348, 24);
+            this.panelPermission.Size = new System.Drawing.Size(174, 30);
             this.panelPermission.TabIndex = 1;
             this.panelPermission.WrapContents = false;
             // 
-            // lblPermissionPrefix - 固定前缀"当前操作权限: "（始终默认黑字）
+            // lblPermissionPrefix
             // 
             this.lblPermissionPrefix.AutoSize = true;
-            this.lblPermissionPrefix.Location = new System.Drawing.Point(3, 3);
-            this.lblPermissionPrefix.Margin = new System.Windows.Forms.Padding(0, 9, 0, 0);
+            this.lblPermissionPrefix.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblPermissionPrefix.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this.lblPermissionPrefix.Location = new System.Drawing.Point(0, 9);
+            this.lblPermissionPrefix.Margin = new System.Windows.Forms.Padding(0, 0, 0, 0);
             this.lblPermissionPrefix.Name = "lblPermissionPrefix";
-            this.lblPermissionPrefix.Size = new System.Drawing.Size(110, 17);
+            this.lblPermissionPrefix.Size = new System.Drawing.Size(119, 16);
             this.lblPermissionPrefix.TabIndex = 0;
             this.lblPermissionPrefix.Text = "当前操作权限: ";
             // 
-            // lblPermissionRole - 角色名（V1.19.7：运行时按权限着色）
+            // lblPermissionRole
             // 
             this.lblPermissionRole.AutoSize = true;
-            this.lblPermissionRole.Location = new System.Drawing.Point(110, 3);
-            this.lblPermissionRole.Margin = new System.Windows.Forms.Padding(0, 9, 0, 0);
+            this.lblPermissionRole.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblPermissionRole.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this.lblPermissionRole.Location = new System.Drawing.Point(119, 9);
+            this.lblPermissionRole.Margin = new System.Windows.Forms.Padding(0, 0, 0, 0);
             this.lblPermissionRole.Name = "lblPermissionRole";
-            this.lblPermissionRole.Size = new System.Drawing.Size(40, 17);
+            this.lblPermissionRole.Size = new System.Drawing.Size(55, 16);
             this.lblPermissionRole.TabIndex = 1;
             this.lblPermissionRole.Text = "操作员";
             // 
             // lblCommStatusLabel
             // 
-            this.lblCommStatusLabel.AutoSize = true;
+            this.lblCommStatusLabel.AutoSize = false;
             this.lblCommStatusLabel.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lblCommStatusLabel.Location = new System.Drawing.Point(908, 0);
+            this.lblCommStatusLabel.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblCommStatusLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
+            this.lblCommStatusLabel.Location = new System.Drawing.Point(349, 0);
+            this.lblCommStatusLabel.Margin = new System.Windows.Forms.Padding(0, 0, 12, 0);
             this.lblCommStatusLabel.Name = "lblCommStatusLabel";
-            this.lblCommStatusLabel.Size = new System.Drawing.Size(83, 12);
+            this.lblCommStatusLabel.Size = new System.Drawing.Size(111, 30);
             this.lblCommStatusLabel.TabIndex = 2;
             this.lblCommStatusLabel.Text = "通讯模块状态:";
             this.lblCommStatusLabel.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // lblCommStatus
             // 
-            this.lblCommStatus.AutoSize = true;
+            this.lblCommStatus.AutoSize = false;
             this.lblCommStatus.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lblCommStatus.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.lblCommStatus.ForeColor = System.Drawing.Color.Red;
-            this.lblCommStatus.Location = new System.Drawing.Point(1186, 0);
+            this.lblCommStatus.Location = new System.Drawing.Point(475, 0);
             this.lblCommStatus.Name = "lblCommStatus";
-            this.lblCommStatus.Size = new System.Drawing.Size(41, 12);
+            this.lblCommStatus.Size = new System.Drawing.Size(55, 30);
             this.lblCommStatus.TabIndex = 3;
             this.lblCommStatus.Text = "未连接";
             this.lblCommStatus.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // btnUserPermission
             // 
+            this.btnUserPermission.Cursor = System.Windows.Forms.Cursors.Hand;
             this.btnUserPermission.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.btnUserPermission.Location = new System.Drawing.Point(3, 3);
+            this.btnUserPermission.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.btnUserPermission.Location = new System.Drawing.Point(797, 3);
+            this.btnUserPermission.MinimumSize = new System.Drawing.Size(1, 1);
             this.btnUserPermission.Name = "btnUserPermission";
-            this.btnUserPermission.Size = new System.Drawing.Size(114, 30);
+            this.btnUserPermission.Size = new System.Drawing.Size(114, 24);
             this.btnUserPermission.TabIndex = 0;
             this.btnUserPermission.Text = "用户权限";
+            this.btnUserPermission.TipsFont = new System.Drawing.Font("宋体", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.btnUserPermission.Click += new System.EventHandler(this.btnUserPermission_Click);
             // 
             // btnParameter
             // 
+            this.btnParameter.Cursor = System.Windows.Forms.Cursors.Hand;
             this.btnParameter.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.btnParameter.Location = new System.Drawing.Point(282, 3);
+            this.btnParameter.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.btnParameter.Location = new System.Drawing.Point(917, 3);
+            this.btnParameter.MinimumSize = new System.Drawing.Size(1, 1);
             this.btnParameter.Name = "btnParameter";
-            this.btnParameter.Size = new System.Drawing.Size(114, 30);
+            this.btnParameter.Size = new System.Drawing.Size(114, 24);
             this.btnParameter.TabIndex = 1;
             this.btnParameter.Text = "参数设置";
+            this.btnParameter.TipsFont = new System.Drawing.Font("宋体", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.btnParameter.Click += new System.EventHandler(this.btnParameter_Click);
             // 
             // btnLog
             // 
+            this.btnLog.Cursor = System.Windows.Forms.Cursors.Hand;
             this.btnLog.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.btnLog.Location = new System.Drawing.Point(561, 3);
+            this.btnLog.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.btnLog.Location = new System.Drawing.Point(1037, 3);
+            this.btnLog.MinimumSize = new System.Drawing.Size(1, 1);
             this.btnLog.Name = "btnLog";
-            this.btnLog.Size = new System.Drawing.Size(114, 30);
+            this.btnLog.Size = new System.Drawing.Size(114, 24);
             this.btnLog.TabIndex = 2;
             this.btnLog.Text = "日志记录";
+            this.btnLog.TipsFont = new System.Drawing.Font("宋体", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.btnLog.Click += new System.EventHandler(this.btnLog_Click);
             // 
-            // btnAbout - "关于"按钮（V1.19.12 更名：btnHelp → btnAbout，文字 帮助 → 关于）
-            // 点击弹出下拉菜单：设置（仅管理员） / 版本说明
-            //
+            // btnAbout
+            // 
+            this.btnAbout.Cursor = System.Windows.Forms.Cursors.Hand;
             this.btnAbout.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.btnAbout.Location = new System.Drawing.Point(840, 3);
+            this.btnAbout.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.btnAbout.Location = new System.Drawing.Point(1157, 3);
+            this.btnAbout.MinimumSize = new System.Drawing.Size(1, 1);
             this.btnAbout.Name = "btnAbout";
-            this.btnAbout.Size = new System.Drawing.Size(114, 30);
+            this.btnAbout.Size = new System.Drawing.Size(114, 24);
             this.btnAbout.TabIndex = 4;
             this.btnAbout.Text = "关于";
+            this.btnAbout.TipsFont = new System.Drawing.Font("宋体", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.btnAbout.Click += new System.EventHandler(this.btnAbout_Click);
             // 
             // splitContainerMain
@@ -329,9 +334,7 @@
             // splitContainerMain.Panel2
             // 
             this.splitContainerMain.Panel2.Controls.Add(this.tableLayoutPanelRight);
-            this.splitContainerMain.Size = new System.Drawing.Size(1274, 833);
-            // 【V1.65】设计值按比例换算：1274 × 0.234 ≈ 298 右侧 → 1274-298-4(分隔条)=972。
-            // 运行时会被 AdjustRightPanelWidth 按窗口实际宽度重算覆盖，这里只保证设计视图不错位。
+            this.splitContainerMain.Size = new System.Drawing.Size(1274, 795);
             this.splitContainerMain.SplitterDistance = 972;
             this.splitContainerMain.TabIndex = 2;
             // 
@@ -351,31 +354,38 @@
             this.tableLayoutPanelRight.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 120F));
             this.tableLayoutPanelRight.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 300F));
             this.tableLayoutPanelRight.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
-            this.tableLayoutPanelRight.Size = new System.Drawing.Size(298, 833);
+            this.tableLayoutPanelRight.Size = new System.Drawing.Size(298, 795);
             this.tableLayoutPanelRight.TabIndex = 0;
             // 
             // groupBoxStatus
             // 
             this.groupBoxStatus.Controls.Add(this.lblRunStatus);
             this.groupBoxStatus.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.groupBoxStatus.Location = new System.Drawing.Point(3, 3);
+            this.groupBoxStatus.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.groupBoxStatus.Location = new System.Drawing.Point(4, 5);
+            this.groupBoxStatus.Margin = new System.Windows.Forms.Padding(4, 5, 4, 5);
+            this.groupBoxStatus.MinimumSize = new System.Drawing.Size(1, 1);
             this.groupBoxStatus.Name = "groupBoxStatus";
-            this.groupBoxStatus.Size = new System.Drawing.Size(292, 84);
+            this.groupBoxStatus.Padding = new System.Windows.Forms.Padding(0, 32, 0, 0);
+            this.groupBoxStatus.Size = new System.Drawing.Size(290, 80);
             this.groupBoxStatus.TabIndex = 0;
             this.groupBoxStatus.TabStop = false;
             this.groupBoxStatus.Text = "运行状态";
+            this.groupBoxStatus.TextAlignment = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // lblRunStatus
             // 
             this.lblRunStatus.AutoSize = true;
+            this.lblRunStatus.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblRunStatus.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
             this.lblRunStatus.Location = new System.Drawing.Point(15, 44);
             this.lblRunStatus.Name = "lblRunStatus";
-            this.lblRunStatus.Size = new System.Drawing.Size(37, 20);
+            this.lblRunStatus.Size = new System.Drawing.Size(39, 16);
             this.lblRunStatus.TabIndex = 0;
             this.lblRunStatus.Text = "空闲";
             // 
             // groupBoxMonitor
-            //
+            // 
             this.groupBoxMonitor.Controls.Add(this.lblUpperTempLabel);
             this.groupBoxMonitor.Controls.Add(this.lblUpperTemp);
             this.groupBoxMonitor.Controls.Add(this.lblSetTempLabel);
@@ -383,63 +393,81 @@
             this.groupBoxMonitor.Controls.Add(this.lblFanStateLabel);
             this.groupBoxMonitor.Controls.Add(this.lblFanState);
             this.groupBoxMonitor.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.groupBoxMonitor.Location = new System.Drawing.Point(3, 93);
+            this.groupBoxMonitor.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.groupBoxMonitor.Location = new System.Drawing.Point(4, 95);
+            this.groupBoxMonitor.Margin = new System.Windows.Forms.Padding(4, 5, 4, 5);
+            this.groupBoxMonitor.MinimumSize = new System.Drawing.Size(1, 1);
             this.groupBoxMonitor.Name = "groupBoxMonitor";
-            this.groupBoxMonitor.Size = new System.Drawing.Size(292, 114);
+            this.groupBoxMonitor.Padding = new System.Windows.Forms.Padding(0, 32, 0, 0);
+            this.groupBoxMonitor.Size = new System.Drawing.Size(290, 110);
             this.groupBoxMonitor.TabIndex = 1;
             this.groupBoxMonitor.TabStop = false;
             this.groupBoxMonitor.Text = "监视";
+            this.groupBoxMonitor.TextAlignment = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // lblUpperTempLabel
-            //
+            // 
             this.lblUpperTempLabel.AutoSize = true;
+            this.lblUpperTempLabel.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblUpperTempLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
             this.lblUpperTempLabel.Location = new System.Drawing.Point(15, 86);
             this.lblUpperTempLabel.Name = "lblUpperTempLabel";
-            this.lblUpperTempLabel.Size = new System.Drawing.Size(53, 12);
+            this.lblUpperTempLabel.Size = new System.Drawing.Size(71, 16);
             this.lblUpperTempLabel.TabIndex = 3;
             this.lblUpperTempLabel.Text = "当前温度";
             // 
             // lblUpperTemp
-            //
+            // 
             this.lblUpperTemp.AutoSize = true;
+            this.lblUpperTemp.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblUpperTemp.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
             this.lblUpperTemp.Location = new System.Drawing.Point(100, 86);
             this.lblUpperTemp.Name = "lblUpperTemp";
+            this.lblUpperTemp.Size = new System.Drawing.Size(31, 16);
             this.lblUpperTemp.TabIndex = 2;
             this.lblUpperTemp.Text = "---";
-            //
+            // 
             // lblSetTempLabel
-            //
+            // 
             this.lblSetTempLabel.AutoSize = true;
+            this.lblSetTempLabel.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblSetTempLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
             this.lblSetTempLabel.Location = new System.Drawing.Point(15, 60);
             this.lblSetTempLabel.Name = "lblSetTempLabel";
-            this.lblSetTempLabel.Size = new System.Drawing.Size(53, 12);
+            this.lblSetTempLabel.Size = new System.Drawing.Size(71, 16);
             this.lblSetTempLabel.TabIndex = 1;
             this.lblSetTempLabel.Text = "设置温度";
-            //
+            // 
             // lblSetTemp
-            //
+            // 
             this.lblSetTemp.AutoSize = true;
+            this.lblSetTemp.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblSetTemp.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
             this.lblSetTemp.Location = new System.Drawing.Point(100, 60);
             this.lblSetTemp.Name = "lblSetTemp";
+            this.lblSetTemp.Size = new System.Drawing.Size(31, 16);
             this.lblSetTemp.TabIndex = 0;
             this.lblSetTemp.Text = "---";
             // 
             // lblFanStateLabel
             // 
             this.lblFanStateLabel.AutoSize = true;
+            this.lblFanStateLabel.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.lblFanStateLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(48)))), ((int)(((byte)(48)))), ((int)(((byte)(48)))));
             this.lblFanStateLabel.Location = new System.Drawing.Point(15, 34);
             this.lblFanStateLabel.Name = "lblFanStateLabel";
-            this.lblFanStateLabel.Size = new System.Drawing.Size(65, 12);
+            this.lblFanStateLabel.Size = new System.Drawing.Size(87, 16);
             this.lblFanStateLabel.TabIndex = 6;
             this.lblFanStateLabel.Text = "送风机状态";
             // 
             // lblFanState
             // 
             this.lblFanState.AutoSize = true;
+            this.lblFanState.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.lblFanState.ForeColor = System.Drawing.Color.Red;
             this.lblFanState.Location = new System.Drawing.Point(112, 34);
             this.lblFanState.Name = "lblFanState";
-            this.lblFanState.Size = new System.Drawing.Size(44, 17);
+            this.lblFanState.Size = new System.Drawing.Size(55, 16);
             this.lblFanState.TabIndex = 7;
             this.lblFanState.Text = "未连接";
             // 
@@ -453,120 +481,180 @@
             this.groupBoxOperation.Controls.Add(this.btnInputLot);
             this.groupBoxOperation.Controls.Add(this.btnBatchRecipe);
             this.groupBoxOperation.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.groupBoxOperation.Location = new System.Drawing.Point(3, 243);
+            this.groupBoxOperation.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.groupBoxOperation.Location = new System.Drawing.Point(4, 215);
+            this.groupBoxOperation.Margin = new System.Windows.Forms.Padding(4, 5, 4, 5);
+            this.groupBoxOperation.MinimumSize = new System.Drawing.Size(1, 1);
             this.groupBoxOperation.Name = "groupBoxOperation";
-            this.groupBoxOperation.Size = new System.Drawing.Size(292, 294);
+            this.groupBoxOperation.Padding = new System.Windows.Forms.Padding(0, 32, 0, 0);
+            this.groupBoxOperation.Size = new System.Drawing.Size(290, 290);
             this.groupBoxOperation.TabIndex = 2;
             this.groupBoxOperation.TabStop = false;
             this.groupBoxOperation.Text = "操作";
-            //
-            // btnBatchRecipe（V1.59.1 重排：按业务流程顺序 选配方→录批号→启动→停止→复位→急停，自上而下）
-            // 【V1.71】语义绿走 Custom+FillColor（自绘按钮 BackColor 画不出来）
-            //
-            this.btnBatchRecipe.FillColor = System.Drawing.Color.LimeGreen;
-            this.btnBatchRecipe.RectColor = System.Drawing.Color.LimeGreen;
-            this.btnBatchRecipe.ForeColor = System.Drawing.Color.White;
-            this.btnBatchRecipe.Style = Sunny.UI.UIStyle.Custom;
-            this.btnBatchRecipe.Location = new System.Drawing.Point(15, 34);
-            this.btnBatchRecipe.Name = "btnBatchRecipe";
-            this.btnBatchRecipe.Size = new System.Drawing.Size(256, 28);
-            this.btnBatchRecipe.TabIndex = 0;
-            this.btnBatchRecipe.Text = "批量设置配方";
-            this.btnBatchRecipe.Click += new System.EventHandler(this.btnBatchRecipe_Click);
-            //
-            // btnInputLot
-            //
-            this.btnInputLot.FillColor = System.Drawing.Color.LimeGreen;
-            this.btnInputLot.RectColor = System.Drawing.Color.LimeGreen;
-            this.btnInputLot.ForeColor = System.Drawing.Color.White;
-            this.btnInputLot.Style = Sunny.UI.UIStyle.Custom;
-            this.btnInputLot.Location = new System.Drawing.Point(15, 63);
-            this.btnInputLot.Name = "btnInputLot";
-            this.btnInputLot.Size = new System.Drawing.Size(256, 28);
-            this.btnInputLot.TabIndex = 1;
-            this.btnInputLot.Text = "录入批号";
-            this.btnInputLot.Click += new System.EventHandler(this.btnInputLot_Click);
-            //
+            this.groupBoxOperation.TextAlignment = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
             // btnStartRun
-            //
+            // 
+            this.btnStartRun.Cursor = System.Windows.Forms.Cursors.Hand;
             this.btnStartRun.FillColor = System.Drawing.Color.DodgerBlue;
-            this.btnStartRun.RectColor = System.Drawing.Color.DodgerBlue;
-            this.btnStartRun.ForeColor = System.Drawing.Color.White;
-            this.btnStartRun.Style = Sunny.UI.UIStyle.Custom;
+            this.btnStartRun.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.btnStartRun.Location = new System.Drawing.Point(15, 92);
+            this.btnStartRun.MinimumSize = new System.Drawing.Size(1, 1);
             this.btnStartRun.Name = "btnStartRun";
+            this.btnStartRun.RectColor = System.Drawing.Color.DodgerBlue;
             this.btnStartRun.Size = new System.Drawing.Size(256, 28);
+            this.btnStartRun.Style = Sunny.UI.UIStyle.Custom;
             this.btnStartRun.TabIndex = 2;
             this.btnStartRun.Text = "启动运行（选中台）";
+            this.btnStartRun.TipsFont = new System.Drawing.Font("宋体", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.btnStartRun.Click += new System.EventHandler(this.btnStartRun_Click);
-            //
+            // 
             // btnStopRun
-            //
-            // 【V1.71】无语义默认灰走 Sunny Gray 档（深色换肤经 ApplyOperationButtonsTheme+ApplyButtonColors）
-            //
-            this.btnStopRun.Style = Sunny.UI.UIStyle.Gray;
+            // 
+            this.btnStopRun.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btnStopRun.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(140)))), ((int)(((byte)(140)))), ((int)(((byte)(140)))));
+            this.btnStopRun.FillColor2 = System.Drawing.Color.FromArgb(((int)(((byte)(140)))), ((int)(((byte)(140)))), ((int)(((byte)(140)))));
+            this.btnStopRun.FillHoverColor = System.Drawing.Color.FromArgb(((int)(((byte)(163)))), ((int)(((byte)(163)))), ((int)(((byte)(163)))));
+            this.btnStopRun.FillPressColor = System.Drawing.Color.FromArgb(((int)(((byte)(112)))), ((int)(((byte)(112)))), ((int)(((byte)(112)))));
+            this.btnStopRun.FillSelectedColor = System.Drawing.Color.FromArgb(((int)(((byte)(112)))), ((int)(((byte)(112)))), ((int)(((byte)(112)))));
+            this.btnStopRun.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.btnStopRun.LightColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(248)))), ((int)(((byte)(248)))));
             this.btnStopRun.Location = new System.Drawing.Point(15, 121);
+            this.btnStopRun.MinimumSize = new System.Drawing.Size(1, 1);
             this.btnStopRun.Name = "btnStopRun";
+            this.btnStopRun.RectColor = System.Drawing.Color.FromArgb(((int)(((byte)(140)))), ((int)(((byte)(140)))), ((int)(((byte)(140)))));
+            this.btnStopRun.RectHoverColor = System.Drawing.Color.FromArgb(((int)(((byte)(163)))), ((int)(((byte)(163)))), ((int)(((byte)(163)))));
+            this.btnStopRun.RectPressColor = System.Drawing.Color.FromArgb(((int)(((byte)(112)))), ((int)(((byte)(112)))), ((int)(((byte)(112)))));
+            this.btnStopRun.RectSelectedColor = System.Drawing.Color.FromArgb(((int)(((byte)(112)))), ((int)(((byte)(112)))), ((int)(((byte)(112)))));
             this.btnStopRun.Size = new System.Drawing.Size(256, 28);
+            this.btnStopRun.Style = Sunny.UI.UIStyle.Custom;
             this.btnStopRun.TabIndex = 3;
             this.btnStopRun.Text = "停止运行（选中台）";
+            this.btnStopRun.TipsFont = new System.Drawing.Font("宋体", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.btnStopRun.Click += new System.EventHandler(this.btnStopRun_Click);
-            //
+            // 
             // btnResetAlarm
-            //
-            this.btnResetAlarm.Style = Sunny.UI.UIStyle.Gray;
+            // 
+            this.btnResetAlarm.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btnResetAlarm.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(140)))), ((int)(((byte)(140)))), ((int)(((byte)(140)))));
+            this.btnResetAlarm.FillColor2 = System.Drawing.Color.FromArgb(((int)(((byte)(140)))), ((int)(((byte)(140)))), ((int)(((byte)(140)))));
+            this.btnResetAlarm.FillHoverColor = System.Drawing.Color.FromArgb(((int)(((byte)(163)))), ((int)(((byte)(163)))), ((int)(((byte)(163)))));
+            this.btnResetAlarm.FillPressColor = System.Drawing.Color.FromArgb(((int)(((byte)(112)))), ((int)(((byte)(112)))), ((int)(((byte)(112)))));
+            this.btnResetAlarm.FillSelectedColor = System.Drawing.Color.FromArgb(((int)(((byte)(112)))), ((int)(((byte)(112)))), ((int)(((byte)(112)))));
+            this.btnResetAlarm.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.btnResetAlarm.LightColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(248)))), ((int)(((byte)(248)))));
             this.btnResetAlarm.Location = new System.Drawing.Point(15, 150);
+            this.btnResetAlarm.MinimumSize = new System.Drawing.Size(1, 1);
             this.btnResetAlarm.Name = "btnResetAlarm";
+            this.btnResetAlarm.RectColor = System.Drawing.Color.FromArgb(((int)(((byte)(140)))), ((int)(((byte)(140)))), ((int)(((byte)(140)))));
+            this.btnResetAlarm.RectHoverColor = System.Drawing.Color.FromArgb(((int)(((byte)(163)))), ((int)(((byte)(163)))), ((int)(((byte)(163)))));
+            this.btnResetAlarm.RectPressColor = System.Drawing.Color.FromArgb(((int)(((byte)(112)))), ((int)(((byte)(112)))), ((int)(((byte)(112)))));
+            this.btnResetAlarm.RectSelectedColor = System.Drawing.Color.FromArgb(((int)(((byte)(112)))), ((int)(((byte)(112)))), ((int)(((byte)(112)))));
             this.btnResetAlarm.Size = new System.Drawing.Size(256, 28);
+            this.btnResetAlarm.Style = Sunny.UI.UIStyle.Custom;
             this.btnResetAlarm.TabIndex = 4;
             this.btnResetAlarm.Text = "报警复位（选中台）";
+            this.btnResetAlarm.TipsFont = new System.Drawing.Font("宋体", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.btnResetAlarm.Click += new System.EventHandler(this.btnResetAlarm_Click);
-            //
-            // btnUnloadJudge（V1.67：Q22 待判定配套，下料时人工录 PASS/FAIL；平时隐藏？不：
-            // 常驻但 AutoPass 下点它只提示，无操作员误触风险；位置在复位下、急停上，29px 步进）
-            //
-            this.btnUnloadJudge.Style = Sunny.UI.UIStyle.Gray;
+            // 
+            // btnUnloadJudge
+            // 
+            this.btnUnloadJudge.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btnUnloadJudge.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(140)))), ((int)(((byte)(140)))), ((int)(((byte)(140)))));
+            this.btnUnloadJudge.FillColor2 = System.Drawing.Color.FromArgb(((int)(((byte)(140)))), ((int)(((byte)(140)))), ((int)(((byte)(140)))));
+            this.btnUnloadJudge.FillHoverColor = System.Drawing.Color.FromArgb(((int)(((byte)(163)))), ((int)(((byte)(163)))), ((int)(((byte)(163)))));
+            this.btnUnloadJudge.FillPressColor = System.Drawing.Color.FromArgb(((int)(((byte)(112)))), ((int)(((byte)(112)))), ((int)(((byte)(112)))));
+            this.btnUnloadJudge.FillSelectedColor = System.Drawing.Color.FromArgb(((int)(((byte)(112)))), ((int)(((byte)(112)))), ((int)(((byte)(112)))));
+            this.btnUnloadJudge.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.btnUnloadJudge.LightColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(248)))), ((int)(((byte)(248)))));
             this.btnUnloadJudge.Location = new System.Drawing.Point(15, 208);
+            this.btnUnloadJudge.MinimumSize = new System.Drawing.Size(1, 1);
             this.btnUnloadJudge.Name = "btnUnloadJudge";
+            this.btnUnloadJudge.RectColor = System.Drawing.Color.FromArgb(((int)(((byte)(140)))), ((int)(((byte)(140)))), ((int)(((byte)(140)))));
+            this.btnUnloadJudge.RectHoverColor = System.Drawing.Color.FromArgb(((int)(((byte)(163)))), ((int)(((byte)(163)))), ((int)(((byte)(163)))));
+            this.btnUnloadJudge.RectPressColor = System.Drawing.Color.FromArgb(((int)(((byte)(112)))), ((int)(((byte)(112)))), ((int)(((byte)(112)))));
+            this.btnUnloadJudge.RectSelectedColor = System.Drawing.Color.FromArgb(((int)(((byte)(112)))), ((int)(((byte)(112)))), ((int)(((byte)(112)))));
             this.btnUnloadJudge.Size = new System.Drawing.Size(256, 28);
+            this.btnUnloadJudge.Style = Sunny.UI.UIStyle.Custom;
             this.btnUnloadJudge.TabIndex = 6;
             this.btnUnloadJudge.Text = "下料判定（选中台）";
+            this.btnUnloadJudge.TipsFont = new System.Drawing.Font("宋体", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.btnUnloadJudge.Click += new System.EventHandler(this.btnUnloadJudge_Click);
-            //
+            // 
             // btnStopAll
-            //
+            // 
+            this.btnStopAll.Cursor = System.Windows.Forms.Cursors.Hand;
             this.btnStopAll.FillColor = System.Drawing.Color.Crimson;
-            this.btnStopAll.RectColor = System.Drawing.Color.Crimson;
-            this.btnStopAll.ForeColor = System.Drawing.Color.White;
-            this.btnStopAll.Style = Sunny.UI.UIStyle.Custom;
+            this.btnStopAll.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.btnStopAll.Location = new System.Drawing.Point(15, 237);
+            this.btnStopAll.MinimumSize = new System.Drawing.Size(1, 1);
             this.btnStopAll.Name = "btnStopAll";
+            this.btnStopAll.RectColor = System.Drawing.Color.Crimson;
             this.btnStopAll.Size = new System.Drawing.Size(256, 28);
+            this.btnStopAll.Style = Sunny.UI.UIStyle.Custom;
             this.btnStopAll.TabIndex = 7;
             this.btnStopAll.Text = "全部停止（急停）";
+            this.btnStopAll.TipsFont = new System.Drawing.Font("宋体", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.btnStopAll.Click += new System.EventHandler(this.btnStopAll_Click);
-            //
+            // 
+            // btnInputLot
+            // 
+            this.btnInputLot.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btnInputLot.FillColor = System.Drawing.Color.LimeGreen;
+            this.btnInputLot.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.btnInputLot.Location = new System.Drawing.Point(15, 63);
+            this.btnInputLot.MinimumSize = new System.Drawing.Size(1, 1);
+            this.btnInputLot.Name = "btnInputLot";
+            this.btnInputLot.RectColor = System.Drawing.Color.LimeGreen;
+            this.btnInputLot.Size = new System.Drawing.Size(256, 28);
+            this.btnInputLot.Style = Sunny.UI.UIStyle.Custom;
+            this.btnInputLot.TabIndex = 1;
+            this.btnInputLot.Text = "录入批号";
+            this.btnInputLot.TipsFont = new System.Drawing.Font("宋体", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.btnInputLot.Click += new System.EventHandler(this.btnInputLot_Click);
+            // 
+            // btnBatchRecipe
+            // 
+            this.btnBatchRecipe.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.btnBatchRecipe.FillColor = System.Drawing.Color.LimeGreen;
+            this.btnBatchRecipe.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.btnBatchRecipe.Location = new System.Drawing.Point(15, 34);
+            this.btnBatchRecipe.MinimumSize = new System.Drawing.Size(1, 1);
+            this.btnBatchRecipe.Name = "btnBatchRecipe";
+            this.btnBatchRecipe.RectColor = System.Drawing.Color.LimeGreen;
+            this.btnBatchRecipe.Size = new System.Drawing.Size(256, 28);
+            this.btnBatchRecipe.Style = Sunny.UI.UIStyle.Custom;
+            this.btnBatchRecipe.TabIndex = 0;
+            this.btnBatchRecipe.Text = "批量设置配方";
+            this.btnBatchRecipe.TipsFont = new System.Drawing.Font("宋体", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.btnBatchRecipe.Click += new System.EventHandler(this.btnBatchRecipe_Click);
+            // 
             // groupBoxLog
-            //
+            // 
             this.groupBoxLog.Controls.Add(this.txtLog);
             this.groupBoxLog.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.groupBoxLog.Location = new System.Drawing.Point(3, 543);
+            this.groupBoxLog.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.groupBoxLog.Location = new System.Drawing.Point(4, 515);
+            this.groupBoxLog.Margin = new System.Windows.Forms.Padding(4, 5, 4, 5);
+            this.groupBoxLog.MinimumSize = new System.Drawing.Size(1, 1);
             this.groupBoxLog.Name = "groupBoxLog";
-            this.groupBoxLog.Size = new System.Drawing.Size(292, 253);
+            this.groupBoxLog.Padding = new System.Windows.Forms.Padding(0, 32, 0, 0);
+            this.groupBoxLog.Size = new System.Drawing.Size(290, 275);
             this.groupBoxLog.TabIndex = 3;
             this.groupBoxLog.TabStop = false;
             this.groupBoxLog.Text = "日志";
+            this.groupBoxLog.TextAlignment = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // txtLog
             // 
             this.txtLog.Dock = System.Windows.Forms.DockStyle.Fill;
             this.txtLog.Font = new System.Drawing.Font("Consolas", 8F);
-            this.txtLog.Location = new System.Drawing.Point(3, 17);
+            this.txtLog.Location = new System.Drawing.Point(0, 32);
             this.txtLog.Multiline = true;
             this.txtLog.Name = "txtLog";
             this.txtLog.ReadOnly = true;
             this.txtLog.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.txtLog.Size = new System.Drawing.Size(280, 233);
+            this.txtLog.Size = new System.Drawing.Size(290, 243);
             this.txtLog.TabIndex = 0;
             // 
             // statusStripMain
@@ -578,7 +666,7 @@
             this.toolStripStatusLabelOnline,
             this.toolStripStatusLabelScanner,
             this.toolStripStatusLabelTime});
-            this.statusStripMain.Location = new System.Drawing.Point(0, 878);
+            this.statusStripMain.Location = new System.Drawing.Point(0, 840);
             this.statusStripMain.Name = "statusStripMain";
             this.statusStripMain.Size = new System.Drawing.Size(1280, 22);
             this.statusStripMain.TabIndex = 3;
@@ -603,20 +691,20 @@
             this.toolStripStatusLabelTesting.Text = "测试中: 0";
             // 
             // toolStripStatusLabelOnline
-            //
+            // 
             this.toolStripStatusLabelOnline.ForeColor = System.Drawing.Color.Red;
             this.toolStripStatusLabelOnline.Name = "toolStripStatusLabelOnline";
             this.toolStripStatusLabelOnline.Size = new System.Drawing.Size(65, 17);
             this.toolStripStatusLabelOnline.Text = "在线: 0/72";
-            //
+            // 
             // toolStripStatusLabelScanner
-            //
+            // 
             this.toolStripStatusLabelScanner.Name = "toolStripStatusLabelScanner";
-            this.toolStripStatusLabelScanner.Size = new System.Drawing.Size(88, 17);
+            this.toolStripStatusLabelScanner.Size = new System.Drawing.Size(61, 17);
             this.toolStripStatusLabelScanner.Text = "扫码枪: --";
-            //
+            // 
             // toolStripStatusLabelTime
-            //
+            // 
             this.toolStripStatusLabelTime.Name = "toolStripStatusLabelTime";
             this.toolStripStatusLabelTime.Size = new System.Drawing.Size(126, 17);
             this.toolStripStatusLabelTime.Text = "2024-01-01 00:00:00";
@@ -625,25 +713,23 @@
             // 
             this.timerTime.Interval = 1000;
             this.timerTime.Tick += new System.EventHandler(this.timerTime_Tick);
+            // 
             // hashTimer
-            //
+            // 
             this.hashTimer.Interval = 3600000;
             this.hashTimer.Tick += new System.EventHandler(this.HashTimer_Tick);
             // 
             // MainForm
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
             this.ClientSize = new System.Drawing.Size(1280, 900);
-            // 【V1.71】UIForm 自绘蓝标题：Dock=Fill 主布局加顶 Pad 避开标题区。
-            this.Padding = new System.Windows.Forms.Padding(0, 38, 0, 0);
-            // 【V1.71】UIForm 自绘蓝标题：Dock=Fill 主布局加顶 Pad 避开标题区。
-            this.Padding = new System.Windows.Forms.Padding(0, 38, 0, 0);
             this.Controls.Add(this.rootScrollPanel);
             this.MinimumSize = new System.Drawing.Size(800, 600);
             this.Name = "MainForm";
+            this.Padding = new System.Windows.Forms.Padding(0, 38, 0, 0);
             this.Text = "老化测试系统V1.16";
             this.WindowState = System.Windows.Forms.FormWindowState.Maximized;
+            this.ZoomScaleRect = new System.Drawing.Rectangle(15, 15, 1280, 900);
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.MainForm_FormClosing);
             this.Load += new System.EventHandler(this.MainForm_Load);
             this.rootScrollPanel.ResumeLayout(false);
@@ -653,6 +739,8 @@
             this.tableLayoutPanelHeader.PerformLayout();
             this.pnlProject.ResumeLayout(false);
             this.pnlProject.PerformLayout();
+            this.panelPermission.ResumeLayout(false);
+            this.panelPermission.PerformLayout();
             this.splitContainerMain.Panel2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.splitContainerMain)).EndInit();
             this.splitContainerMain.ResumeLayout(false);

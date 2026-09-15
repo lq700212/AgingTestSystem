@@ -16,16 +16,17 @@ namespace AgingTestSystem.Models
     /// "关于 → 主页区域调整"可视化编辑器里拖动矩形块边缘，保存即写入
     /// 程序目录下的 HomeLayout.json，无需改代码、无需重新编译。
     ///
-    /// 【默认值说明（V1.58 调大，V1.88.23 顶栏菜单并单行）】
-    /// 默认顶栏/状态栏高度（36/30）：V1.58 曾把标题栏/菜单栏调大到 40/50 好点按；
+    /// 【默认值说明（V1.58 调大，V1.88.23 顶栏菜单并单行，V1.88.26 顶栏再压到 30）】
+    /// 默认顶栏/状态栏高度（30/30）：V1.58 曾把标题栏/菜单栏调大到 40/50 好点按；
     /// V1.88.23 应"按钮太占位置"把两行并成一行（项目/权限/通讯＋4 按钮同行 36px，
     /// 省 34px 纵向还给工作站区），旧 TopBarHeight/MenuHeight 双键删除、单 HeaderHeight 替代。
-    /// 老 HomeLayout.json 里没有 HeaderHeight 键 → 反序列化保持类缺省 36，
+    /// V1.88.26 顶栏字全收到 9pt（按钮＋状态），36px 行显空，再压到 30（按钮剩 24 高）。
+    /// 老 HomeLayout.json 里没有 HeaderHeight 键 → 反序列化保持类缺省 30，
     /// 直接生效，不写迁移分支（项目未上线，旧文件删了重导也行）。
     ///
     /// 【布局结构】（与 MainForm.Designer.cs 的 tableLayoutPanelMain 对应）
     /// ┌───────────────────────────────────────┐
-    /// │ 顶栏 HeaderHeight（默认 36：项目/权限/  │
+    /// │ 顶栏 HeaderHeight（默认 30：项目/权限/  │
     /// │ 通讯＋用户权限/参数设置/日志记录/关于） │
     /// ├──────────────────────────┬────────────┤
     /// │                          │ 右侧状态按钮区│
@@ -51,11 +52,11 @@ namespace AgingTestSystem.Models
     public class HomeLayoutConfig
     {
         /// <summary>
-        /// 顶栏高度（【V1.88.23】单行：项目/权限/通讯＋4 按钮同行；默认 36）。
+        /// 顶栏高度（【V1.88.23】单行：项目/权限/通讯＋4 按钮同行；【V1.88.26】默认 30）。
         /// 旧 TopBarHeight/MenuHeight 双键已删（两行并一行，省 34px 纵向还给工作站区）；
-        /// 老文件无此键即 36，不迁移。
+        /// 老文件无此键即 30，不迁移。
         /// </summary>
-        public int HeaderHeight { get; set; } = 36;
+        public int HeaderHeight { get; set; } = 30;
 
         /// <summary>右侧状态按钮区宽度（运行状态+监视+操作+日志 四块的总宽）。
         /// 【V1.65】类默认值 240 只作编辑器"恢复默认"的基准；主窗体无 json 时实际按
@@ -70,9 +71,10 @@ namespace AgingTestSystem.Models
         // 防止把某个区域拖成 0 或超出合理范围导致主界面错乱。
         // 与 HomeLayoutEditorForm 中的范围常量保持同步。
 
-        /// <summary>顶栏高度最小/最大值（【V1.88.23】34=按钮28＋上下各3边距，再小裁按钮）</summary>
+        /// <summary>顶栏高度最小/最大值（【V1.88.23】34=按钮28＋上下各3边距；
+        /// 【V1.88.26】字全 9pt 后压到 28=按钮22＋上下各3边距，再小裁按钮）</summary>
         [JsonIgnore]
-        public static readonly (int Min, int Max) HeaderRange = (34, 100);
+        public static readonly (int Min, int Max) HeaderRange = (28, 100);
 
         /// <summary>右侧状态按钮区宽度最小/最大值</summary>
         [JsonIgnore]

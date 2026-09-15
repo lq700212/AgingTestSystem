@@ -161,7 +161,7 @@ namespace AgingTestSystem.Views
         /// <summary>
         /// 工位网格（自绘大画布，【V1.50】）。
         /// 整个工位区域 = 1 个自绘 UserControl（含全部面板 + 行全选按钮列），
-        /// 由 <see cref="CreateWorkstationPanels"/> 创建并放入 AutoScroll 滚动容器。
+        /// 由 <see cref="CreateWorkstationPanels"/> 创建并放入外层 Panel 容器（一屏铺满，无滚动）。
         /// </summary>
         private WorkstationGridView _gridView;
 
@@ -211,6 +211,12 @@ namespace AgingTestSystem.Views
             // 【V1.78】顶栏/状态区加粗（用户点名：项目/权限/通讯/运行状态/监视全加粗）。
             // 放构造里按当前字号原样加粗，详见 ApplyHeaderBoldFonts 注释（为什么不动 Designer）。
             ApplyHeaderBoldFonts();
+
+            // 【V1.88.25】顶栏 4 按钮字号 12→9pt（用户点名：标题字小一点）。
+            // 【V1.88.26】左边 6 个状态字同步收到 9pt（用户点名：和右边按钮一样大）。
+            // 对齐：Sunny 缺省即 MiddleCenter/MiddleLeft（harness 实测），配合全高 Dock 自然居中。
+            // 都与加粗同路走代码，不进 Designer（见 ApplyHeaderFonts 注释）。
+            ApplyHeaderFonts();
 
             // 【V1.79】项目前缀标签定宽：Designer 里 AutoSize=false + Dock=Left（撑满高度居中），
             // 宽度这里按 PreferredWidth 收——"当前项目："五个字刚好包住，跟运行字号/DPI 走，
@@ -501,7 +507,17 @@ namespace AgingTestSystem.Views
                 FormBorderStyle = FormBorderStyle.None,        // 无边框
                 StartPosition = FormStartPosition.Manual,      // 手动指定位置
                 ShowInTaskbar = false,                         // 不在任务栏显示
-                KeyPreview = true                              // 允许接收按键事件（按 Esc 关闭）
+                KeyPreview = true,                             // 允许接收按键事件（按 Esc 关闭）
+                // 【V1.88.25】禁自动缩放：下面 ClientSize/行高列宽全是运行时物理像素
+                // （hostButton.Width/Height），再跟缩一次就和主按钮对不上——
+                // 实锤：12pt 时下拉窗被撑到 136 宽（主按钮 114），选项字还被夹掉一半。
+                // 纯代码窗体 + 全显式尺寸，AutoScaleMode.None 即正确值（与网格自绘同理）。
+                AutoScaleMode = AutoScaleMode.None,
+                // 【V1.88.25】MinimumSize 破 Windows 最小跟踪宽度（min-track 136px）：
+                // 边框 None 的窗体窄于 136 会被系统钳到 136（harness 二分实锤：裸窗 ClientSize
+                // 114×66 显示出来 136×66，与 TLP/按钮/主题全无关），MinimumSize=(1,1)
+                // 让 WinForms 接管 MINMAXINFO（(0,0) 不接管，照样被钳），114 宽弹窗得以精确落地。
+                MinimumSize = new Size(1, 1),
             };
 
             // ===== 2. 计算弹出窗体尺寸 =====
@@ -1192,6 +1208,10 @@ namespace AgingTestSystem.Views
             // 先补空模板（缺文件才建，已有激活绝不覆盖）：厂商只填值，不用记文件名。
             Services.SoftwareActivation.EnsureIniTemplate();
             hashTimer.Start();
+
+            // 【V1.88.26】顶栏状态列按内容定宽（首显即对；行高/字体此时就绪，
+            // 文本变更三处各自重算，这里只管首显）。
+            LayoutHeaderColumns();
         }
 
         /// <summary>
@@ -1339,11 +1359,11 @@ namespace AgingTestSystem.Views
         ///
         /// 【布局说明】
         /// - 整个工位区域（8列×9行面板 + 行全选按钮列）合并为 1 个自绘
-        ///   <see cref="WorkstationGridView"/>，尺寸 = 内容总尺寸；
-        /// - 外层用 Panel.AutoScroll 容器托管，默认 FitWidth 按宽顶满（字大，
-        ///   【V1.88.22】zoomX=zoomY=可用宽/内容宽，无横向条、高超出走纵向滚动、
-        ///   只上下滑动；"关于"下拉可切回 FillScreen 双向铺满一屏无滚动）；
-        /// - 滚动时系统只需移动 1 个窗口（而非 V1.49 的 72 个），无撕裂。
+        ///   <see cref="WorkstationGridView"/>，尺寸 = 显示区尺寸（双向铺满一屏）；
+        /// - 外层用普通 Panel 容器托管（AutoScroll=false，无任何滚动条）；
+        /// - 单窗口自绘（而非 V1.49 的 72 个），无撕裂。
+        /// 【V1.88.24】上下滑动/大字版/FitWidth/FillScreen 切换全部删除：
+        /// 用户确认一屏看全够了，只留双向铺满一路。
         /// 【注意】不能放在 FlowLayoutPanel 中，因为 FlowLayoutPanel
         /// 不尊重子控件的 Dock=Fill 属性。
         /// </summary>
@@ -1357,28 +1377,19 @@ namespace AgingTestSystem.Views
             // 一律走 ControlDisposeHelper（快照数组后释放，最后 Clear），不要手写 foreach。
             ControlDisposeHelper.DisposeAllAndClear(splitContainerMain.Panel1.Controls);
 
-            // 外层滚动容器：网格画布尺寸=内容总尺寸，由本容器托管滚动条
+            // 外层容器：只管装画布（Dock=Fill 填满左侧区域），不滚动——
+            // 【V1.88.24】AutoScroll=false：画布恒等于显示区（双向铺满一屏），
+            // 滚动条/拖拽/横向压制/V1.88.15 事后校正全部随滚动移除。
             var scrollContainer = new Panel();
             scrollContainer.Dock = DockStyle.Fill;      // 填满整个左侧区域
-            scrollContainer.AutoScroll = true;          // 内容超出时显示滚动条
-            // 【V1.88.22】默认大字版：画布宽恒顶满、高超出走纵向滚动（只上下滑动）；
-            // FillScreen 铺满模式下才无任何滚动条（画布恒等于显示区）。
-            // 横向条仍直接禁掉（启动瞬间/取整抖动出来看着怪）；纵向保留给日常滑动与
-            // zoom 触底兜底（显示区被挤到极小时画布大于显示区、可滑到全部 72 站）。
-            // 【V1.88.15】事后压制在网格 UpdateCanvasSize 里（BeginInvoke 布局完成后压，
-            // Layout 事件里压不住：布局引擎在事件之后还会覆盖，已实锤）。
-            scrollContainer.HorizontalScroll.Enabled = false;
-            scrollContainer.HorizontalScroll.Visible = false;
-            // 【V1.50】滚动容器开启双缓冲，配合自绘网格消除滚动撕裂/闪烁
+            scrollContainer.AutoScroll = false;         // 无任何滚动条（一屏看全）
+            // 【V1.50】容器开启双缓冲，配合自绘网格消除重绘闪烁
             EnableDoubleBuffering(scrollContainer);
 
-            // 自绘工位网格（1 个 UserControl 画全部面板 + 行全选按钮列）
+            // 自绘工位网格（1 个 UserControl 画全部面板 + 行全选按钮列；
+            // 【V1.88.24】只留双向铺满一屏：网格缺省即铺满，主窗不再设模式、不再提供切换）。
             _gridView = new WorkstationGridView();
             _gridView.Configure(_config.PanelColumns, _config.PanelRows, _config.TotalBarometers);
-            // 【V1.88.22】默认大字版（按宽顶满、只上下滑动，看得清；与网格字段缺省一致，
-            // 这里显式再设一次、意图落字，防以后有人改网格缺省而主窗行为悄悄跟变）；
-            // 操作员想一屏看全去"关于"下拉切铺满（MenuHelpWorkstationFit_Click，不落盘）。
-            _gridView.FitMode = WorkstationFitMode.FitWidth;
             // 【V1.77】电流行直绘开关：UsePowerMeter 开=每面板压力框下方加"电流："行
             // （【V1.88.17】面板 170→188、行 182→200，下游下移 18 间距不变）；关=原来布局逐像素不动。
             // 结构型开关（改后重启生效），这里 startup 装配一次即可（_config 已 LoadConfig 就绪）。
@@ -1407,7 +1418,7 @@ namespace AgingTestSystem.Views
         /// 复制到屏幕，消除滚动/重绘时的闪烁与撕裂。
         /// 【V1.50】网格自身的行全选按钮列、选中交互、按钮文字刷新已全部移入
         /// <see cref="WorkstationGridView"/> 内部（OnLog 通知主窗体写日志），
-        /// 本方法仅保留给外层 AutoScroll 滚动容器开启双缓冲。
+        /// 本方法仅保留给外层工作站容器开启双缓冲。
         /// </summary>
         /// <param name="control">目标控件</param>
         private static void EnableDoubleBuffering(Control control)
@@ -1884,6 +1895,8 @@ namespace AgingTestSystem.Views
 
                 lblCommStatus.Text = _commConnected ? "已连接" : "未连接";
                 lblCommStatus.ForeColor = _commConnected ? Color.Green : Color.Red;
+                // 【V1.88.26】文本变了列宽即重算（"已连接/未连接"同长，但以后文案变了自动跟）。
+                LayoutHeaderColumns();
             }
             catch (ObjectDisposedException)
             {
@@ -2307,7 +2320,7 @@ namespace AgingTestSystem.Views
         /// - 设置：仅管理员可见（V1.17 权限控制，非管理员自动隐藏）
         /// - 版本说明：所有权限可见（V1.19.12 更名：关于 → 版本说明）
         /// - 深浅模式切换：仅 dev 最高权限可见（V1.64 起从顶部独立按钮收进这里）
-        /// - 大字/铺满切换：所有人可见（V1.88.22，工作站显示缩放，不碰业务）
+        /// - 【V1.88.24 已删】大字/铺满切换（只留一屏铺满，不再提供入口）。
         /// </summary>
         private void btnAbout_Click(object sender, EventArgs e)
         {
@@ -2324,16 +2337,7 @@ namespace AgingTestSystem.Views
             // 现场操作员也可能需要按自己习惯微调右侧宽度/行高，故不再限制管理员）。
             items.Add(("主页区域调整", MenuHelpHomeLayout_Click));
 
-            // 【V1.88.22】"工作站大字/铺满"切换：所有人可见（只改显示缩放，不碰业务，
-            // 与"主页区域调整"同级）。默认大字版（按宽顶满、上下滑动）；
-            // 文字永远表示"下一次去哪"（与深浅模式切换同口径），菜单每次打开现拼，
-            // 天然就是最新状态。_gridView 为 null（尚未装配）时不加这一项。
-            if (_gridView != null && !_gridView.IsDisposed)
-            {
-                bool isFitWidth = _gridView.FitMode == WorkstationFitMode.FitWidth;
-                items.Add((isFitWidth ? "切换为铺满一屏（字小）" : "切换为大字显示（上下滑动）",
-                    MenuHelpWorkstationFit_Click));
-            }
+            // 【V1.88.24 已删】"工作站大字/铺满"切换：只留一屏铺满，不再提供入口。
 
             // 【通讯测试】仅技术员及以上权限可见（操作员不可见）
             if (_userManager.HasPermission(UserRole.Technician))
@@ -2363,27 +2367,7 @@ namespace AgingTestSystem.Views
             ShowDropdownPopup(btnAbout, items.ToArray());
         }
 
-        /// <summary>
-        /// 工作站显示"大字版 ⇄ 铺满一屏"切换（【V1.88.22 新增】"关于"下拉入口，见 btnAbout_Click）。
-        ///
-        /// 【流程】翻 _gridView.FitMode（setter 内即 UpdateAutoFit：字体+画布+重绘一条龙）
-        /// → 写 LOG 留痕。只动显示缩放，不碰业务状态、不重建网格；
-        /// 本次切换不落盘（重启回默认大字版；要记忆选项下次再加）。
-        /// </summary>
-        private void MenuHelpWorkstationFit_Click(object sender, EventArgs e)
-        {
-            if (_gridView == null || _gridView.IsDisposed) return;
-            if (_gridView.FitMode == WorkstationFitMode.FitWidth)
-            {
-                _gridView.FitMode = WorkstationFitMode.FillScreen;
-                WriteLog("工作站显示已切换为铺满一屏（72 站一屏无滚动，字较小）");
-            }
-            else
-            {
-                _gridView.FitMode = WorkstationFitMode.FitWidth;
-                WriteLog("工作站显示已切换为大字版（按宽顶满、上下滑动看）");
-            }
-        }
+        // 【V1.88.24 已删】MenuHelpWorkstationFit_Click（大字/铺满切换，随双模式开关移除）。
 
         /// <summary>
         /// 深色/浅色主题切换（【V1.64】入口从顶部独立按钮收进"关于"下拉，仅 dev 可见）。
@@ -2623,6 +2607,131 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
+        /// 顶栏字号统一收小（【V1.88.25】4 按钮 12→9pt，用户点名"标题字小一点"；
+        /// 【V1.88.26】左边 6 个状态字同步 9pt，用户点名"和右边按钮一样大"）。
+        ///
+        /// 【为什么放代码里而不写 Designer】同 ApplyHeaderBoldFonts：Sunny 控件 Style=Inherited
+        /// 吃样式字体，顶栏 10 个控件统一按"当前实际字族/风格"只改字号，相互不分叉；
+        /// Designer 写死字号即与样式字号分叉（以后样式变了这边悄悄过期；且 VS 重写
+        /// Designer 会把样式字号显式序列化进来，更不能信 Designer 的值）。
+        /// 字族/风格一个不动（只换 size），粗细/颜色/主题都不受影响。
+        /// 下拉选项按钮自动同步：ShowDropdownPopup 里选项按钮 Font = hostButton.Font、
+        /// 尺寸 = hostButton 宽高（harness 锁"同尺寸同字号"，改这里弹窗跟着走，不用碰两处）。
+        /// 用 SizeInPoints 比（pt 与 DPI 无关，同屏同视觉大小，不用管 96/120/144DPI）。
+        /// </summary>
+        private void ApplyHeaderFonts()
+        {
+            const float HeaderFontPt = 9f;
+            SetFontSizePt(btnUserPermission, HeaderFontPt);
+            SetFontSizePt(btnParameter, HeaderFontPt);
+            SetFontSizePt(btnLog, HeaderFontPt);
+            SetFontSizePt(btnAbout, HeaderFontPt);
+            SetFontSizePt(lblProjectPrefix, HeaderFontPt);
+            SetFontSizePt(lblProject, HeaderFontPt);
+            SetFontSizePt(lblPermissionPrefix, HeaderFontPt);
+            SetFontSizePt(lblPermissionRole, HeaderFontPt);
+            SetFontSizePt(lblCommStatusLabel, HeaderFontPt);
+            SetFontSizePt(lblCommStatus, HeaderFontPt);
+        }
+
+        /// <summary>
+        /// 单个控件按字族/风格不变只换字号（幂等：已是目标字号不再重复创建字体对象）。
+        /// 空控件/已释放时静默跳过（构造早期调用，防空引用拖垮启动）。
+        /// </summary>
+        /// <param name="c">目标控件（Font 是 Control 基类属性，Sunny/原生通用）</param>
+        /// <param name="sizePt">目标字号（pt）</param>
+        private static void SetFontSizePt(Control c, float sizePt)
+        {
+            if (c == null || c.IsDisposed) return;
+            if (c.Font == null) return;
+            if (Math.Abs(c.Font.SizeInPoints - sizePt) < 0.01f) return;
+            c.Font = new Font(c.Font.FontFamily, sizePt, c.Font.Style);
+        }
+
+        /// <summary>项目列总宽上限（【V1.88.26】长名再长也只给 320，超的省略号；短名按实测紧凑）。</summary>
+        private const int MaxHeaderProjectColWidth = 320;
+
+        /// <summary>
+        /// 每个标签绘制时预留的内边距（【V1.88.26】Sunny 标签绘制内边距经验值：
+        /// V1.88.14 实测"AutoSize 标签实占比 MeasureText 纯文本宽大 3px"，取整 4px/标签；
+        /// 不留这几 px，列宽与文本严丝合缝，绘制一抖就进省略号——hdr26 首版"烧屏测试"
+        /// 只剩"烧…"即此因）。
+        /// </summary>
+        private const int HeaderLabelPaintSlack = 4;
+
+        /// <summary>
+        /// 按六段首选宽度算顶栏 4 个状态列的内容宽（【V1.88.26】纯函数，回归可直接断言）。
+        ///
+        /// 【为什么要代码算】V1.88.24 的 AutoSize 列翻车：Sunny 容器/标签的首选尺寸
+        /// 不可靠——项目名 Fill 标签关着 AutoSize 只报 0 宽（Sunny 缺省 false），
+        /// 整列被压成前缀宽 88、项目名直接看不见（harness 实锤 pnl=88 纹丝不动）。
+        /// 改回"控件 Dock=Fill 全高（垂直居中天然成立）＋列宽按首选尺寸实测"：
+        /// 每个标签问它自己要多宽（GetPreferredSize，自带 Sunny 内边距，再补
+        /// HeaderLabelPaintSlack），最后调用方按各控件 Margin.Horizontal 把单元格
+        /// 边距加上（V1.88.26 血泪二：列宽忘了加 Margin，内容又被单元格边距吃掉 15px）。
+        /// </summary>
+        /// <param name="prefixW">项目前缀首选宽</param>
+        /// <param name="nameW">项目名首选宽</param>
+        /// <param name="permPreW">权限前缀首选宽</param>
+        /// <param name="roleW">角色名首选宽</param>
+        /// <param name="commLabelW">通讯标签首选宽</param>
+        /// <param name="commValW">通讯状态值首选宽</param>
+        /// <returns>[项目列内容宽， 权限列内容宽， 通讯标签列内容宽， 通讯值列内容宽]
+        /// （项目列封顶 320，非法输入钳 0；返回的是内容宽，落列时调用方再加 Margin）</returns>
+        public static int[] ComputeHeaderColumnWidths(int prefixW, int nameW,
+            int permPreW, int roleW, int commLabelW, int commValW)
+        {
+            int c0 = prefixW + nameW + HeaderLabelPaintSlack * 2;
+            if (c0 > MaxHeaderProjectColWidth) c0 = MaxHeaderProjectColWidth;
+            if (c0 < 0) c0 = 0;
+            int c1 = Math.Max(0, permPreW + roleW + 4 + HeaderLabelPaintSlack * 2);
+            int c2 = Math.Max(0, commLabelW + HeaderLabelPaintSlack * 2);
+            int c3 = Math.Max(0, commValW + HeaderLabelPaintSlack * 2);
+            return new int[] { c0, c1, c2, c3 };
+        }
+
+        /// <summary>
+        /// 顶栏状态列按内容定宽＋权限行垂直居中（【V1.88.26】执行侧，见 ComputeHeaderColumnWidths）。
+        /// 口径统一走各控件 GetPreferredSize（自带 Sunny 内边距，无句柄也能跑，
+        /// 所以构造期调用也安全）。调用点：MainForm_Load 末尾（行高/字体就绪，首显即对）＋
+        /// UpdateProjectDisplay / UpdatePermissionDisplay / UpdateConnectionStatus
+        /// （文本变即重算）。窗口 Resize 不用跟（行高固定由配置定，内容宽与窗宽无关）。
+        /// </summary>
+        private void LayoutHeaderColumns()
+        {
+            if (tableLayoutPanelHeader == null || tableLayoutPanelMain == null) return;
+            if (lblProject == null || lblProjectPrefix == null || panelPermission == null) return;
+            if (lblPermissionPrefix == null || lblPermissionRole == null) return;
+            if (lblCommStatusLabel == null || lblCommStatus == null) return;
+            var zero = new Size(0, 0);
+            int[] w = ComputeHeaderColumnWidths(
+                lblProjectPrefix.GetPreferredSize(zero).Width,
+                lblProject.GetPreferredSize(zero).Width,
+                lblPermissionPrefix.GetPreferredSize(zero).Width,
+                lblPermissionRole.GetPreferredSize(zero).Width,
+                lblCommStatusLabel.GetPreferredSize(zero).Width,
+                lblCommStatus.GetPreferredSize(zero).Width);
+            var styles = tableLayoutPanelHeader.ColumnStyles;
+            if (styles.Count >= 4)
+            {
+                // 内容宽＋各自单元格边距（Margin 是 cell 内控件外的留白，不加就吃内容）：
+                // pnlProject(3+12)/panelPermission(0+12)/comm标签(0+12)/comm值(默认3+3)。
+                styles[0].Width = w[0] + pnlProject.Margin.Horizontal;
+                styles[1].Width = w[1] + panelPermission.Margin.Horizontal;
+                styles[2].Width = w[2] + lblCommStatusLabel.Margin.Horizontal;
+                styles[3].Width = w[3] + lblCommStatus.Margin.Horizontal;
+            }
+            // 权限流式面板垂直居中：两标签 Margin.Top 已在 Designer 清零，
+            // 这里按行高给 Padding.Top（9pt 小字在 30px 行里居中；以后行高再改自动跟）。
+            float rowH = tableLayoutPanelMain.RowStyles.Count > 0
+                ? tableLayoutPanelMain.RowStyles[0].Height : 30f;
+            int contentH = Math.Max(lblPermissionPrefix.PreferredHeight,
+                lblPermissionRole.PreferredHeight);
+            int padTop = Math.Max(0, ((int)rowH - contentH) / 2);
+            panelPermission.Padding = new Padding(0, padTop, 0, 0);
+        }
+
+        /// <summary>
         /// 更新权限显示（【V1.19.7】）
         /// 拆为"前缀 + 角色名"两个标签（panelPermission 内 FlowLayoutPanel 水平排列）：
         /// 前缀 lblPermissionPrefix 固定默认黑字；角色名 lblPermissionRole 按权限设置 ForeColor：
@@ -2655,6 +2764,8 @@ namespace AgingTestSystem.Views
 
             lblPermissionRole.Text = roleName;
             lblPermissionRole.ForeColor = roleColor;
+            // 【V1.88.26】角色名长短差很多（"操作员"3字 vs "最高权限(dev)"9字），列宽即重算。
+            LayoutHeaderColumns();
         }
 
         /// <summary>
@@ -2665,12 +2776,14 @@ namespace AgingTestSystem.Views
         /// 前缀 Dock=Left + 项目名 Dock=Fill——项目名要 AutoEllipsis，流式布局给不出约束宽度。
         /// 构造时设一次 + 每次热加载后刷新一次（两处调用，无需订阅事件）。
         /// 超长项目名由 lblProject.AutoEllipsis 省略号收尾不断行。
+        /// 【V1.88.26】文本变了列宽即重算（LayoutHeaderColumns：短名紧凑、长名封顶 320）。
         /// </summary>
         /// <param name="projectName">生效的项目名（EnsureActiveProfile/热加载传入，null 兜底烧屏测试）</param>
         private void UpdateProjectDisplay(string projectName)
         {
             if (lblProject == null) return;
             lblProject.Text = string.IsNullOrWhiteSpace(projectName) ? "烧屏测试" : projectName.Trim();
+            LayoutHeaderColumns();
         }
 
         /// <summary>
