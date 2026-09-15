@@ -604,12 +604,13 @@
             // btnInputLot
             // 
             this.btnInputLot.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.btnInputLot.FillColor = System.Drawing.Color.LimeGreen;
+            this.btnInputLot.FillColor = System.Drawing.Color.ForestGreen;
             this.btnInputLot.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.btnInputLot.ForeColor = System.Drawing.Color.White;
             this.btnInputLot.Location = new System.Drawing.Point(15, 63);
             this.btnInputLot.MinimumSize = new System.Drawing.Size(1, 1);
             this.btnInputLot.Name = "btnInputLot";
-            this.btnInputLot.RectColor = System.Drawing.Color.LimeGreen;
+            this.btnInputLot.RectColor = System.Drawing.Color.ForestGreen;
             this.btnInputLot.Size = new System.Drawing.Size(256, 28);
             this.btnInputLot.Style = Sunny.UI.UIStyle.Custom;
             this.btnInputLot.TabIndex = 1;
@@ -620,12 +621,13 @@
             // btnBatchRecipe
             // 
             this.btnBatchRecipe.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.btnBatchRecipe.FillColor = System.Drawing.Color.LimeGreen;
+            this.btnBatchRecipe.FillColor = System.Drawing.Color.ForestGreen;
             this.btnBatchRecipe.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.btnBatchRecipe.ForeColor = System.Drawing.Color.White;
             this.btnBatchRecipe.Location = new System.Drawing.Point(15, 34);
             this.btnBatchRecipe.MinimumSize = new System.Drawing.Size(1, 1);
             this.btnBatchRecipe.Name = "btnBatchRecipe";
-            this.btnBatchRecipe.RectColor = System.Drawing.Color.LimeGreen;
+            this.btnBatchRecipe.RectColor = System.Drawing.Color.ForestGreen;
             this.btnBatchRecipe.Size = new System.Drawing.Size(256, 28);
             this.btnBatchRecipe.Style = Sunny.UI.UIStyle.Custom;
             this.btnBatchRecipe.TabIndex = 0;

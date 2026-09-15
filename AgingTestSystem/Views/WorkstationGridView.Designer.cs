@@ -25,6 +25,7 @@ namespace AgingTestSystem.Views
                 if (_titleFont != null) _titleFont.Dispose();
                 if (_panelFont != null) _panelFont.Dispose();
                 if (_rowSelectFont != null) _rowSelectFont.Dispose();
+                if (_setButtonFont != null) _setButtonFont.Dispose();
                 // 【大扫荡】缓存画刷/画笔销毁时释放：以前只在 RebuildThemeBrushes 覆盖时放，
                 // 控件销毁时 6 个全漏（GDI 句柄泄漏，长稳运行+切主题放大）。
                 if (_brushSetButton != null) _brushSetButton.Dispose();

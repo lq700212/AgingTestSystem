@@ -507,7 +507,7 @@ namespace AgingTestSystem.Dialogs
                     Location = new Point(110, 105),
                     Size = new Size(90, 30),
                     FlatStyle = FlatStyle.Flat,
-                    BackColor = Color.LimeGreen,
+                    BackColor = Color.ForestGreen,
                     ForeColor = Color.White
                 };
                 btnOK.DialogResult = DialogResult.OK;

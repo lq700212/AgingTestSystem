@@ -208,8 +208,8 @@
             //
             // btnApply - 应用修改按钮
             //
-            this.btnApply.FillColor = System.Drawing.Color.LimeGreen;
-            this.btnApply.RectColor = System.Drawing.Color.LimeGreen;
+            this.btnApply.FillColor = System.Drawing.Color.ForestGreen;
+            this.btnApply.RectColor = System.Drawing.Color.ForestGreen;
             this.btnApply.ForeColor = System.Drawing.Color.White;
             this.btnApply.Style = Sunny.UI.UIStyle.Custom;
             this.btnApply.Font = new System.Drawing.Font("微软雅黑", 9F);

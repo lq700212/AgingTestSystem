@@ -383,8 +383,8 @@ namespace AgingTestSystem.Dialogs
             //
             // btnSave - 保存按钮（功能待确认）
             //
-            this.btnSave.FillColor = System.Drawing.Color.LimeGreen;
-            this.btnSave.RectColor = System.Drawing.Color.LimeGreen;
+            this.btnSave.FillColor = System.Drawing.Color.ForestGreen;
+            this.btnSave.RectColor = System.Drawing.Color.ForestGreen;
             this.btnSave.ForeColor = System.Drawing.Color.White;
             this.btnSave.Style = Sunny.UI.UIStyle.Custom;
             this.btnSave.Location = new System.Drawing.Point(370, 142);
@@ -396,8 +396,8 @@ namespace AgingTestSystem.Dialogs
             //
             // btnAddToQueue - 加入对列按钮（功能待确认）
             //
-            this.btnAddToQueue.FillColor = System.Drawing.Color.LimeGreen;
-            this.btnAddToQueue.RectColor = System.Drawing.Color.LimeGreen;
+            this.btnAddToQueue.FillColor = System.Drawing.Color.ForestGreen;
+            this.btnAddToQueue.RectColor = System.Drawing.Color.ForestGreen;
             this.btnAddToQueue.ForeColor = System.Drawing.Color.White;
             this.btnAddToQueue.Style = Sunny.UI.UIStyle.Custom;
             this.btnAddToQueue.Location = new System.Drawing.Point(370, 183);

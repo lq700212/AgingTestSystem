@@ -209,8 +209,9 @@ namespace AgingTestSystem.Views
     /// - 值框文字左内边距：ValueTextLeftPadding=6px（V1.52，文字不贴值框左边框，值框坐标不变）
     /// - 状态块配色见下方"状态块配色"；颜色值均可由 PanelLayout.json 覆盖
     ///
-    /// 【状态块配色（V1.28 约定；【V1.88.16】工作状态块已删，状态只看面板底色＋上电/真空块）】
-    /// - 上电/下电：绿=LimeGreen=上电，浅灰=LightGray=下电
+    /// 【状态块配色（V1.28 约定；【V1.88.16】工作状态块已删，状态只看面板底色＋上电/真空块；
+    /// 【V1.88.29】绿统一加深为 ForestGreen：白字对比度 2:1→4.6:1，与设置按钮/各窗绿按钮同色）】
+    /// - 上电/下电：绿=ForestGreen=上电，浅灰=LightGray=下电
     /// - 面板背景：空闲=白 / 测试中=浅黄 / 故障=浅粉 / 已完成·待取料=淡钢蓝（V1.59）
     /// - 真空块三色：阀开且负压到位=绿底 / 阀开但没吸住=红底（真空开，ColorVacuumAlarm）/
     ///   阀没开=灰底（真空关，浅色配置灰/深色 DimGray）
@@ -230,8 +231,13 @@ namespace AgingTestSystem.Views
         // 释放旧字体防 GDI 泄漏（Dispose 已释放两者，见 Designer）。
         /// <summary>面板正文文字字体（显式创建，不继承主窗体缩放字体，保证与小矩形匹配）</summary>
         private Font _panelFont;
-        /// <summary>设备编号标题字体（微软雅黑 9 Bold）</summary>
+        /// <summary>设备编号标题字体（【V1.88.29】缺省 12pt：左上独占行，槽位宽裕）</summary>
         private Font _titleFont;
+        /// <summary>
+        /// 设置按钮字体（【V1.88.29 新增】独立大字：按钮框 50×42，"设置"两字在正文字号下只占角落；
+        /// 字号取配置 SetButtonFontSize（缺省 12），跟 zoom 等比缩放，与 RebuildFonts 同建同释放）。
+        /// </summary>
+        private Font _setButtonFont;
         /// <summary>
         /// 行全选按钮字体（【V1.88.28 新增】竖排大字：字号 = 正文字号 × 配置倍率，
         /// 与 RebuildFonts 同建同释放；绘制时按字逐格居中，Paint 里不量字）。
@@ -380,12 +386,12 @@ namespace AgingTestSystem.Views
             // 主题色走 ApplyLightColors（SetDarkMode 切深色/切回浅色都调它，保证浅色精确还原配置值）
             _layout = PanelLayoutConfig.LoadOrDefault();
 
-            _colorPowerOn = Parse(_layout.ColorPowerOn, Color.LimeGreen);
+            _colorPowerOn = Parse(_layout.ColorPowerOn, Color.ForestGreen);
             _colorPowerOff = Parse(_layout.ColorPowerOff, Color.LightGray);
-            _colorVacuumOn = Parse(_layout.ColorVacuumOn, Color.LimeGreen);
+            _colorVacuumOn = Parse(_layout.ColorVacuumOn, Color.ForestGreen);
             _colorVacuumAlarm = Parse(_layout.ColorVacuumAlarm, Color.Red);
             _colorVacuumOff = Parse(_layout.ColorVacuumOff, Color.LightGray);
-            _colorSetButton = Parse(_layout.ColorSetButton, Color.LimeGreen);
+            _colorSetButton = Parse(_layout.ColorSetButton, Color.ForestGreen);
             ApplyLightColors();
 
             // 显式创建字体（不依赖 this.Font / 主窗体 AutoScale，保证文字尺寸与固定矩形一致）。
@@ -393,6 +399,7 @@ namespace AgingTestSystem.Views
             _panelFont = new Font(_layout.FontFamily, _layout.FontSize, FontStyle.Bold);
             _titleFont = new Font(_layout.FontFamily, _layout.TitleFontSize,
                 _layout.TitleFontBold ? FontStyle.Bold : FontStyle.Regular);
+            _setButtonFont = BuildSetButtonFont(_layout, 1f);
             _rowSelectFont = BuildRowSelectFont(_layout, _layout.FontSize);
             // 【V1.88.28】竖排逐字绘制的字符缓存：Paint 里只按下标取，不量字不拼串不分配；
             // 文案来自配置（json 可覆盖），构造时拆好，全生命周期不变。
@@ -403,7 +410,7 @@ namespace AgingTestSystem.Views
             // 【V1.57.2】初始化缓存画刷/画笔：语义色两个一次建好，主题色四个走 RebuildThemeBrushes
             // （SetDarkMode 里复用它重建，保证颜色与字段永远一致）。
             _brushSetButton = new SolidBrush(_colorSetButton);
-            _brushSelectChecked = new SolidBrush(Color.LimeGreen); // 选中✓绿（与原来 _colorWorkIdle 同值，工作状态块删了直接写死）
+            _brushSelectChecked = new SolidBrush(Color.ForestGreen); // 选中✓绿（【V1.88.29】随全仓绿统一加深，白✓对比度同步提升）
             RebuildThemeBrushes();
 
             _toolTip = new ToolTip(components);
@@ -606,13 +613,16 @@ namespace AgingTestSystem.Views
             Font oldPanel = _panelFont;
             Font oldTitle = _titleFont;
             Font oldRowSelect = _rowSelectFont;
+            Font oldSetButton = _setButtonFont;
             _panelFont = new Font(_layout.FontFamily, panelSize, FontStyle.Bold);
             _titleFont = new Font(_layout.FontFamily, titleSize,
                 _layout.TitleFontBold ? FontStyle.Bold : FontStyle.Regular);
             _rowSelectFont = BuildRowSelectFont(_layout, panelSize);
+            _setButtonFont = BuildSetButtonFont(_layout, z);
             if (oldPanel != null) oldPanel.Dispose();
             if (oldTitle != null) oldTitle.Dispose();
             if (oldRowSelect != null) oldRowSelect.Dispose();
+            if (oldSetButton != null) oldSetButton.Dispose();
             RefreshRowSelectMetrics();
         }
 
@@ -626,6 +636,22 @@ namespace AgingTestSystem.Views
         {
             float scale = layout != null && layout.RowSelectFontScale > 0 ? layout.RowSelectFontScale : 2f;
             float size = panelSize * scale;
+            if (size < MinFontSize) size = MinFontSize;
+            string family = layout != null && !string.IsNullOrEmpty(layout.FontFamily)
+                ? layout.FontFamily : "微软雅黑";
+            return new Font(family, size, FontStyle.Bold);
+        }
+
+        /// <summary>
+        /// 按 zoom 构建设置按钮字体（【V1.88.29】纯静态，可单测：字号 = 配置 SetButtonFontSize × zoom，
+        /// 下限保 <see cref="MinFontSize"/>；白字压深绿，加粗保证小屏清楚）。
+        /// </summary>
+        /// <param name="layout">布局配置（取字族与 SetButtonFontSize）</param>
+        /// <param name="zoom">窄边缩放比（与正文/标题同源，保证三套字同比例）</param>
+        public static Font BuildSetButtonFont(PanelLayoutConfig layout, float zoom)
+        {
+            float baseSize = layout != null && layout.SetButtonFontSize > 0 ? layout.SetButtonFontSize : 12f;
+            float size = baseSize * zoom;
             if (size < MinFontSize) size = MinFontSize;
             string family = layout != null && !string.IsNullOrEmpty(layout.FontFamily)
                 ? layout.FontFamily : "微软雅黑";
@@ -1227,11 +1253,12 @@ namespace AgingTestSystem.Views
             DrawLabel(g, new Point(panelLeft + ScaledX(_layout.LabelDelayTimePosition.X), panelTop + ScaledY(_layout.LabelDelayTimePosition.Y)), "延时时间");
             DrawLabel(g, new Point(panelLeft + ScaledX(_layout.LabelBurnInPosition.X), panelTop + ScaledY(_layout.LabelBurnInPosition.Y)), "烧屏时间");
 
-            // 设置按钮（绿底白字）
+            // 设置按钮（绿底白字；【V1.88.29】独立大字 _setButtonFont＋深绿底，
+            // 白字对比度 2:1→4.6:1，小屏看得清）
             Rectangle rcSet = Offset(Scaled(_layout.RcSetButton.ToRectangle()), panelLeft, panelTop);
             g.FillRectangle(_brushSetButton, rcSet);
             g.DrawRectangle(_penBorder, rcSet);
-            TextRenderer.DrawText(g, _layout.SetButtonText, _panelFont, rcSet, Color.White,
+            TextRenderer.DrawText(g, _layout.SetButtonText, _setButtonFont, rcSet, Color.White,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
 
             // 选中指示（常显：选中=绿底白✓，未选中=空心白框；无选中时框也在，操作员一眼知道点哪里选中）

@@ -234,12 +234,13 @@ namespace AgingTestSystem.Dialogs
             // 
             this._btnSave.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this._btnSave.Cursor = System.Windows.Forms.Cursors.Hand;
-            this._btnSave.FillColor = System.Drawing.Color.LimeGreen;
+            this._btnSave.FillColor = System.Drawing.Color.ForestGreen;
             this._btnSave.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this._btnSave.ForeColor = System.Drawing.Color.White;
             this._btnSave.Location = new System.Drawing.Point(534, 10);
             this._btnSave.MinimumSize = new System.Drawing.Size(1, 1);
             this._btnSave.Name = "_btnSave";
-            this._btnSave.RectColor = System.Drawing.Color.LimeGreen;
+            this._btnSave.RectColor = System.Drawing.Color.ForestGreen;
             this._btnSave.Size = new System.Drawing.Size(90, 32);
             this._btnSave.Style = Sunny.UI.UIStyle.Custom;
             this._btnSave.TabIndex = 2;
