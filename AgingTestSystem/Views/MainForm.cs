@@ -221,7 +221,10 @@ namespace AgingTestSystem.Views
             // 【V1.79】项目前缀标签定宽：Designer 里 AutoSize=false + Dock=Left（撑满高度居中），
             // 宽度这里按 PreferredWidth 收——"当前项目："五个字刚好包住，跟运行字号/DPI 走，
             // 写死像素换字号就夹字、多留又挤项目名。必须在加粗之后收（粗体比常规体宽）。
+            // 【V1.88.27】权限前缀同理定宽：与 pnlProject 同构 Panel+Dock，上下居中天然成立，
+            // 不再靠 FlowLayoutPanel+Padding.Top 硬垫（行高一变就偏，血泪）。
             lblProjectPrefix.Width = lblProjectPrefix.PreferredWidth;
+            lblPermissionPrefix.Width = lblPermissionPrefix.PreferredWidth;
 
             // 【V1.60 深色/浅色主题】读出上次保存的主题并给主窗体着色（按钮等语义色原样保留，
             // 详见 ThemeManager 类头"配色约定"）。
@@ -2691,7 +2694,11 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 顶栏状态列按内容定宽＋权限行垂直居中（【V1.88.26】执行侧，见 ComputeHeaderColumnWidths）。
+        /// 顶栏状态列按内容定宽（【V1.88.26】执行侧，见 ComputeHeaderColumnWidths；
+        /// 【V1.88.27】垂直居中不再靠代码垫：三段状态（项目/权限/通讯）统一 Panel＋Dock=Fill 全高＋
+        /// MiddleLeft，居中由 Dock 天然保证，不靠 Padding.Top 硬垫——硬垫用 RowStyle 高（30）
+        /// 算，实际容器只有 22（扣掉表头边距），多垫 2px 反而偏下，且 Flow 子标签 TopLeft
+        /// 与 MiddleLeft 混用，改一行高全散）。
         /// 口径统一走各控件 GetPreferredSize（自带 Sunny 内边距，无句柄也能跑，
         /// 所以构造期调用也安全）。调用点：MainForm_Load 末尾（行高/字体就绪，首显即对）＋
         /// UpdateProjectDisplay / UpdatePermissionDisplay / UpdateConnectionStatus
@@ -2721,19 +2728,12 @@ namespace AgingTestSystem.Views
                 styles[2].Width = w[2] + lblCommStatusLabel.Margin.Horizontal;
                 styles[3].Width = w[3] + lblCommStatus.Margin.Horizontal;
             }
-            // 权限流式面板垂直居中：两标签 Margin.Top 已在 Designer 清零，
-            // 这里按行高给 Padding.Top（9pt 小字在 30px 行里居中；以后行高再改自动跟）。
-            float rowH = tableLayoutPanelMain.RowStyles.Count > 0
-                ? tableLayoutPanelMain.RowStyles[0].Height : 30f;
-            int contentH = Math.Max(lblPermissionPrefix.PreferredHeight,
-                lblPermissionRole.PreferredHeight);
-            int padTop = Math.Max(0, ((int)rowH - contentH) / 2);
-            panelPermission.Padding = new Padding(0, padTop, 0, 0);
         }
 
         /// <summary>
         /// 更新权限显示（【V1.19.7】）
-        /// 拆为"前缀 + 角色名"两个标签（panelPermission 内 FlowLayoutPanel 水平排列）：
+        /// 拆为"前缀 + 角色名"两个标签（panelPermission 内 Panel 横排：前缀 Dock=Left＋角色名 Dock=Fill，
+        /// 【V1.88.27】与 pnlProject 同构，全高 Dock＋MiddleLeft 上下居中天然成立）：
         /// 前缀 lblPermissionPrefix 固定默认黑字；角色名 lblPermissionRole 按权限设置 ForeColor：
         /// - 管理员 → 红色（Red）
         /// - 最高权限(dev) → 红色（Red，V1.64：dev 登录后的顶栏身份，和普通管理员区分）
@@ -2772,8 +2772,8 @@ namespace AgingTestSystem.Views
         /// 顶栏显示当前项目（【V1.72.7 新增】切错项目=跑错工艺，首屏可见防呆）。
         /// 【V1.79】拆为"前缀 + 项目名"两个标签（pnlProject 内横排：lblProjectPrefix 固定"当前项目："
         /// 常规体，lblProject 只装项目名、加粗；与权限"前缀常规、值加粗"同口径）。
-        /// panelPermission 用 FlowLayoutPanel 够用（两段都 AutoSize），这里必须用普通 Panel +
-        /// 前缀 Dock=Left + 项目名 Dock=Fill——项目名要 AutoEllipsis，流式布局给不出约束宽度。
+        /// 【V1.88.27】权限区与项目区同构（普通 Panel＋前缀 Dock=Left＋值 Dock=Fill＋MiddleLeft）——
+        /// 两段都要 AutoEllipsis 约束宽度，流式布局给不出，FlowLayoutPanel 已删。
         /// 构造时设一次 + 每次热加载后刷新一次（两处调用，无需订阅事件）。
         /// 超长项目名由 lblProject.AutoEllipsis 省略号收尾不断行。
         /// 【V1.88.26】文本变了列宽即重算（LayoutHeaderColumns：短名紧凑、长名封顶 320）。

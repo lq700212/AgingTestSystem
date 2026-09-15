@@ -1707,6 +1707,12 @@ namespace AgingTestSystem.Tests
                 && mfType.GetField("btnParameter", MFF) != null
                 && mfType.GetField("btnLog", MFF) != null
                 && mfType.GetField("btnAbout", MFF) != null);
+            // 权限区与项目区同构锁（V1.88.27：panelPermission 必须是 Panel＋Dock 全高＋MiddleLeft，
+            // FlowLayoutPanel＋Padding.Top 硬垫行高一变就偏——只验字段类型，不构造 MainForm）。
+            var permField = mfType.GetField("panelPermission", MFF);
+            Check("权限区是Panel（非FlowLayoutPanel，上下居中由Dock保证）",
+                permField != null && permField.FieldType == typeof(System.Windows.Forms.Panel),
+                "实际 " + (permField == null ? "无字段" : permField.FieldType.Name));
             // 按钮字号锁（V1.88.25：顶栏4按钮12→9pt；SetFontSizePt是纯静态helper，
             // 无需MainForm实例即可单测；对齐缺省MiddleCenter、对弹窗继承由harness锁）
             var setFs = mfType.GetMethod("SetFontSizePt",
