@@ -100,8 +100,7 @@ namespace AgingTestSystem.Models
         /// 保持 8 列 × 9 行 = 72（不动列数）。
         /// 【V1.88.17】自适应（AutoFit）双向精确铺满：zoomX 按宽、zoomY 按高独立算，
         /// 72 站刚好一屏、无需拖滑块，不同工控机屏即换即铺满（见 WorkstationGridView）。
-        /// 【V1.88.22】默认改回按宽顶满大字版（FitWidth 单 zoom 等比、纵向滚动），
-        /// FillScreen 才走上面双向铺满（"关于"下拉切换，见 MainForm）。
+        /// 【V1.88.24】V1.88.22 的双模式（FitWidth 大字版＋纵向滚动）已删，只留本双向铺满一路。
         /// </summary>
         public int PanelColumns { get; set; } = 8;
 

@@ -47,14 +47,15 @@
   `BeginInvoke` 在布局彻底完成后跑校正（再 `PerformLayout`＋压横向条＋钳位置，
   释放检查防重建串扰）。验证走 harness"滚到底→加宽→减窄→再到底"
  （到底值==理论最大＋横向条无＋2 秒稳定；回归无句柄跑不了 AutoScroll，不进回归，harness 即证据）。
-  - **72 站自适应双模式，默认按宽顶满＋纵向滚动（V1.88.22；FillScreen 才双向铺满）**：`FitMode`
-  （`WorkstationFitMode` 枚举，`ComputeFitZoom` 单轴 / `ComputeFitZoomBoth` 双向两个纯函数，
-  `UpdateAutoFit` 按模式分流）：默认 `FitWidth` 单 zoom 等比（`zoomX=zoomY=可用宽/内容宽`，
-  面板不变形，字大），画布宽顶满、无横向条，高超出走纵向滚动（只上下滑动）；
-  `FillScreen` 回 V1.88.17（`zoomX`/`zoomY` 独立，画布精确等于显示区、无滚动条，但字小、
-  面板宽扁拉伸）。绘制/命中按 `ScaledX`/`ScaledY` 分流（禁单 `Scaled(int)`，宽扁拉伸下点选必错位，
-  编译器会把漏改的 int 调用全揪出来）；字体取窄边、下限 4pt（V1.88.21：1280×1024小屏跟随缩小不挤叠，见 WorkstationGridView.MinFontSize）；
-  单轴触底（`MinZoom=0.15`，显示区被挤到极小）转滚动条兜底（站一个不少）。
+   - **72 站自适应只剩双向铺满一屏（V1.88.24 删回单路；V1.88.22 双模式已删）**：
+  `ComputeFitZoom` 是唯一自适应纯函数（`zoomX=可用宽/内容宽、zoomY=可用高/内容高` 独立，
+  画布精确等于显示区、无滚动条；面板允许宽扁拉伸，字取窄边不变形）。
+  绘制/命中按 `ScaledX`/`ScaledY` 分流（禁单 `Scaled(int)`，宽扁拉伸下点选必错位，
+  编译器会把漏改的 int 调用全揪出来）；字体取窄边、下限 4pt（V1.88.21：1280×1024小屏跟随缩小不挤叠，见 WorkstationGridView.MinFontSize）、
+  正文一律加粗（V1.88.25：4~5pt 常规体发虚，加粗 A/B 黑像素 +34% 才落改）；
+  显示区再小也照算（`MinZoom` 钳制与滚动条兜底同步删除，72 站永远一屏）。
+  外层容器 `AutoScroll=false`（V1.88.15 的 MinSize/比例恢复/BeginInvoke 校正三件套已作废，
+  `UpdateCanvasSize` 只设 `Size`；以后谁再加滚动条，先读 V1.88.24 删除清单再动手）。
   面板尺寸是缩放比的杠杆：值框/按钮能省则省（148→130、60×50→50×42），省出的每像素都换成字号；
   选中框边长取缩放后较小边（恒正方形，`GetSelectBoxRect`/`GetSelectBoxLocalRect` 绘制命中同源）。
   显示区最小保护三处：`HomeLayoutConfig.LoadOrDefault` 按 Range 钳（防手改 json 越界）、
@@ -158,6 +159,10 @@
     SelectedValue/DropDownWidth，DropDownStyle 换 `UIDropDownStyle` 枚举；
     UIButton 实现 IButtonControl（AcceptButton/CancelButton 照用）；删 FormBorderStyle
     行（UIForm 自己管边框）；字体不动（动 AutoScaleDimensions 是 DPI 红线）。
+  - Sunny UILabel 缺省 `AutoSize=false`（原生 Label 缺省 true，反直觉！V1.88.24 实锤：
+    项目名 Fill 标签关着 AutoSize 只报 0 宽，AutoSize 列被压成前缀宽、名字常年看不见）。
+    AutoSize 列的填充子必须显式开 AutoSize；排查先 dump 各控件 `AutoSize` 属性值。
+    前缀类 Dock=Left 定宽标签保持关闭（只取首选高度+垂直居中，不参与列宽）。
   - 多行块编辑必须逐行核对：Edit 工具会模糊匹配吞掉间隔行（V1.71 实锤：27 行块吞掉
     3 个 `new`，构造即 NRE）。改完 Designer 必跑"声明/实例化配对"扫描 +
     harness 构造一次（NRE 当场现形）+ 截图目检。

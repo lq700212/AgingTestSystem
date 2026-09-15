@@ -3,6 +3,130 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md).
 
+## V1.88.26 — 顶栏状态字 9pt 居中＋列宽代码实测＋顶栏压到 30（2026-09-15，用户要求"左边没居中、字和按钮一样大、顶栏再矮点"）
+
+### 改动范围
+
+- **状态字 9pt＋垂直居中**（`Views/MainForm.cs`，`ApplyHeaderButtonFonts` 改名
+  `ApplyHeaderFonts`，10 个控件统一 9pt走代码不进 Designer；回归锁 `SetFontSizePt` 不变）。
+  居中靠"控件 Dock=Fill 全高＋标签 MiddleLeft＋权限流式面板按行高算 Padding.Top"，
+  不靠 Margin 硬顶（权限两标签 Margin.Top=9 改 0，顶距运行时按行高居中算）。
+- **列宽改代码实测**（新增 `ComputeHeaderColumnWidths` 纯函数＋`LayoutHeaderColumns`，
+  调用点=Load 末尾＋三个文本 setter）：V1.88.24 的 AutoSize 列翻车回退——Sunny
+  Fill 标签关着 AutoSize 只报 0 宽，整列被压成前缀宽 88、项目名直接看不见。
+  每列=六段 GetPreferredSize（自带 Sunny 内边距）＋每标签 4px 绘制余量，
+  落列时再加各自 Margin.Horizontal（第二坑：列宽忘了加单元格边距，内容又被吃 15px）。
+  项目列内容封顶 320（长名省略号，短名紧凑）；窗口 Resize 不跟（行高固定、内容宽与窗宽无关）。
+- **顶栏 36→30**（`Models/HomeLayoutConfig.cs` 默认 30、`HeaderRange` 28~100、
+  编辑器 `_nudHeader` 下限 28、Designer 第 0 行 30；用户存过的 34 照旧（用户数据优先，
+  想用 30 去"主页区域调整"拖一下或删 json）。28=按钮 22＋上下各 3 边距。
+- **回归**（`tests/TestRunner.cs`）：HomeLayout 默认/范围/回退/老文件缺省 30、
+  量程 28~100、输入钳 -5→28；列宽纯函数三锁（常规/封顶/非法钳 0）。
+
+### 为什么这么改
+
+- 对齐翻车两连坑全是"想当然"：①以为 AutoSize 列能自适应（Sunny 首选尺寸报 0）；
+  ②列宽只加了文本宽、忘了单元格 Margin（15px 说没就没）。
+  教训：凡"看起来严丝合缝"的列宽，首屏截图数像素才是证据（"烧屏测试"剩"烧…"即红灯）。
+- 字号"改了不生效"类问题先查绘制口径：本轮把 TextRenderer/PreferredWidth/
+  Sunny 绘制内边距三方对了一遍，确认生产绘制即 9pt（前缀暗部跨度 51px/6 字≈8.5px，
+  与 9pt 宋体一致；中间曾怀疑 Sunny 吃样式字，裸窗/UIForm/默认缩三探针全数证伪）。
+
+### 验证
+
+- 真窗 harness 全绿：行高 30、6 状态字 9pt、项目名 62px 可见（之前 0）、
+  四列 143/157/105/56＋spacer、短名全显、30 字长名 Panel 精确封顶 320＋省略号、
+  两张截图（短名居中齐整/长名截断不断行）。
+- 全量回归 1877 断言全绿。
+- **水印对齐**：`BuildWatermark.ReleaseLabel` V1.88.25→V1.88.26。
+
+## V1.88.25 — 顶栏按钮 9pt＋弹窗对齐＋面板字加粗（2026-09-15，用户要求"按钮字小点居中、弹窗同步、工作站再清楚点"）
+
+### 改动范围
+
+- **顶栏 4 按钮 12→9pt**（`Views/MainForm.cs` 新增 `ApplyHeaderButtonFonts`，
+  与 `ApplyHeaderBoldFonts` 同路走代码不进 Designer，4 按钮统一换不分叉）：
+  对齐不用动（Sunny 缺省即 MiddleCenter，harness 实测；字小后自然居中）。
+  下拉选项按钮自动同步（`ShowDropdownPopup` 里选项 `Font/尺寸 = hostButton`，
+  改主按钮一处、弹窗跟着走；回归锁 `SetFontSizePt` 换字号/幂等/空安全）。
+- **下拉窗宽度修复**（`ShowDropdownPopup`）：`AutoScaleMode.None`（尺寸全是运行时
+  物理像素，不跟缩；之前 12pt 时下拉窗被撑到 136 宽还夹字）＋
+  `MinimumSize=(1,1)` 破 Windows 最小跟踪宽度（min-track 136px：边框 None 的窗
+  窄于 136 会被系统钳到 136，harness 二分实锤与 TLP/按钮/主题全无关；
+  `(0,0)` 不接管照样被钳，必须 `(1,1)`）。修完选项 114×22 与主按钮逐像素一致。
+- **面板正文字体加粗**（`Views/WorkstationGridView.cs` `RebuildFonts`＋构造初值，
+  标题字体跟配置 `TitleFontBold` 不动）：一屏铺满后字号只剩 4~5pt
+  （1280×1024屏实测 4.81pt），常规体发虚。
+- **回归**（`tests/TestRunner.cs`）：HomeLayout 加分区字段锁＋`SetFontSizePt`
+  三锁；工作站挂载段加"面板正文字体加粗"锁（加粗后标签/时间串装槽由既有用例
+  同口径复核：用的是重建后的真实加粗字体）。
+
+### 为什么这么改
+
+- 弹窗 136 之谜查了三层才定案：先怀疑自动缩放（加 None，不见好）→
+  探针 dump（AutoScale=None 生效仍 136）→ 二分裸窗（裸 `Form+ClientSize`
+  照样 136，与内容全无关）→ 锁定系统 min-track。教训：尺寸对不上先二分到
+  空窗，别在业务代码里打转。
+- "糊"先证伪再动手：`DoubleBuffered` 开/关 A/B 的像素指标逐字相同
+  （coreFrac 0.679/0.680、meanEdge 160.61/160.61），离屏灰度说不成立，
+  不碰双缓冲；加粗 A/B 黑像素 +34%（9735→13026）且同屏对比明显更清楚，
+  才落改。溢出不担心：格子字本来就走省略号/截断，加粗只加笔画不盖框。
+
+### 验证
+
+- 真窗 harness：弹窗 114×66、选项 114×22＝主按钮、字号 9.0＝主按钮（之前 FAIL 项全绿）；
+  顶栏截图 9pt 四按钮居中、左右分区齐整；画布加粗前后同框对比（常规 vs 加粗两张）。
+- 全量回归 1874 断言全绿（途中一次 P3 偶发 3 红、零改动重跑即绿，判环境抖动，
+  见 skill 踩坑 48，不追改）。
+- **水印对齐**：`BuildWatermark.ReleaseLabel` V1.88.23→V1.88.25。
+
+## V1.88.24 — 删工作站滚动只留一屏铺满＋顶栏左右分区（2026-09-15，用户要求"一屏看全就行、顶栏间隙太大"）
+
+### 改动范围
+
+- **双模式开关整套删除**（`Views/WorkstationGridView.cs`）：`WorkstationFitMode`
+  枚举/`FitMode`/`_fitMode`/单轴 `ComputeFitZoom`/`MinZoom-MaxZoom` 钳制/拖拽滚动
+  （字段/定时器/捕获/换算/Tick/滚动同步/`ClampScrollToContent`/`GridView_MouseDown`）
+  全部移除；`ComputeFitZoomBoth` 改名回 `ComputeFitZoom`（唯一自适应入口）；
+  `UpdateAutoFit` 只剩双向一路（不再预扣 1px：容器 `AutoScroll=false`，
+  取整相等也挤不出滚动条）；`UpdateCanvasSize` 只设 `Size`。
+  V1.88.15 的滚动同步三件套（MinSize/比例恢复/BeginInvoke 校正）同步作废。
+- **主窗跟随**（`Views/MainForm.cs`）：外层容器 `AutoScroll=false`（横向压制行删除）、
+  装配不再设模式、"关于"下拉切换项＋`MenuHelpWorkstationFit_Click` 删除；
+  `DeviceConfig.PanelColumns` 注释同步。
+- **顶栏 8 列→9 列**（`Views/MainForm.Designer.cs`，纯 Designer 属性）：
+  状态列全改 AutoSize（项目 Panel 自适应＋`MaximumSize` 宽 320 上限、长名省略号；
+  权限流式面板开 AutoSize；通讯双标签本来就是 AutoSize）＋中间 Percent100 空
+  spacer 吃掉全部富余（状态左、按钮右）＋4 按钮仍 Absolute120（列号顺延 5~8）。
+  状态之间右 Margin=12 留"一点间距"。
+- **回归**（`tests/TestRunner.cs`）：`ComputeFitZoom` 改名跟随；删除锁
+  （枚举/`FitMode`/单轴版/`MinZoom`/`MaxZoom`/拖拽字段/`MouseDown`/`Tick`/
+  `ClampScrollToContent` 存在性即红）；挂载段改为精确铺满
+  （zoom 800/1736、600/1638，画布＝宿主±1px，MinSize 保持空，窄边字钳 4pt）；
+  HomeLayout 加左右分区字段锁。
+- **水印对齐**：`BuildWatermark.ReleaseLabel` V1.88.23→V1.88.24（随 V1.88.25 一起落）。
+
+### 为什么这么改
+
+- 用户确认一屏看全够了：FitWidth 大字版才用两天，纵向滚动在触摸屏上本就难用，
+  留单路代码少一半（画布尺寸/滚动同步/拖拽三处心智负担全消）。
+  钳制必须删：铺满要求 zoom 精确等于可用/内容，钳住即大屏留白/小屏被裁。
+- 顶栏大空隙是 Percent34/16 列撑出来的（1920 下项目列 860px、权限列 404px，
+  实测列宽 dump）；AutoSize 列＋弹性 spacer 是标准解法，项目名上限 320 防长名顶飞按钮。
+
+### 验证
+
+- 真窗 harness：9 列（AutoSize 103/188/125/61＋spacer 317＋4×120），关于按钮右贴边；
+  容器 `AutoScroll=false`、画布＝容器客户区、无滚动条；项目名短名 160 紧凑、
+  18 字长名顶 320 上限＋省略号收尾（反射置长文本＋截图双验）。
+  注：1280×1024屏上窗体会被屏幕约束到 1280×984，探针改在 Show 后重设尺寸再测。
+- 全量回归 1868 断言全绿（改名/删除净增减后）。
+- 血泪两则：①主窗布局注释改出一份重复"注意"行（Edit 新旧串边界没对齐），读文件捞回——
+  注释块替换后必读一遍相邻行。②Sunny UILabel 缺省 `AutoSize=false`（原生 Label 缺省
+  true）：Fill 的项目名只报 0 首选宽，AutoSize 列被压成前缀宽 88、名字看不见；
+  dump `GetPreferredSize`（72 vs 前缀 88）才定位， Designer 补 `AutoSize=true` 即好——
+  AutoSize 列的填充子必须显式开，排查先 dump `AutoSize` 属性值（已沉淀进 AGENTS）。
+
 ## V1.88.23 — 顶栏菜单并单行：省 34px 纵向还给工作站（2026-09-15，用户要求"按钮太占位置"）
 
 ### 改动范围

@@ -7,20 +7,15 @@ using AgingTestSystem.Models;
 namespace AgingTestSystem.Views
 {
     /// <summary>
-    /// 工作站网格自适应模式（【V1.88.22 新增】V1.88.14"按宽顶满"与 V1.88.17"双向铺满"的二选一开关）。
-    /// FitWidth = 按宽顶满（默认）：zoomX=zoomY=可用宽/内容宽，字大（1080p 下约 7.3pt），
-    /// 高度超出部分走外层纵向滚动条、只上下滑动（左右不出条）；
-    /// FillScreen = 双向精确铺满：zoomX/zoomY 独立，72 站一屏无滚动条，但字小（约 4~5pt）。
-    /// 判定逻辑只走本枚举配套的纯函数（ComputeFitZoom / ComputeFitZoomBoth，可单测），
-    /// 执行侧 <see cref="WorkstationGridView.UpdateAutoFit"/> 按模式分流（DeviceManager 不碰显示）。
+    /// 工作站网格自适应（【V1.88.22 曾新增双模式开关 → 【V1.88.24】已删除）。
+    /// 只剩一路：双向精确铺满一屏（zoomX=可用宽/内容宽、zoomY=可用高/内容高独立，
+    /// 72 站一屏无滚动条；面板允许宽扁拉伸，字取窄边不变形）。
+    /// 判定逻辑只走配套的纯函数（ComputeFitZoom，可单测），
+    /// 执行侧 <see cref="WorkstationGridView.UpdateAutoFit"/> 直接双向铺满（DeviceManager 不碰显示）。
+    /// 【V1.88.24 删除清单】WorkstationFitMode 枚举/FitWidth/FitMode/单轴 ComputeFitZoom/
+    /// MinZoom-MaxZoom 钳制/拖拽滚动（字段/定时器/捕获/滚动同步/事后校正）全部移除
+    /// （用户确认：一屏看全够了，不要上下滑动）。
     /// </summary>
-    public enum WorkstationFitMode
-    {
-        /// <summary>按宽顶满：单 zoom 等比，纵向滚动（默认，看得清；长宽比不变，布局最和谐）</summary>
-        FitWidth = 0,
-        /// <summary>双向精确铺满：一屏无滚动（字小，面板会被宽扁拉伸）</summary>
-        FillScreen = 1
-    }
 
     /// <summary>
     /// 工位网格（自绘大画布）——【V1.51 布局外部化 + 文字糊修复】
@@ -30,22 +25,22 @@ namespace AgingTestSystem.Views
     /// 子控件窗口（且每个面板内部还有多个子控件），多窗口移动彼此不同步，
     /// 拖动滚动条必然撕裂/卡顿。V1.50 改为 RecyclerView 同源的"单窗口大画布"：
     /// - 整个网格（8列×9行面板 + 行全选按钮列）合并为 **1 个自绘 UserControl**，
-    ///   尺寸 = 内容总尺寸，放入外层 Panel.AutoScroll 容器中；
-    /// - 滚动时系统只需移动 1 个窗口（内存 BitBlt 移动位图），不再逐帧移动 72 个窗口 → 无撕裂；
-    /// - 72 个面板全部由本控件 OnPaint 按坐标绘制，且只重绘可见区域（配合滚动性能）；
+    ///   尺寸 = 显示区尺寸（双向铺满一屏），放入外层 Panel 容器中；
+    /// - 单窗口自绘，无 72 控件窗口管理开销 → 无撕裂、无滚动条；
+    /// - 72 个面板全部由本控件 OnPaint 按坐标绘制，且只重绘可见区域（按 ClipRectangle 算行列范围）；
     /// - 交互（单击选中 / 设置按钮 / 选中框 / 行全选 / 悬停提示）全部用坐标命中实现。
     ///   【V1.88.14】选中框常显后长按选中整套删除：点选中框或面板空白即切换选中
-    ///   （鼠标与触摸屏同走 MouseDown/Up，无需区分）；拖动（移动超阈值）仍走拖拽滚动，
-    ///   抬起不触发选中，滑动浏览不误选。
+    ///   （鼠标与触摸屏同走 MouseUp 点选，无需区分）；
+    ///   【V1.88.24】拖拽滚动整套删除（只留一屏铺满）：按下拖动不再转滚动，
+    ///   抬起一律按点击处理（点框/空白翻选、点设置区开窗）。
     ///
     /// 【V1.57.2 性能优化（含回退）】
     /// 先尝试"离屏画布缓存：整幅 RenderToCanvas + OnPaint DrawImage 拷贝"，实测离屏大图
     /// （2040×2025）上 TextRenderer 每处约 2.2ms，全量 72 面板高达 2247ms，且 UpdateAll
     /// 每秒全量渲染、选中翻转也全量 → 整个 UI 卡死。故回退为旧版"OnPaint 只重绘可见区"，
-    /// 保留两项仍然有效的优化：
-    /// - 16ms 拖拽滚动合并定时器（_dragScrollTimer）：鼠标回报率 ≫ 屏幕刷新率，
-    ///   高频 MouseMove 只记录目标位置，定时器统一应用 AutoScrollPosition，减少布局/重绘堆积；
+    /// 保留仍然有效的优化：
     /// - 画刷/画笔缓存字段（_penBorder/_brushValueBox 等）：绘制热路径不再每帧 new GDI 对象。
+    /// 【V1.88.24】16ms 拖拽滚动合并定时器（_dragScrollTimer）随拖拽滚动整套删除。
     /// 实测屏幕 DC 上 TextRenderer 近 0ms，直接绘制可见区流畅无卡顿。
     ///
     /// 【V1.51 修复：文字"糊成一坨"】
@@ -96,7 +91,7 @@ namespace AgingTestSystem.Views
     /// （见上方 V1.51 踩坑），必须手动把每个坐标乘缩放因子。
     ///
     /// 【界面布局】
-    /// 一、整体结构（外层 Panel.AutoScroll 滚动容器 + 本控件 = 画布）
+    /// 一、整体结构（外层 Panel 容器 + 本控件 = 画布，无滚动条）
     /// ┌───────────────────────────────────────────┬──────────┐
     /// │             画布（本控件 OnPaint）         │ 行全选列 │
     /// │ ┌──────┬──────┬──────┬──────┬──────┬───  │ ├──────────┤
@@ -113,16 +108,14 @@ namespace AgingTestSystem.Views
     /// 【V1.58.8】行全选按钮高 = 面板内容高-1(=169)，含边框后上下边缘与工作站显示框(170)完全对齐；
     /// 按钮矩形 = (列右缘+2, 行顶+2, 列宽-4, PanelInnerHeight-1)；-1 修正边框底凸出1px
     /// 网格占满全部 72 台设备。
-    /// 【V1.88.22 自适应双模式】默认 AutoFit=true + FitMode=FitWidth（按宽顶满）：
-    /// zoomX=zoomY=显示区可用宽/内容宽（等比，面板不变形），画布宽恒顶满、无横向条，
-    /// 高超出部分走纵向滚动条（只上下滑动；1080p 下字约 7.3pt，看得清）。
-    /// 切到 FillScreen 回 V1.88.17 双向精确铺满：zoomX/zoomY 独立，画布精确等于显示区客户区，
-    /// 纵向横向滚动条都不出（但字约 4~5pt）。窗口拉大/缩小/最大化跟随缩放；
+    /// 【V1.88.24 单一铺满】AutoFit=true 即双向精确铺满一屏（FitWidth/FitMode 双模式开关已删，
+    /// 只留这一路）：zoomX=可用宽/内容宽、zoomY=可用高/内容高独立，画布精确等于显示区客户区，
+    /// 纵向横向滚动条都不出（面板允许宽扁拉伸，字取窄边不变形）。窗口拉大/缩小/最大化跟随缩放；
     /// 字体取窄边等比缩放、下限见 MinFontSize（【V1.88.21】6pt→4pt，
     /// 1280×1024小屏跟随缩小不挤叠）；列数保持 8×9 不动。
-    /// 单轴触底（MinZoom=0.15，显示区被挤到极小）时才出滚动条兜底。
-    /// 关掉 AutoFit 回原尺寸（滚动条按内容出现）。
-    /// 实现见 ComputeFitZoom/ComputeFitZoomBoth/UpdateAutoFit/RebuildFonts/UpdateCanvasSize
+    /// 显示区被挤到极小时 zoom 照算（不再钳 MinZoom，也不转滚动条兜底）：72 站永远一屏看全，
+    /// 字保 MinFontSize 可读。关掉 AutoFit 回原尺寸（超出部分直接裁掉、无滚动条）。
+    /// 实现见 ComputeFitZoom/UpdateAutoFit/RebuildFonts/UpdateCanvasSize
     /// （zoomX/zoomY 并进 ScaledX/ScaledY）。
     ///
     /// 二、单个面板内容（【V1.88.17】204×170，坐标均为"相对面板左上角"；
@@ -279,17 +272,14 @@ namespace AgingTestSystem.Views
         private float _dpiScale = 1f;
 
         /// <summary>
-        /// 自适应缩放因子（【V1.88.14 新增按宽顶满，【V1.88.17】改为双向精确铺满，
-        /// 【V1.88.22】改回默认按宽顶满、FillScreen 才双向：见 FitMode）。
-        /// FitWidth（默认）："字看得清、左右不出条"：zoomX=zoomY=显示区可用宽/内容宽，
-        /// 画布宽精确等于显示区客户区（±1px 取整），无横向条、高超出走纵向滚动；
-        /// FillScreen：zoomX=可用宽/内容宽、zoomY=可用高/内容高独立，画布精确等于显示区，
-        /// 纵向横向滚动条都不出。
-        /// zoom 并进布局基准（最终比例 sx = _dpiScale × _zoomX、sy = _dpiScale × _zoomY，
-        /// 绘制/命中/画布尺寸全走 ScaledX/ScaledY，不碰 Graphics 变换矩阵——
-        /// 与 V1.55 DPI 同路、V1.82 画布缩放同口径）；
-        /// 字体按 min(zoomX, zoomY) 等比缩放重建（pt 单位，下限见 MinFontSize，见 RebuildFonts，
-        /// 字不变形，窄边决定字号）。
+        /// 自适应缩放因子（【V1.88.14 新增按宽顶满 → 【V1.88.17】双向铺满 →
+        /// 【V1.88.22】双模式 → 【V1.88.24】删回单路铺满：只有双向独立这一路）。
+        /// zoomX=可用宽/内容宽、zoomY=可用高/内容高，画布精确等于显示区客户区，
+        /// 纵向横向滚动条都不出。zoom 并进布局基准（最终比例 sx = _dpiScale × _zoomX、
+        /// sy = _dpiScale × _zoomY，绘制/命中/画布尺寸全走 ScaledX/ScaledY，
+        /// 不碰 Graphics 变换矩阵——与 V1.55 DPI 同路、V1.82 画布缩放同口径）；
+        /// 字体按 min(zoomX, zoomY) 等比缩放重建（pt 单位，下限见 MinFontSize，
+        /// 见 RebuildFonts，字不变形，窄边决定字号）。
         /// 【V1.88.17】面板同步紧凑到 204×170（见 PanelLayoutConfig），内容高 2025→1638，
         /// 1080p 下 zoomY 由 0.44 升到约 0.55，6pt 字在 18 高值框内放得下。
         /// 【V1.88.21】1280×1024下zoomY≈0.45，旧6pt下限把字卡大1.5倍致标签挤叠，
@@ -297,20 +287,12 @@ namespace AgingTestSystem.Views
         /// </summary>
         private float _zoomX = 1f;
 
-        /// <summary>纵向自适应缩放因子（FitWidth 下恒等于 _zoomX；FillScreen 下独立，面板允许宽扁拉伸）</summary>
+        /// <summary>纵向自适应缩放因子（与 _zoomX 独立，面板允许宽扁拉伸，字取窄边）</summary>
         private float _zoomY = 1f;
 
-        /// <summary>
-        /// 单轴缩放下限（【V1.88.17 新增】工作站显示区最小保护）。
-        /// 正常窗口下 zoomX/zoomY 约 0.3~1.0，远高于本下限；只有显示区被挤到极小
-        /// （如"主页区域调整"把右侧拉满、或窗口缩到最小）时才触底——触底后画布大于显示区，
-        /// 外层 AutoScroll 出滚动条兜底（能滑到、 total 72 站一个不少），而不是把站压成像素点。
-        /// 上限 4 不变（防窗口拉超大后字涨没边）。
-        /// </summary>
-        public const float MinZoom = 0.15f;
-
-        /// <summary>单轴缩放上限（防窗口拉超大后字涨没边，与 V1.88.14 同值）</summary>
-        public const float MaxZoom = 4f;
+        // 【V1.88.24】MinZoom/MaxZoom 钳制已删：铺满要求 zoom 精确等于可用/内容，
+        // 钳住即铺不满（大屏留白边/小屏被裁）；显示区再小也照算，72 站永远一屏，
+        // 字保 MinFontSize 可读（不再转滚动条兜底，滚动条已整套移除）。
 
         /// <summary>
         /// 自适应字号下限（【V1.88.21 1280×1024小屏适配】6pt→4pt）。
@@ -329,8 +311,8 @@ namespace AgingTestSystem.Views
         public const float MinFontSize = 4f;
 
         /// <summary>
-        /// 是否自适应父容器（默认 true = 按 FitMode 自动缩放：默认按宽顶满、纵向滚动）。
-        /// 关掉回 zoom=1 原尺寸（滚动条按内容出现）。结构型开关，运行时可随时翻。
+        /// 是否自适应父容器（默认 true = 双向铺满一屏，无滚动条）。
+        /// 关掉回 zoom=1 原尺寸（超出部分直接裁掉、无滚动条）。结构型开关，运行时可随时翻。
         /// </summary>
         private bool _autoFit = true;
 
@@ -359,38 +341,18 @@ namespace AgingTestSystem.Views
         /// <summary>选中指示框"未选中"底色画刷（跟随主题重建：浅色白 / 深色深灰）</summary>
         private SolidBrush _brushSelectUnchecked;
 
-        // ============ 拖拽滚动（V1.57：按住左键拖动滑动列表） ============
-        /// <summary>拖拽起始点（鼠标屏幕坐标）；左键按下时记录</summary>
-        private Point _dragStartPoint;
-        /// <summary>拖拽起始时外层滚动容器的滚动位置（AutoScrollPosition，注意其 X/Y 为负值表示内容偏移）</summary>
-        private Point _dragStartScroll;
-        /// <summary>是否已进入"拖拽滚动"状态（移动超过阈值后置 true，置 true 后本次按键不再触发点击/长按）</summary>
-        private bool _isDragging;
-        /// <summary>拖拽滚动时使用的鼠标捕获标志：按住左键期间持续接收 MouseMove，防止拖出控件范围就停止滚动</summary>
-        private bool _captured;
-        /// <summary>
-        /// 【V1.57.2】拖拽滚动的"合并定时器"：把高频 MouseMove 换算出的目标滚动位置
-        /// 每 16ms 应用一次，而不是每次 MouseMove 都 set。鼠标回报率（常见 125Hz~1000Hz）
-        /// 远高于屏幕刷新率（60Hz），若每次移动都直接 set AutoScrollPosition，会触发
-        /// 大量布局 + 滚动条更新 + 重绘堆积，UI 线程被拖垮表现为拖动卡顿。
-        /// 只保留"最新目标位置"，帧率内合并，手感和直接滚动一致但开销大降。
-        /// </summary>
-        private readonly System.Windows.Forms.Timer _dragScrollTimer;
-        /// <summary>拖拽期间最新一次计算出的目标滚动位置（由 _dragScrollTimer 统一应用）</summary>
-        private Point _dragTargetScroll;
+        // ============ 拖拽滚动（V1.57~V1.88.23，已删） ============
+        // 【V1.88.24】整套删除：_dragStartPoint/_dragStartScroll/_isDragging/_captured/
+        // _dragScrollTimer/_dragTargetScroll/DragScrollThreshold + GridView_MouseDown 捕获/
+        // MouseMove 换算/DragScrollTimer_Tick/UpdateCanvasSize 滚动同步/ClampScrollToContent。
+        // 只留一屏铺满后无滚动可拖：按下拖动不再转滚动，抬起一律按点击处理。
 
         /// <summary>工位"设置"按钮点击事件（参数为设备编号，主窗体按被点编号直开该工位设置窗口，不看选中集）</summary>
         public event EventHandler<int> OnSetClicked;
         /// <summary>需要写日志的消息（如行全选动作），由主窗体订阅写入 LOG</summary>
         public event EventHandler<string> OnLog;
 
-        /// <summary>
-        /// 进入"拖拽滚动"的移动阈值（像素）。
-        /// 【V1.88.14】长按选中已删除，阈值保留给"点击 vs 拖动"防抖：
-        /// 触摸屏手指/鼠标按下难免轻微抖动，移动 ≤10px 仍算点击（抬起切换选中），
-        /// 只有明显拖动（&gt;10px）才进入滚动，滑动浏览不误选。
-        /// </summary>
-        private const int DragScrollThreshold = 10;
+        // （DragScrollThreshold 随拖拽滚动整套删除，见上。）
 
         /// <summary>
         /// 无参数构造函数（设计器/运行时通用）
@@ -412,8 +374,9 @@ namespace AgingTestSystem.Views
             _colorSetButton = Parse(_layout.ColorSetButton, Color.LimeGreen);
             ApplyLightColors();
 
-            // 显式创建字体（不依赖 this.Font / 主窗体 AutoScale，保证文字尺寸与固定矩形一致）
-            _panelFont = new Font(_layout.FontFamily, _layout.FontSize, FontStyle.Regular);
+            // 显式创建字体（不依赖 this.Font / 主窗体 AutoScale，保证文字尺寸与固定矩形一致）。
+            // 【V1.88.25】正文字体直接加粗（与 RebuildFonts 同值，首帧不闪常规体，挂载后即重建覆盖）。
+            _panelFont = new Font(_layout.FontFamily, _layout.FontSize, FontStyle.Bold);
             _titleFont = new Font(_layout.FontFamily, _layout.TitleFontSize,
                 _layout.TitleFontBold ? FontStyle.Bold : FontStyle.Regular);
 
@@ -425,13 +388,9 @@ namespace AgingTestSystem.Views
 
             _toolTip = new ToolTip(components);
 
-            // 【V1.57.2】拖拽滚动合并定时器：16ms ≈ 60FPS，把高频 MouseMove 的滚动更新合并到刷新率。
-            // 应用一次后立即 Stop，等下一次 MouseMove 再启动，避免无谓空转。
-            _dragScrollTimer = new System.Windows.Forms.Timer(components);
-            _dragScrollTimer.Interval = 16;
-            _dragScrollTimer.Tick += DragScrollTimer_Tick;
+            // 【V1.88.24】拖拽滚动合并定时器随滚动整套删除；MouseDown 空 handler 同步摘除
+            // （点击只看 MouseUp：单击/触摸点选，拖动不再转滚动）。
 
-            this.MouseDown += GridView_MouseDown;
             this.MouseUp += GridView_MouseUp;
             this.MouseMove += GridView_MouseMove;
             this.MouseLeave += GridView_MouseLeave;
@@ -490,14 +449,16 @@ namespace AgingTestSystem.Views
         #region 自适应缩放（V1.88.14 新增：72 站一屏显示全）
 
         /// <summary>
-        /// 按可用区与内容区算双向自适应缩放比（【V1.88.17 新增】纯函数，回归可直接断言）。
+        /// 按可用区与内容区算双向自适应缩放比（【V1.88.17 新增】纯函数，回归可直接断言；
+        /// 【V1.88.24】单/双模式二合一后唯一自适应入口，原名 ComputeFitZoomBoth 改名至此，
+        /// 单轴版 ComputeFitZoom（V1.88.22）与 FitMode 开关同步删除）。
         ///
         /// 【语义】精确铺满一屏：zoomX = 可用宽/内容宽，zoomY = 可用高/内容高，
         /// 两轴独立（面板允许宽扁拉伸，字号取窄边，见字段注释）；画布精确等于显示区，
         /// 纵向横向滚动条都不出（不同工控机屏即换即铺满）。
         /// 任一边非法（≤0）时两轴都回 1（原尺寸，不摆烂半边）。
-        /// 钳制由调用方 <see cref="UpdateAutoFit"/> 按 <see cref="MinZoom"/>/
-        /// <see cref="MaxZoom"/> 做（触底转滚动条兜底），本函数只做除法、不断言范围。
+        /// 本函数只做除法、不断言范围：铺满要求精确值，不做钳制
+        /// （【V1.88.24】MinZoom/MaxZoom 已删，滚动条兜底同步移除）。
         /// </summary>
         /// <param name="availWidth">可用宽（物理像素）</param>
         /// <param name="availHeight">可用高（物理像素）</param>
@@ -505,7 +466,7 @@ namespace AgingTestSystem.Views
         /// <param name="contentHeight">内容高（物理像素）</param>
         /// <param name="zoomX">横向缩放比</param>
         /// <param name="zoomY">纵向缩放比</param>
-        public static void ComputeFitZoomBoth(double availWidth, double availHeight,
+        public static void ComputeFitZoom(double availWidth, double availHeight,
             double contentWidth, double contentHeight, out double zoomX, out double zoomY)
         {
             if (availWidth <= 0 || availHeight <= 0 || contentWidth <= 0 || contentHeight <= 0)
@@ -519,8 +480,8 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 是否自适应父容器（默认 true = 按 <see cref="FitMode"/> 自动缩放）。
-        /// 关掉回 zoom=1 原尺寸（滚动条按内容出现）；打开立即按当前父尺寸重算。
+        /// 是否自适应父容器（默认 true = 双向铺满一屏，无滚动条）。
+        /// 关掉回 zoom=1 原尺寸（超出部分直接裁掉、无滚动条）；打开立即按当前父尺寸重算。
         /// </summary>
         public bool AutoFit
         {
@@ -544,46 +505,8 @@ namespace AgingTestSystem.Views
             }
         }
 
-        /// <summary>
-        /// 自适应模式（【V1.88.22 新增】默认 FitWidth = 按宽顶满、只上下滑动，看得清）。
-        /// FitWidth 下 zoomX 与 zoomY 恒相等（等比，面板不变形）；
-        /// FillScreen 下两轴独立（V1.88.17 原行为，面板允许宽扁拉伸）。
-        /// 切换后立即按当前父尺寸重算（字体+画布+重绘），运行时可随时翻。
-        /// </summary>
-        public WorkstationFitMode FitMode
-        {
-            get { return _fitMode; }
-            set
-            {
-                if (_fitMode == value) return;
-                _fitMode = value;
-                UpdateAutoFit();
-            }
-        }
-
-        /// <summary>当前自适应模式（默认按宽顶满；主窗体装配时显式再设一次，意图落字）</summary>
-        private WorkstationFitMode _fitMode = WorkstationFitMode.FitWidth;
-
-        /// <summary>
-        /// 按可用宽与内容宽算单轴自适应缩放比（【V1.88.22 从 V1.88.14 原样捞回】纯函数，回归可直接断言）。
-        ///
-        /// 【语义】按宽顶满：zoom = 可用宽/内容宽，站尽可能大、无右侧空白；
-        /// 高度超出部分由外层 AutoScroll 容器出纵向滚动条、上下滑动看（左右不出条）。
-        /// 任一边非法（≤0）回 1（原尺寸，不摆烂）。
-        /// 钳制由调用方 <see cref="UpdateAutoFit"/> 按 <see cref="MinZoom"/>/
-        /// <see cref="MaxZoom"/> 做（触底转滚动条兜底），本函数只做除法、不断言范围。
-        /// </summary>
-        /// <param name="availWidth">可用宽（物理像素）</param>
-        /// <param name="contentWidth">内容宽（物理像素）</param>
-        /// <returns>缩放比；任一边非法（≤0）回 1（原尺寸）</returns>
-        public static double ComputeFitZoom(double availWidth, double contentWidth)
-        {
-            if (availWidth <= 0 || contentWidth <= 0)
-            {
-                return 1.0;
-            }
-            return availWidth / contentWidth;
-        }
+        // 【V1.88.24】FitMode 属性/_fitMode 字段/单轴 ComputeFitZoom(availW, contentW)
+        // 随双模式开关整套删除（只留双向铺满一路，见 ComputeFitZoom 四参版）。
 
         /// <summary>
         /// 父容器换了（MainForm 装配时挂上 scrollContainer）：
@@ -616,45 +539,24 @@ namespace AgingTestSystem.Views
         /// <summary>
         /// 按父容器当前可用区重算 _zoomX/_zoomY 并应用（字体+画布+重绘）。
         /// 不满足任一条件直接返回（保持当前 zoom）：AutoFit 关/未 Configure/无父容器/
-        /// 父容器尚未布局（FitWidth 只看宽、FillScreen 宽或高为 0）/新值与当前差都 &lt;0.001（防抖，
+        /// 父容器尚未布局（宽或高为 0）/新值与当前差都 &lt;0.001（防抖，
         /// Splitter 拖动连续 Resize 不反复重建字体）。
-        /// 【V1.88.22】按 <see cref="FitMode"/> 分流：
-        /// FitWidth（默认）只按宽算单 zoom（_zoomX=_zoomY），画布宽恒顶满（无横向条），
-        /// 高超出部分走纵向滚动条（只上下滑动）；FillScreen 走 V1.88.17 双向独立。
-        /// 两轴各钳制 [MinZoom, MaxZoom]：触底（显示区被挤到极小）时画布大于显示区，
-        /// 外层 AutoScroll 出滚动条兜底（72 站一个不少，只滑不丢），而不是压成像素点；
-        /// 上限防窗口拉超大后字涨没边。FillScreen 正常窗口下不触界，精确铺满、无滚动条。
+        /// 【V1.88.24】只剩双向铺满一路（FitWidth 分支/钳制/滚动兜底全删）：
+        /// zoomX=可用宽/内容宽、zoomY=可用高/内容高独立，画布精确等于显示区客户区，
+        /// 纵向横向滚动条都不出；显示区再小也照算（72 站永远一屏，字保 MinFontSize）。
+        /// 无预扣 1px：外层容器 AutoScroll=false，取整相等也不会挤出滚动条，直接精确顶满。
         /// </summary>
         private void UpdateAutoFit()
         {
             if (!_autoFit || _columns <= 0 || Parent == null) return;
-            // 预扣 1px：Size 取整后与 ClientSize 相等仍可能挤出滚动条（宽高各扣）。
-            int availW = Parent.ClientSize.Width - 1;
-            if (availW <= 0) return;
+            int availW = Parent.ClientSize.Width;
+            int availH = Parent.ClientSize.Height;
+            if (availW <= 0 || availH <= 0) return;
             double contentW = (double)(_columns * _layout.PanelColumnWidth
                 + _layout.RowSelectButtonColumnWidth) * _dpiScale;
+            double contentH = (double)(_rows * _layout.GetEffectiveRowHeight()) * _dpiScale;
             double zx, zy;
-            if (_fitMode == WorkstationFitMode.FitWidth)
-            {
-                // 【V1.88.22】按宽顶满（V1.88.14 原路）：单 zoom 等比，纵横同值、面板不变形；
-                // 高不管，超出部分走外层纵向滚动条（只上下滑动）。
-                double z = ComputeFitZoom(availW, contentW);
-                if (z < MinZoom) z = MinZoom;
-                if (z > MaxZoom) z = MaxZoom;
-                zx = z;
-                zy = z;
-            }
-            else
-            {
-                int availH = Parent.ClientSize.Height - 1;
-                if (availH <= 0) return;
-                double contentH = (double)(_rows * _layout.GetEffectiveRowHeight()) * _dpiScale;
-                ComputeFitZoomBoth(availW, availH, contentW, contentH, out zx, out zy);
-                if (zx < MinZoom) zx = MinZoom;
-                if (zx > MaxZoom) zx = MaxZoom;
-                if (zy < MinZoom) zy = MinZoom;
-                if (zy > MaxZoom) zy = MaxZoom;
-            }
+            ComputeFitZoom(availW, availH, contentW, contentH, out zx, out zy);
             if (Math.Abs(zx - _zoomX) < 0.001 && Math.Abs(zy - _zoomY) < 0.001) return;
             _zoomX = (float)zx;
             _zoomY = (float)zy;
@@ -669,6 +571,10 @@ namespace AgingTestSystem.Views
         /// 双向拉伸下面板允许宽扁，但字不变形、取窄边；【V1.88.21】小屏下字体跟随缩小
         /// 保证不溢出（旧6pt下限在1280×1024下把字卡大1.5倍致标签挤叠，见 MinFontSize 注释），
         /// 格子里的字走 EndEllipsis/居中截断不断行。
+        /// 【V1.88.25】正文字体一律加粗：一屏铺满后字号只剩 4~5pt（1280×1024屏实测 4.81pt，
+        /// 笔画 1px，常规体发虚；harness A/B：常规→加粗，黑像素 +34%、同屏对比明显更清楚，
+        /// 且加粗只加笔画不断行（溢出仍走省略号，不盖框）。标题字体跟配置 TitleFontBold
+        /// （缺省 true，本来就粗），不动。
         /// </summary>
         private void RebuildFonts()
         {
@@ -679,7 +585,7 @@ namespace AgingTestSystem.Views
             if (titleSize < MinFontSize) titleSize = MinFontSize;
             Font oldPanel = _panelFont;
             Font oldTitle = _titleFont;
-            _panelFont = new Font(_layout.FontFamily, panelSize, FontStyle.Regular);
+            _panelFont = new Font(_layout.FontFamily, panelSize, FontStyle.Bold);
             _titleFont = new Font(_layout.FontFamily, titleSize,
                 _layout.TitleFontBold ? FontStyle.Bold : FontStyle.Regular);
             if (oldPanel != null) oldPanel.Dispose();
@@ -689,107 +595,15 @@ namespace AgingTestSystem.Views
         /// <summary>
         /// 按当前列/行/布局重算画布总尺寸（Configure/UpdateDpiScale/ShowCurrentRow/
         /// UpdateAutoFit 四处共用，改尺寸只改这里一处）。
-        /// 外层 Panel.AutoScroll 按此尺寸出滚动条；
-        /// 【V1.88.17】FillScreen 下画布精确等于显示区（zoomX/zoomY 即按可用区算出，
-        /// 取整 ±1px），纵向横向滚动条都不出；
-        /// 【V1.88.22】默认 FitWidth 下画布宽恒顶满（无横向条）、高按单 zoom 等比超出，
-        /// 纵向滚动条看下半屏（只上下滑动）；
-        /// 只有 zoom 触底（显示区被挤到极小）时画布才大于显示区、滚动条兜底。
-        ///
-        /// 【V1.88.15】Size 变化前后保持滚动比例：WinForms 在内容变小时
-        /// 不自动把 AutoScrollPosition 钳到新范围，旧值超新范围会卡住——
-        /// 滑块拉到底也到不了内容底（harness 实锤：减窄后 posY=1082，新最大才 762）。
-        /// 所以先记旧比例，设完 Size 按比例恢复并钳制到新范围。
-        /// 横向不管（横向条已禁，X 保持原值）。
+        /// 【V1.88.24】画布恒等于显示区（zoom 即按可用区算出，取整 ±1px），
+        /// 外层容器 AutoScroll=false，纵向横向滚动条都不出；
+        /// V1.88.15 的滚动同步（MinSize/比例恢复/BeginInvoke 校正/ClampScrollToContent）
+        /// 随滚动整套删除（无滚动可同步，设 Size 即完事）。
         /// </summary>
         private void UpdateCanvasSize()
         {
-            float ratio = 0f;
-            int oldPosX = 0;
-            ScrollableControl sp = Parent as ScrollableControl;
-            if (sp != null && _columns > 0 && this.Height > 0)
-            {
-                int oldMax = Math.Max(0, this.Height - sp.ClientSize.Height);
-                oldPosX = -sp.AutoScrollPosition.X;
-                if (oldMax > 0)
-                {
-                    ratio = (float)(-sp.AutoScrollPosition.Y) / oldMax;
-                }
-            }
-
             this.Size = new Size(ScaledX(_columns * _layout.PanelColumnWidth + _layout.RowSelectButtonColumnWidth),
                                  ScaledY(_rows * _layout.GetEffectiveRowHeight()));
-
-            if (sp != null && _columns > 0)
-            {
-                // 【V1.88.15】显式同步滚动范围：只改 Size 指望布局引擎重算 DisplayRectangle
-                // 在内容剧变（拖 Splitter 改宽）时会卡在旧值（harness 实锤：vMax 纹丝不动、
-                // 横向条误判、Value 超范围，2 秒不收敛是稳定脏态不是时序慢）。
-                // AutoScrollMinSize 是值语义：DisplayRectangle 取 max(MinSize, 子控件范围)，
-                // MinSize 恒等于画布 Size 后，滚动范围只认新 Size，不再看子控件布局时序。
-                // 副作用是没有：MinSize 与 Size 恒一致，内容小时不会多出滚动条；
-                // 横向 MinSize.Width=客户宽-1，布局永不判需横向条（hVis 问题同解）。
-                // （MinSize 留在父容器上：容器随 Panel1 重建释放，无残留；AutoFit 关时
-                // UpdateCanvasSize 照样跑，MinSize 跟回原尺寸。）
-                try { sp.AutoScrollMinSize = this.Size; } catch { /* 忽略 */ }
-                // 【V1.88.15】先同步布局再设位置：Size 刚设完时滚动条 Maximum 还是旧的，
-                // 此时设 AutoScrollPosition 会按旧 Maximum 钳制（harness 实锤：减窄后到底=旧最大 1082）。
-                // PerformLayout 同步跑完布局（Maximum 按新 Size 更新），再设位置才钳得准。
-                try { sp.PerformLayout(); } catch { /* 布局异常不阻断显示 */ }
-                int newMax = Math.Max(0, this.Height - sp.ClientSize.Height);
-                int newPos = (int)Math.Round(ratio * newMax);
-                if (newPos < 0) newPos = 0;
-                if (newPos > newMax) newPos = newMax;
-                if (newPos != -sp.AutoScrollPosition.Y || oldPosX != -sp.AutoScrollPosition.X)
-                {
-                    sp.AutoScrollPosition = new Point(oldPosX, newPos);
-                }
-
-                // 【V1.88.15】再排一次事后校正：布局引擎在 Layout 事件之后还会碰滚动条
-                //（横向 Visible 压不住、Maximum 更新滞后都已实锤），同步态看到的可能是旧值；
-                // BeginInvoke 排到消息队列尾、布局彻底完成后跑，看到最终态再钳一次。
-                // 回调只动网格自家容器，不碰别处。
-                ScrollableControl sp2 = sp;
-                try
-                {
-                    if (sp2.IsHandleCreated && !sp2.IsDisposed && !this.IsDisposed)
-                    {
-                        sp2.BeginInvoke(new Action(() => ClampScrollToContent(sp2)));
-                    }
-                }
-                catch { /* 句柄未就绪不校正，下次 Resize 再算 */ }
-            }
-        }
-
-        /// <summary>
-        /// 布局完成最终态的滚动校正（【V1.88.15】BeginInvoke 回调，见 UpdateCanvasSize）。
-        /// 三件事：①先同步跑一次布局（Resize 事件里调 PerformLayout 会撞上布局挂起被静默忽略，
-        /// harness 实锤自动布局没跑；异步回调里挂起已解除，必跑，DisplayRectangle/Maximum 才更新）；
-        /// ②压住横向条（最终内容不超宽，横向条不需要，布局事后误设的直接压掉）；
-        /// ③把纵向位置钳到最终范围（同步态按旧 Maximum 设的值可能超限，harness 实锤 posY=1082>762）。
-        /// 释放检查：容器/本控件任一已释放直接返回（H5 重建时旧容器回调不碰新界面）。
-        /// </summary>
-        private void ClampScrollToContent(ScrollableControl sp)
-        {
-            try
-            {
-                if (sp == null || sp.IsDisposed || this.IsDisposed || _columns <= 0) return;
-                try { sp.PerformLayout(); } catch { /* 布局异常不阻断校正 */ }
-                if (sp.HorizontalScroll.Visible)
-                {
-                    sp.HorizontalScroll.Visible = false;
-                }
-                int newMax = Math.Max(0, this.Height - sp.ClientSize.Height);
-                int pos = -sp.AutoScrollPosition.Y;
-                int newPos = pos;
-                if (newPos < 0) newPos = 0;
-                if (newPos > newMax) newPos = newMax;
-                if (newPos != pos)
-                {
-                    sp.AutoScrollPosition = new Point(-sp.AutoScrollPosition.X, newPos);
-                }
-            }
-            catch { /* 校正永不抛，静默即可 */ }
         }
 
         #endregion
@@ -951,7 +765,7 @@ namespace AgingTestSystem.Views
         #endregion
 
         /// <summary>
-        /// 按配置创建工位网格并设置画布总尺寸（外层 Panel.AutoScroll 据此出现滚动条）
+        /// 按配置创建工位网格并设置画布总尺寸（恒等于显示区，一屏铺满无滚动条）
         /// </summary>
         public void Configure(int columns, int rows, int totalDevices)
         {
@@ -1207,8 +1021,8 @@ namespace AgingTestSystem.Views
         /// 而 UpdateAll 每秒触发全量渲染、选中翻转也触发，UI 线程被拖死 →"整个软件都卡"。
         /// 旧版直接绘制到屏幕 DC（TextRenderer 实测近 0ms），只重绘可见区域，反而流畅。
         /// 【本版策略】回到旧版"OnPaint 只重绘可见列/行范围的面板"，仅保留 V1.57.2 中仍然有效的
-        /// 两项优化：①16ms 拖拽滚动合并定时器（_dragScrollTimer，避免高频 MouseMove 反复 set）；
-        /// ②画刷/画笔缓存字段（_penBorder/_brushValueBox 等，减少每帧 new GDI 对象）。
+        /// 画刷/画笔缓存字段（_penBorder/_brushValueBox 等，减少每帧 new GDI 对象）。
+        /// 【V1.88.24】16ms 拖拽滚动合并定时器随滚动整套删除（一屏铺满后无滚动可合并）。
         /// 全部使用绝对坐标绘制：每个面板元素的最终坐标 = 面板左上角 + 设计坐标，
         /// 不再使用 TranslateTransform（避免 TextRenderer 的 GDI 绘制与坐标变换错乱导致文字模糊）。
         /// </summary>
@@ -1410,28 +1224,7 @@ namespace AgingTestSystem.Views
 
         #region 坐标命中与交互
 
-        /// <summary>
-        /// 鼠标按下（左键）：记录拖拽起点并捕获鼠标。
-        /// 【V1.88.14】长按选中已删除：按下只记拖拽起点，不启动任何计时；
-        /// 选中切换统一在 MouseUp 做（单击/触摸点选），拖动超阈值则转滚动、抬起不选中。
-        /// </summary>
-        private void GridView_MouseDown(object sender, MouseEventArgs e)
-        {
-            if (e.Button != MouseButtons.Left) return;
-
-            // 【V1.57 拖拽滚动】按下时记录拖拽起点与外层滚动容器的当前滚动位置。
-            // 仅当父容器可滚动（Panel.AutoScroll）时才开启拖拽滚动并捕获鼠标；
-            // 这样按住左键移动即可拖动整个列表（见 GridView_MouseMove），且不会因鼠标移出控件而中断。
-            _dragStartPoint = Control.MousePosition;
-            _isDragging = false;
-            _captured = false;
-            if (Parent is ScrollableControl scrollable)
-            {
-                _dragStartScroll = scrollable.AutoScrollPosition;
-                _captured = true;
-                this.Capture = true;   // 鼠标捕获：拖动期间即使指针移出本控件也能持续收到 MouseMove
-            }
-        }
+        // 【V1.88.24】GridView_MouseDown 已删：拖拽滚动移除后按下无事可做，点击只看 MouseUp。
 
         /// <summary>
         /// 鼠标抬起（左键）：
@@ -1439,32 +1232,13 @@ namespace AgingTestSystem.Views
         /// - 面板内"设置"区域 → 触发 OnSetClicked；
         /// - 面板内"选中框"或"空白区域" → 直接切换该工位选中（单击/触摸点选）。
         /// 【V1.88.14】选中框常显后不再设门槛：无选中时点框/点空白同样选中，
-        /// 长按（选中首个/取消全选）整套删除；取消选中逐台点框/整行"取消"，
-        /// 拖动结束后抬起不触发选中（滑动浏览不误选）。
+        /// 长按（选中首个/取消全选）整套删除；取消选中逐台点框/整行"取消"。
+        /// 【V1.88.24】拖拽滚动已删：按下拖动不再转滚动，抬起一律按点击处理
+        /// （内容恒一屏、无处可滑，"滑动浏览不误选"的前提已不存在）。
         /// </summary>
         private void GridView_MouseUp(object sender, MouseEventArgs e)
         {
             if (e.Button != MouseButtons.Left) return;
-
-            // 【V1.57 拖拽滚动】抬起时释放鼠标捕获；若是拖拽滚动结束，则本次按键不算点击
-            if (_captured)
-            {
-                this.Capture = false;
-                _captured = false;
-            }
-            if (_isDragging)
-            {
-                _isDragging = false;
-                // 【V1.57.2】停止合并定时器，并立即把最新目标滚动位置应用一次，
-                // 否则最后一次 MouseMove 若还没到 16ms 定时点，松手时滚动会停在旧位置。
-                _dragScrollTimer.Stop();
-                if (Parent is ScrollableControl scrollable)
-                {
-                    scrollable.AutoScrollPosition = _dragTargetScroll;
-                }
-                Cursor = Cursors.Default;    // 恢复默认光标（拖动中为 SizeAll）
-                return;
-            }
 
             if (TryHitRowButton(e.Location, out int row))
             {
@@ -1494,46 +1268,10 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 鼠标移动：拖拽滚动换算 + 状态块悬停提示
+        /// 鼠标移动：状态块悬停提示（【V1.88.24】拖拽滚动换算已删，只剩提示）。
         /// </summary>
         private void GridView_MouseMove(object sender, MouseEventArgs e)
         {
-            // 【V1.57 拖拽滚动】按住左键且已捕获鼠标时，把纵向移动距离换算成外层滚动容器的滚动偏移
-            // 【V1.88.14】只支持上下滑动：横向滚动条已在主窗禁用（看着怪），dx 直接按 0 算，
-            // 左右拖内容不动，只有上下拖才滚动。
-            if (_captured && e.Button == MouseButtons.Left && Parent is ScrollableControl scrollable)
-            {
-                Point cur = Control.MousePosition;
-                int dx = 0;
-                int dy = cur.Y - _dragStartPoint.Y;
-                // 移动超过阈值（≥10px）才认定为拖动：按下难免抖动，
-                // 小位移仍算点击（抬起切换选中），只有明显拖动才进入滚动模式。
-                if (!_isDragging && (Math.Abs(dx) > DragScrollThreshold || Math.Abs(dy) > DragScrollThreshold))
-                {
-                    _isDragging = true;
-                    Cursor = Cursors.SizeAll;    // 拖动中给出"可移动"光标反馈
-                }
-                if (_isDragging)
-                {
-                    // AutoScrollPosition 语义（WinForms）：getter 返回负值（-100 表示已向右/下滚 100），
-                    // setter 接收正值（100 表示滚动量 100）。
-                    // 想让内容"跟随鼠标移动"：鼠标下拖 dy → 内容下移 → 纵向滚动量减小 dy。
-                    // 故新滚动量 = 起点滚动量 - 位移，起点滚动量 = -_dragStartScroll.Y（取正）；
-                    // 横向 dx 恒 0（只支持上下滑动），横向滚动量保持起点不动。
-                    // 【V1.57.2 性能】不再直接 set，而是记录目标位置后由 _dragScrollTimer 每 16ms
-                    // 统一应用一次（合并高频 MouseMove，见字段注释）。dx/dy 是基于按下起点的绝对值，
-                    // 所以"只记录最新目标"不会丢位置、手感与逐帧 set 一致。
-                    _dragTargetScroll = new Point(-_dragStartScroll.X - dx, -_dragStartScroll.Y - dy);
-                    if (!_dragScrollTimer.Enabled)
-                    {
-                        _dragScrollTimer.Start();
-                    }
-                }
-            }
-
-            // 拖动滚动中不刷新悬停提示（指针相对网格位置一直在变，提示会闪烁）
-            if (_isDragging) return;
-
             string tip = GetTooltipText(e.Location);
             if (tip != _lastTooltipText)
             {
@@ -1558,19 +1296,7 @@ namespace AgingTestSystem.Views
             _toolTip.Hide(this);
         }
 
-        /// <summary>
-        /// 【V1.57.2】拖拽滚动合并定时器到点：把 MouseMove 期间记录的最新目标滚动位置应用一次。
-        /// 应用完立即 Stop，等下一次 MouseMove 再启动——拖拽期间约每秒 60 次 set，
-        /// 避免高回报率鼠标（125~1000Hz）每次都触发 AutoScrollPosition 的布局+滚动条更新。
-        /// </summary>
-        private void DragScrollTimer_Tick(object sender, EventArgs e)
-        {
-            _dragScrollTimer.Stop();
-            if (_isDragging && Parent is ScrollableControl scrollable)
-            {
-                scrollable.AutoScrollPosition = _dragTargetScroll;
-            }
-        }
+        // 【V1.88.24】DragScrollTimer_Tick 随拖拽滚动整套删除。
 
         /// <summary>
         /// 切换指定工位的选中状态并重绘（选中框常显，只需刷新当前面板）。

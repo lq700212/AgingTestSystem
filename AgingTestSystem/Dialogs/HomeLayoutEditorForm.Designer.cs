@@ -17,7 +17,7 @@ namespace AgingTestSystem.Dialogs
     /// HomeLayoutConfig.Range 常量设，初值 Value 在代码里设）；
     /// ③自绘预览控件本体 HomeLayoutPreviewControl（GDI 自绘类，留 .cs 不进 Designer）。
     /// 【V1.72.16 设计器稳定性三条军规（两次被 VS 重写后沉淀，违者预览即脏/运行即炸）】
-    /// ①量程必须写字面值（如 34/100），禁止写 HomeLayoutConfig.HeaderRange.Min 这类
+    /// ①量程必须写字面值（如 28/100），禁止写 HomeLayoutConfig.HeaderRange.Min 这类
     /// 元组成员表达式——设计器序列化器认不出，打开预览就标脏，存盘时整行删掉，
     /// 输入框变回 0~100，拖预览边缘给 240/340 直接 ArgumentOutOfRangeException，
     /// 整个可视调尺寸功能全坏（本次实锤）。改 Range 常量必须同步改这里三个数；
@@ -145,7 +145,7 @@ namespace AgingTestSystem.Dialogs
             0,
             0});
             this._nudHeader.Minimum = new decimal(new int[] {
-            34,
+            28,
             0,
             0,
             0});

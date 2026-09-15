@@ -3,7 +3,8 @@ namespace AgingTestSystem.Views
     /// <summary>
     /// 工位网格（自绘大画布）—— 设计器自动生成部分
     /// 本控件完全自绘（OnPaint，见 WorkstationGridView.cs），不含任何子控件，
-    /// 仅保留组件容器（托管 ToolTip/拖拽滚动合并计时器）与默认尺寸。
+    /// 仅保留组件容器（托管 ToolTip）与默认尺寸。
+    /// 【V1.88.24】拖拽滚动合并计时器随滚动整套删除。
     /// </summary>
     partial class WorkstationGridView
     {
