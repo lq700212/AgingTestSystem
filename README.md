@@ -74,7 +74,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Services/CrashLogWriter.cs`（V1.88.9） | 崩溃落盘：一崩一文件 Logs\Crash_yyyyMMdd_HHmmssfff_xx.log（含水印＋线程＋类型＋消息＋全堆栈；null/非 Exception 兜底，绝不抛）；Program 两全局异常口先落盘→再补 AppLog 摘要→弹框带路径请客户发回 |
 | `Services/UserManager.cs` | 用户/登录/权限，Users.json 持久化（密码哈希，V1.58.22）；V1.64 起含 dev 最高权限账号（可删改管理员，dev 名系统保留） |
 | `Services/PasswordHasher.cs` | 密码哈希（PBKDF2-HMAC-SHA256，随机盐 + 10 万次迭代，`PBKDF2$迭代$盐$哈希` 自描述格式） |
-| `Services/SoftwareActivation.cs`（V1.87）+ `Dialogs/SoftActivation.cs` | 软件激活：与 HJVision 同源同口径（CPU 序列号 + MD5 30 字符码，同一套《获取激活码》工具通用）；设备ID/设备码/激活码三件套，30天（768 运行小时格）/永久两档；`MainSetting.ini [RunHash]` 存双键（gitignore），主窗 1 小时 Timer 提醒，新设备/过期只置灰用户权限入口，不阻断启动与生产；V1.88.1 起激活成功关闭弹窗即重查解灰，不用重启 |
+| `Services/SoftwareActivation.cs`（V1.87）+ `Dialogs/SoftActivation.cs` | 软件激活：与 HJVision 同源同口径（CPU 序列号 + MD5 30 字符码，同一套《获取激活码》工具通用）；设备ID/设备码/激活码三件套，30天（768 运行小时格）/永久两档；`MainSetting.ini [RunHash]` 存双键（gitignore），主窗 1 小时 Timer 提醒，新设备/过期只置灰用户权限入口，不阻断启动与生产；V1.88.1 起激活成功关闭弹窗即重查解灰，不用重启；V1.99 起工控机现场一键激活走 `tools/auto_activate.py`（双击即算码写双键加回读校验，免手工抄码；随维护人员走，不发客户；另有免装环境的 PowerShell 版 `tools/auto_activate.ps1`，双击 `tools/auto_activate.bat` 即跑） |
 | `Services/RecipeStorage.cs` | 配方列表持久化（V1.67 起跟项目走 `Projects/<项目>/Recipes.json`，启动加载/操作即写盘；SaveWithDuplicateCheck 同名覆盖保存，V1.25/1.26） |
 | `Services/StationSettingsCache.cs` | 工位配置缓存（V1.67 起跟项目走 `Projects/<项目>/StationSettings.json`，按工位缓存 SN/配方/延时/极限温度/负压阈值/显示模式，设置窗口下次打开自动回填，V1.26；V1.66 加后两项） |
 | `Services/ThemeManager.cs` | 深色/浅色主题服务（V1.60）：App.config 存 AppTheme（Light/Dark），双向映射表递归着色（语义色保留、按钮不动），打开窗体前 ApplyTo、切换时 ApplyToAllOpenForms |
