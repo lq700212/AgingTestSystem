@@ -3,6 +3,30 @@
 > 精简版改动历史（最新在前）。只保留有维护价值的功能/修复要点；细微 UI 调整不重复记录。
 > 详细上下文可查 git 历史。协议/寄存器类改动同时已同步到 [`docs/通讯接入.md`](docs/通讯接入.md).
 
+## V1.98 — 公共参数负压值悬停说明（2026-09-15，用户：小白能快速上手）
+
+### 改动范围
+
+- **公共参数窗负压值加 tooltip（`Dialogs/CommonParameterForm.cs`）**：说明与设置表同源
+  （`SettingsForm.GetDescription("AlarmPressureThresholdKPa")`，超 40 字走 `WrapTooltip`
+  换行；标签+数值框双挂，长说明停留 15 秒），小白悬停即懂"写两边/符号方向/配方回退"。
+- **负压阈值说明升级为小白版（`Dialogs/SettingsForm.cs` 的 `_descriptions`）**：
+  原来只有"报警压力阈值（kPa，如 -5）"一句话；现讲清全局 72 台共用、保存同时写
+  仪表硬件（0x0010）与软件判定、方向举例（-3 报警/-7 到位）、配方回退。设置表说明列同步变长。
+
+### 为什么这么改
+
+- 现场问"负压值设的是什么、-1 报不报警"：方向（大于报警）与"写两边"口径只活在代码注释里，
+  界面无处可查。说明进界面，悬停即得，不用翻文档问人。
+
+### 验证
+
+- `build_and_test.ps1` 全量 **1987 断言全绿**（基线 1980 + 新增 7，
+  含 tooltip 双挂/写两边/-3 -7 方向/配方回退/换行≤40/停留 15 秒），构建零 error + 真机冒烟存活。
+- 踩坑：本窗 Designer 的 `components` 恒为 null（无托管组件），`new ToolTip(components)`
+  抛 ArgumentNullException（UiStyle/UiFinalizer 两模块红）→ 改无容器 + `Disposed` 事件释放
+  （`Dispose(bool)` 在 Designer 已定义，.cs 不重复 override）。
+
 ## V1.97 — 全仓稳定大扫荡（2026-09-15，用户：从头到尾过一遍，要绝对稳定0BUG）
 
 ### 改动范围

@@ -5894,6 +5894,28 @@ namespace AgingTestSystem.Tests
                     Check("公共参数标签输入框无重叠",
                         nud.Left - lbl.Right >= 8);
                 }
+                // 公共参数负压值tooltip（标签+数值框双挂，与设置表同源，超40字换行）：
+                var tipPM = typeof(CommonParameterForm).GetField("_tip",
+                    BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(pmForm) as ToolTip;
+                Check("公共参数tooltip容器已建", tipPM != null);
+                if (tipPM != null && lbl != null && nud != null)
+                {
+                    string lblTip = tipPM.GetToolTip(lbl);
+                    Check("负压值tooltip双挂（标签+数值框同文）",
+                        lblTip.Length > 0 && tipPM.GetToolTip(nud) == lblTip);
+                    string flatPM = lblTip.Replace("\r\n", "");
+                    Check("负压说明讲清写两边（硬件0x0010+软件判定）",
+                        flatPM.Contains("0x0010") && flatPM.Contains("软件"));
+                    Check("负压说明举例符号方向（-3报警/-7到位）",
+                        flatPM.Contains("-3") && flatPM.Contains("-7"));
+                    Check("负压说明讲清配方回退",
+                        flatPM.Contains("配方") && flatPM.Contains("回退"));
+                    Check("负压tooltip已换行且每行≤40字",
+                        lblTip.Contains("\r\n")
+                        && lblTip.Split(new[] { "\r\n" }, StringSplitOptions.None).All(
+                            line => line.Length <= 40));
+                    Check("公共参数长说明悬停多停留15秒", tipPM.AutoPopDelay == 15000);
+                }
             }
             finally { pmForm.Dispose(); }
 
