@@ -5334,22 +5334,22 @@ namespace AgingTestSystem.Tests
                     .Count(p => p.Function == IoFunction.Unknown) == 0);
 
             // —— 右侧宽度比例自适应（V1.65 比例＋固定布局：无文件，永远跟窗口走） ——
-            Check("比例常量0.234/护栏180~340",
-                MainForm.RightPanelRatio == 0.234
-                && MainForm.RightPanelMinWidth == 180 && MainForm.RightPanelMaxWidth == 340);
-            Check("设计宽1394→326(与现状一致)",
-                MainForm.ComputeRightPanelWidth(1394) == 326);
-            Check("1366屏分隔容器1360→318",
-                MainForm.ComputeRightPanelWidth(1360) == 318);
-            Check("新设计宽1274→298",
-                MainForm.ComputeRightPanelWidth(1274) == 298);
-            Check("1080p大屏钳到上限340",
-                MainForm.ComputeRightPanelWidth(1914) == 340);
+            Check("比例常量0.19/护栏180~280",
+                MainForm.RightPanelRatio == 0.19
+                && MainForm.RightPanelMinWidth == 180 && MainForm.RightPanelMaxWidth == 280);
+            Check("设计宽1394→265",
+                MainForm.ComputeRightPanelWidth(1394) == 265);
+            Check("1366屏分隔容器1360→258",
+                MainForm.ComputeRightPanelWidth(1360) == 258);
+            Check("新设计宽1274→242",
+                MainForm.ComputeRightPanelWidth(1274) == 242);
+            Check("1080p大屏钳到上限280",
+                MainForm.ComputeRightPanelWidth(1914) == 280);
             Check("小屏700钳到下限180",
                 MainForm.ComputeRightPanelWidth(700) == 180);
-            Check("宽0/负数按设计宽兜底→328",
-                MainForm.ComputeRightPanelWidth(0) == 328
-                && MainForm.ComputeRightPanelWidth(-5) == 328);
+            Check("宽0/负数按设计宽兜底→266",
+                MainForm.ComputeRightPanelWidth(0) == 266
+                && MainForm.ComputeRightPanelWidth(-5) == 266);
 
             // —— 工作站区最小宽度保护（V1.88.17：右侧再宽也不能吃掉 Panel1） ——
             Check("左侧最小宽常量640", MainForm.MinWorkstationPanelWidth == 640);
