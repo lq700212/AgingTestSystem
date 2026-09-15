@@ -1625,6 +1625,45 @@ namespace AgingTestSystem.Tests
             Check("压力标签定高位不动(Y=30)",
                 c.LabelPressurePosition.ToPoint().Y == 30 && tall.LabelPressurePosition.ToPoint().Y == 30,
                 "基准 " + c.LabelPressurePosition.ToPoint().ToString() + " 加高后 " + tall.LabelPressurePosition.ToPoint().ToString());
+            // ── 标签与同行框上下居中：矩形按文本行高、以目标框中心为基准（Point直画顶对齐偏1~2px；
+            // 字 19px＞框 16px，硬塞同Y/H会上下裁字，改中心对齐+对称溢出）──
+            // 行高传 19（96DPI 下 10pt/11pt 实测行高；纯整数几何，断言与机器 DPI 无关；奇数差截断中心差≤1）
+            Check("标签矩形压力行居中(高19中心差≤1)",
+                WorkstationGridView.ComputeLabelRect(c, "Pressure", 19).Height == 19
+                && Math.Abs((2 * WorkstationGridView.ComputeLabelRect(c, "Pressure", 19).Y + 19)
+                    - (2 * c.RcPressureValue.ToRectangle().Y + c.RcPressureValue.ToRectangle().Height)) <= 1,
+                "实际 " + WorkstationGridView.ComputeLabelRect(c, "Pressure", 19).ToString() + " vs " + c.RcPressureValue.ToRectangle().ToString());
+            Check("标签矩形SN/配方行居中",
+                Math.Abs((2 * WorkstationGridView.ComputeLabelRect(c, "SN", 19).Y + 19)
+                    - (2 * c.RcSNValue.ToRectangle().Y + c.RcSNValue.ToRectangle().Height)) <= 1
+                && Math.Abs((2 * WorkstationGridView.ComputeLabelRect(c, "Recipe", 19).Y + 19)
+                    - (2 * c.RcRecipeValue.ToRectangle().Y + c.RcRecipeValue.ToRectangle().Height)) <= 1,
+                "SN " + WorkstationGridView.ComputeLabelRect(c, "SN", 19).ToString() + " 配方 " + WorkstationGridView.ComputeLabelRect(c, "Recipe", 19).ToString());
+            Check("标签矩形延时/烧屏行居中",
+                Math.Abs((2 * WorkstationGridView.ComputeLabelRect(c, "Delay", 19).Y + 19)
+                    - (2 * c.RcDelayTimeValue.ToRectangle().Y + c.RcDelayTimeValue.ToRectangle().Height)) <= 1
+                && Math.Abs((2 * WorkstationGridView.ComputeLabelRect(c, "Burn", 19).Y + 19)
+                    - (2 * c.RcBurnInValue.ToRectangle().Y + c.RcBurnInValue.ToRectangle().Height)) <= 1,
+                "延时 " + WorkstationGridView.ComputeLabelRect(c, "Delay", 19).ToString() + " 烧屏 " + WorkstationGridView.ComputeLabelRect(c, "Burn", 19).ToString());
+            Check("标题矩形第一行居中",
+                Math.Abs((2 * WorkstationGridView.ComputeLabelRect(c, "Title", 19).Y + 19)
+                    - (2 * c.RcPower.ToRectangle().Y + c.RcPower.ToRectangle().Height)) <= 1,
+                "实际 " + WorkstationGridView.ComputeLabelRect(c, "Title", 19).ToString() + " vs " + c.RcPower.ToRectangle().ToString());
+            Check("CenterRectOn偶数差精确居中",
+                WorkstationGridView.CenterRectOn(9, 65, new Rectangle(74, 30, 121, 16), 16).Equals(new Rectangle(9, 30, 65, 16)));
+            Check("CenterRectOn行高大于框高对称溢出不裁",
+                WorkstationGridView.CenterRectOn(9, 65, new Rectangle(74, 30, 121, 16), 19).Equals(new Rectangle(9, 29, 65, 19)),
+                "实际 " + WorkstationGridView.CenterRectOn(9, 65, new Rectangle(74, 30, 121, 16), 19).ToString());
+            using (var f10 = new Font("微软雅黑", 10f, FontStyle.Bold))
+            using (var f11 = new Font("微软雅黑", 11f, FontStyle.Bold))
+            {
+                Check("10pt行高≥16(字比框高是裁字根因)", WorkstationGridView.MeasureLabelLineH(f10, "真空压力") >= 16,
+                    "实际 " + WorkstationGridView.MeasureLabelLineH(f10, "真空压力"));
+                Check("11pt标题行高≥16", WorkstationGridView.MeasureLabelLineH(f11, "NO.72") >= 16,
+                    "实际 " + WorkstationGridView.MeasureLabelLineH(f11, "NO.72"));
+                Check("行高空串/空字体不炸",
+                    WorkstationGridView.MeasureLabelLineH(f10, "") >= 1 && WorkstationGridView.MeasureLabelLineH(null, "x") == 1);
+            }
 
             // ── 颜色解析工具 ──
             Color fallback = Color.FromArgb(1, 2, 3);
@@ -1677,6 +1716,10 @@ namespace AgingTestSystem.Tests
                 cur.RcPressureValue.ToRectangle().Y == 30 && cur.RcVacuumOpen.ToRectangle().Y == 4);
             Check("开电流标签50", cur.LabelCurrentPosition.ToPoint().Y == 50);
             Check("开电流SN标签跟随70", cur.LabelSnPosition.ToPoint().Y == 70);
+            Check("开电流标签矩形居中于电流框",
+                Math.Abs((2 * WorkstationGridView.ComputeLabelRect(cur, "Current", 19).Y + 19)
+                    - (2 * cur.RcCurrentValue.ToRectangle().Y + cur.RcCurrentValue.ToRectangle().Height)) <= 1,
+                "实际 " + WorkstationGridView.ComputeLabelRect(cur, "Current", 19).ToString());
             // 关回去：与默认快照零差异（开关往返不漂移）
             cur.ShowCurrent = false;
             cur.ResolveAnchors();
