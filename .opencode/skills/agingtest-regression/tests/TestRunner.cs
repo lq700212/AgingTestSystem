@@ -6167,6 +6167,30 @@ namespace AgingTestSystem.Tests
                 }
                 finally { try { comm.Dispose(); } catch { } }
 
+                // —— 小屏布局锁（1280x1024 工控屏：按钮行被页签盖住实锤） ——
+                // 根因链：窗体 1100 高超出 1024 屏 → 实测收高 56 → 绝对定位的页签(75~788)
+                // 与底部 Dock 面板(732~)重叠 56px → 页签 z 序在前盖住整行按钮（harness 像素实锤：
+                // 按钮行绿像素修前 0、修后 107）。锁三件事：页签 Dock=Fill（布局永不重叠）＋
+                // 窗高装得进小屏＋九宫格一页装下＋按钮在面板内。只构造不 Show（零弹窗阻塞）。
+                var commLayout = new CommunicationTestForm(mockDm);
+                try
+                {
+                    var tabLayout = typeof(CommunicationTestForm).GetField("tabControl", Flags)?.GetValue(commLayout) as Control;
+                    Check("通讯窗页签Dock=Fill（小屏不盖按钮行）",
+                        tabLayout != null && tabLayout.Dock == DockStyle.Fill);
+                    Check("通讯窗设计高装得进1280x1024",
+                        commLayout.ClientSize.Height <= 950 && commLayout.MinimumSize.Height <= 800);
+                    var gridVacLayout = typeof(CommunicationTestForm).GetField("panelGridVacuum", Flags)?.GetValue(commLayout) as Control;
+                    Check("通讯窗九宫格一页装下（52px灯/604高）",
+                        gridVacLayout != null && gridVacLayout.Height <= 624);
+                    var btnConnLayout = typeof(CommunicationTestForm).GetField("btnConnect", Flags)?.GetValue(commLayout) as Control;
+                    var pnlBotLayout = typeof(CommunicationTestForm).GetField("pnlBottom", Flags)?.GetValue(commLayout) as Control;
+                    Check("连接按钮在底部面板内",
+                        btnConnLayout != null && pnlBotLayout != null
+                        && btnConnLayout.Top >= 0 && btnConnLayout.Bottom <= pnlBotLayout.Height);
+                }
+                finally { try { commLayout.Dispose(); } catch { } }
+
                 var fan = new FanTestForm(mockDm);
                 try
                 {
