@@ -1603,6 +1603,8 @@ namespace AgingTestSystem.Tests
             {
                 SweepPowerFailRollback();
                 SweepStopWriteBeforeClear();
+                SweepStartupEventOrdering();
+                SweepOfflineIdsAndSummary();
                 SweepShortArrayAndBroadcast();
                 SweepSkipVacuumFreeze();
                 SweepAlarmReasons();
@@ -1704,6 +1706,92 @@ namespace AgingTestSystem.Tests
                     !dm.GetTestingStates()[1] && !io.ReadOutput(ValveOut(config, 2)));
             }
             finally { try { io.SetThrowOnWrite(false); } catch { } try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
+        }
+
+        // ---------- S2b 启动排序：连接事件先于首批数据（现场曾因首轮 72 台同步采集拖住 Start，
+        // 扫码枪连接与顶部状态排队等它，界面长时间无数据；现 Start 先报连接、首轮放后台） ----------
+        private static void SweepStartupEventOrdering()
+        {
+            var config = new DeviceConfig();
+            config.TotalBarometers = 4;
+            config.TotalInputs = 80;
+            config.TotalOutputs = 160;
+            config.CollectInterval = 30;
+            config.VacuumConfirmTimeoutMs = 600;
+            config.CommunicationLossAlarmCount = 3;
+            config.AlarmWhenPressureHigherThanThreshold = true;
+            config.AlarmPressureThresholdKPa = -5m;
+            config.FanEnabled = false;
+            var reader = new FakeBarometerReader(config.TotalBarometers);
+            for (int i = 1; i <= config.TotalBarometers; i++) reader.SetPressure(i, 0m);
+            var io = new FakeIoController(config.TotalInputs + config.TotalOutputs);
+            var dm = new DeviceManager(config, reader, io, null);
+            try
+            {
+                var order = new List<string>();
+                var lck = new object();
+                dm.OnConnectionStatusChanged += (s, v) => { lock (lck) { if (!order.Contains("conn")) order.Add("conn"); } };
+                dm.OnBatchDataUpdated += (s, d) => { lock (lck) { if (!order.Contains("batch")) order.Add("batch"); } };
+                bool started = dm.Start();
+                Check("[大扫荡][启动排序] Start成功", started);
+                bool both = WaitUntil(() =>
+                {
+                    lock (lck) { return order.Contains("conn") && order.Contains("batch"); }
+                }, 5000);
+                Check("[大扫荡][启动排序] 连接与首批均上报", both);
+                int ci, bi;
+                lock (lck) { ci = order.IndexOf("conn"); bi = order.IndexOf("batch"); }
+                Check("[大扫荡][启动排序] 连接事件先于首批数据", both && ci >= 0 && bi >= 0 && ci < bi);
+            }
+            finally { try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
+        }
+
+        // ---------- S2c 离线清单 + 首轮诊断行（现场 72 台只在线 48 台，LOG 直接报出台号） ----------
+        private static void SweepOfflineIdsAndSummary()
+        {
+            FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+            DeviceManager dm = BuildTestManager(out reader, out io, out config);
+            try
+            {
+                Check("[大扫荡][离线清单] 启动后在线4台",
+                    WaitUntil(() => dm.GetOnlineCount() == 4, 5000));
+                Check("[大扫荡][离线清单] 全在线时清单为空", dm.GetOfflineIds().Count == 0);
+                string s1 = DeviceManager.BuildFirstPollSummary(4, 4, new List<int>(), 123);
+                Check("[大扫荡][离线清单] 全在线文案",
+                    s1.Contains("4/4") && s1.Contains("123ms") && !s1.Contains("离线"));
+            }
+            finally { try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
+
+            var config2 = new DeviceConfig();
+            config2.TotalBarometers = 4;
+            config2.TotalInputs = 80;
+            config2.TotalOutputs = 160;
+            config2.CollectInterval = 30;
+            config2.VacuumConfirmTimeoutMs = 600;
+            config2.CommunicationLossAlarmCount = 3;
+            config2.AlarmWhenPressureHigherThanThreshold = true;
+            config2.AlarmPressureThresholdKPa = -5m;
+            config2.FanEnabled = false;
+            var reader2 = new FakeBarometerReader(config2.TotalBarometers);
+            reader2.SetPressure(1, 0m);
+            reader2.SetPressure(2, 0m);
+            reader2.SetFail(3, true);
+            reader2.SetFail(4, true);
+            var io2 = new FakeIoController(config2.TotalInputs + config2.TotalOutputs);
+            var dm2 = new DeviceManager(config2, reader2, io2, null);
+            try
+            {
+                dm2.Start();
+                Check("[大扫荡][离线清单] 半离线在线2台",
+                    WaitUntil(() => dm2.GetOnlineCount() == 2, 5000));
+                var off = dm2.GetOfflineIds();
+                Check("[大扫荡][离线清单] 离线为3、4台",
+                    off.Count == 2 && off.Contains(3) && off.Contains(4));
+                string s2 = DeviceManager.BuildFirstPollSummary(2, 4, off, 456);
+                Check("[大扫荡][离线清单] 半离线文案带台号",
+                    s2.Contains("2/4") && s2.Contains("3") && s2.Contains("4") && s2.Contains("456ms"));
+            }
+            finally { try { dm2.StopAll(); } catch { } try { dm2.Dispose(); } catch { } }
         }
 
         // ---------- S3 短数组尾部按读失败 + S4 广播按总数 ----------

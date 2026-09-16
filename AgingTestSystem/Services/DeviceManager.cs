@@ -734,13 +734,10 @@ namespace AgingTestSystem.Services
                 // 【大扫荡】气压表没连上也启动定时器：CollectData 本来就能处理全 null
                 //（失败计数+安全兜底），重连心跳寄生在采集循环里；以前定时器不起，
                 // 开机没插 RS485 则之后插上也永不自愈，只能重启。
-                // 先采集一次数据（同步调用，确保首次数据立即可用）
-                try { CollectData(); }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[启动] 首轮采集失败: {ex.Message}");
-                }
-
+                // 先启动定时器、再上报连接状态、最后后台首轮采集：
+                // 现场 72 台首轮轮询可达分钟级（离线台逐台超时），原来同步采集会拖住
+                // Start 返回，扫码枪连接与顶部状态刷新被迫排队等它，界面长时间无数据。
+                // 新顺序：连接结果立即可见，首轮数据随后经正常广播补上。
                 // 启动数据采集定时器
                 _collectTimer.Start();
 
@@ -758,6 +755,36 @@ namespace AgingTestSystem.Services
                 // 之后某个设备中途断开时，能正确识别"已连接 → 未连接"边沿并提示一次。
                 _barometerWasConnected = barometerConnected;
                 _lastFanConnected = _fanController != null && _fanController.IsConnected;
+
+                // 首轮采集放后台（与 Start 调用方并行）：计时 + 防重入（与定时器同锁），
+                // 完成后记一条"在线 X/Y、离线台号、耗时"诊断，现场一眼定位是哪些表没回。
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    if (_disposed) return;
+                    if (!Monitor.TryEnter(_collectLock)) return;
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    try
+                    {
+                        try { CollectData(); }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"[启动] 首轮采集失败: {ex.Message}");
+                        }
+                        sw.Stop();
+                        try
+                        {
+                            int online = GetOnlineCount();
+                            int total = _config.TotalBarometers;
+                            var offline = GetOfflineIds();
+                            Diagnostic(BuildFirstPollSummary(online, total, offline, sw.ElapsedMilliseconds));
+                        }
+                        catch { /* 诊断行失败不影响采集 */ }
+                    }
+                    finally
+                    {
+                        Monitor.Exit(_collectLock);
+                    }
+                });
 
                 return barometerConnected;
             }
@@ -2787,6 +2814,46 @@ namespace AgingTestSystem.Services
         /// 超过该时间没有成功读到数据，视为该台离线
         /// </summary>
         private const int OnlineFreshnessSeconds = 10;
+
+        /// <summary>
+        /// 获取当前"通讯离线"的工位号清单（与 <see cref="GetOnlineCount"/> 同口径：10 秒内没读到过数据）。
+        /// 首轮采集诊断与现场排查用：直接报出台号，不用逐台点面板。
+        /// </summary>
+        /// <returns>离线工位号（1 起；全在线返回空列表）</returns>
+        public List<int> GetOfflineIds()
+        {
+            var offline = new List<int>();
+            lock (_stateLock)
+            {
+                DateTime now = DateTime.Now;
+                for (int i = 0; i < _lastGoodTimes.Length; i++)
+                {
+                    double ageSecs = (now - _lastGoodTimes[i]).TotalSeconds;
+                    if (ageSecs < 0) ageSecs = 0;
+                    if (ageSecs >= OnlineFreshnessSeconds)
+                        offline.Add(i + 1);
+                }
+            }
+            return offline;
+        }
+
+        /// <summary>
+        /// 首轮采集诊断行（纯函数）：在线数 + 离线台号 + 耗时拼成一行 LOG。
+        /// 离线台集中在尾段多为从站地址/接线问题，散布多为总线负载/供电问题，见 LOG 后半句指引。
+        /// </summary>
+        /// <param name="onlineCount">在线台数</param>
+        /// <param name="total">总数</param>
+        /// <param name="offlineIds">离线工位号（可为 null/空）</param>
+        /// <param name="elapsedMs">首轮耗时毫秒</param>
+        /// <returns>诊断文本</returns>
+        public static string BuildFirstPollSummary(int onlineCount, int total, IList<int> offlineIds, long elapsedMs)
+        {
+            if (offlineIds == null || offlineIds.Count == 0)
+                return $"首轮采集完成：在线 {onlineCount}/{total}，耗时 {elapsedMs}ms";
+            string ids = string.Join("、", offlineIds);
+            return $"首轮采集完成：在线 {onlineCount}/{total}，离线 {offlineIds.Count} 台 [{ids}]，" +
+                   $"耗时 {elapsedMs}ms（排查从站地址/终端电阻/中继器/供电；尾段集中多为地址接线，散布多为总线负载）";
+        }
 
         // =====================================================================
         // 断电恢复：快照落盘 / 恢复重测 / 放弃恢复
