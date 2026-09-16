@@ -265,9 +265,14 @@ namespace AgingTestSystem.Views
                             "⚠确认机械固定！"
                         };
                     }
+                    // 超时 0=关闭：不限时等，不判建立超时（只靠老化失压报警+人工停止）；
+                    // 显示带"0"与"关闭"两样：设置表存 0、下拉首项"0（关闭）"，三处对得上。
+                    string timeoutLine = config.VacuumConfirmTimeoutMs <= 0
+                        ? "超时 0ms（关闭）"
+                        : $"超时 {config.VacuumConfirmTimeoutMs}ms";
                     return new string[]
                     {
-                        $"超时 {config.VacuumConfirmTimeoutMs}ms",
+                        timeoutLine,
                         $"失联 {config.CommunicationLossAlarmCount} 次",
                         $"抽真空 {counts.Vacuuming} 台"
                     };

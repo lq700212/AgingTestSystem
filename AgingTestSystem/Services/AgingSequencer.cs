@@ -16,6 +16,7 @@ namespace AgingTestSystem.Services
     ///     └─ Vacuuming：等「真空到位」且「now - t0 ≥ 延时时间」（两者取较晚；
     ///          延时=0 不等真空，ShouldPowerOn 直接 true，见下）
     ///          ├─ 到位前超过 VacuumConfirmTimeoutMs 仍未到位 → 报警(产品责任 FAIL)，永不带电
+    ///          │  （宽限 0=关闭时不限时等，永不判超时，见 IsVacuumBuildFailed）
     ///          └─ 条件满足 → 载台上电 → Aging，老化计时起点 = 上电时刻
     ///     └─ Aging：now - 计时起点 ≥ 烧屏时间(配方) → 完成(下电+关阀+PASS·待取料)
     ///   延时时间 = "保持载台电源断电、只让真空吸附"的等待段；
@@ -97,15 +98,22 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 抽真空阶段判定：真空建立是否已超时失败
         /// （开阀后 VacuumConfirmTimeoutMs 内压力始终未到位 → 判"真空建立失败"报警）
+        /// 【0=关闭】配置为 0 时不限时等待、永不判超时（只靠老化阶段失压报警+人工停止兜底）；
+        /// 负数非法，保存校验已拦、手改文件由启动加载钳回缺省，这里 ≤0 一律按关闭处理防崩。
         /// </summary>
         /// <param name="pressureInRange">当前压力是否到位</param>
         /// <param name="elapsedSinceValveOpen">距开阀时刻经过的时间</param>
-        /// <param name="confirmTimeoutMs">确认宽限窗口（毫秒，全局配置，默认 15000）</param>
+        /// <param name="confirmTimeoutMs">确认宽限窗口（毫秒，默认 15000；0=关闭超时报警）</param>
         /// <returns>true = 真空建立失败，应报警断电（产品责任 FAIL）</returns>
         public static bool IsVacuumBuildFailed(bool pressureInRange, TimeSpan elapsedSinceValveOpen, int confirmTimeoutMs)
         {
             // 已到位就永远不算失败（后续只是等延时时间，那是正常等待不是故障）
             if (pressureInRange)
+            {
+                return false;
+            }
+            // 宽限 0=关闭：不限时等，不判建立超时（Aging 阶段失压报警照常，与 SkipVacuum 全豁免不同）
+            if (confirmTimeoutMs <= 0)
             {
                 return false;
             }

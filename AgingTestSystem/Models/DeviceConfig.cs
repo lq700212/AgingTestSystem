@@ -332,6 +332,9 @@ namespace AgingTestSystem.Models
         /// 如果开阀后 <VacuumConfirmTimeoutMs> 毫秒内压力仍未进入正常区间
         /// （说明真空没建立：阀故障/管路泄漏/产品没放好），按"真空建立失败"报警，
         /// 关闭该台电磁阀并切断载台上电，避免产品在未吸附固定的情况下通电老化。
+        /// 【0=关闭】0 表示不限时等待、不判建立超时（只靠老化阶段失压报警+人工停止兜底），
+        /// 与 SkipVacuum（连失压报警一起豁免）不同；负数非法，保存时拦、手改文件启动时钳回缺省。
+        /// 跟项目（Policy.json 可按产品覆盖，机器缺省 15000）。
         /// </summary>
         public int VacuumConfirmTimeoutMs { get; set; } = 15000;
 

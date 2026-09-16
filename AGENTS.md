@@ -92,7 +92,7 @@
   双击复位自己按 `DoubleClickTime/DoubleClickSize` 在 `MouseDown` 里判定
   （Panel 双击风格对中键不可靠）；`AutoScrollMinSize` 给完整虚宽（给"超出量"横向出不来）。
   - 界面可显示中文/友好文案，但**存到 App.config 的值必须经过归一化映射**（见 `SettingsForm.NormalizeParity` / `NormalizeStopBits`），禁止把非规范字符写进配置。
-- 配置项编辑控件统一在 `SettingsForm.CreateValueCell` 按 key 分发（布尔/串口/波特率/数据位/停止位/校验位/数字/文本）。新增串口类配置项时，**气压表与扫码枪两套 key（如 `PortName`+`ScannerPort`）都要覆盖**，共用同一套映射逻辑。
+- 配置项编辑控件统一在 `SettingsForm.CreateValueCell` 按 key 分发（布尔/串口/波特率/数据位/停止位/校验位/数字/文本）。数字+语义开关二合一的配置（如真空超时 0=关闭）走可手输下拉（关闭选项存 0＋常用档位＋自定义，显示值恒以数字开头），不走数字微调框；范围由 `ValidateValue` 独立分支锁（含 0、拦负数），手改文件绕过的脏值由启动加载钳制。新增串口类配置项时，**气压表与扫码枪两套 key（如 `PortName`+`ScannerPort`）都要覆盖**，共用同一套映射逻辑。
 - **新增 App.config 配置项五处同步（V1.66 血泪）**：`DeviceConfig` 属性 + `App.config` key（含中文注释）+
   `MainForm` 读取 + `SettingsForm`（`_boolKeys` **和** `ValidateValue` 布尔分支 **两个名单都要进** +
   `_descriptions` + `_categories`）。`ValidateValue` 的布尔分支是硬编码 switch，
@@ -105,6 +105,9 @@
   （`ParsePolicyEnum` 非法兜底现状）+ `SettingsForm`（`_descriptions` + `_categories`
   + `ValidateValue` 名单分支 + `CreateValueCell` 下拉分支——枚举不进 `_boolKeys`，
   不归一化就"脏值也能存"）。回归里"三处同步锁"（PolicyKeys↔属性↔选项可解析）看绿才算完。
+  预置数值扩展（V1.105）：跟项目走的策略数值（如真空超时）可进 `PolicyPresets` 的
+  `NumericValues`（套用时与 12 开关同一条保存路进 Policy.json，不参与 `DetectPreset`
+  探测）；配方项（延时/时长）任何预置都不写（无配方默认 0，有配方按配方来）。
 - **判定类分支先写 AgingSequencer 纯函数（V1.67 收紧）**：策略执行侧一律先加纯函数
   （`BuildStartBlockText`/`MapAlarmResult`/`ComputeResumeDurationSeconds`/
   `ValidatePolicyCombination`）并同步用例，`DeviceManager` 只做"调用决策 + IO + 日志"。

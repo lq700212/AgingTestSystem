@@ -988,9 +988,14 @@ namespace AgingTestSystem.Views
             config.FanIpCandidates = DeviceConfig.ParseFanIpCandidates(fanIpCandidates);
 
             // ===== 老化测试业务参数读取（V1.10 新增） =====
+            // 真空确认超时 0=关闭（不限时等，不判建立超时）；负数非法：
+            // 保存校验已拦，手改 App.config 绕过时这里钳回缺省 15000，不带病启动。
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["VacuumConfirmTimeoutMs"], out int vacuumConfirmTimeoutMs))
             {
-                config.VacuumConfirmTimeoutMs = vacuumConfirmTimeoutMs;
+                if (vacuumConfirmTimeoutMs >= 0)
+                {
+                    config.VacuumConfirmTimeoutMs = vacuumConfirmTimeoutMs;
+                }
             }
 
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["CommunicationLossAlarmCount"], out int commLossCount))
@@ -1201,6 +1206,12 @@ namespace AgingTestSystem.Views
 
             // 项目策略叠加（Projects/<当前项目>/Policy.json 覆盖同名机器缺省）
             ProjectPolicyStore.ApplyOverlay(config);
+            // 真空确认超时负数钳制：手改 Policy.json 绕过保存校验时钳回缺省 15000
+            // （0 是合法的"关闭"，只有负数算脏值；纯函数侧 ≤0 一律按关闭是防崩兜底）。
+            if (config.VacuumConfirmTimeoutMs < 0)
+            {
+                config.VacuumConfirmTimeoutMs = 15000;
+            }
 
             if (config.TotalInputs < config.TotalBarometers)
             {

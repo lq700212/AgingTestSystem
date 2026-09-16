@@ -811,8 +811,9 @@ namespace AgingTestSystem.Views
         /// <summary>
         /// 套用预置（傻瓜入口：脏先问存 → 列差异确认 → 逐项校验 →
         /// PersistChanges 同一条保存路 → 刷新右栏编辑器 + 画布 + 预置回显）。
-        /// 【只动 12 个行为开关】MES/规则/报表/画面字典/破空点位/时长阈值等
+        /// 【只动 12 个行为开关＋数值项】MES/规则/报表/画面字典/破空点位/时长阈值等
         /// 自由文本与配方/机器参数一律不动——切预置不丢现场已填的东西。
+        /// 数值项（D 的真空超时 0）是跟项目走的策略 key，同样进本项目 Policy.json。
         /// 【失败语义】校验拦/C 组合拦（超温上限为 0）都是"按住不动 + 中文告诉人
         /// 去哪填"，绝不悄悄写一半（PersistChanges 内部先验后写）。
         /// </summary>
@@ -837,9 +838,10 @@ namespace AgingTestSystem.Views
                 if (r == DialogResult.Yes && !SaveCurrentNode()) return;
                 _dirty = false;
             }
-            Dictionary<string, string> values = PolicyPresets.GetPresetValues(id);
+            Dictionary<string, string> values = PolicyPresets.GetAllValues(id);
             if (values == null) return;
-            // 差异预览：只列"真的会变"的项（中文名 + 现值→预置值）
+            // 差异预览：只列"真的会变"的项（中文名 + 现值→预置值；
+            // 数值项（真空超时 0）同样列出，D 预置一次看全）
             var diffLines = new List<string>();
             foreach (string key in PolicyPresets.GovernedKeys)
             {
@@ -855,6 +857,22 @@ namespace AgingTestSystem.Views
                 if (!PolicyPresets.KeyLabels.TryGetValue(key, out label)) label = key;
                 diffLines.Add("【" + label + "】 " + cur + " → " + want);
             }
+            Dictionary<string, string> numerics = PolicyPresets.GetNumericValues(id);
+            if (numerics != null)
+            {
+                foreach (var kv in numerics)
+                {
+                    string cur = GetConfigString(kv.Key);
+                    if (string.Equals(cur != null ? cur.Trim() : "",
+                        kv.Value != null ? kv.Value.Trim() : "", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+                    string label;
+                    if (!PolicyPresets.KeyLabels.TryGetValue(kv.Key, out label)) label = kv.Key;
+                    diffLines.Add("【" + label + "】 " + cur + " → " + kv.Value);
+                }
+            }
             if (diffLines.Count == 0)
             {
                 MessageBox.Show(this, "当前已是【" + def.Title + "】，无需套用。",
@@ -866,7 +884,8 @@ namespace AgingTestSystem.Views
                     ? "" : "\r\n前置条件：" + def.Requires + "\r\n")
                 + "\r\n将修改 " + diffLines.Count + " 项：\r\n"
                 + string.Join("\r\n", diffLines.ToArray())
-                + "\r\n\r\n配方（时长/阈值/画面/极限温度）、MES/规则/报表/画面字典/点位等不动。\r\n"
+                + "\r\n\r\n配方延时/时长/阈值/画面等配方项、MES/规则/报表/画面字典/点位等不动"
+                + "（配方延时填0即阀电同开，无配方默认即0，有配方按配方来）。\r\n"
                 + def.HowToSwitch;
             if (MessageBox.Show(this, confirm, "套用预置",
                 MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK)

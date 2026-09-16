@@ -231,7 +231,6 @@ namespace AgingTestSystem.Dialogs
                 { "FanUnitId", (1, 255, 0, 1) },
                 { "FanTimeoutMs", (10, 60000, 0, 10) },
 
-                { "VacuumConfirmTimeoutMs", (100, 600000, 0, 100) },
                 { "CommunicationLossAlarmCount", (1, 10000, 0, 1) },
                 { "MaxTestDurationSeconds", (0, 86400, 0, 10) },
                 { "FanTempAlarmLimitC", (0, 200, 1, 0.5m) },
@@ -296,7 +295,7 @@ namespace AgingTestSystem.Dialogs
             { "FanTimeoutMs", "送风机通讯超时（毫秒）" },
 
             // ===== 老化测试业务 =====
-            { "VacuumConfirmTimeoutMs", "真空建立确认超时（毫秒，默认 15000）" },
+            { "VacuumConfirmTimeoutMs", "真空建立确认超时（毫秒，默认15000；0=关闭：不限时等，不判建立超时，只靠老化失压报警+人工停止）" },
             { "CommunicationLossAlarmCount", "通讯故障报警阈值（连续读取失败 N 次）" },
             { "MaxTestDurationSeconds", "老化测试最大时长（秒，0=不限时手动停止）" },
             { "UseDiAlarmContact", "气压表报警触点(DI)是否并入报警判定（false/true）" },
@@ -638,6 +637,8 @@ namespace AgingTestSystem.Dialogs
         /// <summary>
         /// 处理 DataGridView 数据错误：波特率下拉允许手输自定义值，
         /// 输入不在列表里的波特率时自动补进 Items 并接受该值，而不是弹出错误
+        /// （真空超时下拉同理：显示/存值分离的 ComboOption 项补 ComboOption，
+        /// 纯文本项补纯文本，保证补项后回显与保存口径一致）。
         /// </summary>
         private void Grid_DataError(object sender, DataGridViewDataErrorEventArgs e)
         {
@@ -650,7 +651,15 @@ namespace AgingTestSystem.Dialogs
                     string typed = editing.Text;
                     if (!string.IsNullOrWhiteSpace(typed) && !combo.Items.Contains(typed))
                     {
-                        combo.Items.Add(typed);
+                        if (!string.IsNullOrEmpty(combo.ValueMember)
+                            && combo.Items.Count > 0 && combo.Items[0] is ComboOption)
+                        {
+                            combo.Items.Add(new ComboOption(typed, typed));
+                        }
+                        else
+                        {
+                            combo.Items.Add(typed);
+                        }
                         cell.Value = typed;
                         e.ThrowException = false;
                         return;
@@ -1588,6 +1597,16 @@ namespace AgingTestSystem.Dialogs
                     NormalizeMesAuthType(value));
             }
 
+            // 真空建立确认超时：可手输的下拉（常用档位 + 自定义毫秒数）。
+            // 首项即关闭项（存 0）：界面显示"0（关闭）"，用户手输 0 等同选关闭；
+            // 负数不支持，保存时由 ValidateValue 拦截（错误信息指明 0=关闭）。
+            // 不走 _numericKeys 的数字微调框：微调框选不出"关闭"语义，客户也说不清要几秒，
+            // 下拉给档位、手输给自由，二者同一校验口（0~600000）。
+            if (key == "VacuumConfirmTimeoutMs")
+            {
+                return CreateVacuumTimeoutComboCell(value);
+            }
+
             if (_numericKeys.TryGetValue(key, out var range))
             {
                 var cell = new DataGridViewNumericUpDownCell
@@ -1866,6 +1885,49 @@ namespace AgingTestSystem.Dialogs
             return cell;
         }
 
+        /// <summary>
+        /// 真空建立确认超时下拉单元格（可手输）：首项"0（关闭）"存 0，
+        /// 其余常用档位显示即存值（毫秒数）；当前值不在档位里（如手改文件写了 7000）
+        /// 补一项原值回显，保存时走 ValidateValue 同一口径（0~600000，负数拦）。
+        /// 显示值恒以数字开头：关闭态界面显示"0（关闭）"，与"0=关闭"约定一致。
+        /// </summary>
+        private static DataGridViewEditableComboBoxCell CreateVacuumTimeoutComboCell(string currentValue)
+        {
+            var cell = new DataGridViewEditableComboBoxCell();
+            StyleComboCell(cell);
+            var options = new[]
+            {
+                new ComboOption("0（关闭）", "0"),
+                new ComboOption("5000", "5000"),
+                new ComboOption("10000", "10000"),
+                new ComboOption("15000（默认）", "15000"),
+                new ComboOption("30000", "30000"),
+                new ComboOption("60000", "60000"),
+            };
+            foreach (ComboOption option in options)
+            {
+                cell.Items.Add(option);
+            }
+            cell.DisplayMember = "Display";
+            cell.ValueMember = "Value";
+
+            string cur = (currentValue ?? "").Trim();
+            if (!string.IsNullOrEmpty(cur))
+            {
+                bool found = false;
+                foreach (ComboOption option in cell.Items)
+                {
+                    if (option.Value == cur) { found = true; break; }
+                }
+                if (!found)
+                {
+                    cell.Items.Add(new ComboOption(cur, cur));
+                }
+                cell.Value = cur;
+            }
+            return cell;
+        }
+
         /// <summary>下拉单元格统一样式：扁平无灰底、白底深字，与页面风格一致</summary>
         private static void StyleComboCell(DataGridViewComboBoxCell cell)
         {
@@ -2070,7 +2132,6 @@ namespace AgingTestSystem.Dialogs
                 case "PlcPort":
                 case "FanPort":
                 case "FanTimeoutMs":
-                case "VacuumConfirmTimeoutMs":
                 case "CommunicationLossAlarmCount":
                 case "MaxTestDurationSeconds":
                 case "ScannerBaudRate":
@@ -2124,6 +2185,18 @@ namespace AgingTestSystem.Dialogs
                 case "UsePowerMeter":
                 case "DisplayModeEnabled":
                     if (!bool.TryParse(value, out _)) { error = "应为 true 或 false"; return false; }
+                    return true;
+
+                // 真空建立确认超时（毫秒）：0=关闭（不限时等，不判建立超时），
+                // 不支持负数。界面是"关闭选项+手输"下拉，手输 0 等同选关闭；
+                // 手改文件写负数同样在这里拦不住（文件不走保存），启动时由 MainForm 钳回缺省。
+                case "VacuumConfirmTimeoutMs":
+                    int vacTimeout;
+                    if (!int.TryParse(value, out vacTimeout) || vacTimeout < 0 || vacTimeout > 600000)
+                    {
+                        error = "应为 0~600000 的整数（毫秒，0=关闭：不限时等，不判建立超时）";
+                        return false;
+                    }
                     return true;
 
                 // 破空阀点位（非负整数，0=未配置）

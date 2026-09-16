@@ -16,6 +16,9 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <!-- 【修复 L2】指定应用程序清单文件，启用 DPI 感知 -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- 应用图标（V1.105）：exe/桌面/任务栏图标（主窗体未单独设 Icon，跟 exe 走）；
+         源文件 Resources\app.ico（用户提供，256 单尺寸，合法 ICO 直用不重绘） -->
+    <ApplicationIcon>Resources\app.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -310,6 +313,9 @@
     <!-- 【修复 L2】应用程序清单文件，启用 DPI 感知 -->
     <None Include="app.manifest" />
     <None Include="packages.config" />
+    <!-- 应用图标源文件（V1.105，用户提供；ico 编进 exe，png 同款大图只入库备用，不进编译不拷贝到输出） -->
+    <None Include="Resources\app.ico" />
+    <None Include="Resources\app.png" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

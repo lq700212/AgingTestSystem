@@ -97,7 +97,8 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `Models/` | BarometerData / FanData(+FanRunState) / IoStatus / DeviceConfig / RecipeConfig / StationInfo / PanelLayoutConfig / PolicyEnums（V1.67 工艺策略枚举） / 用户模型 |
 | `Services/ProjectProfile.cs` / `Services/ProjectPolicyStore.cs` | 项目档案（V1.67）：`Projects/<项目>/` 路径解析/迁移/切换（配方/工位设置/策略跟项目，用户/快照/日志跟机器；主页布局是纯代码固定值，不跟文件）；策略分流读写 Policy.json（PolicyKeys 唯一名单） |
 | `Dialogs/UnloadJudgeForm.cs` / `Dialogs/ProjectSwitchForm.cs` | 下料判定窗（V1.67，Q22 待判定配套）/ 项目切换窗（V1.67，仅管理员；V1.72.12 起 Designer 化，静态边框进 Designer.cs） |
-| `.opencode/skills/agingtest-regression/` | 项目最终测试验证技能：一键"构建→冒烟→1918 条回归断言"，用例源码 `tests/TestRunner.cs`，新测试用例一律沉淀于此（用法见其 SKILL.md） |
+| `.opencode/skills/agingtest-regression/` | 项目最终测试验证技能：一键"构建→冒烟→2054 条回归断言"，用例源码 `tests/TestRunner.cs`，新测试用例一律沉淀于此（用法见其 SKILL.md） |
+| `Resources/app.ico` / `Resources/app.png` | 软件图标（V1.105，用户提供同款：ico=exe/桌面/任务栏图标，csproj `ApplicationIcon` 编进 exe；png=同款大图只入库备用； Resources 目录此前为空，专收此类美术资源） |
 
 > WinForms 视图均拆 `.cs` + `.Designer.cs` 两个 partial；**所有 .cs 必须 UTF-8 with BOM 编码**（否则设计器报"无法设计基类 System.Void"）。
 
@@ -109,6 +110,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 [启动] 只开真空阀 + 送风机定值启动；任务参数(时长/延时/阈值)此刻定格
 [抽真空] 等「真空到位」且「距开阀≥配方延时时间」两者满足（判定阈值=配方负压值优先，全局-5kPa兜底；
          VacuumConfirmTimeoutMs 默认15s 内始终不到位→真空建立失败报警：关阀断电标故障，全程不带电；
+         设 0=关闭（不限时等，不判建立超时，只靠老化失压报警+人工停止；跟项目走，机器缺省 15000 不动）；
          面板真空灯：阀没开灰 / 开了到位绿 / 开了没吸住红，下电灯只看载台电）
 [上电] 条件满足自动载台上电 → 进入老化计时
 [老化] 计时时长=配方"烧屏时间"(>0)，否则回退 MaxTestDurationSeconds(0=不限时长手动停；V1.66 起启动框对 0 时长/空 SN 工位追加警告，可继续；V1.67 起策略可切硬拦截）
@@ -125,7 +127,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 ### 4.2 报警来源（DeviceManager.IsAlarm）
 1. **压力越限**：真空压力 > `AlarmPressureThresholdKPa`（默认 -5kPa，即真空变差）
-2. **真空建立超时**：开阀后 15s 压力未进正常区间
+2. **真空建立超时**：开阀后 15s 压力未进正常区间（设 0=关闭：不限时等，不判此项）
 3. **通讯失联**：某台连续读取失败 ≥ `CommunicationLossAlarmCount` 次
 4. **DI 报警触点**（可选）：`UseDiAlarmContact=true` 时启用，默认关
 
@@ -181,7 +183,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `FanEnabled` / `FanIpAddress` / `FanPort` | true / 192.168.1.220 / 50000 | 送风机（可选设备，连不上不影响启动） |
 | `FanAutoDetectEnabled` / `FanIpCandidates` | true / .220,.221,.222 | 送风机 IP 自动识别 |
 | `FanUnitId` / `FanTimeoutMs` | 1 / 3000 | 送风机从站/超时 |
-| `VacuumConfirmTimeoutMs` | 15000 | 真空建立确认超时(ms) |
+| `VacuumConfirmTimeoutMs` | 15000 | 真空建立确认超时(ms；0=关闭不限时等，跟项目走 Policy.json，机器缺省不动） |
 | `CommunicationLossAlarmCount` | 3 | 通讯失联报警阈值(连续失败次数) |
 | `MaxTestDurationSeconds` | 0 | 老化最大时长(0=不限) |
 | `UseDiAlarmContact` | false | DI 报警触点并入判定（需现场确认电平） |
