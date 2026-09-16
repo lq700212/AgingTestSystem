@@ -2078,8 +2078,16 @@ namespace AgingTestSystem.Tests
                 AgingSequencer.IsVacuumBuildFailed(false, TimeSpan.FromSeconds(60), 15000));
             Check("计时为负永不判失败",
                 !AgingSequencer.IsVacuumBuildFailed(false, TimeSpan.FromSeconds(-1), 15000));
-            Check("零宽限+未到位立即失败",
-                AgingSequencer.IsVacuumBuildFailed(false, TimeSpan.Zero, 0));
+            // 宽限 0=关闭（不限时等，不判建立超时；只靠老化失压报警+人工停止）——
+            // 老语义"零宽限立即失败"已作废：0 会让开阀首轮常压即报警，正常抽真空 3~5 秒也误报。
+            Check("零宽限=关闭：启动时刻未到位不判失败",
+                !AgingSequencer.IsVacuumBuildFailed(false, TimeSpan.Zero, 0));
+            Check("零宽限=关闭：久等仍不判失败",
+                !AgingSequencer.IsVacuumBuildFailed(false, TimeSpan.FromHours(1), 0));
+            Check("负宽限同样按关闭处理(防崩，手改文件由启动钳回缺省)",
+                !AgingSequencer.IsVacuumBuildFailed(false, TimeSpan.FromSeconds(60), -5));
+            Check("零宽限=关闭：到位同样不判失败",
+                !AgingSequencer.IsVacuumBuildFailed(true, TimeSpan.FromSeconds(60), 0));
 
             // ── IsPressureOutOfRange（V1.62 新增：两处私有判定的唯一口径）──
             Check("默认方向-4>-5越限", AgingSequencer.IsPressureOutOfRange(-4m, -5m, true));
@@ -2235,14 +2243,18 @@ namespace AgingTestSystem.Tests
             Check("PolicyKeys 每个都有 DeviceConfig 同名属性(防存了用不上)", keysOk);
             Check("PolicyKeys 含超温联停开关(老 key 收编)",
                 ProjectPolicyStore.PolicyKeys.Contains("FanTempShutdownEnabled"));
+            Check("PolicyKeys 含真空超时(跟项目走，机器缺省15000不动)",
+                ProjectPolicyStore.PolicyKeys.Contains("VacuumConfirmTimeoutMs"));
             bool optsOk = true;
             foreach (string k in ProjectPolicyStore.PolicyKeys)
             {
-                // VentValveDoPoint 是数字项、FanTempShutdownEnabled/SkipVacuum/DisplayModeEnabled
+                // VentValveDoPoint/VacuumConfirmTimeoutMs 是数字项、
+                // FanTempShutdownEnabled/SkipVacuum/DisplayModeEnabled
                 // 是布尔项、MesTriggers/MesFieldMap/MesStaticFields/CustomAlarmRules/
                 // CompleteExpression/ReportColumns/DisplayModes 是自由文本
                 // （V1.68/V1.69/V1.74/V1.75），都无策略下拉
-                if (k == "VentValveDoPoint" || k == "FanTempShutdownEnabled" || k == "SkipVacuum"
+                if (k == "VentValveDoPoint" || k == "VacuumConfirmTimeoutMs"
+                    || k == "FanTempShutdownEnabled" || k == "SkipVacuum"
                     || k == "DisplayModeEnabled"
                     || k == "MesTriggers" || k == "MesFieldMap" || k == "MesStaticFields"
                     || k == "CustomAlarmRules" || k == "CompleteExpression"
@@ -3251,6 +3263,11 @@ namespace AgingTestSystem.Tests
                 linesOf("start").Contains("警告") && linesOf("start").Contains("空闲 0 台"));
             Check("抽真空缺省（超时15000/失联3次）",
                 linesOf("vacuum").Contains("15000") && linesOf("vacuum").Contains("3"));
+            // 超时 0=关闭：副标题带 0 与"关闭"，与设置表下拉首项"0（关闭）"对得上
+            dc.VacuumConfirmTimeoutMs = 0;
+            Check("抽真空关闭态（超时0/关闭）",
+                linesOf("vacuum").Contains("0") && linesOf("vacuum").Contains("关闭"));
+            dc.VacuumConfirmTimeoutMs = 15000;
             Check("上电缺省（全局不限/时长到）",
                 linesOf("power").Contains("全局不限") && linesOf("power").Contains("时长到"));
             Check("完成缺省（自动/下电）",
@@ -4010,6 +4027,15 @@ namespace AgingTestSystem.Tests
                 Check("温度上限0~200合法", ok("FanTempAlarmLimitC", "0") && ok("FanTempAlarmLimitC", "200"));
                 Check("温度上限越界拦截",
                     !ok("FanTempAlarmLimitC", "-1") && !ok("FanTempAlarmLimitC", "201"));
+                // 真空超时 0=关闭：0 与常用档位过，负数/非整数/超上限拦
+                Check("真空超时0关闭+档位合法",
+                    ok("VacuumConfirmTimeoutMs", "0") && ok("VacuumConfirmTimeoutMs", "15000")
+                    && ok("VacuumConfirmTimeoutMs", "600000"));
+                Check("真空超时负数拦截",
+                    !ok("VacuumConfirmTimeoutMs", "-1") && !ok("VacuumConfirmTimeoutMs", "-100"));
+                Check("真空超时非整数与超上限拦截",
+                    !ok("VacuumConfirmTimeoutMs", "abc") && !ok("VacuumConfirmTimeoutMs", "")
+                    && !ok("VacuumConfirmTimeoutMs", "600001"));
 
                 // _boolKeys 17 项逐项过校验（防"只加一边"的配置漂移；V1.68 +MesEnabled/MesMockEnabled；V1.69 +SkipVacuum；V1.73 +VentValveEnabled；V1.74 +UsePowerMeter；V1.75 +DisplayModeEnabled）
                 var boolKeys = (HashSet<string>)typeof(SettingsForm).GetField("_boolKeys",
@@ -4078,6 +4104,37 @@ namespace AgingTestSystem.Tests
                     Check("策略落盘Policy.json",
                         File.Exists(policyPath)
                         && File.ReadAllText(policyPath).Contains("Block"));
+
+                    // 3b) 数字策略键同样分流 Policy.json（真空超时跟项目走）+ 内存热回写
+                    var c3b = new DeviceConfig();
+                    SettingsForm.PersistResult r3b;
+                    string e3b;
+                    bool ok3b = SettingsForm.PersistChanges(c3b,
+                        new Dictionary<string, string> { { "VacuumConfirmTimeoutMs", "0" } },
+                        out r3b, out e3b);
+                    Check("真空超时策略保存成功", ok3b && e3b == null && r3b != null
+                        && r3b.SavedKeys.Contains("VacuumConfirmTimeoutMs"));
+                    Check("真空超时内存热回写0=关闭", c3b.VacuumConfirmTimeoutMs == 0);
+                    Check("真空超时落盘Policy.json",
+                        File.Exists(policyPath)
+                        && File.ReadAllText(policyPath).Contains("VacuumConfirmTimeoutMs"));
+
+                    // 3c) D 预置整包分流（12 开关＋超时 0 全进 Policy.json）+ 内存热回写
+                    var c3c = new DeviceConfig();
+                    SettingsForm.PersistResult r3c;
+                    string e3c;
+                    bool ok3c = SettingsForm.PersistChanges(c3c,
+                        PolicyPresets.GetAllValues("D"), out r3c, out e3c);
+                    Check("D整包保存成功", ok3c && e3c == null && r3c != null
+                        && r3c.SavedKeys.Contains("AgingPressureLossPolicy")
+                        && r3c.SavedKeys.Contains("VacuumConfirmTimeoutMs"));
+                    Check("D整包内存热回写（失压不停+超时0）",
+                        c3c.AgingPressureLossPolicy == AgingPressureLossPolicy.KeepRunning
+                        && c3c.VacuumConfirmTimeoutMs == 0);
+                    Check("D整包落盘Policy.json（含超时0）",
+                        File.Exists(policyPath)
+                        && File.ReadAllText(policyPath).Contains("VacuumConfirmTimeoutMs")
+                        && File.ReadAllText(policyPath).Contains("KeepRunning"));
 
                     // 4) 机器键写 exe.config + 内存热回写
                     var c4 = new DeviceConfig();
@@ -4155,6 +4212,8 @@ namespace AgingTestSystem.Tests
             Check("总数范围1~999整数", tb.Item1 == 1m && tb.Item2 == 999m && tb.Item3 == 0);
             Check("端口范围上限65535", ranges["PlcPort"].Item2 == 65535m);
             Check("采集间隔下限10", ranges["CollectInterval"].Item1 == 10m);
+            // 真空超时不走数字微调框：关闭选项+手输下拉（0=关闭），范围由 ValidateValue 锁 0~600000
+            Check("真空超时不在数字键表（走可输入下拉）", !ranges.ContainsKey("VacuumConfirmTimeoutMs"));
 
             // —— 公开连接键集合契约 ——
             Check("结构键含数量/Mock/风机",
@@ -4211,6 +4270,16 @@ namespace AgingTestSystem.Tests
             Check("停止位非法归一1", Equals(cellOf("StopBits", "3").Value, "1"));
             var parCell = cellOf("Parity", "Odd");
             Check("校验位存枚举名", Equals(parCell.Value, "Odd"));
+            // 真空超时→可手输下拉：关闭选项存 0，常用档位原值回显，不在档位补原值项
+            var vacCell = (DataGridViewComboBoxCell)cellOf("VacuumConfirmTimeoutMs", "0");
+            Check("真空超时0回显关闭项",
+                vacCell is DataGridViewComboBoxCell && Equals(vacCell.Value, "0"));
+            Check("真空超时档位回显原值",
+                Equals(cellOf("VacuumConfirmTimeoutMs", "15000").Value, "15000"));
+            Check("真空超时自定义值补项回显",
+                Equals(cellOf("VacuumConfirmTimeoutMs", "7000").Value, "7000"));
+            Check("真空超时不走数字微调框",
+                !(cellOf("VacuumConfirmTimeoutMs", "15000") is DataGridViewNumericUpDownCell));
             var numCell = (DataGridViewNumericUpDownCell)cellOf("AlarmPressureThresholdKPa", "-5.5");
             Check("数字格范围小数位一致",
                 numCell.Minimum == -200m && numCell.Maximum == 200m && numCell.DecimalPlaces == 2
@@ -7034,15 +7103,16 @@ namespace AgingTestSystem.Tests
             }
         }
 
-        // 12h. PolicyPresetV185 —— 预置策略 A/B/C（一键套用，V1.85 新增）
+        // 12h. PolicyPresetV185 —— 预置策略 A/B/C/D（一键套用，V1.85 新增；V1.105 加 D 客户常开）
         private static void PolicyPresetTests()
         {
             // —— 名单与规模锁 ——
-            Check("预置3个且试用顺序A/B/C",
-                PolicyPresets.All.Count == 3
+            Check("预置4个且试用顺序A/B/C/D",
+                PolicyPresets.All.Count == 4
                 && PolicyPresets.All[0].Id == "A"
                 && PolicyPresets.All[1].Id == "B"
-                && PolicyPresets.All[2].Id == "C");
+                && PolicyPresets.All[2].Id == "C"
+                && PolicyPresets.All[3].Id == "D");
             Check("管辖12个行为开关", PolicyPresets.GovernedKeys.Count == 12);
             bool governedInKeys = true;
             foreach (string k in PolicyPresets.GovernedKeys)
@@ -7128,7 +7198,7 @@ namespace AgingTestSystem.Tests
                     break;
                 }
             }
-            Check("A/B/C套用后探测回原预置", roundOk);
+            Check("A/B/C/D套用后探测回原预置", roundOk);
             Check("缺省配置=自定义（预置是刻意偏离现状，不是现状本身）",
                 PolicyPresets.DetectPreset(new DeviceConfig()) == PolicyPresets.CustomId);
             var cfgA = new DeviceConfig();
@@ -7167,8 +7237,8 @@ namespace AgingTestSystem.Tests
                     noSkip = false;
                 }
             }
-            Check("三预置全不选泄压（本机无破空阀，选了保存即拦）", noVent);
-            Check("三预置全不跳抽真空（真空治具永不跳过）", noSkip);
+            Check("四预置全不选泄压（本机无破空阀，选了保存即拦）", noVent);
+            Check("四预置全不跳抽真空（真空治具永不跳过）", noSkip);
             Check("A/B超温联停关（零门槛直接套）",
                 PolicyPresets.Find("A").Values["FanTempShutdownEnabled"] == "false"
                 && PolicyPresets.Find("B").Values["FanTempShutdownEnabled"] == "false");
@@ -7181,6 +7251,58 @@ namespace AgingTestSystem.Tests
                 AgingSequencer.ValidatePolicyCombination(
                     true, 60f, CompletionAction.PowerOffAndBeep, 0, false) == null);
             Check("A零门槛组合校验过（上电/风机/阀全默认）",
+                AgingSequencer.ValidatePolicyCombination(
+                    false, 0f, CompletionAction.PowerOffAndBeep, 0, false) == null);
+            // —— D 客户常开（V1.105：A 标准只动失压→只记不停＋超时 0 跟项目） ——
+            var valsD = PolicyPresets.GetPresetValues("D");
+            var valsA = PolicyPresets.GetPresetValues("A");
+            bool dDiffOk = valsD != null && valsA != null;
+            if (dDiffOk)
+            {
+                foreach (string k in PolicyPresets.GovernedKeys)
+                {
+                    bool same = string.Equals(valsD[k], valsA[k], StringComparison.OrdinalIgnoreCase);
+                    if (k == "AgingPressureLossPolicy") { if (same) dDiffOk = false; }
+                    else if (!same) dDiffOk = false;
+                }
+            }
+            Check("D与A只差失压开关（其余照抄A标准）", dDiffOk);
+            Check("D失压=只记不停（保持常开核心）",
+                valsD != null && valsD["AgingPressureLossPolicy"] == "KeepRunning");
+            Check("D不跳抽真空（只是不限时等，不是不看真空）",
+                valsD != null && valsD["SkipVacuum"] == "false");
+            var numD = PolicyPresets.GetNumericValues("D");
+            Check("D数值项超时0（跟项目写，不参与探测）",
+                numD != null && numD.Count == 1 && numD["VacuumConfirmTimeoutMs"] == "0");
+            Check("D数值键是PolicyKeys成员（存得进项目文件）",
+                ProjectPolicyStore.PolicyKeys.Contains("VacuumConfirmTimeoutMs"));
+            var numProp = typeof(DeviceConfig).GetProperty("VacuumConfirmTimeoutMs");
+            Check("D数值可解析（与PersistChanges同口径）",
+                numProp != null
+                && ProjectPolicyStore.ParseValue(numProp.PropertyType, "0") != null);
+            var miVac = typeof(SettingsForm).GetMethod("ValidateValue",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Check("D数值过保存校验（0=关闭合法）",
+                miVac != null
+                && (bool)miVac.Invoke(null, new object[] { "VacuumConfirmTimeoutMs", "0", null }) == true);
+            Check("ABC数值项为空（行为与旧版一致）",
+                PolicyPresets.GetNumericValues("A").Count == 0
+                && PolicyPresets.GetNumericValues("B").Count == 0
+                && PolicyPresets.GetNumericValues("C").Count == 0);
+            Check("未知预置数值null", PolicyPresets.GetNumericValues("Z") == null);
+            var numD1 = PolicyPresets.GetNumericValues("D");
+            var numD2 = PolicyPresets.GetNumericValues("D");
+            numD1["VacuumConfirmTimeoutMs"] = "15000";
+            Check("数值取值返回副本（改返回不污染预置本身）",
+                PolicyPresets.GetNumericValues("D")["VacuumConfirmTimeoutMs"] == "0"
+                && numD2["VacuumConfirmTimeoutMs"] == "0");
+            var allD = PolicyPresets.GetAllValues("D");
+            Check("合流含12开关+超时0（套用走这一份）",
+                allD != null && allD.Count == PolicyPresets.GovernedKeys.Count + 1
+                && allD["AgingPressureLossPolicy"] == "KeepRunning"
+                && allD["VacuumConfirmTimeoutMs"] == "0");
+            Check("未知预置合流null", PolicyPresets.GetAllValues("Z") == null);
+            Check("D零门槛组合校验过（与A同动作同阀）",
                 AgingSequencer.ValidatePolicyCombination(
                     false, 0f, CompletionAction.PowerOffAndBeep, 0, false) == null);
 
@@ -7214,13 +7336,13 @@ namespace AgingTestSystem.Tests
                     ? fCbo.GetType().GetProperty("Items").GetValue(fCbo, null)
                         as System.Collections.IList
                     : null;
-                Check("预置下拉4项（A/B/C/自定义）",
-                    items != null && items.Count == 4);
+                Check("预置下拉5项（A/B/C/D/自定义）",
+                    items != null && items.Count == 5);
                 int selIdx = fCbo != null
                     ? (int)fCbo.GetType().GetProperty("SelectedIndex").GetValue(fCbo, null)
                     : -1;
                 Check("无参构造回显自定义且整行禁用（只读安全）",
-                    selIdx == 3
+                    selIdx == 4
                     && !((Control)fCbo).Enabled && !((Control)fBtn).Enabled
                     && !string.IsNullOrWhiteSpace(desc.Text));
             }
@@ -7271,6 +7393,25 @@ namespace AgingTestSystem.Tests
                 Check("关窗后悬停提示已释放（不进终结器）", tipGone);
             }
             finally { try { if (full != null) full.Dispose(); } catch { } }
+            // D 配置打开回显选中 D（第 4 项，索引 3；套用 D 后当前配置即回显 D，
+            // 不再是"自定义"——这就是"自定义与 D 保持一致"的含义）
+            ProcessPolicyForm fullD = null;
+            try
+            {
+                var cfgD = new DeviceConfig();
+                PolicyPresets.ApplyToConfig(cfgD, "D");
+                fullD = new ProcessPolicyForm(cfgD, null, true);
+                var tD = typeof(ProcessPolicyForm);
+                object fCboD = tD.GetField("_cboPreset",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(fullD);
+                var descD = tD.GetField("_lblPresetDesc",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(fullD) as Control;
+                int selD = (int)fCboD.GetType().GetProperty("SelectedIndex").GetValue(fCboD, null);
+                Check("D配置打开回显选中D", selD == 3);
+                Check("说明行显示D场景",
+                    descD != null && descD.Text.Contains("常开"));
+            }
+            finally { try { if (fullD != null) fullD.Dispose(); } catch { } }
         }
 
         // 12i. PolicyNodeComboV1851 —— 节点选项框按预置下拉口径统一（V1.85.1 新增）

@@ -7,13 +7,24 @@ namespace AgingTestSystem.Services
 {
     /// <summary>
     /// 预置工艺策略（傻瓜化：现场不用逐项理解 20 个策略 key，
-    /// 在工艺策略窗顶部下拉选 A/B/C，点"套用"即整套生效，切预置=换整套行为）。
+    /// 在工艺策略窗顶部下拉选 A/B/C/D，点"套用"即整套生效，切预置=换整套行为）。
     /// 【为什么要做预置】
     /// 本机是显示屏烧屏老化线（合肥显耀 MicroLED 微显示：屏小、怕过温；
     /// 炉内单温控探头 + 冷却送风机，72 工位真空吸附固定、载台上电点亮）。
-    /// 烧屏工艺大差不差就三种情况：①量产标准跑（先试这个）②新治具/新配方
-    /// 调试（误报多，先跑起来）③出货放行（最严）。现场工艺没时间逐项核对，
-    /// 那就把三种情况提前配好，A 不行切 B，B 不行切 C——这就是 A/B/C 的由来。
+    /// 烧屏工艺大差不差就四种情况：①量产标准跑（先试这个）②新治具/新配方
+    /// 调试（误报多，先跑起来）③出货放行（最严）④客户常开（阀电同开保持常开）。
+    /// 现场工艺没时间逐项核对，
+    /// 那就把几种情况提前配好，A 不行切 B，B 不行切 C，客户常开直接套 D。
+    /// 【设计三原则（改预置内容前必读）】
+    /// 1) 只动"行为开关"，不动"自由文本/配方/机器参数"：12 个开关 key 全在
+    ///    <see cref="ProjectPolicyStore.PolicyKeys"/> 里（跟项目，走 Policy.json）。
+    ///    MES 映射/自定义规则/完成表达式/报表列/画面字典/破空点位是各现场手填的，
+    ///    切预置不能把人填好的东西洗掉；时长/阈值/温度上限是配方或跟机器的参数，
+    ///    预置无权碰（超温上限这种涉及安全的更不能代填，必须人按炉温填）。
+    ///    例外（V1.105）：跟项目走的策略数值（PolicyKeys 成员，如真空超时）可进
+    ///    NumericValues——套用时一并写入本项目 Policy.json（与开关同一条保存路），
+    ///    不参与 DetectPreset（探测只认 12 开关：数值是各项目的微调，不算身份）。
+    ///    配方延时（DelayTime）是配方项，任何预置都不写：无配方默认即 0，有配方按配方来。
     /// 【设计三原则（改预置内容前必读）】
     /// 1) 只动"行为开关"，不动"自由文本/配方/机器参数"：12 个开关 key 全在
     ///    <see cref="ProjectPolicyStore.PolicyKeys"/> 里（跟项目，走 Policy.json）。
@@ -32,6 +43,9 @@ namespace AgingTestSystem.Services
     /// C 严格出货（放行标准）：A 的严格版 + 启动定格追溯 + 超温联停 + 画面记录。
     ///    开 C 前置：本机【超温上限】必须先填＞0（报警节点里填，按炉子工艺温度定），
     ///    否则保存即拦——这是故意的（fail-safe：没上限的联停等于没配，不能悄悄开）。
+    /// D 客户常开（阀电同开保持常开）：A 标准的 12 开关只动"老化失压→只记不停"，
+    ///    另把本项目真空超时写 0（不限时等，数值项见 NumericValues）；配方延时填 0
+    ///    即阀电同开（无配方默认即 0，有配方按配方来——配方项预置不动）。
     /// </summary>
     public static class PolicyPresets
     {
@@ -74,6 +88,8 @@ namespace AgingTestSystem.Services
             { "FanTempShutdownEnabled", "超温联停" },
             { "SkipVacuum", "跳过抽真空" },
             { "DisplayModeEnabled", "画面维度" },
+            // 数值项中文名（NumericValues 差异预览用，不进存盘；只收 PolicyKeys 成员）
+            { "VacuumConfirmTimeoutMs", "真空超时" },
         };
 
         /// <summary>单个预置定义（纯数据：UI 下拉/确认框/说明提示全读它，不另写一份文案）。</summary>
@@ -91,9 +107,15 @@ namespace AgingTestSystem.Services
             public string Requires;
             /// <summary>12 项存储值（key→英文存储值/小写布尔，与落盘口径一致）。</summary>
             public Dictionary<string, string> Values;
+            /// <summary>
+            /// 数值项存储值（key→存储字符串，如真空超时毫秒数；V1.105 新增）。
+            /// 只要 PolicyKeys 成员才收（跟项目走，套用时与 Values 同一条保存路进 Policy.json）；
+            /// 不参与 DetectPreset（探测只认 12 开关）；A/B/C 为空集合（行为与旧版一致）。
+            /// </summary>
+            public Dictionary<string, string> NumericValues;
         }
 
-        /// <summary>全部预置（顺序即试用顺序 A→B→C，下拉按此排）。</summary>
+        /// <summary>全部预置（顺序即试用顺序 A→B→C→D，下拉按此排）。</summary>
         public static readonly List<PolicyPresetDef> All = new List<PolicyPresetDef>
         {
             new PolicyPresetDef
@@ -129,11 +151,12 @@ namespace AgingTestSystem.Services
                     { "EventIdentityMode", "RecordTime" },
                     // 超温联停=关：零门槛（上限还没按炉温填，开了保存即拦）；填好上限后可手动开，或切C。
                     { "FanTempShutdownEnabled", "false" },
-                    // 跳过抽真空=关：三个预置全关——真空治具永不跳过（无真空治具的机械夹具才手动开）。
+                    // 跳过抽真空=关：四个预置全关——真空治具永不跳过（无真空治具的机械夹具才手动开）。
                     { "SkipVacuum", "false" },
                     // 画面维度=关（现状零打扰，PG 画面本来也由治具/PG 固定输出）；要记追溯→切C。
                     { "DisplayModeEnabled", "false" },
-                }
+                },
+                NumericValues = new Dictionary<string, string>(StringComparer.Ordinal),
             },
             new PolicyPresetDef
             {
@@ -164,7 +187,8 @@ namespace AgingTestSystem.Services
                     { "FanTempShutdownEnabled", "false" },
                     { "SkipVacuum", "false" },
                     { "DisplayModeEnabled", "false" },
-                }
+                },
+                NumericValues = new Dictionary<string, string>(StringComparer.Ordinal),
             },
             new PolicyPresetDef
             {
@@ -195,7 +219,46 @@ namespace AgingTestSystem.Services
                     { "SkipVacuum", "false" },
                     // 画面维度=开：烧屏画面（白场/RGB/棋盘格…）记追溯；空=允许，老配方不炸。
                     { "DisplayModeEnabled", "true" },
-                }
+                },
+                NumericValues = new Dictionary<string, string>(StringComparer.Ordinal),
+            },
+            // D 客户常开（阀电同开保持常开，一键套用免逐项改）：
+            // 12 开关照抄 A，只动老化失压→只记不停；数值项把本项目真空超时写 0。
+            // 配方延时不归预置管：无配方默认即 0（阀电同开），有配方按配方来。
+            new PolicyPresetDef
+            {
+                Id = "D",
+                Title = "预置D·客户常开（阀电同开保持常开）",
+                Scenario = "客户常开工艺：真空吸附与上电同时开、保持常开不关闭。"
+                    + "行为开关与A标准一致，只把老化失压改成只记不停；"
+                    + "本项目真空超时随套用写0（不限时等）。",
+                HowToSwitch = "配方延时填0即阀电同开（无配方默认即0，有配方按配方来）；"
+                    + "超时0随套用写入本项目；建成后失压只记不停。"
+                    + "误报多→切B；出货放行→切C；回到标准→切A。",
+                Requires = "",
+                Values = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    { "ZeroDurationPolicy", "Block" },
+                    { "EmptySnPolicy", "Block" },
+                    { "FanDisconnectPolicy", "BlockStart" },
+                    { "VacuumFailKind", "ProductFail" },
+                    { "CompletionJudgePolicy", "AutoPass" },
+                    { "PowerLossPolicy", "RestartFull" },
+                    // 与 A 唯一的差别：老化失压只记不停——保持常开的核心，
+                    // 管路波动/失压记一条事件继续烧，不关阀不断电。
+                    { "AgingPressureLossPolicy", "KeepRunning" },
+                    { "CompletionAction", "PowerOffAndBeep" },
+                    { "EventIdentityMode", "RecordTime" },
+                    { "FanTempShutdownEnabled", "false" },
+                    // 跳过抽真空=关：有真空治具永不跳过（D 只是不限时等，不是不看真空）。
+                    { "SkipVacuum", "false" },
+                    { "DisplayModeEnabled", "false" },
+                },
+                NumericValues = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    // 真空超时 0=关闭：不限时等，不判建立超时（只靠老化失压报警+人工停止兜底）
+                    { "VacuumConfirmTimeoutMs", "0" },
+                },
             },
         };
 
@@ -219,6 +282,35 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
+        /// 取某预置的数值项副本（V1.105 新增；未知 Id 返回 null，已知但无数值返回空字典——
+        /// 与 GetPresetValues 对称，调用方无需判 null 即可合并）。
+        /// </summary>
+        public static Dictionary<string, string> GetNumericValues(string id)
+        {
+            PolicyPresetDef def = Find(id);
+            if (def == null) return null;
+            if (def.NumericValues == null) return new Dictionary<string, string>(StringComparer.Ordinal);
+            return new Dictionary<string, string>(def.NumericValues, StringComparer.Ordinal);
+        }
+
+        /// <summary>
+        /// 取某预置的全部落盘值（12 开关＋数值项合并，V1.105 新增；
+        /// 工艺策略窗"套用预置"走这一份：差异预览/校验/保存看到的是同一集合）。
+        /// 未知 Id 返回 null。
+        /// </summary>
+        public static Dictionary<string, string> GetAllValues(string id)
+        {
+            Dictionary<string, string> values = GetPresetValues(id);
+            if (values == null) return null;
+            Dictionary<string, string> numerics = GetNumericValues(id);
+            if (numerics != null)
+            {
+                foreach (var kv in numerics) values[kv.Key] = kv.Value;
+            }
+            return values;
+        }
+
+        /// <summary>
         /// 把预置写进内存配置（UI 套用前先填内存？不——套用走 PersistChanges 直写文件+
         /// 热回写，这里只给"预览差异/单测"用：纯函数，不碰文件不碰静态）。
         /// </summary>
@@ -226,7 +318,8 @@ namespace AgingTestSystem.Services
         public static string ApplyToConfig(DeviceConfig config, string id)
         {
             if (config == null) return "配置对象为空，无法套用预置。";
-            Dictionary<string, string> values = GetPresetValues(id);
+            // 开关＋数值一起写（数值走同一解析口；探测仍只认 12 开关，见 DetectPreset）
+            Dictionary<string, string> values = GetAllValues(id);
             if (values == null) return "未知预置：" + (id ?? "");
             var bad = new List<string>();
             foreach (var kv in values)
@@ -248,9 +341,10 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 反查当前配置≈哪个预置（纯函数：12 项逐项序列化比对，全对上才算）。
+        /// 反查当前配置≈哪个预置（纯函数：12 项逐项序列化比对，全对上才算；
+        /// 数值项不参与——数值是各项目的微调（如超时 0/15000），不算身份）。
         /// </summary>
-        /// <returns>预置 Id（"A"/"B"/"C"）；凑不上任何一个返回 <see cref="CustomId"/>。</returns>
+        /// <returns>预置 Id（"A"/"B"/"C"/"D"）；凑不上任何一个返回 <see cref="CustomId"/>。</returns>
         public static string DetectPreset(DeviceConfig config)
         {
             if (config == null) return CustomId;

@@ -49,6 +49,10 @@ namespace AgingTestSystem.Services
             "ReportColumns",
             "DisplayModes",
             "DisplayModeEnabled",
+            // 真空建立确认超时（整数毫秒，0=关闭）：腔体/管路抽气时间因产品而异，
+            // 跟项目走（机器缺省 15000 不动）；数字项无策略下拉，同步锁里按
+            // VentValveDoPoint 同口径豁免（见回归"三处同步锁"注释）。
+            "VacuumConfirmTimeoutMs",
         };
 
         /// <summary>当前项目的策略文件路径（Projects/&lt;项目&gt;/Policy.json）。</summary>

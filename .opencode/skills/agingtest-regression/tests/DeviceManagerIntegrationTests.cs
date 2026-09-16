@@ -1617,7 +1617,7 @@ namespace AgingTestSystem.Tests
         // 用 Fake 写失败注入 + 短数组 + 反射，直接锁：
         // 上电失败回滚 / 停止先写后清 / 短数组尾部按读失败 / 广播按总数 /
         // SkipVacuum 启动定格 / 报警原因文案 / 下料认领原子化 / 热更重建数组 /
-        // 急停关破空阀 / 订阅异常隔离 / 负延时钳零。
+        // 急停关破空阀 / 订阅异常隔离 / 负延时钳零 / 延时0双开 / 真空超时0关闭。
         // =====================================================================
         private static void DeviceManagerSweepTests()
         {
@@ -1643,6 +1643,7 @@ namespace AgingTestSystem.Tests
                 SweepNegativeDelay();
                 SweepVacuumInRangeFlag();
                 SweepZeroDelayPowerOnAtStart();
+                SweepVacuumTimeoutDisabled();
                 SweepFanStopRetry();
                 SweepResetWriteBeforeClear();
                 SweepCompleteWriteFailKeepsTesting();
@@ -2111,6 +2112,61 @@ namespace AgingTestSystem.Tests
                     io.EverPowerOn(PowerOut(config, 2)));
                 Check("[延时0] 超时后阀电全关",
                     !io.ReadOutput(ValveOut(config, 2)) && !io.ReadOutput(PowerOut(config, 2)));
+            }
+            finally { try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
+        }
+
+        // ---------- S15 真空超时 0=关闭：不限时等，不判建立超时 ----------
+        // 客户工艺：延时 0 + 超时 0 → 阀电同开、保持常开、不要报警不要断电。
+        // 语义锁：超时 0 只关"建立超时"这一判；建成后失压仍按老化正常报警断电
+        // （与 SkipVacuum 全程豁免不同，保护没丢）。
+        private static void SweepVacuumTimeoutDisabled()
+        {
+            FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+            DeviceManager dm = BuildTestManager(out reader, out io, out config);
+            try
+            {
+                config.VacuumConfirmTimeoutMs = 0;   // 关闭建立超时（跟项目可配，机器缺省 15000 不动）
+                // 1号：延时0 + 常压永不到位 → 超过原 600ms 窗口仍不报警、阀电保持常开、仍在测
+                dm.SetStationRecipe(1, "RZ", -5m, null);
+                dm.SetStationDelayTimes(1, TimeSpan.Zero, TimeSpan.FromSeconds(60));
+                dm.StartTesting(new[] { 1 });
+                Check("[超时关] 启动阀电同开",
+                    WaitUntil(() => io.ReadOutput(ValveOut(config, 1))
+                        && io.ReadOutput(PowerOut(config, 1)), 1500));
+                Thread.Sleep(1200);   // 远超原 600ms 窗口：旧语义（0=立即失败）这里早已报警断电
+                var d1 = dm.GetBarometerData(1);
+                Check("[超时关] 超窗仍在测不报警",
+                    d1 != null && d1.Status == DeviceStatus.Testing);
+                Check("[超时关] 超窗后阀电保持常开",
+                    io.ReadOutput(ValveOut(config, 1)) && io.ReadOutput(PowerOut(config, 1)));
+                // 到位 → 宽限关闭，转入常规老化；再失压 → 老化失压照常报警断电（保护没丢）
+                reader.SetPressure(1, -6m);
+                Check("[超时关] 到位后宽限关闭",
+                    WaitUntil(() => ((DateTime[])GetDmField(dm, "_vacuumConfirmTimes"))[0]
+                        == DateTime.MinValue, 2000));
+                reader.SetPressure(1, 0m);
+                Check("[超时关] 建成后失压照常报警断电",
+                    WaitUntil(() =>
+                    {
+                        var d = dm.GetBarometerData(1);
+                        return d != null && d.Status == DeviceStatus.Fault;
+                    }, 3000));
+                dm.StopTesting(new[] { 1 });
+
+                // 2号：无配方（不调 SetStationRecipe/SetStationDelayTimes）→ 延时默认即 0，
+                // 启动同样阀电同开（"无配方按 0，有配方按配方"口径锁）
+                dm.StartTesting(new[] { 2 });
+                Check("[超时关] 无配方默认延时0阀电同开",
+                    WaitUntil(() => io.ReadOutput(ValveOut(config, 2))
+                        && io.ReadOutput(PowerOut(config, 2)), 1500));
+                Check("[超时关] 无配方直接进Aging",
+                    WaitUntil(() =>
+                    {
+                        var ph = GetDmField(dm, "_testPhases") as Array;
+                        return ph != null && ph.GetValue(1).ToString() == "Aging";
+                    }, 1500));
+                dm.StopTesting(new[] { 2 });
             }
             finally { try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { } }
         }
