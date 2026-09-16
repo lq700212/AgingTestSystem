@@ -210,7 +210,7 @@ function Resolve-IniPath {
   }
   $cwd = (Get-Location).Path
   if ((Test-Path -LiteralPath (Join-Path $cwd $IniName)) -or
-      (Test-Path -LiteralPath (Join-Path $cwd "AgingTestSystem.exe"))) {
+      (Test-Path -LiteralPath (Join-Path $cwd "烧屏测试控制中心.exe"))) {
     return (Join-Path $cwd $IniName)
   }
   return (Join-Path $script:ScriptDir $IniName)

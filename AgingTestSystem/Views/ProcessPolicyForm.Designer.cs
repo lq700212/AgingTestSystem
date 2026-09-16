@@ -31,10 +31,10 @@ namespace AgingTestSystem.Views
         /// <summary>右栏标题（选中节点名 / 未选中节点 / 连线（只读））</summary>
         private Sunny.UI.UILabel _lblNodeTitle;
 
-        /// <summary>预置行标题（"预置策略（一键套用A/B/C）"静态文本）</summary>
+        /// <summary>预置行标题（"预置策略（一键套用A/B/C/D）"静态文本）</summary>
         private Sunny.UI.UILabel _lblPresetTitle;
 
-        /// <summary>预置下拉（A/B/C/自定义；选项代码填，下拉列表宽340防截断）</summary>
+        /// <summary>预置下拉（A/B/C/D/自定义；选项代码填，下拉列表宽340防截断）</summary>
         private Sunny.UI.UIComboBox _cboPreset;
 
         /// <summary>套用预置按钮（Sunny 默认蓝，主操作）</summary>
@@ -108,7 +108,7 @@ namespace AgingTestSystem.Views
             this._lblNodeTitle.Font = new Font(this.Font.FontFamily, 11F, FontStyle.Bold);
             this._lblPresetTitle.Location = new Point(12, 46);
             this._lblPresetTitle.Size = new Size(296, 20);
-            this._lblPresetTitle.Text = "预置策略（一键套用A/B/C）";
+            this._lblPresetTitle.Text = "预置策略（一键套用A/B/C/D）";
             this._cboPreset.DropDownStyle = Sunny.UI.UIDropDownStyle.DropDownList;
             this._cboPreset.Location = new Point(12, 68);
             this._cboPreset.Size = new Size(182, 28);

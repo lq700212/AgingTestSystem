@@ -28,7 +28,7 @@ namespace AgingTestSystem.Views
     /// ┌──────────────────────────────────────────────┬───────────────┐
     /// │ 画布（自绘，可缩放/平移/拖节点）               │ 右栏 320px    │
     /// │  [启动开阀]              [断电恢复]            │ 预置策略行    │
-    /// │      │开阀                   ┊整台重测/续跑    │ [A/B/C下拉]   │
+    /// │      │开阀                   ┊整台重测/续跑    │ [A/B/C/D下拉]   │
     /// │  [抽真空]────────超时/失压/失联/规则───────┐   │ [套用预置]    │
     /// │      │压力到位 且 延时时间到                          │ 选中节点标题  │
     /// │  [上电老化]────失压/失联/规则/超温───────┐   │ [编辑器组]    │
@@ -39,9 +39,11 @@ namespace AgingTestSystem.Views
     /// ├──────────────────────────────────────────────┴───────────────┤
     /// │ 状态条：项目名 | 选中节点 | 保存提示                           │
     /// └──────────────────────────────────────────────────────────────┘
-    /// 右栏顶部（标题46/下拉+按钮68/说明100）：下拉选 A/B/C
-    /// （或"自定义"回显），"套用预置"一键整套生效（确认框列差异项 + 前置条件，
-    /// 走 PersistChanges 同一条保存路）。只动 12 个行为开关（见 PolicyPresets），
+    /// 右栏顶部（标题46/下拉+按钮68/说明100）：下拉选 A/B/C/D
+    /// （或"自定义"回显），下拉改选左侧画布即时预览该预置（克隆+套值的副本，
+    /// 只看不存不标脏）；"套用预置"一键整套生效（确认框列差异项 + 前置条件，
+    /// 走 PersistChanges 同一条保存路）。关窗时预览还没套用，弹 SunnyUI 确认框
+    /// 问要不要套用（确定=套用后关，取消=直接关；X 与关闭按钮同路）。只动 12 个行为开关（见 PolicyPresets），
     /// MES/规则/报表/点位/时长阈值不动；只读模式整行禁用。
     /// 全部节点 Bool/Enum 下拉按预置下拉口径统一：
     /// 下拉列表按最长选项实测拉宽（SizeNodeCombo，最长 22 字项原来被截断）+
@@ -79,6 +81,10 @@ namespace AgingTestSystem.Views
         private ToolTip _presetTip;
         // 下拉联动自保护：程序回显选中项时不触发"用户改选"分支（只套用按钮才真干活）。
         private bool _presetRefreshing;
+        // 窗体展示过（OnShown 置位）：关闭确认只对"真开过的窗"弹，构造冒烟/回归直调 Close 不扰民。
+        private bool _shownOnce;
+        // 关闭已确认（关闭按钮走完确认流程后置位，防 OnFormClosing 二次弹框）。
+        private bool _closingConfirmed;
 
         // 与 _presetTip 同款的共享悬停提示（一个实例管全部
         // 节点下拉，选中项全文随选随换）。不给每个下拉各建一个：提示按控件建表
@@ -133,6 +139,7 @@ namespace AgingTestSystem.Views
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
+            _shownOnce = true;
             // 滚轮悬停即缩放（不用先点画布抢焦点，右栏改地址时悬停回来照样缩）
             Application.AddMessageFilter(this);
             // 实时台数每秒刷新（画布重画；关窗即停）
@@ -612,12 +619,31 @@ namespace AgingTestSystem.Views
             UpdateStatus("布局已复位。");
         }
 
-        /// <summary>关闭按钮（Designer 命名处理器，原匿名 lambda 落袋）。</summary>
+        /// <summary>关闭按钮：预览未套用先问（SunnyUI 确认框），用户取消/套用被拦则留在窗内。</summary>
         private void BtnClose_Click(object sender, EventArgs e)
         {
+            if (!ConfirmPreviewOnClose()) return;
+            _closingConfirmed = true;
             this.DialogResult = SavedKeys.Count > 0
                 ? DialogResult.OK : DialogResult.Cancel;
             this.Close();
+        }
+
+        /// <summary>
+        /// 右上 X 同样先问预览（关闭按钮已问过的不重复；取消即 e.Cancel 留在窗内，
+        /// DialogResult 同步清 None，防下次关闭沿用旧值）。
+        /// </summary>
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if (!e.Cancel && !_closingConfirmed && _shownOnce)
+            {
+                if (!ConfirmPreviewOnClose())
+                {
+                    e.Cancel = true;
+                    this.DialogResult = DialogResult.None;
+                }
+            }
+            base.OnFormClosing(e);
         }
 
         /// <summary>
@@ -669,6 +695,9 @@ namespace AgingTestSystem.Views
             // 内存已热回写，这里重建一次右栏，点位行当场出现/消失，不用切节点才看到。
             if (presult.SavedKeys.Contains("VentValveEnabled")) RebuildEditors();
             if (_canvas != null) _canvas.RefreshCounts();
+            // 真实配置变了：预览是按旧真实造的副本，已过期，按新真实重造
+            // （只重造画布看到的副本，下拉选项不动，不干扰用户的预览选择）。
+            UpdateCanvasPreview();
             string msg = "已保存并即时生效。";
             if (presult.StructuralChanged.Count > 0) msg += "（含重启生效项）";
             if (presult.SecretFallbackPlain) msg += "（注：密钥加密失败，已明文保存）";
@@ -724,7 +753,7 @@ namespace AgingTestSystem.Views
             RefreshPresetRow();
         }
 
-        /// <summary>下拉改选只换说明文字（真干活只认"套用预置"按钮，防手滑一切换就改配置）。</summary>
+        /// <summary>下拉改选：换说明文字＋左侧画布即时预览该预置（只看不存，真干活只认"套用预置"按钮）。</summary>
         private void PresetComboChanged(object sender, EventArgs e)
         {
             if (_presetRefreshing) return;
@@ -732,7 +761,7 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 按内存配置回显预置行：凑上 A/B/C 就选中它，否则落"自定义"；
+        /// 按内存配置回显预置行：凑上 A/B/C/D 就选中它，否则落"自定义"；
         /// 只读模式（非管理员）整行禁用（与节点编辑器同级，不开后门）。
         /// </summary>
         private void RefreshPresetRow()
@@ -784,7 +813,7 @@ namespace AgingTestSystem.Views
             PolicyPresets.PolicyPresetDef def = PolicyPresets.Find(id);
             _lblPresetDesc.Text = def != null
                 ? def.Scenario
-                : "当前配置与A/B/C都不完全一致（手动微调过），可重选一套覆盖。";
+                : "当前配置与A/B/C/D都不完全一致（手动微调过），可重选一套覆盖。";
             // 悬停提示同步（_cboPreset 闭合显示被截断时，悬停看全文）
             try
             {
@@ -795,12 +824,50 @@ namespace AgingTestSystem.Views
                             + (string.IsNullOrWhiteSpace(def.Requires)
                                 ? "" : "\r\n\r\n前置条件：" + def.Requires)
                         : "自定义（当前配置）\r\n\r\n"
-                            + "当前 12 个行为开关与A/B/C都不完全一致（手动微调过），"
+                            + "当前 12 个行为开关与A/B/C/D都不完全一致（手动微调过），"
                             + "下拉重选一套并点“套用预置”可整体覆盖。";
                     _presetTip.SetToolTip(_cboPreset, tip);
                 }
             }
             catch { /* 提示写失败不影响主流程（纯展示） */ }
+            // 下拉即预览：说明换完，左侧画布同步换成该预置的画面（只看不存）
+            UpdateCanvasPreview();
+        }
+
+        /// <summary>
+        /// 下拉即预览：按下拉当前选项给画布换"预览配置"（只换画布看到的值，
+        /// 不碰真实 _config、不标脏、不写文件）。
+        /// 选 A/B/C/D 任一项＝把当前真实配置克隆一份、套上该预置的全部落盘值
+        /// （含 D 的超时 0），画布即时重画，所见即"真套用后"的样子；
+        /// 选"自定义"＝清预览（画布看回真实配置）。
+        /// 【为什么是克隆+套用而不是直接读预置值】画布要的是"完整配置"
+        /// （12 开关＋超时＋阈值/时长等不动项），预置只有 12 开关＋数值项；
+        /// 克隆保证不动项与当前一致，预览与真套用后的画面一字不差。
+        /// 【只读承诺】预览是单独 new 出来的副本，画布只读它；右栏编辑器/保存
+        /// 仍读真实 _config，切下拉不产生待保存项（_dirty 不动），点"套用预置"才真写。
+        /// </summary>
+        private void UpdateCanvasPreview()
+        {
+            if (_canvas == null || _canvas.IsDisposed) return;
+            if (_config == null) { _canvas.SetPreviewConfig(null); return; }
+            string id = SelectedPresetId(_cboPreset);
+            _canvas.SetPreviewConfig(BuildPreviewConfig(_config, id));
+        }
+
+        /// <summary>按预置 id 造预览配置（纯函数：克隆现配置＋套预置值；
+        /// 非预置 id（自定义）/失败返回 null＝画布看真实）。</summary>
+        private static DeviceConfig BuildPreviewConfig(DeviceConfig current, string presetId)
+        {
+            try
+            {
+                if (current == null) return null;
+                if (PolicyPresets.Find(presetId) == null) return null;
+                var preview = new DeviceConfig();
+                preview.CopyFrom(current);
+                if (PolicyPresets.ApplyToConfig(preview, presetId) != null) return null;
+                return preview;
+            }
+            catch { return null; }
         }
 
         private void BtnApplyPreset_Click(object sender, EventArgs e)
@@ -813,8 +880,8 @@ namespace AgingTestSystem.Views
         /// PersistChanges 同一条保存路 → 刷新右栏编辑器 + 画布 + 预置回显）。
         /// 【只动 12 个行为开关＋数值项】MES/规则/报表/画面字典/破空点位/时长阈值等
         /// 自由文本与配方/机器参数一律不动——切预置不丢现场已填的东西。
-        /// 数值项（D 的真空超时 0）是跟项目走的策略 key，同样进本项目 Policy.json。
-        /// 【失败语义】校验拦/C 组合拦（超温上限为 0）都是"按住不动 + 中文告诉人
+        /// 数值项（A 的真空超时 0）是跟项目走的策略 key，同样进本项目 Policy.json。
+        /// 【失败语义】校验拦/D 组合拦（超温上限为 0）都是"按住不动 + 中文告诉人
         /// 去哪填"，绝不悄悄写一半（PersistChanges 内部先验后写）。
         /// </summary>
         private void ApplyPreset()
@@ -824,7 +891,7 @@ namespace AgingTestSystem.Views
             PolicyPresets.PolicyPresetDef def = PolicyPresets.Find(id);
             if (def == null)
             {
-                MessageBox.Show(this, "请先在下拉里选预置A、B 或 C，再点套用。",
+                MessageBox.Show(this, "请先在下拉里选预置A、B、C 或 D，再点套用。",
                     "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
@@ -841,7 +908,7 @@ namespace AgingTestSystem.Views
             Dictionary<string, string> values = PolicyPresets.GetAllValues(id);
             if (values == null) return;
             // 差异预览：只列"真的会变"的项（中文名 + 现值→预置值；
-            // 数值项（真空超时 0）同样列出，D 预置一次看全）
+            // 数值项（超时 0）同样列出，一次看全）
             var diffLines = new List<string>();
             foreach (string key in PolicyPresets.GovernedKeys)
             {
@@ -892,6 +959,24 @@ namespace AgingTestSystem.Views
             {
                 return;
             }
+            if (!ApplyPresetValues(id)) return;
+            PolicyPresets.PolicyPresetDef applied = PolicyPresets.Find(id);
+            string msg = "已套用【" + (applied != null ? applied.Title : id) + "】并即时生效。";
+            UpdateStatus(msg);
+            MessageBox.Show(this, msg + "\r\n\r\n" + (applied != null ? applied.HowToSwitch : ""),
+                "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        /// <summary>
+        /// 执行套用：逐项校验 → 同一条保存路（组合校验 + 分流写文件 + 热回写）→
+        /// 刷新（右栏重建＋画布＋预置回显）。
+        /// 调用前必须已确认（套用按钮的差异框 / 关闭时的预览确认二选一），这里不再二次确认。
+        /// </summary>
+        /// <returns>true=套用成功，false=被拦（原因已中文明示，留在窗内）</returns>
+        private bool ApplyPresetValues(string id)
+        {
+            Dictionary<string, string> values = PolicyPresets.GetAllValues(id);
+            if (values == null) return false;
             // 逐项校验（预置值理论上全合法；真被拦就是预置本身写错了，报出来修预置）
             var invalid = new List<string>();
             foreach (var kv in values)
@@ -907,7 +992,7 @@ namespace AgingTestSystem.Views
                 MessageBox.Show(this, "预置本身写错了（不是您配错了），请联系开发：\r\n\r\n" +
                     string.Join("\r\n", invalid.ToArray()),
                     "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
+                return false;
             }
             // 同一条保存路：组合校验 + 分流写文件 + 热回写全在里面
             Dialogs.SettingsForm.PersistResult presult;
@@ -915,18 +1000,75 @@ namespace AgingTestSystem.Views
             if (!Dialogs.SettingsForm.PersistChanges(_config, values, out presult, out perror))
             {
                 MessageBox.Show(this, perror, "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
+                return false;
             }
             foreach (string k in presult.SavedKeys) SavedKeys.Add(k);
             _dirty = false;
             // 内存已热回写：当前节点编辑器重建回显新值（不重建会显示旧值，误导人）
             RebuildEditors();
             if (_canvas != null) _canvas.RefreshCounts();
+            // 预置回显：下拉落到套用后的预置（与选择一致），说明＋画布预览同步重造
             RefreshPresetRow();
-            string msg = "已套用【" + def.Title + "】并即时生效。";
-            UpdateStatus(msg);
-            MessageBox.Show(this, msg + "\r\n\r\n" + def.HowToSwitch,
-                "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return true;
+        }
+
+        /// <summary>
+        /// 预览未套用即关：下拉停在"与现状不一致的预置"上，说明用户看中了它却没点套用，
+        /// 直接关会丢意图——弹 SunnyUI 确认框问一嘴（确定=套用后关闭，取消=不套用直接关闭）。
+        /// </summary>
+        /// <returns>true=继续关闭，false=留在窗内（用户取消了脏保存 / 套用被拦）</returns>
+        private bool ConfirmPreviewOnClose()
+        {
+            try
+            {
+                if (_config == null || !_shownOnce || IsDisposed || Disposing) return true;
+                string selected = SelectedPresetId(_cboPreset);
+                if (!IsPreviewPending(_config, selected)) return true;
+                bool ok;
+                try
+                {
+                    ok = Sunny.UI.UIMessageBox.Show(BuildPreviewClosePrompt(selected),
+                        "套用预览的配置？", Sunny.UI.UIStyle.Blue,
+                        Sunny.UI.UIMessageBoxButtons.OKCancel, false, 0);
+                }
+                catch { ok = false; }  // Sunny 弹框万一失败，按"不套用"处理，绝不拦关闭
+                if (!ok) return true;
+                // 确定：脏先问存（与套用按钮同规矩：是=先存，否=丢弃，取消=不套用、不关闭）
+                if (_dirty)
+                {
+                    DialogResult r = MessageBox.Show(this,
+                        "当前节点有未保存的修改，套用预置前保存吗？\n\n【是】保存后套用\n【否】丢弃后套用\n【取消】不套用、不关闭",
+                        "提示", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                    if (r == DialogResult.Cancel) return false;
+                    if (r == DialogResult.Yes && !SaveCurrentNode()) return false;
+                    _dirty = false;
+                }
+                // 关闭前的确认即授权，直接执行套用（不再弹差异框）；被拦则留在窗内看原因
+                return ApplyPresetValues(selected);
+            }
+            catch { return true; }  // 关闭路径绝不抛异常拦人
+        }
+
+        /// <summary>有没有"看了没套用"的预览（纯函数：选中是真预置、且与现状探测不一致）。</summary>
+        private static bool IsPreviewPending(DeviceConfig config, string selectedId)
+        {
+            try
+            {
+                if (config == null) return false;
+                if (PolicyPresets.Find(selectedId) == null) return false;  // 自定义/未知：没有"预览"
+                return !string.Equals(PolicyPresets.DetectPreset(config),
+                    selectedId, StringComparison.OrdinalIgnoreCase);
+            }
+            catch { return false; }
+        }
+
+        /// <summary>关闭确认框文案（纯函数：标题＋确定/取消两路含义，与 UIMessageBox.OKCancel 对齐）。</summary>
+        private static string BuildPreviewClosePrompt(string selectedId)
+        {
+            PolicyPresets.PolicyPresetDef def = PolicyPresets.Find(selectedId);
+            string title = def != null ? def.Title : (selectedId ?? "");
+            return "当前正在预览【" + title + "】，尚未套用。\r\n\r\n"
+                + "【确定】套用该预置后关闭\r\n【取消】不套用，直接关闭";
         }
 
         /// <summary>
@@ -937,6 +1079,10 @@ namespace AgingTestSystem.Views
         {
             private readonly DeviceConfig _config;
             private readonly DeviceManager _deviceManager;
+
+            // 预览配置（下拉即预览用：非 null 时画布只读它，真实 _config 纹丝不动；
+            // "自定义"即 null＝看真实；保存/套用走真实 _config，与这里无关）。
+            private DeviceConfig _previewConfig;
 
             private readonly Dictionary<string, Point> _positions = new Dictionary<string, Point>();
             private PolicyGraph.FlowCounts _counts;
@@ -1062,6 +1208,16 @@ namespace AgingTestSystem.Views
                 catch { /* 计数永不拖垮绘制 */ }
                 if (!this.IsDisposed) this.Invalidate();
             }
+
+            /// <summary>换预览配置（null＝看回真实配置；只重画，不碰真实数据）。</summary>
+            public void SetPreviewConfig(DeviceConfig preview)
+            {
+                _previewConfig = preview;
+                if (!this.IsDisposed) this.Invalidate();
+            }
+
+            /// <summary>画布当前看到的配置（有预览看预览，平时即真实）。</summary>
+            private DeviceConfig EffectiveConfig() { return _previewConfig ?? _config; }
 
             /// <summary>复位布局（缺省位置 + 存盘 + 重画）。</summary>
             public void ResetLayout()
@@ -1331,7 +1487,7 @@ namespace AgingTestSystem.Views
                     g.DrawLine(pen, b, p2);
                 }
                 // 条件标签（中点，白底/黑底衬一下，字不糊在线上）
-                string label = PolicyGraph.BuildEdgeLabel(e.Id, _config);
+                string label = PolicyGraph.BuildEdgeLabel(e.Id, EffectiveConfig());
                 if (!string.IsNullOrEmpty(label))
                 {
                     Point mid = new Point((a.X + b.X) / 2, (a.Y + b.Y) / 2);
@@ -1371,7 +1527,7 @@ namespace AgingTestSystem.Views
                     new Rectangle(r.Left + 6, r.Top, r.Width - 12, headH),
                     Color.White, TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
 
-                string[] lines = PolicyGraph.BuildNodeLines(n.Id, _config, _counts);
+                string[] lines = PolicyGraph.BuildNodeLines(n.Id, EffectiveConfig(), _counts);
                 int y = r.Top + headH + 3;
                 foreach (string line in lines)
                 {

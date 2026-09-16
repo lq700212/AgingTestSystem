@@ -224,7 +224,7 @@ namespace AgingTestSystem.Tests
         }
 
         /// <summary>
-        /// dump 模式：把指定目录 AgingTestSystem.exe 里 Models 命名空间的
+        /// dump 模式：把指定目录 烧屏测试控制中心.exe 里 Models 命名空间的
         /// 类型/公开属性/公开字段打印成排序后的确定性文本（供发版脚本 diff 两边）。
         /// 本进程只加载这一份程序集（执行态），依赖（SunnyUI 等）就地解析。
         /// </summary>
@@ -232,7 +232,7 @@ namespace AgingTestSystem.Tests
         {
             try
             {
-                string asmPath = Path.Combine(asmDir, "AgingTestSystem.exe");
+                string asmPath = Path.Combine(asmDir, "烧屏测试控制中心.exe");
                 if (!File.Exists(asmPath))
                 {
                     Console.WriteLine("DUMP-FAIL 程序集不存在: " + asmPath);

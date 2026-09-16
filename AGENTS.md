@@ -105,9 +105,13 @@
   （`ParsePolicyEnum` 非法兜底现状）+ `SettingsForm`（`_descriptions` + `_categories`
   + `ValidateValue` 名单分支 + `CreateValueCell` 下拉分支——枚举不进 `_boolKeys`，
   不归一化就"脏值也能存"）。回归里"三处同步锁"（PolicyKeys↔属性↔选项可解析）看绿才算完。
-  预置数值扩展（V1.105）：跟项目走的策略数值（如真空超时）可进 `PolicyPresets` 的
-  `NumericValues`（套用时与 12 开关同一条保存路进 Policy.json，不参与 `DetectPreset`
-  探测）；配方项（延时/时长）任何预置都不写（无配方默认 0，有配方按配方来）。
+  预置数值扩展（V1.105 建，V1.106 收紧）：跟项目走的策略数值（如真空超时）可进 `PolicyPresets` 的
+  `NumericValues`（套用时与 12 开关同一条保存路进 Policy.json）；探测口径：
+  无数值项的预置只认 12 开关，带数值项的预置（A 常用）数值也算身份
+  （C 开关＋超时 0 即 A，超时非 0 即 C——A 以 C 为基准，不认数值就分不出来）；
+  配方项（延时/时长）任何预置都不写（无配方默认 0，有配方按配方来）。
+  预置顺序即试用顺序（V1.106 起 A=常用/B=标准/C=宽松/D=严格，常用首位；项目未上线，
+  改名换序直改，不写迁移分支）。
 - **判定类分支先写 AgingSequencer 纯函数（V1.67 收紧）**：策略执行侧一律先加纯函数
   （`BuildStartBlockText`/`MapAlarmResult`/`ComputeResumeDurationSeconds`/
   `ValidatePolicyCombination`）并同步用例，`DeviceManager` 只做"调用决策 + IO + 日志"。
@@ -214,6 +218,12 @@
   存取符号坑（setter 取正值）；双锁分开取防死锁（`GetPhaseCounts` 先状态后缓存）。
   MES上报是无连线纯配置节点（上报正交于流程，画连线误导）；无阀本机藏破空点位行
   （`VentValveEnabled=false` 时，开关本身照常显示）。
+  预置下拉即预览（V1.106）：切下拉画布即换该预置画面——克隆真实配置＋套预置值
+  的副本给画布（`SetPreviewConfig`，`EffectiveConfig` 统一读口），真实 `_config` 不动、
+  不标脏；"自定义"即清预览看回真实；保存/套用后按新真实重造预览（下拉选项不动）。
+  关窗时预览未套用弹 `UIMessageBox.Show(OKCancel)` 确认（确定=直接套用后关闭，
+  取消=直接关闭；脏先问存；X 与关闭按钮同路走 `OnFormClosing`＋`_closingConfirmed` 防重弹；
+  只对真开过的窗弹，未 Show 的构造冒烟/回归不扰民）。
 - **配方加字段三窗同步（V1.66）**：`RecipeConfig` 加字段 → 三个录入窗
   （`RecipeManagerForm`/`BatchRecipeForm`/`StationSettingsForm`：输入框 + 保存 + 回填 +
   头部 ASCII 图）→ `SetStationRecipe` 下发 → `StationInfo`（+`Clone`）→
@@ -506,11 +516,11 @@
 & "D:\Program Files\Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe" AgingTestSystem/AgingTestSystem.csproj /p:Configuration=Debug /p:Platform=AnyCPU /t:Build /nologo /v:m
 ```
 
-- 构建成功标准：输出 `AgingTestSystem -> ...\bin\Debug\AgingTestSystem.exe` 且无 error。
+- 构建成功标准：输出 `AgingTestSystem -> ...\bin\Debug\烧屏测试控制中心.exe` 且无 error。
 - **新增 .cs 文件必须手工在 csproj 登记**（老式项目无通配，漏登记报 CS0246）：
   在 `<Compile Include="...">` 段按目录加一行（纯代码窗体加 `<SubType>Form</SubType>` 即可，
   无需 Designer/resx）。V1.67 实锤：5 个新文件漏登记编译全红。
-- **最终测试验证手段（V1.58.23 起）**：一键跑 `powershell -ExecutionPolicy Bypass -File .opencode\skills\agingtest-regression\scripts\build_and_test.ps1`，自动完成"构建 → 真机冒烟（exe 启动存活）→ 全量回归用例（1722 断言，覆盖 PasswordHasher/UserManager/配置归一化/IO 映射/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案/MES映射上报/规则表达式/流程驾驶舱/编排扩展场景/软件激活等核心逻辑类）"。也可单独跑同目录 `smoke_test.ps1`（只冒烟）/ `run_unit_tests.ps1`（只回归）。退出码 0 = 全绿。
+- **最终测试验证手段（V1.58.23 起）**：一键跑 `powershell -ExecutionPolicy Bypass -File .opencode\skills\agingtest-regression\scripts\build_and_test.ps1`，  自动完成"构建 → 真机冒烟（exe 启动存活）→ 全量回归用例（2097 断言，覆盖 PasswordHasher/UserManager/配置归一化/IO 映射/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案/MES映射上报/规则表达式/流程驾驶舱/编排扩展场景/软件激活等核心逻辑类）"。也可单独跑同目录 `smoke_test.ps1`（只冒烟）/ `run_unit_tests.ps1`（只回归）。退出码 0 = 全绿。
 - **界面像素级 bug（竖线/横线/颜色/叠色/裁剪/滚动条）**：调用全局技能 `winforms-ui-debug`——编译独立 harness 直接 new 目标窗体（指哪打哪，绕过登录/主流程），用反射探私有字段 + PrintWindow 截图 + 像素扫描定位根因并验证修复。含可复用的 csc 编译命令、坐标映射、色值字典与踩坑清单。
 - **调试完自动沉淀技能**：每次用 `winforms-ui-debug` 排查成功（尤其是"一次性改对"的高光案例）后，**主动把可复用的新套路/新踩坑/新型探针代码回写到全局技能 `winforms-ui-debug` 的 SKILL.md**（新增/补充小节、追加踩坑条目），不用等用户提醒。价值标准：换个人靠这份 skill 能更快解决同类问题。
 - 改构建输出（csproj 路径/bin 目录/主 exe 名）时，同步改全局技能 `winforms-ui-debug` 附录 A 的 AgingTestSystem 行（防开工查表拿到旧值）。

@@ -372,7 +372,7 @@ namespace AgingTestSystem.Views
         /// </summary>
         private void InitWindowChrome()
         {
-            this.Text = "老化测试系统 " + BuildWatermark.ReleaseLabel;
+            this.Text = "烧屏测试控制中心 " + BuildWatermark.ReleaseLabel;
             if (btnWinMin == null || btnWinMax == null || btnWinClose == null) return;
             Button[] wins = { btnWinMin, btnWinMax, btnWinClose };
             foreach (Button b in wins)

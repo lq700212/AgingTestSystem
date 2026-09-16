@@ -174,11 +174,11 @@ try {
     # 排除：旧 exe/pdb/文档 xml/运行时数据（Users/ini/Logs/Projects 正常 Release 里本就没有，
     # 这里是防御性排除，万一有人在本机跑过 Release 也不会把脏数据发出去）。
     Copy-Item -Path (Join-Path $inDir "*") -Destination $pkgDir -Force -Exclude @(
-        "AgingTestSystem.exe", "*.pdb", "*.xml",
+        "烧屏测试控制中心.exe", "*.pdb", "*.xml",
         "Users.json", "RememberedLogin.json", "TestSession.json", "MainSetting.ini",
         "MesQueue.json", "Logs", "Projects")
-    Copy-Item -LiteralPath (Join-Path $shipExeDir "AgingTestSystem.exe") -Destination $pkgDir -Force
-    if (-not (Test-Path (Join-Path $pkgDir "AgingTestSystem.exe.config"))) {
+    Copy-Item -LiteralPath (Join-Path $shipExeDir "烧屏测试控制中心.exe") -Destination $pkgDir -Force
+    if (-not (Test-Path (Join-Path $pkgDir "烧屏测试控制中心.exe.config"))) {
         Fail "[PACKAGE FAIL] 缺 exe.config（App.config 没编进去，跑不起来）" 1
     }
     $flavorName = $(if ($DebugPackage) { "调试版" } else { "混淆版" })
@@ -191,7 +191,7 @@ try {
 老化测试系统 $ReleaseLabel（$flavorName）部署说明$flavorWarn
 ================================================
 1. 把"包"里全部文件拷到工控机同一个文件夹（不要只拷 exe，dll 和 config 都要）。
-2. 双击 AgingTestSystem.exe 启动。首次启动自动生成用户文件与激活模板，
+2. 双击 烧屏测试控制中心.exe 启动。首次启动自动生成用户文件与激活模板，
    用默认账号登录后第一件事：改掉全部默认密码（admin/technician/operator）。
 3. 软件授权：把"设备ID＋设备码"报给我们拿激活码（与 HJVision 同一套工具）。
    MainSetting.ini 一机一码，别拷到别的机器。
@@ -205,7 +205,7 @@ try {
         Copy-Item -LiteralPath $mapping -Destination (Join-Path $arcDir "Mapping.txt") -Force
     }
     Copy-Item -LiteralPath (Join-Path $RepoRoot "tools\obfuscation\obfuscar.xml") -Destination (Join-Path $arcDir "obfuscar.xml") -Force
-    $inPdb = Join-Path $inDir "AgingTestSystem.pdb"
+    $inPdb = Join-Path $inDir "烧屏测试控制中心.pdb"
     if (Test-Path $inPdb) { Copy-Item -LiteralPath $inPdb -Destination $arcDir -Force }
     Push-Location $RepoRoot
     try {
@@ -237,7 +237,7 @@ try {
     Copy-Item -Path (Join-Path $pkgDir "*") -Destination $accDir -Force -Exclude "部署说明.txt"
     & $csc /nologo /t:exe /out:"$accDir\Accept.exe" `
         (Join-Path $RepoRoot ".opencode\skills\agingtest-regression\tests\ObfuscationAcceptance.cs") `
-        /r:"$accDir\AgingTestSystem.exe" /r:"$accDir\Newtonsoft.Json.dll" /r:"$accDir\SunnyUI.dll" /codepage:65001
+        /r:"$accDir\烧屏测试控制中心.exe" /r:"$accDir\Newtonsoft.Json.dll" /r:"$accDir\SunnyUI.dll" /codepage:65001
     if ($LASTEXITCODE -ne 0) { Fail "[ACCEPT FAIL] 验收跑器编译不过" 2 }
     Push-Location $accDir
     try { & ".\Accept.exe" behavior $accDir $ReleaseLabel $expectObfFlag; $cBeh = $LASTEXITCODE }
@@ -267,7 +267,7 @@ try {
     if (Test-Path $smkDir) { Remove-Item -LiteralPath $smkDir -Recurse -Force }
     New-Item -ItemType Directory -Path $smkDir -Force | Out-Null
     Copy-Item -Path (Join-Path $pkgDir "*") -Destination $smkDir -Force -Exclude "部署说明.txt"
-    $p = Start-Process -FilePath (Join-Path $smkDir "AgingTestSystem.exe") -PassThru
+    $p = Start-Process -FilePath (Join-Path $smkDir "烧屏测试控制中心.exe") -PassThru
     $waited = 0
     while ($waited -lt 22000 -and -not $p.HasExited) { Start-Sleep -Milliseconds 1000; $waited += 1000 }
     if ($p.HasExited) { Fail ("[ACCEPT FAIL] 发版包启动" + [int]($waited / 1000) + "s内退出，码=" + $p.ExitCode) 2 }
