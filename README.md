@@ -55,6 +55,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 - **IO 映射**：内部用十进制连续编号（输入 1~80、输出 81~240），`IoMapBuilder` 换算成三菱八进制物理地址（X/Y），
   每台气压表 = 1 输入（报警触点 DI）+ 2 输出（真空阀 Y + 载台上电 Y）。八进制：X007 后是 X010，Y107 后是 Y110。
 - **事件**：`DeviceManager` 一次性触发 `OnBatchDataUpdated`（72 台数据数组，避免逐条 72 次 UI 切换）；
+  慢轮询时另节流触发 `OnScanProgress`（在线数实时爬，首轮"扫描中"秒出数，不等整轮）；
   `OnConnectionStatusChanged` / `OnFanDataUpdated` / `OnDiagnostic`。
 
 ## 3. 目录结构与职责（定位用）

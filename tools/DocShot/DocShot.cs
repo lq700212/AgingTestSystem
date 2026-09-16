@@ -37,6 +37,8 @@ sealed class SteadyReader : IBarometerReader
     private int _total = 72;
     public bool IsConnected { get { return _connected; } }
     public string CurrentPortName { get { return "COM9"; } }
+    // V1.103 接口新增逐台进度回调：截图工具瞬间读完，用空实现保编译一致。
+    public Action<int, BarometerData> SingleReadCallback { get; set; }
     public event EventHandler<string> OnError;
     public bool Connect(DeviceConfig config)
     {

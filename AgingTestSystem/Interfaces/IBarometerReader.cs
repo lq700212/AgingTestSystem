@@ -60,6 +60,14 @@ namespace AgingTestSystem.Interfaces
         BarometerData[] ReadAllData();
 
         /// <summary>
+        /// 逐台读取进度回调（V1.103 离线加速，可为 null）
+        /// ReadAllData 每读完一台调一次（deviceId 从 1 起，本台数据／读失败为 null）。
+        /// 采集侧用它逐台刷新"在线时间戳"＋节流广播进度，状态栏在线数实时往上爬，
+        /// 不再等整轮 72 台读完；实现类必须吞掉回调异常（订阅者 bug 不能打断轮询）。
+        /// </summary>
+        Action<int, BarometerData> SingleReadCallback { get; set; }
+
+        /// <summary>
         /// 写入单台气压表的设备阈值（Holding Register 0x0010）
         ///
         /// 【单位说明（重要）】
