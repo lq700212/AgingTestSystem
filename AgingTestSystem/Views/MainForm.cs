@@ -1338,12 +1338,30 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 后台启动设备管理器与扫码枪（【启动优化】）
-        /// - _deviceManager.Start()：连接气压表/IO耦合器/送风机 + 首次采集，耗时步骤放后台；
-        /// - _scanner.Start()：扫码枪自动识别串口并连接（可选设备，内部已做未启用跳过）。
+        /// - 扫码枪先行（UI 线程直接 Start：内部已非阻塞，建定时器+窗口后立即返回，
+        ///   WMI 识别走线程池，与 72 台采集并行，不再排队等首轮轮询）；
+        /// - _deviceManager.Start()：连接气压表/IO耦合器/送风机 + 定时器 + 连接事件，
+        ///   首轮 72 台采集放后台（Start 内部 Task），耗时步骤放后台；
         /// 完成后切回 UI 线程刷新顶部"通讯模块状态"与状态栏"扫码枪"状态。
+        /// 注意：ScannerService 的 Start() 必须在 UI 线程执行——它内部会创建
+        /// System.Windows.Forms.Timer（重连/心跳）和 DeviceChangeWindow（NativeWindow，
+        /// 用于接收 WM_DEVICECHANGE 热插拔消息），两者都依赖 UI 消息泵；
+        /// 在 Task.Run 后台线程执行会导致定时器与热插拔监听失效，扫码枪无法自动重连。
+        /// 本方法由 MainForm_Load（UI 线程）调用，正好满足该约束。
         /// </summary>
         private void StartDevicesInBackground()
         {
+            // 扫码枪先行：UI 线程直接启动（非阻塞，毫秒级返回；未启用内部跳过）。
+            // 与下面设备采集并行：无扫码枪现场的 WMI 搜索不再卡住气压表/送风机状态刷新。
+            try
+            {
+                _scanner?.Start();
+            }
+            catch (Exception ex)
+            {
+                WriteLog($"扫码枪启动异常：{ex.Message}");
+            }
+
             Task.Run(() =>
             {
                 // 启动设备管理器（开始数据采集）
@@ -1364,25 +1382,6 @@ namespace AgingTestSystem.Views
                     // 启动失败（气压表串口没连上）：把原因写到 LOG，方便现场排查
                     WriteLogOnUi($"设备启动失败：{_deviceManager.LastStartupError}");
                 }
-
-                // 启动扫码枪服务（自动识别串口并连接；未启用/未插入时定时重连）
-                // 扫码枪是可选设备，内部已做"ScannerEnabled=false 直接跳过"处理，不影响整机启动。
-                // 注意：ScannerService 的 Start() 必须在 UI 线程执行——它内部会创建
-                // System.Windows.Forms.Timer（重连/心跳）和 DeviceChangeWindow（NativeWindow，
-                // 用于接收 WM_DEVICECHANGE 热插拔消息），两者都依赖 UI 消息泵；
-                // 在 Task.Run 后台线程执行会导致定时器与热插拔监听失效，扫码枪无法自动重连。
-                RunOnUi(() =>
-                {
-                    if (IsDisposed || Disposing) return;
-                    try
-                    {
-                        _scanner?.Start();
-                    }
-                    catch (Exception ex)
-                    {
-                        WriteLog($"扫码枪启动异常：{ex.Message}");
-                    }
-                });
 
                 // 顶部"通讯模块状态"只反映 IO 耦合器（阀/载台电控制）是否连接，
                 // 不再用"气压表串口是否连上"冒充。Start() 内部已同步触发

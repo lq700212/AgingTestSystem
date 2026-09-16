@@ -89,6 +89,25 @@ namespace AgingTestSystem.Services
         private bool _disposed;
 
         /// <summary>
+        /// 连接状态锁：保护 _serialPort/_isConnected/_currentPortName/_wasConnected/_disconnectReported/_ticksSinceCloseRescan。
+        /// 只锁串口对象与状态改写：WMI 搜索本身不持锁（耗时可达数秒到数分钟，持锁会连带卡住 UI 线程的断连处理）。
+        /// </summary>
+        private readonly object _connLock = new object();
+
+        /// <summary>后台连接任务是否在跑（防重入：慢 WMI 未归时 Tick/插拔消息不再叠新任务）</summary>
+        private int _bgConnectRunning;
+
+        /// <summary>心跳转发的后台任务是否在跑（同上，Tick 3 秒一次）</summary>
+        private int _tickQueued;
+
+        /// <summary>
+        /// 上次心跳看到的端口快照签名（WMI 匹配 + 系统串口列表拼接，锁内读写）。
+        /// 心跳明细只在签名变化时记一行：稳态每 3 秒重复打同样的内容就是刷屏，
+        /// 真有用的只有"端口出现/消失"的那一次边沿。
+        /// </summary>
+        private string _lastHeartbeatSignature;
+
+        /// <summary>
         /// 是否已连接扫码枪（只读，供上层显示状态用）
         /// </summary>
         public bool IsConnected => _isConnected;
@@ -202,8 +221,45 @@ namespace AgingTestSystem.Services
                 }
             }
 
-            // 立即尝试第一次连接（成功则直接进入已连接状态）
-            TryConnect();
+            // 立即尝试第一次连接：放后台线程跑（WMI 搜索 + 串口 Open 可能耗时数秒到数分钟，
+            // 现场无扫码枪时曾卡住 UI 近 2 分钟，期间气压表/送风机状态刷不出来）。
+            // 本方法立即返回，连接结果经 OnStatusChanged 事件回 UI。
+            QueueConnectInBackground();
+        }
+
+        /// <summary>
+        /// 把一次连接尝试排到线程池（非阻塞，调用方立即返回）。
+        /// 防重入：已有连接任务在跑时跳过（慢 WMI 未归时 Tick 不叠任务，在跑的那次会覆盖）。
+        /// </summary>
+        private void QueueConnectInBackground()
+        {
+            if (_disposed) return;
+            if (System.Threading.Interlocked.CompareExchange(ref _bgConnectRunning, 1, 0) != 0) return;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try { TryConnect(); }
+                catch { /* TryConnect 内部已吞异常记边沿，这里只兜底防任务未观察异常 */ }
+                finally { System.Threading.Interlocked.Exchange(ref _bgConnectRunning, 0); }
+            });
+        }
+
+        /// <summary>
+        /// 心跳检查 + 重连排到线程池（供 Tick 与设备插拔消息共用：UI 线程只做转发，WMI 不占消息泵）。
+        /// </summary>
+        private void QueueCheckAndConnectInBackground()
+        {
+            if (_disposed) return;
+            if (System.Threading.Interlocked.CompareExchange(ref _tickQueued, 1, 0) != 0) return;
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                try
+                {
+                    CheckConnectionAlive();
+                    TryConnect();
+                }
+                catch { /* 同上，兜底 */ }
+                finally { System.Threading.Interlocked.Exchange(ref _tickQueued, 0); }
+            });
         }
 
         /// <summary>
@@ -239,9 +295,9 @@ namespace AgingTestSystem.Services
         /// COM 调用（WMI 的 ManagementObjectSearcher）会抛
         /// RPC_E_CANTCALLOUT_ININPUTSYNCCALL（托管调试助手 DisconnectedContext）。
         /// 实机运行这个异常会被 FindMatchingPorts 的 catch 吃掉并返回 null，
-        /// 表现为"插入扫码枪后连不上"。所以这里只做不碰 COM 的 Disconnect，
-        /// 重连（内部要发 WMI 查询）一律 Post 到消息队列末尾，等本消息处理完、
-        /// 脱离该上下文后再执行（仍留在 UI 线程）。
+        /// 表现为"插入扫码枪后连不上"。所以这里只做不碰 COM 的 Disconnect（持锁关句柄，
+        /// 毫秒级，UI 线程可直接执行），重连（含 WMI 查询）一律排到线程池，
+        /// 既脱离输入同步上下文，又不占 UI 消息泵（现场曾因此卡 UI 近 2 分钟）。
         /// </summary>
         /// <param name="wParam">WM_DEVICECHANGE 的 wParam（事件类型）</param>
         private void HandleDeviceChangeMessage(int wParam)
@@ -250,48 +306,31 @@ namespace AgingTestSystem.Services
 
             if (wParam == DbtDeviceArrival)
             {
-                if (!_isConnected)
+                bool connected;
+                lock (_connLock) { connected = _isConnected; }
+                if (!connected)
                 {
                     DebugLog($"设备插入通知(0x{wParam:X4})：立即尝试连接...");
-                    PostDeferred(TryConnect);     // 重连要发 WMI 查询，推迟到消息处理完成后执行
+                    QueueConnectInBackground();
                 }
             }
             else if (wParam == DbtDeviceRemovePending || wParam == DbtDeviceRemoveComplete)
             {
                 // 移除挂起/完成都当断连：只关句柄（不碰 COM，可在此直接执行），
-                // 重连（内部要发 WMI 查询）推迟出本消息，见类注释 V1.16.5。
+                // 重连（内部要发 WMI 查询）排后台，见本方法头注释。
                 DebugLog($"设备移除通知(0x{wParam:X4})：立即断开并重新识别...");
-                if (_isConnected) Disconnect();
-                PostDeferred(TryConnect);
+                bool connected;
+                lock (_connLock) { connected = _isConnected; }
+                if (connected) Disconnect();
+                QueueConnectInBackground();
             }
             else if (wParam == DbtDevnodesChanged)
             {
-                // 设备树变化：不确定是不是扫码枪，延迟做一次"检查+重连"，
+                // 设备树变化：不确定是不是扫码枪，后台做一次"检查+重连"，
                 // 由搜索决定：扫码枪还在 → 维持/恢复连接；没了 → 断连。
                 DebugLog($"设备树变化通知(0x{wParam:X4})：刷新连接状态...");
-                PostDeferred(() =>
-                {
-                    if (_isConnected) CheckConnectionAlive();
-                    else TryConnect();
-                });
+                QueueCheckAndConnectInBackground();
             }
-        }
-
-        /// <summary>
-        /// 把动作推迟到当前消息（WM_DEVICECHANGE）处理完之后执行
-        /// 见 <see cref="HandleDeviceChangeMessage"/>：
-        /// 设备消息处理期间的 COM 上下文不允许传出呼叫，必须等消息返回、
-        /// 回到正常消息泵后再发 WMI 查询。有 UI 同步上下文就用它 Post
-        /// （下一轮消息泵执行，仍在本线程）；没有则直接执行。
-        /// </summary>
-        /// <param name="action">要推迟执行的动作</param>
-        private void PostDeferred(Action action)
-        {
-            if (_disposed) return;
-            if (_syncContext != null)
-                _syncContext.Post(_ => action(), null);
-            else
-                action();
         }
 
         /// <summary>
@@ -304,17 +343,22 @@ namespace AgingTestSystem.Services
         /// </summary>
         private void TryConnect()
         {
-            // 已经连着就不重复连接
-            if (_isConnected) return;
+            if (_disposed) return;
+            // 已经连着就不重复连接（快照读，WMI 之前先拦一道）
+            lock (_connLock)
+            {
+                if (_isConnected) return;
+            }
 
+            // 1) 确定要用的串口（不持锁：WMI 搜索可达数秒到数分钟，持锁会卡住 UI 的断连处理）：
+            //    配置里写了固定端口（ScannerPort）就优先用固定端口，
+            //    否则通过 WMI 按设备关键词自动识别（如 "Xenon 1902"）
+            string port = null;
             string failReason = null;
             bool ok = false;
             try
             {
-                // 1) 确定要用的串口：
-                //    配置里写了固定端口（ScannerPort）就优先用固定端口，
-                //    否则通过 WMI 按设备关键词自动识别（如 "Xenon 1902"）
-                string port = !string.IsNullOrWhiteSpace(_config.ScannerPort)
+                port = !string.IsNullOrWhiteSpace(_config.ScannerPort)
                     ? _config.ScannerPort.Trim()
                     : FindScannerPort();
 
@@ -325,11 +369,10 @@ namespace AgingTestSystem.Services
                 }
                 else
                 {
-                    // 2) 创建串口对象并配置参数（与 SerialScannerTest Demo 一致）
-                    //    若之前连接过，先断开旧连接，避免重复 Open 报"端口被占用"
-                    Disconnect();
-
-                    _serialPort = new SerialPort(port,
+                    // 2) 创建串口对象并配置参数（与 SerialScannerTest Demo 一致）。
+                    //    先在锁外建好对象、锁内做"断开旧连接 + 挂新对象 + 打开"，
+                    //    打开失败只影响局部对象，不污染已有关闭态。
+                    var newPort = new SerialPort(port,
                         _config.ScannerBaudRate,
                         ParseParity(_config.ScannerParity),
                         _config.ScannerDataBits,
@@ -338,16 +381,46 @@ namespace AgingTestSystem.Services
                         // 给个读取超时，防止串口假死时 ReadExisting 一直挂着
                         ReadTimeout = 2000
                     };
+                    newPort.DataReceived += SerialPort_DataReceived;
+                    newPort.ErrorReceived += SerialPort_ErrorReceived;
 
-                    // 3) 注册数据接收与错误事件
-                    _serialPort.DataReceived += SerialPort_DataReceived;
-                    _serialPort.ErrorReceived += SerialPort_ErrorReceived;
+                    try
+                    {
+                        newPort.Open();
+                    }
+                    catch (Exception ex)
+                    {
+                        try
+                        {
+                            newPort.DataReceived -= SerialPort_DataReceived;
+                            newPort.ErrorReceived -= SerialPort_ErrorReceived;
+                            newPort.Dispose();
+                        }
+                        catch { }
+                        throw new InvalidOperationException(ex.Message, ex);
+                    }
 
-                    // 4) 打开串口
-                    _serialPort.Open();
-
-                    _currentPortName = port;
-                    _isConnected = true;
+                    lock (_connLock)
+                    {
+                        if (_disposed)
+                        {
+                            try { if (newPort.IsOpen) newPort.Close(); } catch { }
+                            newPort.Dispose();
+                            return;
+                        }
+                        // 并发下别人已连上：新人让路，避免双句柄
+                        if (_isConnected)
+                        {
+                            try { if (newPort.IsOpen) newPort.Close(); } catch { }
+                            newPort.Dispose();
+                            return;
+                        }
+                        // 若之前连接过，先断开旧连接，避免重复 Open 报"端口被占用"
+                        DisconnectLocked();
+                        _serialPort = newPort;
+                        _currentPortName = port;
+                        _isConnected = true;
+                    }
                     ok = true;
                 }
             }
@@ -360,31 +433,45 @@ namespace AgingTestSystem.Services
             }
 
             // ===== 边沿日志（V1.16.2 心跳机制：只在状态变化时提示，失败过程静默） =====
-            if (ok)
+            string connectedPort = null;
+            string keyword = null;
+            bool shouldPostOk = false;
+            bool shouldPostFail = false;
+            string postFailText = null;
+            lock (_connLock)
             {
-                // 连接成功：只有"之前未连接"才提示一次"已连接"
-                if (!_wasConnected)
+                if (ok)
                 {
-                    _wasConnected = true;
-                    PostStatus($"扫码枪已连接: {_currentPortName}，等待扫码...");
+                    connectedPort = _currentPortName;
+                    keyword = _config.ScannerDeviceKeyword;
+                    // 连接成功：只有"之前未连接"才提示一次"已连接"
+                    if (!_wasConnected)
+                    {
+                        _wasConnected = true;
+                        shouldPostOk = true;
+                    }
+                    // 复位"已提示未连接"标记：下次掉线允许再提示一次
+                    _disconnectReported = false;
                 }
-                // 复位"已提示未连接"标记：下次掉线允许再提示一次
-                _disconnectReported = false;
-
-                // 心跳调试日志：确认新代码在跑，并记录实际解析到的端口
-                DebugLog($"连接成功: 端口={_currentPortName}，识别关键词='{_config.ScannerDeviceKeyword}'");
-            }
-            else
-            {
-                // 连接失败：置为未连接状态
-                _wasConnected = false;
-                // 只在"本次掉线还没提示过"时提示一次，之后静默重试（不刷日志）
-                if (!_disconnectReported)
+                else
                 {
-                    _disconnectReported = true;
-                    PostStatus(failReason ?? "扫码枪未连接，正在后台自动重试...");
+                    // 连接失败：置为未连接状态
+                    _wasConnected = false;
+                    // 只在"本次掉线还没提示过"时提示一次，之后静默重试（不刷日志）
+                    if (!_disconnectReported)
+                    {
+                        _disconnectReported = true;
+                        shouldPostFail = true;
+                        postFailText = failReason ?? "扫码枪未连接，正在后台自动重试...";
+                    }
                 }
             }
+            if (shouldPostOk)
+                PostStatus($"扫码枪已连接: {connectedPort}，等待扫码...");
+            if (shouldPostOk)
+                DebugLog($"连接成功: 端口={connectedPort}，识别关键词='{keyword}'");
+            if (shouldPostFail)
+                PostStatus(postFailText);
         }
 
         /// <summary>
@@ -397,12 +484,18 @@ namespace AgingTestSystem.Services
         {
             if (_disposed) return;
 
-            // 原本就没连接上：不算"掉线"（启动失败等），不提示，避免重复打扰
-            if (!_wasConnected) return;
+            bool shouldPost = false;
+            lock (_connLock)
+            {
+                // 原本就没连接上：不算"掉线"（启动失败等），不提示，避免重复打扰
+                if (!_wasConnected) return;
 
-            _wasConnected = false;
-            _disconnectReported = true;   // 断连原因已提示，后续失败静默
-            PostStatus($"扫码枪已断开，正在后台自动重试...（{reason}）");
+                _wasConnected = false;
+                _disconnectReported = true;   // 断连原因已提示，后续失败静默
+                shouldPost = true;
+            }
+            if (shouldPost)
+                PostStatus($"扫码枪已断开，正在后台自动重试...（{reason}）");
         }
 
         /// <summary>
@@ -416,16 +509,44 @@ namespace AgingTestSystem.Services
             if (_disposed) return false;
 
             // 确保重连定时器在跑（正常情况下一直在跑，这里是兜底）
-            if (!_reconnectTimer.Enabled) _reconnectTimer.Start();
+            try { if (!_reconnectTimer.Enabled) _reconnectTimer.Start(); } catch { }
 
-            TryConnect();
-            return _isConnected;
+            lock (_connLock)
+            {
+                if (_isConnected) return true;
+            }
+            // 后台重连 + 有界等待（最多 3 秒）：用户点"录入批号"时显式触发，
+            // 等太久（无设备时 WMI 全量搜索可达分钟级）不如先放行走手动输入，
+            // 后台连上后经 OnStatusChanged 自动翻绿。
+            QueueConnectInBackground();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < 3000)
+            {
+                System.Threading.Thread.Sleep(100);
+                lock (_connLock)
+                {
+                    if (_isConnected) return true;
+                }
+                if (_disposed) break;
+            }
+            lock (_connLock) { return _isConnected; }
         }
 
         /// <summary>
         /// 断开串口连接（关闭并释放串口对象，清除连接状态）
         /// </summary>
         private void Disconnect()
+        {
+            lock (_connLock)
+            {
+                DisconnectLocked();
+            }
+            // 清空接收缓冲区，避免下一次连接时还残留上一段的数据
+            try { _buffer.Clear(); } catch { }
+        }
+
+        /// <summary>断开串口（调用方必须已持 <see cref="_connLock"/>；只做关句柄与状态清理，毫秒级）</summary>
+        private void DisconnectLocked()
         {
             if (_serialPort != null)
             {
@@ -434,15 +555,17 @@ namespace AgingTestSystem.Services
                     if (_serialPort.IsOpen) _serialPort.Close();
                 }
                 catch { /* 关闭失败不阻塞（可能已被系统移除） */ }
-                _serialPort.DataReceived -= SerialPort_DataReceived;
-                _serialPort.ErrorReceived -= SerialPort_ErrorReceived;
-                _serialPort.Dispose();
+                try
+                {
+                    _serialPort.DataReceived -= SerialPort_DataReceived;
+                    _serialPort.ErrorReceived -= SerialPort_ErrorReceived;
+                }
+                catch { }
+                try { _serialPort.Dispose(); } catch { }
                 _serialPort = null;
             }
             _isConnected = false;
             _currentPortName = null;
-            // 清空接收缓冲区，避免下一次连接时还残留上一段的数据
-            _buffer.Clear();
         }
 
         /// <summary>
@@ -530,10 +653,15 @@ namespace AgingTestSystem.Services
         {
             try
             {
-                if (_serialPort == null || !_serialPort.IsOpen) return;
+                // 快照引用：并发 Disconnect 会把字段置空，快照后只用局部变量（原直接读字段有竞态）
+                SerialPort sp = sender as SerialPort ?? _serialPort;
+                if (sp == null) return;
+                bool open = false;
+                try { open = sp.IsOpen; } catch { return; }
+                if (!open) return;
 
                 // 一次性读取当前缓冲区所有可用数据（ASCII 文本）
-                string chunk = _serialPort.ReadExisting();
+                string chunk = sp.ReadExisting();
                 if (string.IsNullOrEmpty(chunk)) return;
 
                 _buffer.Append(chunk);
@@ -599,11 +727,9 @@ namespace AgingTestSystem.Services
         /// </summary>
         private void ReconnectTimer_Tick(object sender, EventArgs e)
         {
-            // 1) 心跳检查：已连接时验证串口还在不在（USB 被拔出时状态能及时变"未连接"）
-            CheckConnectionAlive();
-
-            // 2) 未连接时自动尝试重连
-            TryConnect();
+            // Tick 只做转发就返回：心跳检查含 WMI 搜索，放后台跑，不占 UI 消息泵
+            //（原来直调会把 WMI 搬上 UI 线程，现场每 3 秒卡一次、启动卡近 2 分钟）。
+            QueueCheckAndConnectInBackground();
         }
 
         /// <summary>
@@ -632,11 +758,21 @@ namespace AgingTestSystem.Services
         {
             if (_disposed) return;
 
-            // 未连接时不需要心跳（TryConnect 自己会处理重连）
-            if (!_isConnected) return;
+            // 快照共享状态（短持锁）：WMI 搜索在锁外跑，不卡其它线程的断连处理
+            string currentPort;
+            SerialPort portRef;
+            lock (_connLock)
+            {
+                // 未连接时不需要心跳（TryConnect 自己会处理重连）
+                if (!_isConnected) return;
+                currentPort = _currentPortName;
+                portRef = _serialPort;
+            }
 
             // 情况 1：串口对象被置空 / 已被关闭 → 视为断连
-            if (_serialPort == null || !_serialPort.IsOpen)
+            bool open = false;
+            try { open = portRef != null && portRef.IsOpen; } catch { open = false; }
+            if (!open)
             {
                 OnDisconnectDetected("串口已关闭");
                 Disconnect();
@@ -647,12 +783,13 @@ namespace AgingTestSystem.Services
             // 确认扫码枪物理设备还在。设备被拔掉 → PnP 节点消失 → 搜不到 → 断连。
             // 同时用"当前端口是否还在系统串口列表"作第二路独立信号（防止其中一路
             // 因驱动残留/查询失败而漏判）；两路任一路确定端口不在 → 判定断连。
+            // WMI 与 GetPortNames 都在锁外执行（耗时操作不持锁）。
             if (string.IsNullOrWhiteSpace(_config.ScannerPort))
             {
                 // ① WMI 设备关键词搜索：反映物理设备是否真在（null=查询失败 / 空=不在 / 非空=在）
                 List<string> wmiMatches = FindMatchingPorts();
                 bool wmiSaysPresent = wmiMatches != null &&
-                    wmiMatches.Exists(p => string.Equals(p, _currentPortName, StringComparison.OrdinalIgnoreCase));
+                    wmiMatches.Exists(p => string.Equals(p, currentPort, StringComparison.OrdinalIgnoreCase));
 
                 // ② 系统串口列表（GetPortNames，读注册表 SERIALCOMM）：当前端口是否还在
                 string[] portNames = null;
@@ -664,7 +801,7 @@ namespace AgingTestSystem.Services
                     {
                         foreach (string p in portNames)
                         {
-                            if (string.Equals(p, _currentPortName, StringComparison.OrdinalIgnoreCase))
+                            if (string.Equals(p, currentPort, StringComparison.OrdinalIgnoreCase))
                             {
                                 inPortList = true;
                                 break;
@@ -674,9 +811,22 @@ namespace AgingTestSystem.Services
                 }
                 catch { /* GetPortNames 失败：跳过这一路判定 */ }
 
-                // 诊断日志（ScannerDebugLog=true 时打到 LOG，供现场排查"断连识别不到"）
-                DebugLog($"心跳: 当前={_currentPortName}, WMI匹配=[{JoinPorts(wmiMatches)}], " +
-                         $"系统列表=[{JoinPorts(portNames)}], WMI在={wmiSaysPresent}, 列表在={inPortList}");
+                // 诊断日志（ScannerDebugLog=true 时打到 LOG，供现场排查"断连识别不到"）。
+                // 只在端口快照变化时记一行：稳态重复打同样的心跳就是刷屏，
+                // 拔插导致的出现/消失走签名变化自然会记下来。
+                string hbSig = "W:" + JoinPorts(wmiMatches) + "|S:" + JoinPorts(portNames);
+                bool hbChanged = false;
+                lock (_connLock)
+                {
+                    if (!string.Equals(_lastHeartbeatSignature, hbSig, StringComparison.Ordinal))
+                    {
+                        _lastHeartbeatSignature = hbSig;
+                        hbChanged = true;
+                    }
+                }
+                if (hbChanged)
+                    DebugLog($"心跳: 当前={currentPort}, WMI匹配=[{JoinPorts(wmiMatches)}], " +
+                             $"系统列表=[{JoinPorts(portNames)}], WMI在={wmiSaysPresent}, 列表在={inPortList}");
 
                 // 两路独立判定：任一路"查询成功但端口已不在" → 判定断连
                 // （查询失败的那一路自动跳过，避免 WMI/注册表偶发故障误报）
@@ -697,7 +847,7 @@ namespace AgingTestSystem.Services
                     bool portExists = false;
                     foreach (string p in SerialPort.GetPortNames())
                     {
-                        if (string.Equals(p, _currentPortName, StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(p, currentPort, StringComparison.OrdinalIgnoreCase))
                         {
                             portExists = true;
                             break;
@@ -726,7 +876,11 @@ namespace AgingTestSystem.Services
             // 正在收数据（BytesToRead>0）时自动延后，避免把条码读丢。
             TryPeriodicCloseRescan();
             // 探测若判定断连已 Disconnect 并重连处理，直接结束本轮心跳
-            if (!_isConnected) return;
+            lock (_connLock)
+            {
+                if (!_isConnected) return;
+                portRef = _serialPort;
+            }
 
             // I/O 探测兜底：上面判不出断连（固定端口 / WMI 查询失败）时，主动读一次。
             // 端口有数据在等时跳过探测（避免和 DataReceived 抢数据、把条码读丢）；
@@ -734,9 +888,19 @@ namespace AgingTestSystem.Services
             // 句柄已失效（设备被拔/驱动异常）会抛异常 → 进 catch 判定断连。
             try
             {
-                if (_serialPort.BytesToRead <= 0)
+                SerialPort sp = portRef;
+                if (sp == null) return;
+                int waiting;
+                try { waiting = sp.BytesToRead; }
+                catch (Exception ex)
                 {
-                    _serialPort.ReadExisting();
+                    OnDisconnectDetected($"端口探测失败: {ex.Message}");
+                    Disconnect();
+                    return;
+                }
+                if (waiting <= 0)
+                {
+                    sp.ReadExisting();
                 }
             }
             catch (Exception ex)
@@ -764,18 +928,31 @@ namespace AgingTestSystem.Services
         /// </summary>
         private void TryPeriodicCloseRescan()
         {
-            if (_serialPort == null || !_serialPort.IsOpen) return;
+            // 快照引用后在锁外读 BytesToRead：引用被并发 Disconnect 置空也不怕（判空即返）
+            SerialPort sp;
+            lock (_connLock) { sp = _serialPort; }
+            if (sp == null) return;
+            bool open = false;
+            try { open = sp.IsOpen; } catch { return; }
+            if (!open) return;
 
             // 正在收数据：延后探测（避免和 DataReceived 抢数据、把条码读丢）
-            if (_serialPort.BytesToRead > 0)
+            try
             {
-                _ticksSinceCloseRescan = 0;
-                return;
+                if (sp.BytesToRead > 0)
+                {
+                    lock (_connLock) { _ticksSinceCloseRescan = 0; }
+                    return;
+                }
             }
+            catch { return; }
 
-            _ticksSinceCloseRescan++;
-            if (_ticksSinceCloseRescan < CloseRescanEveryTicks) return;
-            _ticksSinceCloseRescan = 0;
+            lock (_connLock)
+            {
+                _ticksSinceCloseRescan++;
+                if (_ticksSinceCloseRescan < CloseRescanEveryTicks) return;
+                _ticksSinceCloseRescan = 0;
+            }
 
             DebugLog("心跳：周期探测-关闭串口重新识别（确认设备真实存在）");
             Disconnect();   // 关闭句柄 → 释放鬼设备残留
@@ -805,8 +982,8 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 心跳调试日志（）
         /// ScannerDebugLog=true 时把端口搜索结果通过状态事件打到 LOG，
-        /// 用于现场排查"扫码枪断连识别不到"：能直接看到心跳每个周期
-        /// WMI 搜到什么、系统串口列表是什么、判定结果如何。
+        /// 用于现场排查"扫码枪断连识别不到"。调用方只在端口快照变化时调本方法，
+        /// 稳态不重复刷屏；开关默认关闭，生产 LOG 只留连上/断开边沿各一行。
         /// </summary>
         /// <param name="message">调试内容</param>
         private void DebugLog(string message)

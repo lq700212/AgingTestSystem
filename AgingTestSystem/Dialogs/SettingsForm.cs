@@ -356,7 +356,7 @@ namespace AgingTestSystem.Dialogs
             { "ScannerDataBits", "扫码枪数据位（8）" },
             { "ScannerStopBits", "扫码枪停止位（1）" },
             { "ScannerParity", "扫码枪校验位（None）" },
-            { "ScannerDebugLog", "扫码枪心跳调试日志开关（false/true）" },
+            { "ScannerDebugLog", "扫码枪心跳调试日志（默认关；生产只留连上/断开各一行。排查断连识别时再开，开后心跳只在端口变化时记一行）" },
         };
 
         /// <summary>

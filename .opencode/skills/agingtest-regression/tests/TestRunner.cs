@@ -4385,6 +4385,39 @@ namespace AgingTestSystem.Tests
                 BindingFlags.NonPublic | BindingFlags.Static);
             Check("两端15口径一致",
                 ((string)norm.Invoke(null, new object[] { "1.5" }) == "15") && stb(15) == "OnePointFive");
+
+            // —— 心跳防刷屏（现场曾每 3 秒一条心跳刷 LOG）：固定坏端口 + 调试开，
+            // Start 非阻塞返回，多次 Tick 后失败提示仍只有一行 ——
+            var scfg = new DeviceConfig();
+            scfg.ScannerEnabled = true;
+            scfg.ScannerPort = "COM999";
+            scfg.ScannerDebugLog = true;
+            var scan = new ScannerService(scfg);
+            var msgs = new List<string>();
+            var mlock = new object();
+            scan.OnStatusChanged += (s, m) => { lock (mlock) { msgs.Add(m); } };
+            var ssw = System.Diagnostics.Stopwatch.StartNew();
+            scan.Start();
+            ssw.Stop();
+            Check("Start非阻塞返回", ssw.ElapsedMilliseconds < 5000 && !scan.IsConnected);
+            var tick = t.GetMethod("ReconnectTimer_Tick", BindingFlags.NonPublic | BindingFlags.Instance);
+            for (int k = 0; k < 3; k++)
+            {
+                tick.Invoke(scan, new object[] { null, EventArgs.Empty });
+                Thread.Sleep(200);
+            }
+            var tsw = System.Diagnostics.Stopwatch.StartNew();
+            while (tsw.ElapsedMilliseconds < 3000)
+            {
+                try { Application.DoEvents(); } catch { } // 同步上下文若已装，Post 的回调靠泵送达
+                lock (mlock) { if (msgs.Count >= 1) break; }
+                Thread.Sleep(100);
+            }
+            for (int k = 0; k < 8; k++) { try { Application.DoEvents(); } catch { } Thread.Sleep(100); } // 多等一轮，确认无重复追打
+            int n;
+            lock (mlock) { n = msgs.Count; }
+            Check("失败提示只一行不刷屏", n == 1 && msgs[0].Contains("连接失败"));
+            try { scan.Dispose(); } catch { }
         }
 
         // =====================================================================
