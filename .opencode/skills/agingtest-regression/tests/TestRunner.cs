@@ -5539,6 +5539,106 @@ namespace AgingTestSystem.Tests
                 IoMapBuilder.Build(new DeviceConfig { TotalBarometers = 72, TotalInputs = 72, TotalOutputs = 144 })
                     .Count(p => p.Function == IoFunction.Unknown) == 0);
 
+            // —— 通讯测试窗三页统一：打开自动同步 + 手动失败灯回滚（只构造不 Show，不点会弹框的按钮） ——
+            // （块内变量一律 ct 前缀：外层方法已有 grid/spare/closed 等同名变量，重名即 CS0136）
+            {
+                const BindingFlags ctFlags = BindingFlags.NonPublic | BindingFlags.Public
+                    | BindingFlags.Instance | BindingFlags.Static;
+                var ctCfg = new DeviceConfig { UseMockCommunication = true };
+                var ctDm = new DeviceManager(ctCfg);
+                try
+                {
+                    var ctComm = new CommunicationTestForm(ctDm);
+                    try
+                    {
+                        var ctGridF = typeof(CommunicationTestForm).GetField("_vacuumGrid", ctFlags);
+                        var ctGrid = ctGridF.GetValue(ctComm) as CommunicationTestForm.ChannelGrid;
+                        Check("通讯窗三页灯回滚helper可用", ctGrid != null);
+                        if (ctGrid != null)
+                        {
+                            // 未连接写寄存器返回 false（只记日志，不弹框）
+                            Check("通讯窗未连接写寄存器返回false", ctComm.WriteRegister(ctGrid, 0, 0) == false);
+                            // 灯回滚：先拨亮再弹回，两个方向都对
+                            ctGrid.Buttons[0, 0].IsOn = true;
+                            ctGrid.RevertToggle(0, 0, false);
+                            Check("负压灯失败回滚到操作前", ctGrid.Buttons[0, 0].IsOn == false);
+                            ctGrid.Buttons[0, 0].IsOn = false;
+                            ctGrid.RevertToggle(0, 0, true);
+                            Check("负压灯回滚能恢复亮态", ctGrid.Buttons[0, 0].IsOn == true);
+                            ctGrid.Buttons[0, 0].IsOn = false;
+                            ctGrid.RevertToggle(0, 0, false);
+                        }
+                        // 预留 DO 灯回滚（与负压/载台同职责）
+                        var ctSpareF = typeof(CommunicationTestForm).GetField("_spareGrid", ctFlags);
+                        var ctSpare = ctSpareF.GetValue(ctComm);
+                        var ctDoBtnsF = ctSpare.GetType().GetField("_doButtons", ctFlags);
+                        var ctDoBtns = ctDoBtnsF.GetValue(ctSpare) as Array;
+                        bool ctSpareOk = ctDoBtns != null && ctDoBtns.Length > 0;
+                        Check("预留DO灯存在", ctSpareOk);
+                        if (ctSpareOk)
+                        {
+                            var ctFirst = (CommunicationTestForm.CircleButton)ctDoBtns.GetValue(0);
+                            ctFirst.IsOn = true;
+                            ctSpare.GetType().GetMethod("RevertDoToggle").Invoke(ctSpare, new object[] { 0, false });
+                            Check("预留DO灯失败回滚到操作前", ctFirst.IsOn == false);
+                            ctFirst.IsOn = false;
+                        }
+                        // DI 灯可用后台快照直接刷新（不断言连接，缓存直达）
+                        var ctDiLampsF = ctSpare.GetType().GetField("_diLamps", ctFlags);
+                        var ctDiLamps = ctDiLampsF.GetValue(ctSpare) as Array;
+                        bool ctDiOk = ctDiLamps != null && ctDiLamps.Length > 0;
+                        Check("预留DI灯存在", ctDiOk);
+                        if (ctDiOk)
+                        {
+                            var ctCached = new bool[ctCfg.TotalInputs];
+                            ctCached[72] = true;   // 首个预留输入 IoId=73
+                            ctSpare.GetType().GetMethod("RefreshDiInputs").Invoke(ctSpare, new object[] { ctCached });
+                            var ctLamp0 = (CommunicationTestForm.CircleButton)ctDiLamps.GetValue(0);
+                            Check("DI灯按快照点亮", ctLamp0.IsOn == true);
+                        }
+                        // 失败提示入口存在；关窗后调用静默丢弃（不断言弹框）
+                        var ctNoticeM = typeof(CommunicationTestForm).GetMethod("ShowWriteFailureNotice",
+                            BindingFlags.Public | BindingFlags.Instance);
+                        Check("反射找到ShowWriteFailureNotice", ctNoticeM != null);
+                        var ctClosedF = typeof(CommunicationTestForm).GetField("_closed", ctFlags);
+                        ctClosedF.SetValue(ctComm, true);
+                        bool ctQuiet = true;
+                        try
+                        {
+                            if (ctGrid != null)
+                                Check("通讯窗关后写寄存器返回false", ctComm.WriteRegister(ctGrid, 0, 0) == false);
+                            ctNoticeM.Invoke(ctComm, new object[] { "关后提示应丢弃" });
+                        }
+                        catch { ctQuiet = false; }
+                        Check("通讯窗关后提示静默丢弃", ctQuiet);
+                        ctClosedF.SetValue(ctComm, false);
+                        // 自动同步入口存在；置已连接后触发一次，后台 worker 应静默收尾（Mock 读回为空，只记日志）
+                        var ctAutoM = typeof(CommunicationTestForm).GetMethod("AutoRefreshAfterConnect",
+                            BindingFlags.NonPublic | BindingFlags.Instance);
+                        Check("反射找到AutoRefreshAfterConnect", ctAutoM != null);
+                        if (ctAutoM != null)
+                        {
+                            var ctSetConn = typeof(CommunicationTestForm).GetMethod("SetConnected",
+                                BindingFlags.NonPublic | BindingFlags.Instance);
+                            ctSetConn.Invoke(ctComm, new object[] { true });
+                            var ctBusyF = typeof(CommunicationTestForm).GetField("_autoReadBusy", ctFlags);
+                            ctAutoM.Invoke(ctComm, null);
+                            bool ctSettled = false;
+                            for (int ctI = 0; ctI < 30; ctI++)
+                            {
+                                System.Threading.Thread.Sleep(100);
+                                try { if (!(bool)ctBusyF.GetValue(ctComm)) { ctSettled = true; break; } }
+                                catch { break; }
+                            }
+                            Check("自动同步后台收尾不卡死", ctSettled);
+                            ctSetConn.Invoke(ctComm, new object[] { false });
+                        }
+                    }
+                    finally { try { ctComm.Dispose(); } catch { } }
+                }
+                finally { try { ctDm.Dispose(); } catch { } }
+            }
+
             // —— 右侧宽度比例自适应（V1.65 比例＋固定布局：无文件，永远跟窗口走） ——
             Check("比例常量0.16/护栏200~240",
                 MainForm.RightPanelRatio == 0.16
