@@ -101,6 +101,14 @@ namespace AgingTestSystem.Dialogs
     ///   - 可视化连线页（IoRemapVisualForm）：左列源通道、右列备用目标，点选连线；
     ///     目标独占（一个备用只接一个源，IoRemapValidator 拦截）；保存走
     ///     SettingsForm.PersistChanges（与设置表同一条落盘路），写 App.config 即时生效。
+    /// 【打开自动同步 + 手动失败提示】
+    ///   - 打开页面（或中途断线重连成功）后自动读回 0x2000~0x2009 与预留 DI，
+    ///     三页灯第一次就显示现场真值，不用先点"读取状态"；
+    ///     读动作放后台线程，灯刷新切回 UI 线程，遍历运行时自动让路。
+    ///   - 手动点灯（负压/载台/预留 DO）写入失败或未连接时弹框明示，
+    ///     灯自动弹回操作前状态，不出现"灯亮着、设备没动"的误导；
+    ///     遍历与状态定时器走日志不弹框（后台动作不打扰用户），
+    ///     全部关闭失败给一条汇总提示。
     /// </summary>
     public partial class CommunicationTestForm : UIForm
     {
@@ -140,6 +148,9 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>是否已在后台执行遍历单拍（防重入：上一个 500ms 还没做完就不叠加新的，避免任务堆积）</summary>
         private volatile bool _sweepStepBusy;
+
+        /// <summary>自动同步是否正在后台执行（防重入：首次连接成功与重连边沿可能连续触发，只跑一次）</summary>
+        private volatile bool _autoReadBusy;
 
         /// <summary>当前遍历到的通道号（0~71；行 = /8，列 = %8，对应 9 排 × 8 列按钮）</summary>
         private int _sweepChannelIndex;
@@ -373,6 +384,8 @@ namespace AgingTestSystem.Dialogs
                 if (ok)
                 {
                     AppendLog($"[连接] 已连接耦合器 {_config.PlcAddress}:{_config.PlcPort}（复用主程序共享连接）");
+                    // 连上即自动同步一次现场真值，三页灯第一次就与设备一致
+                    AutoRefreshAfterConnect();
                 }
                 else
                 {
@@ -426,6 +439,11 @@ namespace AgingTestSystem.Dialogs
                     AppendLog("[连接] 与耦合器的连接已断开，主程序正在后台自动重连...");
                     // 遍历跑马灯若在运行，立即停止（写寄存器必然失败）
                     if (_sweepActive) StopSweep();
+                }
+                else
+                {
+                    // 断线重连成功：灯可能已过期，自动同步一次现场真值（与首次打开同逻辑）
+                    AutoRefreshAfterConnect();
                 }
             });
         }
@@ -542,17 +560,18 @@ namespace AgingTestSystem.Dialogs
         /// <param name="grid">目标测试网格</param>
         /// <param name="regIndex">寄存器索引（0~4 对应 RegAddresses；5=备用映射目标 0x2009）</param>
         /// <param name="triggerRow">触发本次写入的排索引（0~8），仅用于日志显示</param>
-        public void WriteRegister(ChannelGrid grid, int regIndex, int triggerRow)
+        /// <returns>true=主寄存器与备用目标都写成功；false=未写进去（调用方决定是否提示/回滚）</returns>
+        public bool WriteRegister(ChannelGrid grid, int regIndex, int triggerRow)
         {
             // 关后停硬件写（在途遍历拍的收尾调用进到这里即丢弃）。
-            if (_closed || IsDisposed || Disposing) return;
+            if (_closed || IsDisposed || Disposing) return false;
             int addr = grid.RegAddresses[regIndex];
             int val = grid.CurrentRegValues[regIndex];
 
             if (!_connected)
             {
                 AppendLog($"[警告] 未连接，无法写入。请先点击“连接测试”。(由第 {triggerRow + 1} 排触发，0x{addr:X4} = 0x{val:X4})");
-                return;
+                return false;
             }
 
             lock (_modbusLock)
@@ -560,7 +579,7 @@ namespace AgingTestSystem.Dialogs
                 if (!_connected)
                 {
                     AppendLog($"[警告] 未连接，无法写入。请先点击“连接测试”。(由第 {triggerRow + 1} 排触发，0x{addr:X4} = 0x{val:X4})");
-                    return;
+                    return false;
                 }
 
                 // 读-改-写：只改写本网格在寄存器里拥有的位，保留其它位（如 0x2004 上对方的字节）
@@ -581,14 +600,15 @@ namespace AgingTestSystem.Dialogs
                 if (!WriteReg((ushort)addr, writeValue))
                 {
                     AppendLog($"[错误] 写入 0x{addr:X4} 失败（连接已断开，主程序后台自动重连中）");
-                    return;
+                    return false;
                 }
 
                 // 备用映射目标寄存器（0x2009）一并下发：读-改-写，只动本网格拥有的映射目标位，
                 // 保留另一测试在该寄存器里的映射位（与主项目 ModbusTcpIoController 逐通道 RMW 一致）
-                WriteBackupRegister(grid, grid.CurrentRegValues[5]);
+                bool backupOk = WriteBackupRegister(grid, grid.CurrentRegValues[5]);
 
                 AppendLog($"[写入] 由第 {triggerRow + 1} 排触发  0x{addr:X4} = 0x{writeValue:X4}");
+                return backupOk;
             }
         }
 
@@ -633,6 +653,87 @@ namespace AgingTestSystem.Dialogs
             }
         }
 
+        /// <summary>
+        /// 连接成功后自动同步现场通道状态（三页统一：负压/载台/预留 DO 灯 + 预留 DI 灯）。
+        /// 调用点只有两个：首次打开连接成功、状态定时器发现"断开→连上"边沿。
+        /// 读寄存器放后台线程（与一键遍历同路，不卡界面），灯刷新切回 UI 线程；
+        /// 遍历运行中自动让路（遍历每拍本来就读回真值），失败只记日志不弹框
+        /// （自动动作不打扰用户，手动点"读取状态"可重试）。
+        /// </summary>
+        private void AutoRefreshAfterConnect()
+        {
+            if (_closed || IsDisposed || Disposing) return;
+            if (!_connected || _sweepActive || _autoReadBusy) return;
+            _autoReadBusy = true;
+            Task.Run((Action)AutoRefreshWorker);
+        }
+
+        /// <summary>自动同步后台 worker：读 10 个 DO 寄存器 + 全部 DI，读完切回 UI 线程统一上灯。</summary>
+        private void AutoRefreshWorker()
+        {
+            try
+            {
+                if (_closed || IsDisposed || Disposing) return;
+                ushort[] regs;
+                bool[] inputs;
+                lock (_modbusLock)
+                {
+                    if (_closed || !_connected) return;
+                    regs = ReadRegs(0x2000, 10);
+                    try { inputs = _deviceManager.GetAllInputs(); }
+                    catch { inputs = null; }
+                }
+                if (regs == null || regs.Length < 10)
+                {
+                    RunOnUi(() => AppendLog("[读取] 自动同步失败（读回为空），可点“读取状态”手动重试"));
+                    return;
+                }
+                var values = new int[10];
+                for (int i = 0; i < 10; i++) values[i] = regs[i] & 0xFFFF;
+                bool[] diSnapshot = inputs;
+                RunOnUi(() =>
+                {
+                    if (_closed || IsDisposed || Disposing) return;
+                    if (_sweepActive) return;   // 排队期间用户起了遍历，灯归遍历管，自动快照丢弃
+                    try
+                    {
+                        _vacuumGrid.SetButtonsFromRegisters(values);
+                        _carrierGrid.SetButtonsFromRegisters(values);
+                        _spareGrid.SetButtonsFromRegisters(values);
+                        _spareGrid.RefreshDiInputs(diSnapshot);
+                        AppendLog("[读取] 已自动同步现场通道状态（三页灯与设备一致）");
+                    }
+                    catch { }
+                });
+            }
+            catch (Exception ex)
+            {
+                RunOnUi(() => AppendLog("[读取] 自动同步异常: " + ex.Message));
+            }
+            finally
+            {
+                _autoReadBusy = false;
+            }
+        }
+
+        /// <summary>
+        /// 手动开关通道失败的交互提示（只给人看：点灯没写进设备时弹框，不只记日志）。
+        /// 自动动作（打开同步/遍历/状态定时器）一律不调这里，避免后台弹框打扰用户；
+        /// 关窗后调用直接丢弃（排队回调不碰已释放窗体）。
+        /// </summary>
+        /// <param name="message">已拼好的失败说明（含通道名、想做的动作、原因、下一步）</param>
+        public void ShowWriteFailureNotice(string message)
+        {
+            if (_closed || IsDisposed || Disposing) return;
+            AppendLog("[失败] " + message);
+            try
+            {
+                UIMessageBox.Show(message, "通道操作失败",
+                    UIStyle.Red, UIMessageBoxButtons.OK, true, 0);
+            }
+            catch { }
+        }
+
         /// <summary>全部关闭：0x2000~0x2009 全写 0，三个测试网格全部按钮置 OFF（现场应急用）</summary>
         private void AllOff()
         {
@@ -646,18 +747,31 @@ namespace AgingTestSystem.Dialogs
             if (!_connected)
             {
                 AppendLog("[警告] 未连接，仅清除本地状态。请先连接再写入。");
+                ShowWriteFailureNotice("全部关闭失败：耦合器尚未连接，仅清除了本地显示，设备侧通道未动。请先点击“连接测试”，连接成功后可重试。");
                 return;
             }
 
+            int failCount = 0;
             lock (_modbusLock)
             {
                 for (int i = 0; i < 10; i++)
                 {
                     if (!WriteReg((ushort)(0x2000 + i), 0x0000))
                     {
+                        failCount++;
                         AppendLog($"[错误] 写 0x{0x2000 + i:X4} 失败（连接已断开）");
                     }
                 }
+            }
+            if (failCount > 0)
+            {
+                // 本地灯已提前清零、设备侧没写进去：后台自动拉一次真值把灯弹回，不留"灯灭着、设备开着"的误导
+                AutoRefreshAfterConnect();
+                // 批量动作只给一条汇总提示，不逐个寄存器弹框
+                ShowWriteFailureNotice(string.Format(
+                    "全部关闭未完成：{0} 个寄存器写入失败（连接已断开，主程序后台自动重连中），部分通道可能仍有输出。连接恢复后请先点“读取状态”确认真值，再决定是否重关。",
+                    failCount));
+                return;
             }
             AppendLog("[关闭] 0x2000~0x2009 全部清零");
         }
@@ -1236,18 +1350,19 @@ namespace AgingTestSystem.Dialogs
         /// </summary>
         /// <param name="grid">目标测试网格</param>
         /// <param name="remapValue">本网格要写进 0x2009 的映射值（含备用映射目标位）</param>
-        private void WriteBackupRegister(ChannelGrid grid, int remapValue)
+        /// <returns>true=写成功或无需写；false=备用目标没写进去（调用方按失败处理）</returns>
+        private bool WriteBackupRegister(ChannelGrid grid, int remapValue)
         {
             // 总开关关闭时不写 0x2009（配置默认关，多数工作台行为不变）
-            if (!_config.IoBackupChannelMappingEnabled) return;
+            if (!_config.IoBackupChannelMappingEnabled) return true;
 
             int remapMask = grid.ComputeRemapTargetMask();
-            if (remapMask == 0) return;   // 本网格没有任何映射目标，不动 0x2009
+            if (remapMask == 0) return true;   // 本网格没有任何映射目标，不动 0x2009
 
             ushort[] cur = ReadRegs((ushort)grid.RegAddresses[5], 1);
             ushort current = (cur != null && cur.Length > 0) ? cur[0] : (ushort)0;
             ushort writeValue = (ushort)((current & ~remapMask) | (remapValue & remapMask));
-            WriteReg((ushort)grid.RegAddresses[5], writeValue);
+            return WriteReg((ushort)grid.RegAddresses[5], writeValue);
         }
 
         /// <summary>
@@ -1591,6 +1706,9 @@ namespace AgingTestSystem.Dialogs
                     _owner.ShowRemapNotice(RowIoNames[row, btn.Col], absReg, ch, dstReg, dstBit);
                 }
 
+                bool previous = btn.IsOn;
+                string action = previous ? "关闭" : "开启";
+                string ioName = RowIoNames[row, btn.Col];
                 btn.IsOn = !btn.IsOn;
 
                 int regIndex = RowToRegIndex[row];
@@ -1599,7 +1717,40 @@ namespace AgingTestSystem.Dialogs
                 // 被映射走的源通道位已从源寄存器剔除，其信号汇总到 0x2009（CurrentRegValues[5]）
                 CurrentRegValues[5] = RecomputeRemapRegValue();
 
-                _owner.WriteRegister(this, regIndex, row);
+                if (!_owner._connected)
+                {
+                    RevertToggle(row, btn.Col, previous);
+                    _owner.ShowWriteFailureNotice(string.Format(
+                        "通道 {0} {1}失败：耦合器尚未连接，请先点击“连接测试”。状态灯已恢复，连接成功后可重试。",
+                        ioName, action));
+                    return;
+                }
+                if (!_owner.WriteRegister(this, regIndex, row))
+                {
+                    RevertToggle(row, btn.Col, previous);
+                    _owner.ShowWriteFailureNotice(string.Format(
+                        "通道 {0} {1}失败：写入寄存器 0x{2:X4} 失败（连接已断开，主程序后台自动重连中）。状态灯已恢复，连接恢复后可重试。",
+                        ioName, action, absReg));
+                    return;
+                }
+                RefreshRowLabels();
+            }
+
+            /// <summary>
+            /// 手动点灯写入失败/未连接时的灯回滚：把按钮弹回操作前状态并重算寄存器本地值，
+            /// 不出现"灯亮着、设备没动"的误导。只动本地显示，不碰设备。
+            /// </summary>
+            /// <param name="row">排索引（0~8）</param>
+            /// <param name="col">列索引（0~7）</param>
+            /// <param name="previous">操作前灯态</param>
+            public void RevertToggle(int row, int col, bool previous)
+            {
+                if (row < 0 || row >= 9 || col < 0 || col >= 8) return;
+                if (Buttons[row, col] == null) return;
+                Buttons[row, col].IsOn = previous;
+                int regIndex = RowToRegIndex[row];
+                CurrentRegValues[regIndex] = RecomputeRegValue(regIndex);
+                CurrentRegValues[5] = RecomputeRemapRegValue();
                 RefreshRowLabels();
             }
 
@@ -2177,27 +2328,53 @@ namespace AgingTestSystem.Dialogs
                     _owner.ShowRemapNotice(p.PhysicalAddress, reg, bit, dstReg, dstBit);
                 }
 
+                bool previous = btn.IsOn;
+                string action = previous ? "关闭" : "开启";
                 btn.IsOn = !btn.IsOn;
-                WriteDoRegisters(reg);
+                if (!_owner._connected)
+                {
+                    RevertDoToggle(idx, previous);
+                    _owner.ShowWriteFailureNotice(string.Format(
+                        "通道 {0} {1}失败：耦合器尚未连接，请先点击“连接测试”。状态灯已恢复，连接成功后可重试。",
+                        p.PhysicalAddress, action));
+                    return;
+                }
+                if (!WriteDoRegisters(reg))
+                {
+                    RevertDoToggle(idx, previous);
+                    _owner.ShowWriteFailureNotice(string.Format(
+                        "通道 {0} {1}失败：写入寄存器 0x{2:X4} 失败（连接已断开，主程序后台自动重连中）。状态灯已恢复，连接恢复后可重试。",
+                        p.PhysicalAddress, action, reg));
+                }
+            }
+
+            /// <summary>预留 DO 灯回滚（与 ChannelGrid.RevertToggle 同职责：只恢复本地灯，不碰设备）</summary>
+            /// <param name="index">DO 灯下标</param>
+            /// <param name="previous">操作前灯态</param>
+            public void RevertDoToggle(int index, bool previous)
+            {
+                if (index < 0 || index >= _doButtons.Length || _doButtons[index] == null) return;
+                _doButtons[index].IsOn = previous;
             }
 
             /// <summary>写单个预留 DO 寄存器：期望=本寄存器内 ON 灯的位 OR（被映射走的源位剔除），
             /// 映射保位保留，未连接/失败只记日志不抛。</summary>
-            private void WriteDoRegisters(int reg)
+            /// <returns>true=写成功；false=未写进去（调用方回滚灯态并提示）</returns>
+            private bool WriteDoRegisters(int reg)
             {
                 // 关后停硬件写
-                if (_owner._closed || _owner.IsDisposed || _owner.Disposing) return;
+                if (_owner._closed || _owner.IsDisposed || _owner.Disposing) return false;
                 if (!_owner._connected)
                 {
                     _owner.AppendLog($"[警告] 未连接，无法写入预留输出。请先点击“连接测试”。(0x{reg:X4})");
-                    return;
+                    return false;
                 }
                 lock (_owner._modbusLock)
                 {
                     if (!_owner._connected)
                     {
                         _owner.AppendLog($"[警告] 未连接，无法写入预留输出。请先点击“连接测试”。(0x{reg:X4})");
-                        return;
+                        return false;
                     }
                     int desired = 0;
                     for (int i = 0; i < _spareOutputs.Count; i++)
@@ -2214,9 +2391,10 @@ namespace AgingTestSystem.Dialogs
                     if (!_owner.WriteReg((ushort)reg, (ushort)w))
                     {
                         _owner.AppendLog($"[错误] 写入 0x{reg:X4} 失败（连接已断开，主程序后台自动重连中）");
-                        return;
+                        return false;
                     }
                     _owner.AppendLog($"[写入] 预留输出  0x{reg:X4} = 0x{w:X4}");
+                    return true;
                 }
             }
 
@@ -2224,14 +2402,19 @@ namespace AgingTestSystem.Dialogs
             /// 刷新 DI 灯（必在 UI 线程调：碰 IsOn→Invalidate）。
             /// 未连接/读失败时灯保持旧态并记日志，不误报全灭。
             /// </summary>
-            public void RefreshDiInputs()
+            /// <param name="cachedAll">已读好的全量输入快照（自动同步在后台读好传进来，省一次报文）；
+            /// null=自己现读（"读取状态"按钮/切页刷新走这条）</param>
+            public void RefreshDiInputs(bool[] cachedAll = null)
             {
                 if (_owner._closed || _owner.IsDisposed || _owner.Disposing) return;
                 if (_spareInputs.Count == 0) return;
-                if (!_owner._connected) return;
-                bool[] all;
-                try { all = _owner._deviceManager.GetAllInputs(); }
-                catch { all = null; }
+                bool[] all = cachedAll;
+                if (all == null || all.Length < _config.TotalInputs)
+                {
+                    if (!_owner._connected) return;
+                    try { all = _owner._deviceManager.GetAllInputs(); }
+                    catch { all = null; }
+                }
                 if (all == null || all.Length < _config.TotalInputs)
                 {
                     _owner.AppendLog("[警告] 预留输入读取失败（返回点数不足），状态灯保持上次值");
