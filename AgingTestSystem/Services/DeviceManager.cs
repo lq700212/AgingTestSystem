@@ -66,6 +66,26 @@ namespace AgingTestSystem.Services
     ///   （采集线程与 UI 线程的按钮操作会并发访问）
     /// - 送风机轮询独立定时器用 _fanPollLock 防重入
     /// </summary>
+    /// <summary>
+    /// 气压表轮询进度事件参数（V1.103 离线加速）
+    /// 慢轮询（离线台多、一轮几十秒）时每 ~400ms 广播一次，状态栏在线数实时往上爬；
+    /// 快轮询（全在线、毫秒级）基本不广播，整轮结束仍走 OnBatchDataUpdated 全量刷新。
+    /// </summary>
+    public class BarometerScanProgressEventArgs : EventArgs
+    {
+        /// <summary>本轮已确认在线台数（与 GetOnlineCount 同口径）</summary>
+        public int OnlineCount;
+
+        /// <summary>气压表总数（_config.TotalBarometers）</summary>
+        public int Total;
+
+        /// <summary>是否首轮（首轮完成前 UI 显示"扫描中"，之后显示"在线"）</summary>
+        public bool IsFirstPoll;
+
+        /// <summary>本轮已耗时（毫秒，排障用）</summary>
+        public long ElapsedMs;
+    }
+
     public class DeviceManager : IDisposable
     {
         /// <summary>
@@ -160,6 +180,33 @@ namespace AgingTestSystem.Services
         /// 由"已连接 → 未连接"时提示一次"气压表串口已断开"，避免每个采集周期刷日志。
         /// </summary>
         private bool _barometerWasConnected;
+
+        /// <summary>
+        /// "在线"新鲜窗口（秒，V1.103 自适应，替代常量 OnlineFreshnessSeconds）
+        /// 含义不变：N 秒内成功读到过数据 = 在线。以前恒为 10，轮询一轮要 D 秒时
+        /// （24 台离线零重试后≈24 秒）两轮间隙计数会掉零再弹回；现按上轮实测耗时
+        /// 自适应（ComputeOnlineFreshnessSeconds），Mock/全在线时恒为 10，老行为不变。
+        /// 读写持 _stateLock（与 _lastGoodTimes 同锁）。
+        /// </summary>
+        private int _onlineFreshnessSeconds = 10;
+
+        /// <summary>上轮气压表轮询实测耗时（毫秒，Stopwatch 实测，供窗口自适应；持 _stateLock）</summary>
+        private long _lastPollDurationMs;
+
+        /// <summary>本轮轮询开始时刻（Utc，进度事件 ElapsedMs 用；只采集线程读写）</summary>
+        private DateTime _pollStartUtc = DateTime.MinValue;
+
+        /// <summary>上次广播扫描进度的时刻（Utc，节流 400ms 用；只采集线程读写）</summary>
+        private DateTime _lastProgressFireUtc = DateTime.MinValue;
+
+        /// <summary>首轮是否已完成（首轮内进度事件带 IsFirstPoll，UI 显示"扫描中"；持 _stateLock）</summary>
+        private bool _firstPollDone;
+
+        /// <summary>首轮首个成功是否已即时广播（首屏秒出数用；只采集线程读写）</summary>
+        private bool _firstProgressFired;
+
+        /// <summary>扫描进度广播节流间隔（毫秒）：慢轮询约 2.5Hz 刷状态栏，不刷屏）</summary>
+        private const int ScanProgressIntervalMs = 400;
 
         /// <summary>
         /// 上一次送风机连接状态（，边沿检测）
@@ -412,6 +459,12 @@ namespace AgingTestSystem.Services
         /// 【注意】在后台线程触发，UI 层需用 BeginInvoke 切到 UI 线程写日志。
         /// </summary>
         public event EventHandler<string> OnDiagnostic;
+
+        /// <summary>
+        /// 气压表轮询进度事件（V1.103 离线加速：慢轮询时节流广播，状态栏在线数实时爬）
+        /// 【注意】在后台线程触发，UI 层需用 BeginInvoke 切到 UI 线程。
+        /// </summary>
+        public event EventHandler<BarometerScanProgressEventArgs> OnScanProgress;
 
         /// <summary>
         /// 上次启动失败的诊断信息（）
@@ -2786,7 +2839,8 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 获取当前"通讯在线"的台数
-        /// 【判断规则】最近 <see cref="OnlineFreshnessSeconds"/> 秒内成功读到过数据的视为在线。
+        /// 【判断规则】新鲜窗口（<see cref="_onlineFreshnessSeconds"/>，快轮询 10 秒、
+        /// 慢轮询按实测耗时自适应）内成功读到过数据的视为在线。
         /// </summary>
         public int GetOnlineCount()
         {
@@ -2800,7 +2854,7 @@ namespace AgingTestSystem.Services
                     // stale 台误在线；与重连节流处的钳制同口径。
                     double ageSecs = (now - _lastGoodTimes[i]).TotalSeconds;
                     if (ageSecs < 0) ageSecs = 0;
-                    if (ageSecs < OnlineFreshnessSeconds)
+                    if (ageSecs < _onlineFreshnessSeconds)
                     {
                         count++;
                     }
@@ -2810,13 +2864,25 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 判断"在线"的时间窗（秒）
-        /// 超过该时间没有成功读到数据，视为该台离线
+        /// 在线新鲜窗口自适应（纯函数，V1.103，回归可直接断言）
+        /// 轮询一轮要 D 秒，每台每 D 秒才被刷新一次，窗口必须大于 D，
+        /// 否则两轮间隙在线数掉零再弹回（抖动）。取 2D＋2 秒余量（漏一轮仍在线），
+        /// 下限 10 秒（现状口径，快轮询行为不变），上限 300 秒
+        /// （串口极端卡死时离线台也要能翻成离线，不能永远"在线"）。
         /// </summary>
-        private const int OnlineFreshnessSeconds = 10;
+        /// <param name="pollDurationMs">上轮实测轮询耗时（毫秒，负数按 0 算）</param>
+        /// <returns>新鲜窗口（秒）</returns>
+        public static int ComputeOnlineFreshnessSeconds(long pollDurationMs)
+        {
+            if (pollDurationMs < 0) pollDurationMs = 0;
+            long need = pollDurationMs * 2 / 1000 + 2;
+            if (need < 10) need = 10;
+            if (need > 300) need = 300;
+            return (int)need;
+        }
 
         /// <summary>
-        /// 获取当前"通讯离线"的工位号清单（与 <see cref="GetOnlineCount"/> 同口径：10 秒内没读到过数据）。
+        /// 获取当前"通讯离线"的工位号清单（与 <see cref="GetOnlineCount"/> 同口径：新鲜窗口内没读到过数据）。
         /// 首轮采集诊断与现场排查用：直接报出台号，不用逐台点面板。
         /// </summary>
         /// <returns>离线工位号（1 起；全在线返回空列表）</returns>
@@ -2830,7 +2896,7 @@ namespace AgingTestSystem.Services
                 {
                     double ageSecs = (now - _lastGoodTimes[i]).TotalSeconds;
                     if (ageSecs < 0) ageSecs = 0;
-                    if (ageSecs >= OnlineFreshnessSeconds)
+                    if (ageSecs >= _onlineFreshnessSeconds)
                         offline.Add(i + 1);
                 }
             }
@@ -3138,7 +3204,20 @@ namespace AgingTestSystem.Services
                 // 读取所有气压表数据
                 //（串口断开时返回"全 null 数组"，让下面的逐台循环继续累加失败次数、
                 //   触发"通讯故障"关阀断电的安全兜底——见 ModbusRtuBarometerReader.ReadAllData）
+                // V1.103：挂逐台进度回调＋测本轮耗时。每读完一台即刷新该台在线时间戳
+                // （OnBarometerSingleRead，成功台用真实读取时刻），状态栏在线数从 0 开始
+                // 实时爬，不再等整轮结束；耗时供在线窗口自适应（慢轮询两轮间隙不掉零抖动）。
+                _barometerReader.SingleReadCallback = OnBarometerSingleRead;
+                _pollStartUtc = DateTime.UtcNow;
+                var pollSw = System.Diagnostics.Stopwatch.StartNew();
                 var allData = _barometerReader.ReadAllData();
+                pollSw.Stop();
+                lock (_stateLock)
+                {
+                    _lastPollDurationMs = pollSw.ElapsedMilliseconds;
+                    _onlineFreshnessSeconds = ComputeOnlineFreshnessSeconds(pollSw.ElapsedMilliseconds);
+                    _firstPollDone = true;
+                }
 
                 // 防御性检查（_config 未初始化时返回空数组 → 结束本轮）
                 if (allData == null || allData.Length == 0) return;
@@ -3560,6 +3639,85 @@ namespace AgingTestSystem.Services
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"数据采集失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 逐台读取进度回调（V1.103）：跑在采集线程（ReadAllData 循环内逐台触发）。
+        /// 成功台立即刷新在线时间戳（真实读取时刻，不等整轮结束）；
+        /// 首轮首个成功立即广播＋之后每 400ms 广播一次进度，状态栏实时爬数。
+        /// 只碰 _stateLock（时间戳/广播节流态），不碰缓存与业务状态：
+        /// 失败计数/失联报警仍由主循环统一处理，这里不记、不判，不双记。
+        /// </summary>
+        /// <param name="deviceId">从 1 起的设备号</param>
+        /// <param name="data">本台数据；读失败为 null（直接返回，等主循环记失败）</param>
+        private void OnBarometerSingleRead(int deviceId, BarometerData data)
+        {
+            if (_disposed) return;
+            if (data == null || deviceId < 1) return;
+            BarometerScanProgressEventArgs args = null;
+            lock (_stateLock)
+            {
+                if (_lastGoodTimes == null || deviceId > _lastGoodTimes.Length) return;
+                _lastGoodTimes[deviceId - 1] = DateTime.Now;
+                // 广播节流：首轮首个成功立即刷（首屏秒出数）＋之后 400ms 一次；
+                // 快轮询（全在线毫秒级）整轮内基本只触发首轮这一次，不刷屏。
+                DateTime nowUtc = DateTime.UtcNow;
+                bool firstPoll = !_firstPollDone;
+                bool fire = false;
+                if (firstPoll && !_firstProgressFired)
+                {
+                    _firstProgressFired = true;
+                    _lastProgressFireUtc = nowUtc;
+                    fire = true;
+                }
+                else if ((nowUtc - _lastProgressFireUtc).TotalMilliseconds >= ScanProgressIntervalMs)
+                {
+                    _lastProgressFireUtc = nowUtc;
+                    fire = true;
+                }
+                if (fire)
+                {
+                    args = new BarometerScanProgressEventArgs();
+                    args.Total = _config.TotalBarometers;
+                    args.IsFirstPoll = firstPoll;
+                    args.ElapsedMs = _pollStartUtc == DateTime.MinValue
+                        ? 0 : (long)(nowUtc - _pollStartUtc).TotalMilliseconds;
+                    // 在线数锁内现算（与 GetOnlineCount 同口径，不另调避免锁重入啰嗦）
+                    int count = 0;
+                    DateTime now = DateTime.Now;
+                    for (int i = 0; i < _lastGoodTimes.Length; i++)
+                    {
+                        double ageSecs = (now - _lastGoodTimes[i]).TotalSeconds;
+                        if (ageSecs < 0) ageSecs = 0;
+                        if (ageSecs < _onlineFreshnessSeconds) count++;
+                    }
+                    args.OnlineCount = count;
+                }
+            }
+            // 事件锁外广播（订阅者在后台线程收，UI 侧 BeginInvoke；异常逐个隔离）
+            if (args != null) FireScanProgress(args);
+        }
+
+        /// <summary>
+        /// 广播扫描进度（订阅异常逐个隔离，坏订阅不拖累好订阅，同 OnBatchDataUpdated）。
+        /// </summary>
+        /// <param name="args">进度参数（调用方已填好，锁外只管广播）</param>
+        private void FireScanProgress(BarometerScanProgressEventArgs args)
+        {
+            var handler = OnScanProgress;
+            if (handler == null) return;
+            foreach (EventHandler<BarometerScanProgressEventArgs> single in handler.GetInvocationList())
+            {
+                try
+                {
+                    single(this, args);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[采集] 扫描进度订阅异常（非采集故障）: {ex.Message}");
+                }
             }
         }
 
@@ -4235,6 +4393,9 @@ namespace AgingTestSystem.Services
 
                     // 取消事件订阅（避免内存泄漏）
                     _barometerReader.OnError -= BarometerReader_OnError;
+                    // 逐台进度回调摘掉（V1.103）：在途轮询的回调靠 _disposed 自拦，
+                    // 这里再摘一次防释放后新轮询被误触发（Stop 已停定时器，双保险）。
+                    try { _barometerReader.SingleReadCallback = null; } catch { }
                     _ioController.OnError -= IoController_OnError;
                     if (_fanController != null)
                     {

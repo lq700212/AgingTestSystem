@@ -94,6 +94,19 @@ namespace AgingTestSystem.Services
         /// </summary>
         private bool _cachedPortLoadedFromDisk;
 
+        /// <summary>
+        /// 逐台读取进度回调（V1.103 离线加速，见接口注释）
+        /// ReadAllData 每读完一台调一次，采集侧逐台刷新在线时间戳。
+        /// </summary>
+        public Action<int, BarometerData> SingleReadCallback { get; set; }
+
+        /// <summary>
+        /// 写阈值时的 NModbus 重试次数（V1.103）
+        /// 轮询读已零重试（见 Connect），但写是用户主动点的低频操作、失败要人工重试，
+        /// 保留 NModbus 缺省重试不降写可靠性；SetThreshold 内临时抬高、用完恢复。
+        /// </summary>
+        private const int WriteRetryCount = 3;
+
         public bool IsConnected => _isConnected;
 
         public event EventHandler<string> OnError;
@@ -152,6 +165,11 @@ namespace AgingTestSystem.Services
                         _master = factory.CreateRtuMaster(_serialPort);
                         _master.Transport.ReadTimeout = config.SerialReadTimeoutMs;
                         _master.Transport.WriteTimeout = config.SerialWriteTimeoutMs;
+                        // 轮询零重试（V1.103 离线加速：NModbus 缺省 Retries=3，
+                        // 离线台单次代价≈超时×4＋重试间隔≈5 秒，24 台离线≈2 分钟才出数；
+                        // 零重试后≈1 秒/台。漏读由下一轮 1 秒采集自然补，
+                        // 比单轮内重试划算；写阈值仍保留重试，见 SetThreshold）。
+                        _master.Transport.Retries = 0;
 
                         // 标记连接成功
                         _isConnected = true;
@@ -466,7 +484,20 @@ namespace AgingTestSystem.Services
             for (int i = 0; i < _config.TotalBarometers; i++)
             {
                 // 逐台读取：如果某台失败返回 null，不影响其它台
+                // 【注意】RS485 是半双工共享总线，72 台必须串行一问一答，
+                // 并行会帧交叉 CRC 错——"串行"不是 bug，是总线物理约束（见通讯接入.md）。
                 data[i] = ReadData(i + 1);
+                // 逐台进度回调（V1.103）：报给采集侧即时刷新在线数；
+                // 回调异常内部吞（订阅者 bug 不能打断 72 台轮询）。
+                var cb = SingleReadCallback;
+                if (cb != null)
+                {
+                    try { cb(i + 1, data[i]); }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[气压表] 进度回调异常（已忽略）: {ex.Message}");
+                    }
+                }
             }
             return data;
         }
@@ -551,7 +582,19 @@ namespace AgingTestSystem.Services
                         return false;
                     }
 
-                    _master.WriteSingleRegister((byte)deviceId, ThresholdRegisterAddress, (ushort)scaled);
+                    // 写保留重试（V1.103）：轮询读零重试后本 Transport 常态 Retries=0，
+                    // 写是低频人工操作、失败要人工重试，临时抬回 WriteRetryCount，
+                    // 用完恢复，不影响轮询；同 _syncRoot 锁内，无并发竞态。
+                    int savedRetries = _master.Transport.Retries;
+                    try
+                    {
+                        _master.Transport.Retries = WriteRetryCount;
+                        _master.WriteSingleRegister((byte)deviceId, ThresholdRegisterAddress, (ushort)scaled);
+                    }
+                    finally
+                    {
+                        _master.Transport.Retries = savedRetries;
+                    }
                     return true;
                 }
             }
@@ -567,8 +610,8 @@ namespace AgingTestSystem.Services
         /// 批量写入所有气压表的设备阈值
         /// 逐台调用 <see cref="SetThreshold"/>，单台失败不影响其它台；
         /// 返回 deviceId → 是否成功，方便上层汇总"哪些台没写进去"。
-        /// 【性能提示】72 台连写 + 坏设备会阻塞较久（每台坏设备约一个读超时），
-        /// 调用方应在后台线程执行，不要直接放在 UI 线程里。
+        /// 【性能提示】72 台连写 + 坏设备会阻塞较久（写保留 NModbus 重试，
+        /// 每台坏设备约 4 个写超时），调用方应在后台线程执行，不要直接放在 UI 线程里。
         /// 【未连接时的约定（V1.16）】
         /// 如果串口没连上，直接返回"空字典"而不是 72 台全失败——
         /// 这样上层（公共参数窗口）能给出"未连接任何气压表，请先检查通讯连接"

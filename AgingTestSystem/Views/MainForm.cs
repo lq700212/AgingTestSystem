@@ -209,6 +209,7 @@ namespace AgingTestSystem.Views
 
             // 4. 订阅设备管理器事件（批量更新一次刷全部门板；快速跟踪只刷触发那台；诊断走后台线程，内部切回 UI 写 LOG）
             _deviceManager.OnBatchDataUpdated += DeviceManager_OnBatchDataUpdated;
+            _deviceManager.OnScanProgress += DeviceManager_OnScanProgress;
             _deviceManager.OnQuickTrackDataUpdated += DeviceManager_OnQuickTrackDataUpdated;
             _deviceManager.OnConnectionStatusChanged += DeviceManager_OnConnectionStatusChanged;
             _deviceManager.OnFanDataUpdated += DeviceManager_OnFanDataUpdated;
@@ -1569,6 +1570,59 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
+        /// 首轮全量广播是否到过（V1.103：到之前在线标签显示"扫描中"，到了切"在线"）
+        /// </summary>
+        private bool _firstBatchDone;
+
+        /// <summary>
+        /// 气压表轮询进度处理（V1.103 离线加速：慢轮询时在线数实时爬，首轮显示"扫描中"）
+        /// 后台线程触发，BeginInvoke 切 UI（H9 参数展开坑：显式包 object[]）。
+        /// </summary>
+        private void DeviceManager_OnScanProgress(object sender, BarometerScanProgressEventArgs e)
+        {
+            if (_mainClosing || this.IsDisposed || this.Disposing) return;
+            if (e == null) return;
+            try
+            {
+                if (this.InvokeRequired)
+                {
+                    this.BeginInvoke(
+                        new Action<BarometerScanProgressEventArgs>(UpdateOnlineLabelLive),
+                        new object[] { e });
+                }
+                else
+                {
+                    UpdateOnlineLabelLive(e);
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                // 窗体已释放，忽略
+            }
+            catch (InvalidOperationException)
+            {
+                // 窗体在 BeginInvoke 前刚好释放，忽略
+            }
+        }
+
+        /// <summary>
+        /// 实时刷状态栏在线数（V1.103：只动在线标签，不碰面板/运行状态，轻量高频可刷）
+        /// 首轮完成前显示"扫描中 M/N"（不等整轮），之后与 UpdateRunStatusSummary 同口径"在线 M/N"。
+        /// 0 台红色只在首轮完成后判（扫描中途的 0 是"还没扫到"，不是"全离线"，不变红闪）。
+        /// </summary>
+        /// <param name="e">扫描进度（后台已算好在线数，UI 只管显示）</param>
+        private void UpdateOnlineLabelLive(BarometerScanProgressEventArgs e)
+        {
+            if (_mainClosing || this.IsDisposed || this.Disposing) return;
+            toolStripStatusLabelOnline.Text = (e.IsFirstPoll && !_firstBatchDone)
+                ? $"扫描中: {e.OnlineCount}/{e.Total}"
+                : $"在线: {e.OnlineCount}/{_config.TotalBarometers}";
+            toolStripStatusLabelOnline.ForeColor = (e.OnlineCount == 0 && _firstBatchDone)
+                ? Color.Red
+                : SystemColors.ControlText;
+        }
+
+        /// <summary>
         /// 单台快速跟踪增量更新事件处理（）
         /// IO 触发后高频补读指定工位，每读到一次触发一次。
         /// 【注意】此方法由快速跟踪定时器的后台线程调用，必须用 BeginInvoke
@@ -1639,6 +1693,9 @@ namespace AgingTestSystem.Views
             {
                 _gridView.UpdateAll(allData);
             }
+
+            // 首轮全量广播到了：在线标签切回"在线"口径（V1.103，进度事件不再显示"扫描中"）
+            _firstBatchDone = true;
 
             // 顺便更新右侧整机状态汇总（测试中 N 台 / 在线 M / 报警 Z）
             UpdateRunStatusSummary();
@@ -3710,6 +3767,7 @@ namespace AgingTestSystem.Views
             if (_deviceManager != null)
             {
                 _deviceManager.OnBatchDataUpdated -= DeviceManager_OnBatchDataUpdated;
+                _deviceManager.OnScanProgress -= DeviceManager_OnScanProgress;
                 _deviceManager.OnQuickTrackDataUpdated -= DeviceManager_OnQuickTrackDataUpdated;
                 _deviceManager.OnConnectionStatusChanged -= DeviceManager_OnConnectionStatusChanged;
                 _deviceManager.OnFanDataUpdated -= DeviceManager_OnFanDataUpdated;

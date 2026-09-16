@@ -47,8 +47,13 @@ namespace AgingTestSystem.Tests
             private readonly Dictionary<int, int> _spoofIds = new Dictionary<int, int>();
             private readonly List<BarometerData> _extraReads = new List<BarometerData>();
             private bool _connected;
+            // V1.103：逐台进度回调（接口成员，采集侧挂载）＋可注入的单台读取延迟
+            //（慢轮询进度用例用；volatile 保证采集线程立即可见）。
+            private volatile int _readDelayMs;
 
             public FakeBarometerReader(int total) { _total = total; }
+
+            public Action<int, BarometerData> SingleReadCallback { get; set; }
 
             public bool IsConnected => _connected;
             public string CurrentPortName => _connected ? "FAKE-COM" : "";
@@ -58,6 +63,9 @@ namespace AgingTestSystem.Tests
 
             public BarometerData ReadData(int deviceId)
             {
+                // V1.103：可注入延迟放锁外（模拟离线台超时/慢总线，不挡 SetPressure 等控制面）
+                int delay = _readDelayMs;
+                if (delay > 0) Thread.Sleep(delay);
                 lock (_lock)
                 {
                     if (_failIds.Contains(deviceId)) return null;   // 模拟该台通讯失联
@@ -73,7 +81,14 @@ namespace AgingTestSystem.Tests
             public BarometerData[] ReadAllData()
             {
                 var list = new List<BarometerData>();
-                for (int i = 1; i <= _total; i++) list.Add(ReadData(i));
+                for (int i = 1; i <= _total; i++)
+                {
+                    var d = ReadData(i);
+                    list.Add(d);
+                    // V1.103：逐台进度（位置口径 i，与真实读取器 i+1 同义）；
+                    // 短数组截掉的尾部不报（那几台按通讯失败走，与真实语义一致）。
+                    if (!_returnCount.HasValue || i <= _returnCount.Value) FireProgress(i, d);
+                }
                 list.AddRange(_extraReads); // 超长数组：模拟实现有 bug 的读取器
                 // 【复查补齐】短数组：只回前 N 台，模拟实现返回短数组的读取器
                 //（编排侧必须按"尾部通讯失败"处理，不能静默 stale）。
@@ -83,6 +98,17 @@ namespace AgingTestSystem.Tests
                 }
                 return list.ToArray();
             }
+
+            /// <summary>V1.103：触发逐台进度回调（订阅异常内部吞，不打断轮询）</summary>
+            private void FireProgress(int deviceId, BarometerData data)
+            {
+                var cb = SingleReadCallback;
+                if (cb == null) return;
+                try { cb(deviceId, data); } catch { }
+            }
+
+            /// <summary>V1.103：注入单台读取延迟（毫秒，模拟慢轮询；0=关闭）</summary>
+            public void SetReadDelayMs(int ms) { _readDelayMs = ms < 0 ? 0 : ms; }
 
             public bool SetThreshold(int deviceId, decimal thresholdValue) => true;
 
@@ -1605,6 +1631,7 @@ namespace AgingTestSystem.Tests
                 SweepStopWriteBeforeClear();
                 SweepStartupEventOrdering();
                 SweepOfflineIdsAndSummary();
+                SweepScanProgressAndFreshness();
                 SweepShortArrayAndBroadcast();
                 SweepSkipVacuumFreeze();
                 SweepAlarmReasons();
@@ -1792,6 +1819,79 @@ namespace AgingTestSystem.Tests
                     s2.Contains("2/4") && s2.Contains("3") && s2.Contains("4") && s2.Contains("456ms"));
             }
             finally { try { dm2.StopAll(); } catch { } try { dm2.Dispose(); } catch { } }
+        }
+
+        // ---------- S2d 扫描进度＋自适应窗口（V1.103 离线加速：慢轮询进度先行＋窗口跟耗时走） ----------
+        private static void SweepScanProgressAndFreshness()
+        {
+            // 纯函数：快轮询恒 10 秒（老口径），慢轮询按 2D+2 自适应，上限 300 秒
+            Check("[离线加速][窗口] 0ms→10秒", DeviceManager.ComputeOnlineFreshnessSeconds(0) == 10);
+            Check("[离线加速][窗口] 1秒轮询→10秒", DeviceManager.ComputeOnlineFreshnessSeconds(1000) == 10);
+            Check("[离线加速][窗口] 4秒轮询→10秒", DeviceManager.ComputeOnlineFreshnessSeconds(4000) == 10);
+            Check("[离线加速][窗口] 5秒轮询→12秒", DeviceManager.ComputeOnlineFreshnessSeconds(5000) == 12);
+            Check("[离线加速][窗口] 30秒轮询→62秒", DeviceManager.ComputeOnlineFreshnessSeconds(30000) == 62);
+            Check("[离线加速][窗口] 负数按0算", DeviceManager.ComputeOnlineFreshnessSeconds(-5) == 10);
+            Check("[离线加速][窗口] 上限300秒", DeviceManager.ComputeOnlineFreshnessSeconds(1000000) == 300);
+
+            // 集成：慢 Fake（8 台×150ms≈1.2 秒/轮）下进度先于整轮广播到达，最终计数正确
+            var config = new DeviceConfig();
+            config.TotalBarometers = 8;
+            config.TotalInputs = 80;
+            config.TotalOutputs = 160;
+            config.CollectInterval = 30;
+            config.VacuumConfirmTimeoutMs = 600;
+            config.CommunicationLossAlarmCount = 3;
+            config.AlarmWhenPressureHigherThanThreshold = true;
+            config.AlarmPressureThresholdKPa = -5m;
+            config.FanEnabled = false;
+            var reader = new FakeBarometerReader(config.TotalBarometers);
+            for (int i = 1; i <= config.TotalBarometers; i++) reader.SetPressure(i, -6m);
+            reader.SetReadDelayMs(150);
+            var io = new FakeIoController(config.TotalInputs + config.TotalOutputs);
+            var dm = new DeviceManager(config, reader, io, null);
+            var order = new List<string>();
+            var lck = new object();
+            int progressTotal = -1;
+            bool progressFirstPoll = false;
+            EventHandler<BarometerScanProgressEventArgs> prog = (s, e) =>
+            {
+                lock (lck)
+                {
+                    progressTotal = e.Total;
+                    progressFirstPoll = e.IsFirstPoll;
+                    if (!order.Contains("progress")) order.Add("progress");
+                }
+            };
+            EventHandler<BarometerData[]> batch = (s, d) => { lock (lck) { if (!order.Contains("batch")) order.Add("batch"); } };
+            dm.OnScanProgress += prog;
+            dm.OnBatchDataUpdated += batch;
+            try
+            {
+                Check("[离线加速][进度] Start成功", dm.Start());
+                Check("[离线加速][进度] 进度与整轮都广播",
+                    WaitUntil(() => { lock (lck) { return order.Contains("progress") && order.Contains("batch"); } }, 8000));
+                int pi, bi;
+                lock (lck) { pi = order.IndexOf("progress"); bi = order.IndexOf("batch"); }
+                Check("[离线加速][进度] 进度先于整轮", pi >= 0 && bi >= 0 && pi < bi);
+                Check("[离线加速][进度] 进度带总数8", progressTotal == 8);
+                Check("[离线加速][进度] 首轮标记", progressFirstPoll);
+                Check("[离线加速][进度] 最终在线8台",
+                    WaitUntil(() => dm.GetOnlineCount() == 8, 5000));
+                Check("[离线加速][进度] 离线清单为空", dm.GetOfflineIds().Count == 0);
+                // 窗口与实测耗时自适应一致（1.2 秒轮询→仍 10 秒口径，(frame==Compute) 恒成立）
+                long dur = (long)GetDmField(dm, "_lastPollDurationMs");
+                int fresh = (int)GetDmField(dm, "_onlineFreshnessSeconds");
+                Check("[离线加速][窗口] 实测耗时约1.2秒", dur >= 900 && dur < 5000);
+                Check("[离线加速][窗口] 窗口与耗时自适应一致",
+                    fresh == DeviceManager.ComputeOnlineFreshnessSeconds(dur));
+            }
+            finally
+            {
+                try { dm.OnScanProgress -= prog; } catch { }
+                try { dm.OnBatchDataUpdated -= batch; } catch { }
+                try { reader.SetReadDelayMs(0); } catch { }
+                try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { }
+            }
         }
 
         // ---------- S3 短数组尾部按读失败 + S4 广播按总数 ----------

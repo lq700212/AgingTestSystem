@@ -51,6 +51,11 @@ namespace AgingTestSystem.Services
 
         public event EventHandler<string> OnError;
 
+        /// <summary>
+        /// 逐台读取进度回调（V1.103，见接口注释；Mock 瞬间读完，回调仅保接口一致）
+        /// </summary>
+        public Action<int, BarometerData> SingleReadCallback { get; set; }
+
         public bool Connect(DeviceConfig config)
         {
             // 【大扫荡】空配置拒绝（与 MockIoController/MockFanController 同口径）。
@@ -164,6 +169,16 @@ namespace AgingTestSystem.Services
             for (int i = 0; i < _config.TotalBarometers; i++)
             {
                 data[i] = ReadData(i + 1);
+                // 逐台进度回调（V1.103，接口一致性；Mock 瞬间读完，采集侧节流后几乎不广播）
+                var cb = SingleReadCallback;
+                if (cb != null)
+                {
+                    try { cb(i + 1, data[i]); }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[Mock气压表] 进度回调异常（已忽略）: {ex.Message}");
+                    }
+                }
             }
             return data;
         }
