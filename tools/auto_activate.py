@@ -12,7 +12,7 @@
     写盘走 kernel32 INI API（与产品同一条路，不破坏 ini 里其它段）；
     RunHash1（设备绑定）和 RunHash2（永久/试用起点）一次写齐，
     新机不用再找厂商手写第一键。
-怎么用：拷到工控机程序目录（AgingTestSystem.exe 旁边）双击即可，
+    怎么用：拷到工控机程序目录（烧屏测试控制中心.exe 旁边）双击即可，
     默认永久激活；试用 30 天加参数 --mode trial；只看码不写盘加 --dry-run。
 
 依赖：仅 Python 标准库（3.6+），不用装任何第三方包。
@@ -226,7 +226,7 @@ def resolve_ini_path(explicit_ini, exe_dir):
         return os.path.join(os.path.abspath(exe_dir), INI_NAME)
     cwd = os.getcwd()
     if os.path.isfile(os.path.join(cwd, INI_NAME)) or \
-            os.path.isfile(os.path.join(cwd, "AgingTestSystem.exe")):
+            os.path.isfile(os.path.join(cwd, "烧屏测试控制中心.exe")):
         return os.path.join(cwd, INI_NAME)
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), INI_NAME)
 
@@ -249,7 +249,7 @@ def main(argv=None):
                     default="permanent", help="permanent=永久（默认），trial=30天试用")
     ap.add_argument("--ini", default="", help="MainSetting.ini 全路径（缺省自动找程序目录）")
     ap.add_argument("--exe-dir", default="",
-                    help="程序目录（AgingTestSystem.exe 所在目录，缺省用当前目录/脚本目录）")
+                    help="程序目录（烧屏测试控制中心.exe 所在目录，缺省用当前目录/脚本目录）")
     ap.add_argument("--dry-run", action="store_true", help="只算码打印，不写盘")
     ap.add_argument("--no-pause", action="store_true", help="结束不等待按键（计划任务用）")
     args = ap.parse_args(argv)

@@ -37,7 +37,7 @@
   ================================================================================
 -->
 <Obfuscator>
-  <!-- 输入：Release 编译产物目录（含 AgingTestSystem.exe + 全部 dll）；输出：待发目录 -->
+  <!-- 输入：Release 编译产物目录（含 烧屏测试控制中心.exe + 全部 dll）；输出：待发目录 -->
   <Var name="InPath" value=".\bin\Release" />
   <Var name="OutPath" value=".\obfuscated" />
   <!-- Framework 引用目录：Obfuscar 自己跑在新版 .NET 上，认不出 .NET Framework 4.x 的
@@ -59,7 +59,7 @@
   <!-- 字符串加密：运行时自动解密，日志中文不受影响；开后必须冒烟确认 -->
   <Var name="HideStrings" value="true" />
 
-  <Module file="$(InPath)\AgingTestSystem.exe">
+  <Module file="$(InPath)\烧屏测试控制中心.exe">
     <!-- ===== Json 序列化模型：整个 Models 命名空间跳过（存盘兼容性红线） =====
          SkipNamespace 会跳过该命名空间下全部类型/成员的重命名。凡进 Models 的新类
          自动受保护，不用补行（这一点比逐个 SkipType 省心，V1.88.10 实测有效）。

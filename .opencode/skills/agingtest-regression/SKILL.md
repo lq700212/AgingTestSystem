@@ -1,6 +1,6 @@
 ﻿---
 name: agingtest-regression
-description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案热更删除/终结器释放/关窗竞态/MES映射上报/规则表达式/工艺策略窗/电流报表画面/软件激活(HJVision同源MD5三件套)等全部核心逻辑类（2074 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
+description: AgingTestSystem 项目专属的最终测试验证技能：一键完成"构建 → 真机冒烟测试 → 全量回归测试用例"。回归 harness 覆盖 PasswordHasher/UserManager 登录权限/配置归一化/IO 映射解析/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案热更删除/终结器释放/关窗竞态/MES映射上报/规则表达式/工艺策略窗/电流报表画面/软件激活(HJVision同源MD5三件套)等全部核心逻辑类（2097 断言）。当用户要求"跑测试、冒烟测试、回归验证、测一遍、发布前验证、改完代码验证一下"或修完 bug/加完功能需要验证时使用；新增测试用例也必须沉淀到本 skill 的 tests/TestRunner.cs 中。
 ---
 
 # AgingTestSystem 回归测试套件（冒烟 + 用例一体）
@@ -88,7 +88,7 @@ agingtest-regression/
     └── ObfuscationAcceptance.cs ← 混淆验收跑器（behavior/dump 双模式，见一点六）
 ```
 
-## 三、测试覆盖范围（46 个模块，2074 断言）
+## 三、测试覆盖范围（46 个模块，2097 断言）
 
 | 模块 | 覆盖点 |
 | --- | --- |
@@ -135,7 +135,7 @@ agingtest-regression/
 | DesignerStabilityV172_16(V1.72.16) | 快照释放（helper全释放/null安全/旧foreach红证据/驾驶舱真方法反射释放）、两窗AutoScale=None锁（判定/批量，防Font+Zoom混搭回潮；布局窗随编辑器删除） |
 | PowerReportV174(V1.74) | 缺省锁（不用电表/报表空/字典空/电流NaN/Clone带电流）、Mock电表（连接/72路0.05~0.60A/断开/释放）、真实桩（连不上/读null口径/deviceCount<=0空数组/重连失败）、编排接线（开关管创建/未Start不连，反射验_powerMeter）、规则 current 变量（解析/求值/NaN恒false）、报表列（预设11列/身份事件列序/自定义保序/未知丢弃/空合法/脏拦截/全错兜底预设）、显示字典（预设8项/重复提醒/空清空过/规范写法/字典外拦报选项/无配置走预设/配置优先/遗留追加/ValidateValue三态）、三窗显示下拉（配方窗预设8项+工位/批量窗单选非空，DropDownList锁）、报表列弹窗（预设11行回写/自定义保序/生产路径弹出释放+弹窗格分发）、显示字典弹窗（预设8行回写/自定义保序/生产路径弹出释放+弹窗格分发）、维度开关（缺省关/真值显示/三窗收缩317/330/323与开态不变+隐藏恒空+布尔键17项）、电流行直显开关冒烟（V1.77：缺省关/置位关回） |
 | SoftActivation(V1.87 HJVision同源) | Encrypt标准向量pin算法（RFC1321空串/a前15字节hex）+公式关系式（设备ID码=ID+A/设备码=ID+1/30天码=设备码+30/永久码=设备码+ALL/永久标记=ID+ALL/30天起点=ID+0）+激活比对（先永久后30天，错码/空静默）+设备绑定（对上/错位/空=新设备）+计数格（0/767/839找到，840外/乱串找不到，768分界，0格30天/24格29天）+综合判定（新设备/永久/试用/768过期/找不到过期）+四档文案+ini隔离往返（双键/缺文件读空/推进一格）+激活窗构造（无参三框/设备码方程/状态行/错码静默，构造不Show直接调handler）+空模板（缺文件建出/两键读空/空=新设备/已有不覆盖） |
-| PolicyPresetV185(V1.85) | 预置3个试用顺序A/B/C、管辖12开关全是PolicyKeys成员+中文名齐、每预置完整12项、标题场景换挡文案非空、值全可解析+枚举值全在下拉选项、套用探测往返、缺省=自定义/改一项即自定义、未知与空参四不抛、取值副本隔离、四预置不泄压（无阀）不跳真空、A/B联停关C开+上限0拦60过+A零门槛过、存盘口径三态、UI预置行4件+下拉5项+无参回显自定义禁用/B配置回显选中B/管理员可用/场景说明（反射读Items/SelectedIndex，禁as原生类型见坑41）、下拉列表拉宽+悬停全文+关窗释放；V1.105 预置D客户常开20条（4个顺序A/B/C/D＋往返探测＋D与A只差失压＋数值超时0成员解析校验副本合流＋ABC数值空＋D零门槛＋D整包分流＋下拉5项＋自定义顺延4＋D回显选中＋无配方延时0集成2条；NumericValues只收PolicyKeys数值、不参与探测） |
+| PolicyPresetV185(V1.85) | 预置4个试用顺序A/B/C/D、管辖12开关全是PolicyKeys成员+中文名齐、每预置完整12项、标题场景换挡文案非空、值全可解析+枚举值全在下拉选项、套用探测往返、缺省=自定义/改一项即自定义、未知与空参四不抛、取值副本隔离、四预置不泄压（无阀）不跳真空、B/C联停关D开+上限0拦60过+B零门槛过、存盘口径三态、UI预置行4件+下拉5项+无参回显自定义禁用/B配置回显选中B/管理员可用/场景说明（反射读Items/SelectedIndex，禁as原生类型见坑41）、下拉列表拉宽+悬停全文+关窗释放；V1.105 预置D客户常开20条（4个顺序A/B/C/D＋往返探测＋D与A只差失压＋数值超时0成员解析校验副本合流＋ABC数值空＋D零门槛＋D整包分流＋下拉5项＋自定义顺延4＋D回显选中＋无配方延时0集成2条；NumericValues只收PolicyKeys数值）；V1.106 顺序轮转A=常用/B=标准/C=宽松/D=严格23条（A标题场景常用常开＋A回显＋行标题A/B/C/D＋A与C十二项全同＋A超时0成员合流＋BCD数值空＋A零门槛＋A整包分流＋C超时0探测为A＋下拉即预览隔离不脏D预览＋BuildPreviewConfig＋关窗IsPreviewPending四态＋文案两路；带数值项的预置数值算身份） |
 | PolicyNodeComboV1851(V1.85.1) | 节点选项框按预置下拉口径统一：全节点16下拉数=全部Bool/Enum key、下拉不比框窄、逐项独立实测无截断、悬停恒=选中全文、旧口径必截断反向验证（最长需389>270）、切节点旧提示清表、改选同步、关窗两提示皆释放；标题tooltip 5条（V1.88：key全有说明同源/换行每行≤40/缺key回空/UI层报警节点每项标题有换行提示/反射口径）；harness第二证据：最宽项真实点开展示截图无截断 |
 | DeployDiagV188_9(V1.88.9 调试部署诊断) | 启动水印纯函数（版本/程序集/构建时间/调试版文案/位数关键字、混淆版mapping提示、MinValue与空输入兜底未知、GetStartupLine/GetBuildTime不抛、调试期IsObfuscatedBuild恒false锁）＋崩溃日志（文件名确定性/自动尾格式、正文水印线程类型消息堆栈关键字、空堆栈占位、null与非Exception对象兜底落盘、真实Write路径在Logs下内容全、连写两次不互盖） |
 
@@ -200,7 +200,7 @@ UI 弹窗分支（如配方同名覆盖确认框，靠界面手工测试）、�
   Users.json 等运行时文件再编译运行。因为 UserManager/RecipeStorage 用相对路径读写 json、
   日志类写到 `AppDomain.CurrentDomain.BaseDirectory\Logs`——在 run 目录里跑，
   测试产生的数据全部落在临时目录，绝不污染仓库和真实 bin。
-- **编译命令要点**：csc 引用 `$runDir\AgingTestSystem.exe` + Newtonsoft.Json.dll 等；
+- **编译命令要点**：csc 引用 `$runDir\烧屏测试控制中心.exe` + Newtonsoft.Json.dll 等；
   **必须 `/codepage:65001`**（源文件含中文且无 BOM，csc 默认按 GBK 读会乱码）。
   V1.62 起加 `/r:SunnyUI.dll`（UiPureHelpers 等用例直接 new SunnyUI 派生窗体，
   编译期须解析 UIForm 基类；dll 随 bin\Debug 产物一起拷到 run 目录）。
@@ -469,3 +469,10 @@ UI 弹窗分支（如配方同名覆盖确认框，靠界面手工测试）、�
     修法：`EnterCleanDir` 内反射跟随 `UserManager.BaseDirOverride`
     （与旧"CWD 即目录"语义一致，零用例改动）。**教训：改存储路径必须同步改
     测试隔离手段，rg 全仓扫的不仅是字面文件名，还有 `EnterCleanDir` 的假设。**）
+55. **无 BOM 的 ps1 加中文必须补 BOM，否则中文路径变乱码**
+    （V1.106：smoke_test.ps1 原来纯英文无 BOM，加中文 exe 名后 PS5.1 按 ANSI
+    解析，`Test-Path 中文路径` 恒假、冒烟报"exe not found"；run_unit_tests 等
+    有 BOM 的文件同样改法却正常，一度误导为路径问题）。
+    修法：改完查三字节头（EF BB BF），缺则补（读 UTF-8 文本→带 BOM 写回）。
+    **教训：凡 ps1 出现第一个中文字符，先问"这文件有 BOM 吗"；
+    edit 工具改 BOM 文件会保留 BOM，但无 BOM 文件加中文不会自动补。**

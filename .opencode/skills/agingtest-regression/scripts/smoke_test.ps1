@@ -1,8 +1,8 @@
-# ============================================================================
-#  smoke_test.ps1 - Smoke test the real AgingTestSystem.exe.
+﻿# ============================================================================
+#  smoke_test.ps1 - Smoke test the real 烧屏测试控制中心.exe.
 #
 #  What it does:
-#    1. Verify bin/Debug/AgingTestSystem.exe exists (build it first if not).
+#    1. Verify bin/Debug/烧屏测试控制中心.exe exists (build it first if not).
 #    2. Start the exe, keep it alive for -Seconds (default 18; device connect
 #       timeouts make real startup take ~10-15s), then stop it.
 #    3. PASS = process still alive after the wait window (did not crash),
@@ -17,7 +17,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$exe = Join-Path $RepoRoot "AgingTestSystem\bin\Debug\AgingTestSystem.exe"
+$exe = Join-Path $RepoRoot "AgingTestSystem\bin\Debug\烧屏测试控制中心.exe"
 
 if (-not (Test-Path $exe)) {
     Write-Host "[SMOKE FAIL] exe not found, build first." -ForegroundColor Red

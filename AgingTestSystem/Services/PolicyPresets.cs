@@ -11,10 +11,10 @@ namespace AgingTestSystem.Services
     /// 【为什么要做预置】
     /// 本机是显示屏烧屏老化线（合肥显耀 MicroLED 微显示：屏小、怕过温；
     /// 炉内单温控探头 + 冷却送风机，72 工位真空吸附固定、载台上电点亮）。
-    /// 烧屏工艺大差不差就四种情况：①量产标准跑（先试这个）②新治具/新配方
-    /// 调试（误报多，先跑起来）③出货放行（最严）④客户常开（阀电同开保持常开）。
+    /// 烧屏工艺大差不差就四种情况：①常用（客户常开：阀电同开保持常开，先试这个）
+    /// ②量产标准跑 ③新治具/新配方调试（误报多，先跑起来）④出货放行（最严）。
     /// 现场工艺没时间逐项核对，
-    /// 那就把几种情况提前配好，A 不行切 B，B 不行切 C，客户常开直接套 D。
+    /// 那就把几种情况提前配好：常用直接套 A；标准误报多切 C；出货放行切 D。
     /// 【设计三原则（改预置内容前必读）】
     /// 1) 只动"行为开关"，不动"自由文本/配方/机器参数"：12 个开关 key 全在
     ///    <see cref="ProjectPolicyStore.PolicyKeys"/> 里（跟项目，走 Policy.json）。
@@ -36,16 +36,18 @@ namespace AgingTestSystem.Services
     ///    做类型转换，和保存走的是同一套解析，预置值永远"存得进去"。
     /// 3) 每个预置都是"完整集合"（12 项全列），切 A→B 不会残留 A 的某一项；
     ///    DetectPreset 只比这 12 项：全对上=该预置，差一项=自定义。
-    /// 【三个预置速览】
-    /// A 标准烧屏（推荐首试）：量产标准，门槛稍高但每道拦都有中文指引，
+    /// 【四个预置速览】
+    /// A 常用（默认首选）：宽松试产整套开关＋本项目真空超时写 0（不限时等），
+    ///    配方延时填 0 即阀电同开（无配方默认即 0，有配方按配方来），建成后失压
+    ///    只记不停——不关闭、不断电、不报警。
+    /// B 标准烧屏：量产标准，门槛稍高但每道拦都有中文指引，
     ///    被拦按提示填上即可（填时长/扫SN/连风机）。
-    /// B 宽松试产（跑起来优先）：新治具/样机调试，误报变提示、人工复判兜底。
-    /// C 严格出货（放行标准）：A 的严格版 + 启动定格追溯 + 超温联停 + 画面记录。
-    ///    开 C 前置：本机【超温上限】必须先填＞0（报警节点里填，按炉子工艺温度定），
+    /// C 宽松试产（跑起来优先）：新治具/样机调试，误报变提示、人工复判兜底。
+    /// D 严格出货（放行标准）：B 的严格版 + 启动定格追溯 + 超温联停 + 画面记录。
+    ///    开 D 前置：本机【超温上限】必须先填＞0（报警节点里填，按炉子工艺温度定），
     ///    否则保存即拦——这是故意的（fail-safe：没上限的联停等于没配，不能悄悄开）。
-    /// D 客户常开（阀电同开保持常开）：A 标准的 12 开关只动"老化失压→只记不停"，
-    ///    另把本项目真空超时写 0（不限时等，数值项见 NumericValues）；配方延时填 0
-    ///    即阀电同开（无配方默认即 0，有配方按配方来——配方项预置不动）。
+    /// A 与 C 的 12 开关一字不差（A 以 C 为基准，V1.106 起），差的只是超时 0；
+    /// 探测时数值也算身份：C 开关＋超时 0 即 A，超时非 0 即 C（见 DetectPreset）。
     /// </summary>
     public static class PolicyPresets
     {
@@ -95,9 +97,9 @@ namespace AgingTestSystem.Services
         /// <summary>单个预置定义（纯数据：UI 下拉/确认框/说明提示全读它，不另写一份文案）。</summary>
         public class PolicyPresetDef
         {
-            /// <summary>预置 Id（"A"/"B"/"C"，下拉存它；改名即不兼容，不改）。</summary>
+            /// <summary>预置 Id（"A"/"B"/"C"/"D"，下拉存它；项目未上线，改名不动存盘，直改）。</summary>
             public string Id;
-            /// <summary>下拉显示名（如"预置A·标准烧屏（推荐首试）"）。</summary>
+            /// <summary>下拉显示名（如"预置A·常用（阀电同开保持常开）"）。</summary>
             public string Title;
             /// <summary>一句话适用场景（下拉下方灰字 + 悬停提示）。</summary>
             public string Scenario;
@@ -109,62 +111,111 @@ namespace AgingTestSystem.Services
             public Dictionary<string, string> Values;
             /// <summary>
             /// 数值项存储值（key→存储字符串，如真空超时毫秒数；V1.105 新增）。
-            /// 只要 PolicyKeys 成员才收（跟项目走，套用时与 Values 同一条保存路进 Policy.json）；
-            /// 不参与 DetectPreset（探测只认 12 开关）；A/B/C 为空集合（行为与旧版一致）。
+            /// 只要 PolicyKeys 成员才收（跟项目走，套用时与 Values 同一条保存路进 Policy.json）。
+            /// 探测口径（见 DetectPreset）：无数值项的预置只认 12 开关；
+            /// 带数值项的预置（当前只有 A 常用）数值也算身份（C 开关＋超时 0 即 A）。
+            /// B/C/D 为空集合（行为与旧版一致）。
             /// </summary>
             public Dictionary<string, string> NumericValues;
         }
 
-        /// <summary>全部预置（顺序即试用顺序 A→B→C→D，下拉按此排）。</summary>
+        /// <summary>全部预置（顺序即试用顺序 A→B→C→D，下拉按此排；A 常用放首位，现场先试这个）。</summary>
         public static readonly List<PolicyPresetDef> All = new List<PolicyPresetDef>
         {
+            // A 常用（客户常开工艺，阀电同开保持常开，一键套用免逐项改）：
+            // 12 开关照抄 C 宽松试产（误报变提示、人工复判兜底，常开不报警）；
+            // 数值项把本项目真空超时写 0（不限时等）。
+            // 配方延时不归预置管：填 0 即阀电同开（无配方默认即 0，有配方按配方来）。
             new PolicyPresetDef
             {
                 Id = "A",
-                Title = "预置A·标准烧屏（推荐首试）",
+                Title = "预置A·常用（阀电同开保持常开）",
+                Scenario = "常用工艺（客户常开）：真空吸附与上电同时开、保持常开不关闭。"
+                    + "行为开关与宽松试产一致（只记不停、人工复判，不误报警）；"
+                    + "本项目真空超时随套用写0（不限时等）。",
+                HowToSwitch = "配方延时填0即阀电同开（无配方默认即0，有配方按配方来）；"
+                    + "超时0随套用写入本项目；建成后失压只记不停。"
+                    + "回到标准→切B；出货放行→切D。",
+                Requires = "",
+                Values = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    // 0时长/空SN只警告：先放行，人工复判兜底（常开不报警的核心）。
+                    { "ZeroDurationPolicy", "Warn" },
+                    { "EmptySnPolicy", "Warn" },
+                    // 风机只提示：提示一次照跑（人必须在场看炉温）。
+                    { "FanDisconnectPolicy", "LogOnly" },
+                    // 真空责任=装夹异常：不冤枉产品，可重测。
+                    { "VacuumFailKind", "FixtureAlarm" },
+                    // 完成待判定：到时标"待判定"，下料人工录 PASS/FAIL + 不良代码。
+                    { "CompletionJudgePolicy", "PendingReview" },
+                    // 断电续跑剩余：省时间（重抽真空后补足剩余时长）。
+                    { "PowerLossPolicy", "ResumeRemaining" },
+                    // 老化失压只记不停：保持常开的核心，
+                    // 管路波动/失压记一条事件继续烧，不关阀不断电。
+                    { "AgingPressureLossPolicy", "KeepRunning" },
+                    // 只下电关阀：最安静。
+                    { "CompletionAction", "PowerOffOnly" },
+                    { "EventIdentityMode", "RecordTime" },
+                    // 超温联停=关：零门槛（上限还没按炉温填，开了保存即拦）。
+                    { "FanTempShutdownEnabled", "false" },
+                    // 跳过抽真空=关：有真空治具永不跳过（A 只是不限时等，不是不看真空）。
+                    { "SkipVacuum", "false" },
+                    // 画面维度=关（现状零打扰）。
+                    { "DisplayModeEnabled", "false" },
+                },
+                NumericValues = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    // 真空超时 0=关闭：不限时等，不判建立超时（只靠老化失压记录+人工停止兜底）
+                    { "VacuumConfirmTimeoutMs", "0" },
+                },
+            },
+            new PolicyPresetDef
+            {
+                Id = "B",
+                Title = "预置B·标准烧屏（推荐首试）",
                 Scenario = "量产标准跑：72 台真空吸附 + 载台上电，炉子加热、风机冷却，"
                     + "到时自动下电蜂鸣提醒取料。",
-                HowToSwitch = "启动被拦就按提示填（时长/SN/风机）；误报多（装夹/管路波动）→切B；"
-                    + "出货放行→切C。",
+                HowToSwitch = "启动被拦就按提示填（时长/SN/风机）；误报多（装夹/管路波动）→切C；"
+                    + "出货放行→切D。",
                 Requires = "",
                 Values = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     // 0时长硬拦截：烧屏无限点亮最危险（72 台彻夜空烧），配方/全局必须填时长；
-                    // 真要"不限时长手动停"的工艺→切B（Warn）。
+                    // 真要"不限时长手动停"的工艺→切C（Warn）。
                     { "ZeroDurationPolicy", "Block" },
-                    // 空SN硬拦截：MicroLED 量产无 SN 无法追溯单体；样机没码→切B。
+                    // 空SN硬拦截：MicroLED 量产无 SN 无法追溯单体；样机没码→切C。
                     { "EmptySnPolicy", "Block" },
                     // 风机断连阻断启动：炉子加热 + 单探头，无冷却点火=过温风险；
                     // 只管"启动那一下"，跑中掉线不停机（另有超温联停管）。
                     { "FanDisconnectPolicy", "BlockStart" },
-                    // 真空责任=产品：首试按产品记，不良不流出；装夹问题多→切B记装夹异常。
+                    // 真空责任=产品：首试按产品记，不良不流出；装夹问题多→切C记装夹异常。
                     { "VacuumFailKind", "ProductFail" },
-                    // 完成自动PASS：到时无报警即 PASS·待取料；要人工逐台复判→切B。
+                    // 完成自动PASS：到时无报警即 PASS·待取料；要人工逐台复判→切C。
                     { "CompletionJudgePolicy", "AutoPass" },
-                    // 断电整台重测：评审结论（断电不连续，已跑作废）；试产省时间→切B续跑。
+                    // 断电整台重测：评审结论（断电不连续，已跑作废）；试产省时间→切C续跑。
                     { "PowerLossPolicy", "RestartFull" },
-                    // 老化失压停机：失压还烧=带病烧屏；管路波动误报多→切B只记不停。
+                    // 老化失压停机：失压还烧=带病烧屏；管路波动误报多→切C只记不停。
                     { "AgingPressureLossPolicy", "StopOnLoss" },
                     // 下电+蜂鸣：提醒取料；本机无破空阀，泄压类动作预置里没有（选了保存即拦）。
                     { "CompletionAction", "PowerOffAndBeep" },
-                    // 事件口径=现值（现状）；严格追溯→切C定格。
+                    // 事件口径=现值（现状）；严格追溯→切D定格。
                     { "EventIdentityMode", "RecordTime" },
-                    // 超温联停=关：零门槛（上限还没按炉温填，开了保存即拦）；填好上限后可手动开，或切C。
+                    // 超温联停=关：零门槛（上限还没按炉温填，开了保存即拦）；填好上限后可手动开，或切D。
                     { "FanTempShutdownEnabled", "false" },
                     // 跳过抽真空=关：四个预置全关——真空治具永不跳过（无真空治具的机械夹具才手动开）。
                     { "SkipVacuum", "false" },
-                    // 画面维度=关（现状零打扰，PG 画面本来也由治具/PG 固定输出）；要记追溯→切C。
+                    // 画面维度=关（现状零打扰，PG 画面本来也由治具/PG 固定输出）；要记追溯→切D。
                     { "DisplayModeEnabled", "false" },
                 },
                 NumericValues = new Dictionary<string, string>(StringComparer.Ordinal),
             },
             new PolicyPresetDef
             {
-                Id = "B",
-                Title = "预置B·宽松试产（跑起来优先）",
+                Id = "C",
+                Title = "预置C·宽松试产（跑起来优先）",
                 Scenario = "新治具/新配方/样机调试：误报变提示、人工复判兜底，先跑起来摸条件。",
-                HowToSwitch = "条件摸熟、误报收敛→切回A；出货放行→切C。"
-                    + "注意：B 是试产口径（续跑/装夹/待判定），量产不要长期跑B。",
+                HowToSwitch = "条件摸熟、误报收敛→切回B；出货放行→切D。"
+                    + "注意：C 是试产口径（续跑/装夹/待判定），量产不要长期跑C。",
                 Requires = "",
                 Values = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
@@ -190,17 +241,19 @@ namespace AgingTestSystem.Services
                 },
                 NumericValues = new Dictionary<string, string>(StringComparer.Ordinal),
             },
+            // D 严格出货（放行标准，一键套用免逐项改）：
+            // B 标准的严格版 + 启动定格追溯 + 超温联停 + 画面记录。
             new PolicyPresetDef
             {
-                Id = "C",
-                Title = "预置C·严格出货（放行标准）",
-                Scenario = "量产放行：A 的严格版 + 启动定格追溯 + 超温联停 + 画面记录，"
+                Id = "D",
+                Title = "预置D·严格出货（放行标准）",
+                Scenario = "量产放行：B 的严格版 + 启动定格追溯 + 超温联停 + 画面记录，"
                     + "全程无报警才算 PASS。",
-                HowToSwitch = "C 是终点口径，不用再切；若 C 太严（频繁拦）→退回A找原因，"
+                HowToSwitch = "D 是终点口径，不用再切；若 D 太严（频繁拦）→退回B找原因，"
                     + "不要长期混用（追溯口径会两边倒）。",
                 // 前置写死在这里：UI 确认框与说明都读它，不另写一份。
                 Requires = "本机【超温上限】必须先填＞0（报警节点【超温上限(°C)】，按炉子工艺温度定），"
-                    + "否则保存即拦。时长/配方/SN/风机要求与A相同。",
+                    + "否则保存即拦。时长/配方/SN/风机要求与B相同。",
                 Values = new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     { "ZeroDurationPolicy", "Block" },
@@ -221,44 +274,6 @@ namespace AgingTestSystem.Services
                     { "DisplayModeEnabled", "true" },
                 },
                 NumericValues = new Dictionary<string, string>(StringComparer.Ordinal),
-            },
-            // D 客户常开（阀电同开保持常开，一键套用免逐项改）：
-            // 12 开关照抄 A，只动老化失压→只记不停；数值项把本项目真空超时写 0。
-            // 配方延时不归预置管：无配方默认即 0（阀电同开），有配方按配方来。
-            new PolicyPresetDef
-            {
-                Id = "D",
-                Title = "预置D·客户常开（阀电同开保持常开）",
-                Scenario = "客户常开工艺：真空吸附与上电同时开、保持常开不关闭。"
-                    + "行为开关与A标准一致，只把老化失压改成只记不停；"
-                    + "本项目真空超时随套用写0（不限时等）。",
-                HowToSwitch = "配方延时填0即阀电同开（无配方默认即0，有配方按配方来）；"
-                    + "超时0随套用写入本项目；建成后失压只记不停。"
-                    + "误报多→切B；出货放行→切C；回到标准→切A。",
-                Requires = "",
-                Values = new Dictionary<string, string>(StringComparer.Ordinal)
-                {
-                    { "ZeroDurationPolicy", "Block" },
-                    { "EmptySnPolicy", "Block" },
-                    { "FanDisconnectPolicy", "BlockStart" },
-                    { "VacuumFailKind", "ProductFail" },
-                    { "CompletionJudgePolicy", "AutoPass" },
-                    { "PowerLossPolicy", "RestartFull" },
-                    // 与 A 唯一的差别：老化失压只记不停——保持常开的核心，
-                    // 管路波动/失压记一条事件继续烧，不关阀不断电。
-                    { "AgingPressureLossPolicy", "KeepRunning" },
-                    { "CompletionAction", "PowerOffAndBeep" },
-                    { "EventIdentityMode", "RecordTime" },
-                    { "FanTempShutdownEnabled", "false" },
-                    // 跳过抽真空=关：有真空治具永不跳过（D 只是不限时等，不是不看真空）。
-                    { "SkipVacuum", "false" },
-                    { "DisplayModeEnabled", "false" },
-                },
-                NumericValues = new Dictionary<string, string>(StringComparer.Ordinal)
-                {
-                    // 真空超时 0=关闭：不限时等，不判建立超时（只靠老化失压报警+人工停止兜底）
-                    { "VacuumConfirmTimeoutMs", "0" },
-                },
             },
         };
 
@@ -318,7 +333,8 @@ namespace AgingTestSystem.Services
         public static string ApplyToConfig(DeviceConfig config, string id)
         {
             if (config == null) return "配置对象为空，无法套用预置。";
-            // 开关＋数值一起写（数值走同一解析口；探测仍只认 12 开关，见 DetectPreset）
+            // 开关＋数值一起写（数值走同一解析口；探测口径见 DetectPreset：
+            // 无数值项的预置只认 12 开关，带数值项的（A 常用）数值也算身份）
             Dictionary<string, string> values = GetAllValues(id);
             if (values == null) return "未知预置：" + (id ?? "");
             var bad = new List<string>();
@@ -342,7 +358,8 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 反查当前配置≈哪个预置（纯函数：12 项逐项序列化比对，全对上才算；
-        /// 数值项不参与——数值是各项目的微调（如超时 0/15000），不算身份）。
+        /// 带数值项的预置（当前只有 A 常用）数值也算身份：C 开关＋超时 0 即 A，
+        /// 超时非 0 即 C——A 以 C 为基准，超时 0 是两者唯一的差别，不认数值就分不出来）。
         /// </summary>
         /// <returns>预置 Id（"A"/"B"/"C"/"D"）；凑不上任何一个返回 <see cref="CustomId"/>。</returns>
         public static string DetectPreset(DeviceConfig config)
@@ -361,6 +378,19 @@ namespace AgingTestSystem.Services
                     {
                         allMatch = false;
                         break;
+                    }
+                }
+                // 数值身份：只对"带数值项"的预置加赛一轮（无数值项的走上面 12 开关即定）。
+                if (allMatch && p.NumericValues != null)
+                {
+                    foreach (var kv in p.NumericValues)
+                    {
+                        if (!string.Equals(ToStorageString(GetProp(config, kv.Key)),
+                            kv.Value != null ? kv.Value.Trim() : "", StringComparison.OrdinalIgnoreCase))
+                        {
+                            allMatch = false;
+                            break;
+                        }
                     }
                 }
                 if (allMatch) return p.Id;

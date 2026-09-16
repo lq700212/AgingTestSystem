@@ -7,7 +7,7 @@
     <ProjectGuid>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</ProjectGuid>
     <OutputType>WinExe</OutputType>
     <RootNamespace>AgingTestSystem</RootNamespace>
-    <AssemblyName>AgingTestSystem</AssemblyName>
+    <AssemblyName>烧屏测试控制中心</AssemblyName>
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
@@ -16,8 +16,12 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <!-- 【修复 L2】指定应用程序清单文件，启用 DPI 感知 -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- 输出中文名（V1.106，用户要求）：exe 文件名=烧屏测试控制中心.exe；
+         只改 AssemblyName（输出文件名），RootNamespace/命名空间保持 AgingTestSystem 不动，
+         代码零改；改后回归/发版/混淆脚本里的 exe 引用同步跟改，见 CHANGELOG -->
     <!-- 应用图标（V1.105）：exe/桌面/任务栏图标（主窗体未单独设 Icon，跟 exe 走）；
-         源文件 Resources\app.ico（用户提供，256 单尺寸，合法 ICO 直用不重绘） -->
+         源文件 Resources\app.ico（用户提供，256 单尺寸，合法 ICO 直用不重绘；
+         V1.106 用户更新了 app.ico/app.png，直接用最新文件重编即换新） -->
     <ApplicationIcon>Resources\app.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
