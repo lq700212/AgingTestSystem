@@ -34,6 +34,9 @@ namespace AgingTestSystem.Dialogs
     ///   挂接（SunnyUI 专用：内部建 TabPage + Dock=Fill + TabPage 绑定 + Show()）。
     ///   禁止手写 TabPage 包裹 + Controls.Add（漏掉 Show() 会导致 Visible=false，
     ///   按钮全建好但页面一片空白，现场实锤）。
+    /// - 小屏布局（1280x1024 工控屏）：tabControl 用 Dock=Fill 吃中间剩余区（z 序最前、
+    ///   最后布局，见 AddPage 后的 BringToFront），窗体收高也不与 pnlBottom 重叠盖按钮；
+    ///   窗体设计高 950、底部面板 200（按钮行＋132 高日志）、九宫格灯 52px，九排 604px 一页装下。
     /// - 底部按钮全部为 Sunny.UI.UIButton，日志框为 Sunny.UI.UITextBox（只读多行）。
     /// </summary>
     partial class CommunicationTestForm
@@ -144,11 +147,10 @@ namespace AgingTestSystem.Dialogs
             this.tabControl.DrawMode = System.Windows.Forms.TabDrawMode.OwnerDrawFixed;
             this.tabControl.Font = new System.Drawing.Font("微软雅黑", 10.5F, System.Drawing.FontStyle.Bold);
             this.tabControl.ItemSize = new System.Drawing.Size(150, 40);
-            this.tabControl.Location = new System.Drawing.Point(0, 75);
+            this.tabControl.Dock = System.Windows.Forms.DockStyle.Fill;
             this.tabControl.MainPage = "";
             this.tabControl.Name = "tabControl";
             this.tabControl.SelectedIndex = 0;
-            this.tabControl.Size = new System.Drawing.Size(780, 713);
             this.tabControl.SizeMode = System.Windows.Forms.TabSizeMode.Fixed;
             this.tabControl.Style = Sunny.UI.UIStyle.Custom;
             this.tabControl.TabIndex = 1;
@@ -183,6 +185,7 @@ namespace AgingTestSystem.Dialogs
             this.pageVacuum.Style = Sunny.UI.UIStyle.Custom;
             this.pageVacuum.Text = "负压开关测试";
             this.pageVacuum.TitleFont = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.pageVacuum.AutoScroll = true;
             // 
             // panelGridVacuum
             // 
@@ -194,7 +197,7 @@ namespace AgingTestSystem.Dialogs
             this.panelGridVacuum.MinimumSize = new System.Drawing.Size(1, 1);
             this.panelGridVacuum.Name = "panelGridVacuum";
             this.panelGridVacuum.RectColor = System.Drawing.Color.FromArgb(((int)(((byte)(230)))), ((int)(((byte)(234)))), ((int)(((byte)(240)))));
-            this.panelGridVacuum.Size = new System.Drawing.Size(680, 660);
+            this.panelGridVacuum.Size = new System.Drawing.Size(646, 604);
             this.panelGridVacuum.TabIndex = 0;
             this.panelGridVacuum.Text = null;
             this.panelGridVacuum.TextAlignment = System.Drawing.ContentAlignment.MiddleCenter;
@@ -225,6 +228,7 @@ namespace AgingTestSystem.Dialogs
             this.pagePowerOn.Style = Sunny.UI.UIStyle.Custom;
             this.pagePowerOn.Text = "载台上电测试";
             this.pagePowerOn.TitleFont = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.pagePowerOn.AutoScroll = true;
             // 
             // panelGridPowerOn
             // 
@@ -236,7 +240,7 @@ namespace AgingTestSystem.Dialogs
             this.panelGridPowerOn.MinimumSize = new System.Drawing.Size(1, 1);
             this.panelGridPowerOn.Name = "panelGridPowerOn";
             this.panelGridPowerOn.RectColor = System.Drawing.Color.FromArgb(((int)(((byte)(230)))), ((int)(((byte)(234)))), ((int)(((byte)(240)))));
-            this.panelGridPowerOn.Size = new System.Drawing.Size(680, 660);
+            this.panelGridPowerOn.Size = new System.Drawing.Size(646, 604);
             this.panelGridPowerOn.TabIndex = 0;
             this.panelGridPowerOn.Text = null;
             this.panelGridPowerOn.TextAlignment = System.Drawing.ContentAlignment.MiddleCenter;
@@ -270,6 +274,7 @@ namespace AgingTestSystem.Dialogs
             this.pageSpare.Style = Sunny.UI.UIStyle.Custom;
             this.pageSpare.Text = "预留点位";
             this.pageSpare.TitleFont = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
+            this.pageSpare.AutoScroll = true;
             // 
             // lblSpareDiTitle
             // 
@@ -331,6 +336,11 @@ namespace AgingTestSystem.Dialogs
             this.tabControl.AddPage(this.pageVacuum);
             this.tabControl.AddPage(this.pagePowerOn);
             this.tabControl.AddPage(this.pageSpare);
+            // Fill 吃中间剩余区：Dock 布局按 z 序从后往前（边栏先占边、Fill 最后吃剩），
+            // 页签必须在 z 序最前才最后布局，否则小屏上窗体收高后页签与底部面板重叠、
+            // 页签盖住按钮行（1280x1024 实锤：重叠 56px 整行按钮看不见）。harness 判据
+            // Controls.GetChildIndex(tabControl) == 0，回归用例另锁 Dock == Fill。
+            this.tabControl.BringToFront();
             // 
             // pnlBottom
             // 
@@ -343,12 +353,12 @@ namespace AgingTestSystem.Dialogs
             this.pnlBottom.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.pnlBottom.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(250)))), ((int)(((byte)(252)))));
             this.pnlBottom.Font = new System.Drawing.Font("宋体", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
-            this.pnlBottom.Location = new System.Drawing.Point(0, 788);
+            this.pnlBottom.Location = new System.Drawing.Point(0, 750);
             this.pnlBottom.Margin = new System.Windows.Forms.Padding(4, 5, 4, 5);
             this.pnlBottom.MinimumSize = new System.Drawing.Size(1, 1);
             this.pnlBottom.Name = "pnlBottom";
             this.pnlBottom.RectColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(250)))), ((int)(((byte)(252)))));
-            this.pnlBottom.Size = new System.Drawing.Size(780, 312);
+            this.pnlBottom.Size = new System.Drawing.Size(780, 200);
             this.pnlBottom.TabIndex = 2;
             this.pnlBottom.Text = null;
             this.pnlBottom.TextAlignment = System.Drawing.ContentAlignment.MiddleCenter;
@@ -361,7 +371,7 @@ namespace AgingTestSystem.Dialogs
             this.txtLog.Cursor = System.Windows.Forms.Cursors.IBeam;
             this.txtLog.FillReadOnlyColor = System.Drawing.Color.White;
             this.txtLog.Font = new System.Drawing.Font("微软雅黑", 9.5F);
-            this.txtLog.Location = new System.Drawing.Point(14, 73);
+            this.txtLog.Location = new System.Drawing.Point(14, 60);
             this.txtLog.Margin = new System.Windows.Forms.Padding(4, 5, 4, 5);
             this.txtLog.MinimumSize = new System.Drawing.Size(1, 16);
             this.txtLog.Multiline = true;
@@ -370,7 +380,7 @@ namespace AgingTestSystem.Dialogs
             this.txtLog.ReadOnly = true;
             this.txtLog.ShowScrollBar = true;
             this.txtLog.ShowText = false;
-            this.txtLog.Size = new System.Drawing.Size(752, 231);
+            this.txtLog.Size = new System.Drawing.Size(752, 132);
             this.txtLog.TabIndex = 4;
             this.txtLog.TextAlignment = System.Drawing.ContentAlignment.MiddleLeft;
             this.txtLog.Watermark = "操作日志将显示在这里";
@@ -489,20 +499,20 @@ namespace AgingTestSystem.Dialogs
             // CommunicationTestForm
             // 
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
-            this.ClientSize = new System.Drawing.Size(780, 1100);
+            this.ClientSize = new System.Drawing.Size(780, 950);
             this.Controls.Add(this.tabControl);
             this.Controls.Add(this.pnlHeader);
             this.Controls.Add(this.pnlBottom);
             this.EscClose = true;
             this.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this.MinimumSize = new System.Drawing.Size(780, 1000);
+            this.MinimumSize = new System.Drawing.Size(780, 800);
             this.Name = "CommunicationTestForm";
             this.ShowIcon = false;
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Style = Sunny.UI.UIStyle.Custom;
             this.Text = "通讯测试";
             this.TitleFont = new System.Drawing.Font("微软雅黑", 12F, System.Drawing.FontStyle.Bold);
-            this.ZoomScaleRect = new System.Drawing.Rectangle(15, 15, 780, 1000);
+            this.ZoomScaleRect = new System.Drawing.Rectangle(15, 15, 780, 800);
             this.pnlHeader.ResumeLayout(false);
             this.tabControl.ResumeLayout(false);
             this.pageVacuum.ResumeLayout(false);

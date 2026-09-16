@@ -1585,9 +1585,11 @@ namespace AgingTestSystem.Dialogs
             /// <summary>动态生成 9 行 × 8 列的圆形灯按钮与行标签</summary>
             private void BuildButtonGrid()
             {
-                const int buttonSize = 56;
+                // 灯 52px＋行距 12：九排总高 604px，一页装下不滚动（窗体按 1280x1024 收高到 950 后
+                // 页高约 635；56px 灯要 656px，会被底边裁掉第 9 排。4 字灯名在 52px 圈内照常装下。）
+                const int buttonSize = 52;
                 const int gapX = 8;
-                const int gapY = 14;
+                const int gapY = 12;
                 const int rowLabelWidth = 150;
                 const int gridLeft = 12;
                 const int gridTop = 6;
@@ -2118,9 +2120,10 @@ namespace AgingTestSystem.Dialogs
             /// 行标签"0x地址 高/低字节 + 首~尾通道名"，与另两页同观感。无点位时显示空态。</summary>
             private void BuildLamps(UIPanel panel, bool isInput)
             {
-                const int buttonSize = 56;
+                // 与负压/载台页同尺寸（52px 灯＋12 行距），三页观感一致，预留灯不另起一套。
+                const int buttonSize = 52;
                 const int gapX = 8;
-                const int gapY = 14;
+                const int gapY = 12;
                 const int rowLabelWidth = 210;
                 const int gridLeft = 12;
                 const int gridTop = 6;
