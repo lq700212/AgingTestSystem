@@ -38,6 +38,12 @@ powershell -ExecutionPolicy Bypass -Command "& '.opencode\skills\agingtest-regre
   按 `git diff` 自动算模块子集（如公共参数窗间距只跑 `UiStyleV172_1`，17 条秒过）。
 - **必须全量**：大重构、发布前、改了骨架（csproj/Interfaces/用例自身/scripts）。
   映射不到的新文件/接口改动会自动兜底全量（fail-safe，宁多跑不漏测）。
+- **纯用例改动走 TESTONLY**：只碰 `tests/TestRunner.cs` /
+  `tests/DeviceManagerIntegrationTests.cs` 时，按 diff 行号反查 `XxxTests()`
+  方法→`allModules` 字典，只跑命中模块（≤3 个；产品 exe 未变，冒烟跳过；
+  纯注释改动直接跳过回归）。helper 改动沿调用链往上归属（如 `SweepXxx`→
+  `DeviceManagerSweep`）；碰 `Main`/`allModules`/`Check`/`BuildTestManager`/
+  Fake 类等公共脚手架、跨 3 个以上模块一律兜底全量。
 - **映射表**在 `scripts/get_affected_modules.ps1` 的 `$Map`：
   **新增产品 .cs 文件必须在此登记**（否则每次改它都付全量代价）；
   登记时连带"断言交互"的模块一起写（如 TestEventLogger 改格式→全部 DeviceManager* 都读 CSV）。
@@ -68,7 +74,8 @@ powershell -ExecutionPolicy Bypass -Command "& '.opencode\skills\agingtest-regre
   （`ExtraFrameworkFolders` 指 v4.7.2 引用目录，升级目标框架同步改；InPath/OutPath
   发版脚本按绝对路径生成，Obfuscar 新版只认绝对路径）。
 - **改了发版链要知道**：`obfuscated_release.ps1` 与 `tests/ObfuscationAcceptance.cs`
-  都在 `$FullPatterns` 覆盖下（scripts/tests 改动兜底全量回归）；新增 ps1 必须带
+  都在 `$FullPatterns` 覆盖下（scripts/验收器改动兜底全量回归；两份用例源码改动走
+  TESTONLY fast path，见一点五）；新增 ps1 必须带
   UTF-8 BOM（PS5.1 无 BOM 解析中文直接 ParserError，实测）；XML 属性读写走
   SelectSingleNode＋SetAttribute（`$_.value=` 适配器写法在 `-File` 下抛
   XmlNodeSetShouldBeAString，交互式却正常，原因未明，显式 DOM 最稳）。
@@ -486,3 +493,11 @@ UI 弹窗分支（如配方同名覆盖确认框，靠界面手工测试）、�
     另加自锁断言（helper 存在性＋置脏照切行为：删 helper 即编译错，行为锁防绕过）。
     **教训：等人的用例就是坏用例——新增切节点/切边/套预置/关窗类用例，
     先问"窗体脏了会弹什么"；helper 收口后，review 只看有没有新增裸调。**
+57. **Get-Content 缺省按 ANSI 解码，无 BOM 的 UTF-8 中文源文件会被吞换行**
+    （TESTONLY 落地时实测：`DeviceManagerIntegrationTests.cs` 缺省读 2571 行，
+    `-Encoding UTF8` 读 2725 行，154 个换行凭空消失；拿 PS 行号对 git hunk
+    行号时，marker 全错位，轻则误判 FULL，重则归属错模块）。
+    修法：凡拿 PS 读到的行号去对外部行号（git diff/编译器报错行），一律
+    `Get-Content -Encoding UTF8`（本仓源码铁律 UTF-8），再加"hunk 行号越界即
+    FULL"护栏。**教训：Select-String/行号运算只保证自洽，不保证与外部同口径；
+    跨工具对行号先问一句"两边数出来一样多吗"，三行命令就能验。**

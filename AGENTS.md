@@ -573,8 +573,10 @@ else 分支已做叠加——改采集/状态显示时勿破坏此机制）。�
 1. **改完代码必须验证（V1.72.4 分级回归）**：日常小改跑
    `build_and_test.ps1 -Affected`（按 git 改动自动算模块子集，只测影响面；
    交互模块已含在映射里，如改 CSV 格式会连带全部 DeviceManager*）；
-   大重构/发布前/改骨架（csproj/Interfaces/用例自身/scripts）跑全量
-   `build_and_test.ps1`（默认）；映射不到的新文件自动兜底全量。
+    大重构/发布前/改骨架（csproj/Interfaces/用例自身/scripts）跑全量
+    `build_and_test.ps1`（默认）；映射不到的新文件自动兜底全量。
+    纯用例改动（只碰 tests 两份用例源码）走 TESTONLY：按 diff 反查命中模块只跑子集、
+    产品未变跳过冒烟，碰公共脚手架/超 3 个模块仍兜底全量。
    **新增产品 .cs 文件必须在 `get_affected_modules.ps1` 的 `$Map` 登记**，
    否则每次改它都付全量代价。
 2. **修 bug 必补用例**：每修复一个 bug，先在 `TestRunner.cs` 对应模块加一条能复现该 bug 的 `Check` 用例（红→修产品代码→绿），防止回归；新增功能同理补正向+边界用例。
