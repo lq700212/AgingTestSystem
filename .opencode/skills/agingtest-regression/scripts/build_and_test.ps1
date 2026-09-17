@@ -10,6 +10,8 @@
 #
 #  分级策略（V1.72.4）：日常小改用 -Affected（只测影响面）；
 #  大重构/发布前/骨架改动（csproj/Interfaces/用例自身）走全量（默认）。
+#  纯用例改动（TESTONLY:前缀）只跑命中模块并跳过冒烟——产品 exe 未变，
+#  启动行为不可能变；MSBuild 增量保留，防 bin 目录过期。
 #
 #  Exit codes: 0 = all green; non-zero = first failing stage:
 #      1 = build failed, 2 = smoke failed, 3 = unit tests failed, 4 = setup.
@@ -42,14 +44,9 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "[BUILD PASS]" -ForegroundColor Green
 
-Write-Host ""
-Write-Host "========== [2/3] SMOKE TEST =========="
-& (Join-Path $PSScriptRoot "smoke_test.ps1") -RepoRoot $RepoRoot
-if ($LASTEXITCODE -ne 0) { Write-Host "[SMOKE FAIL]" -ForegroundColor Red; exit 2 }
-
-Write-Host ""
-Write-Host "========== [3/3] UNIT / REGRESSION TESTS =========="
 # V1.72.4 分级回归：-Affected 按 git 改动自动算子集；显式 -Modules 优先。
+# 注意算子集必须在冒烟之前——TESTONLY 要跳过冒烟。
+$skipSmoke = $false
 if ($Affected -and ($Modules -eq "")) {
     # 注意：局部变量名绝不能叫 $affected（与开关 $Affected 同名，PS 变量大小写不敏感，
     # 赋值即炸 SwitchParameter 转换错）——血泪，见 SKILL.md 踩坑清单。
@@ -58,21 +55,44 @@ if ($Affected -and ($Modules -eq "")) {
         Write-Host "[AFFECTED] 兜底全量回归。"
     }
     elseif ($affectedResult -eq "NONE") {
-        Write-Host "[AFFECTED] 无可验证模块，跳过回归（构建+冒烟已过）。"
+        Write-Host "[AFFECTED] 无可验证模块，跳过冒烟与回归（构建已过）。"
         Write-Host ""
         Write-Host "=========================================="
-        Write-Host " ALL GREEN: build + smoke OK (regression skipped: nothing verifiable)" -ForegroundColor Green
+        Write-Host " ALL GREEN: build OK (smoke+regression skipped: nothing verifiable)" -ForegroundColor Green
         exit 0
+    }
+    elseif ("$affectedResult" -like "TESTONLY:*") {
+        $Modules = ("$affectedResult").Substring(9)
+        $skipSmoke = $true
+        Write-Host "[AFFECTED] 纯用例改动，只跑命中模块并跳过冒烟。"
     }
     else {
         $Modules = $affectedResult
         Write-Host "[AFFECTED] 按影响面跑子集。"
     }
 }
+
+Write-Host ""
+Write-Host "========== [2/3] SMOKE TEST =========="
+if ($skipSmoke) {
+    Write-Host "[SMOKE SKIP] 纯用例改动，产品 exe 未变，跳过冒烟。"
+}
+else {
+    & (Join-Path $PSScriptRoot "smoke_test.ps1") -RepoRoot $RepoRoot
+    if ($LASTEXITCODE -ne 0) { Write-Host "[SMOKE FAIL]" -ForegroundColor Red; exit 2 }
+}
+
+Write-Host ""
+Write-Host "========== [3/3] UNIT / REGRESSION TESTS =========="
 & (Join-Path $PSScriptRoot "run_unit_tests.ps1") -RepoRoot $RepoRoot -Modules $Modules
 if ($LASTEXITCODE -ne 0) { Write-Host "[UNIT-TESTS FAIL]" -ForegroundColor Red; exit 3 }
 
 Write-Host ""
 Write-Host "=========================================="
-Write-Host " ALL GREEN: build + smoke + regression OK" -ForegroundColor Green
+if ($skipSmoke) {
+    Write-Host " ALL GREEN: build + regression OK (smoke skipped: test-only change)" -ForegroundColor Green
+}
+else {
+    Write-Host " ALL GREEN: build + smoke + regression OK" -ForegroundColor Green
+}
 exit 0
