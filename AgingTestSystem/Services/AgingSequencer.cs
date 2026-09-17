@@ -44,6 +44,25 @@ namespace AgingTestSystem.Services
         /// <returns>true=越限（应报警），false=正常</returns>
         public static bool IsPressureOutOfRange(decimal pressureKPa, decimal thresholdKPa, bool alarmWhenHigher)
         {
+            return IsPressureOutOfRange(pressureKPa, thresholdKPa, alarmWhenHigher, true);
+        }
+
+        /// <summary>
+        /// 压力是否越限（带总开关版，判定口径唯一出处）。
+        /// <para>做什么：总开关关闭时恒返回 false（不越限）：阈值越限不报，真空建立超时因"恒到位"同步不报（见调用方 ClassifyAlarm），负压阀保持常开。</para>
+        /// <para>为什么收拢到这里：DeviceManager.PressureOutOfRange 与 ModbusRtuBarometerReader.IsAlarm 两处转调本函数，开关只加一处，两边永远同口径。</para>
+        /// </summary>
+        /// <param name="pressureKPa">当前真空压力（kPa）</param>
+        /// <param name="thresholdKPa">有效阈值（kPa，配方优先、全局兜底由调用方定）</param>
+        /// <param name="alarmWhenHigher">报警方向（对应配置 AlarmWhenPressureHigherThanThreshold）</param>
+        /// <param name="alarmEnabled">压力报警总开关（对应配置 PressureAlarmEnabled；false=全不报）</param>
+        /// <returns>true=越限（应报警），false=正常（含总开关关闭）</returns>
+        public static bool IsPressureOutOfRange(decimal pressureKPa, decimal thresholdKPa, bool alarmWhenHigher, bool alarmEnabled)
+        {
+            if (!alarmEnabled)
+            {
+                return false;
+            }
             if (alarmWhenHigher)
             {
                 return pressureKPa > thresholdKPa;
@@ -118,6 +137,20 @@ namespace AgingTestSystem.Services
                 return false;
             }
             return elapsedSinceValveOpen.TotalMilliseconds >= confirmTimeoutMs;
+        }
+
+        /// <summary>
+        /// 最高级静默是否生效（纯函数：报警全关开关的唯一判定口）。
+        /// <para>做什么：MuteAllAlarms = true 时压住一切报警分支（阈值越限/建立超时/DI 触点/
+        /// 通讯失联/自定义规则/超温联停）；false 时各分支按各自开关判定。</para>
+        /// <para>为什么收拢到这里：DeviceManager 的 ClassifyAlarm/失联分支/自定义规则三处、
+        /// 主窗超温联停一处，同调本函数，开关只加一处，四边永远同口径（V1.67 约定）。</para>
+        /// </summary>
+        /// <param name="muteAllAlarms">报警全关开关（对应配置 MuteAllAlarms；true=全部静默）</param>
+        /// <returns>true = 压住报警（不断电/不标故障/不判结果），false = 正常判定</returns>
+        public static bool ShouldSuppressAlarm(bool muteAllAlarms)
+        {
+            return muteAllAlarms;
         }
 
         /// <summary>

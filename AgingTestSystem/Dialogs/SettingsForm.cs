@@ -140,6 +140,8 @@ namespace AgingTestSystem.Dialogs
             "InvertOutputs",
             "IoBackupChannelMappingEnabled",
             "AlarmWhenPressureHigherThanThreshold",
+            "PressureAlarmEnabled",
+            "MuteAllAlarms",
             "FanEnabled",
             "FanAutoDetectEnabled",
             "UseDiAlarmContact",
@@ -284,6 +286,8 @@ namespace AgingTestSystem.Dialogs
             // ===== 报警参数 =====
             { "AlarmPressureThresholdKPa", "全局真空阈值（kPa，72台共用，缺省-5）：保存时同时写入气压表硬件（寄存器0x0010）与软件报警判定。方向：压力值大于阈值报警——阈值-5时-3报警（没吸住），-7到位（已吸住），越接近0真空越差。配方单独设了负压的台按配方来，没设的回退到这里。" },
             { "AlarmWhenPressureHigherThanThreshold", "报警方向（true=压力高于阈值时报警）" },
+            { "PressureAlarmEnabled", "压力报警总开关（true=现状：阈值越限与真空建立超时正常报警，断电保护；false=全不报：负压阀与载台电保持常开，只等时长到或人工停止。DI触点/通讯失联/自定义规则不受影响照常报警。预置A·常用默认关闭）" },
+            { "MuteAllAlarms", "报警全关·最高级（false=现状：各项报警按各自开关判定；true=全部静默：阈值越限/建立超时/DI触点/通讯失联/自定义规则/超温联停全不报，不断电不标故障。优先级高于压力报警总开关。四个预置默认全关，只走手动或自定义开启；空载调试用，量产慎开）" },
 
             // ===== 冷却送风机 =====
             { "FanEnabled", "是否启用冷却送风机（false/true）" },
@@ -398,7 +402,8 @@ namespace AgingTestSystem.Dialogs
             }),
             ("报警参数", new string[]
             {
-                "AlarmPressureThresholdKPa", "AlarmWhenPressureHigherThanThreshold"
+                "AlarmPressureThresholdKPa", "AlarmWhenPressureHigherThanThreshold",
+                "PressureAlarmEnabled", "MuteAllAlarms"
             }),
             ("冷却送风机", new string[]
             {
@@ -1463,9 +1468,11 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 获取配置项的当前值
-        /// 取值优先级：项目策略文件 Policy.json（策略 key）→ AppSettings →
-        /// 内存 DeviceConfig 属性兜底。策略 key 优先读项目文件，保证界面显示的是
-        /// 当前项目真正生效的值（而不是 App.config 里的机器缺省）。
+        /// 取值优先级：项目策略文件 Policy.json（策略 key）→ A 管辖缺省（与 ApplyOverlay
+        /// 同一口径，见 ResolvePolicyDefault：文件缺 key 时显示 A 值，与生效值一致，
+        /// 不摆机器缺省误导）→ AppSettings → 内存 DeviceConfig 属性兜底。
+        /// 策略 key 优先读项目文件，保证界面显示的是当前项目真正生效的值
+        /// （工艺策略窗套用后，再开设置表看到的就是套用后的值，不用二次核对）。
         /// </summary>
         private string GetEffectiveValue(string key)
         {
@@ -1474,6 +1481,9 @@ namespace AgingTestSystem.Dialogs
             {
                 string policyRaw = ProjectPolicyStore.GetRaw(key);
                 if (policyRaw != null) return policyRaw;
+                // 文件缺 key：显示 A 管辖缺省（与生效内存同口径，不摆机器缺省）。
+                string policyDefault = ProjectPolicyStore.ResolvePolicyDefault(key);
+                if (policyDefault != null) return policyDefault;
             }
 
             string raw = System.Configuration.ConfigurationManager.AppSettings[key];
@@ -1495,6 +1505,32 @@ namespace AgingTestSystem.Dialogs
                 if (value != null) return value.ToString();
             }
             return "";
+        }
+
+        /// <summary>
+        /// 新旧两值是否算"改了"（纯函数：保存弹窗只对真改了的策略项点名，不打扰）。
+        /// 布尔按 true/false 比（内存"True"与存盘"true"算同一个）；其余 Trim 后忽略
+        /// 大小写比（枚举英文名大小写不敏感，与 ParseValue 同口径；数字/字符串不受影响）。
+        /// 比错了最多多出一行提示（值照样正确保存），fail-safe。
+        /// </summary>
+        public static bool IsValueChanged(string oldValue, string newValue)
+        {
+            string a = (oldValue ?? "").Trim();
+            string b = (newValue ?? "").Trim();
+            bool ba, bb;
+            if (bool.TryParse(a, out ba) && bool.TryParse(b, out bb)) return ba != bb;
+            return !string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// 组装"已同步到工艺策略"提示尾巴（纯函数：无改动回空串，调用方拼进保存成功框）。
+        /// </summary>
+        public static string BuildPolicySyncNote(System.Collections.Generic.List<string> nodeLabels)
+        {
+            if (nodeLabels == null || nodeLabels.Count == 0) return "";
+            return "\r\n\r\n注：以下 " + nodeLabels.Count + " 项归当前工艺策略管（策略优先），已同步到："
+                + string.Join("、", nodeLabels.ToArray())
+                + "（两边看到的是同一个值）。";
         }
 
         /// 根据配置项类型创建"设置值"单元格控件，防止用户乱输导致配置写坏：
@@ -2172,6 +2208,8 @@ namespace AgingTestSystem.Dialogs
                 case "InvertOutputs":
                 case "IoBackupChannelMappingEnabled":
                 case "AlarmWhenPressureHigherThanThreshold":
+                case "PressureAlarmEnabled":
+                case "MuteAllAlarms":
                 case "FanEnabled":
                 case "FanAutoDetectEnabled":
                 case "UseDiAlarmContact":
@@ -2503,6 +2541,18 @@ namespace AgingTestSystem.Dialogs
                 return;
             }
 
+            // 策略同步点名：只对"真改了、且驾驶舱有节点管"的项弹窗
+            // （全量收集常含未改项，不比对会每次保存都扰民；纯机器项无节点可点名，不打扰）。
+            // 取值走 GetEffectiveValue（与显示同口径：文件→A缺省→机器），比的就是用户看到的旧值。
+            var syncedLabels = new System.Collections.Generic.List<string>();
+            foreach (var kv in changes)
+            {
+                string where = AgingTestSystem.Views.PolicyGraph.LocateKey(kv.Key);
+                if (where == null) continue;
+                if (!IsValueChanged(GetEffectiveValue(kv.Key), kv.Value)) continue;
+                if (!syncedLabels.Contains(where)) syncedLabels.Add(where);
+            }
+
             // 落盘走统一入口（组合/MES校验 + 分流写文件 + 热回写全在里面）
             PersistResult presult;
             string perror;
@@ -2533,6 +2583,8 @@ namespace AgingTestSystem.Dialogs
             {
                 saveMessage += "\r\n\r\n注：MES 密钥加密失败，已按明文保存（上报不受影响），请检查后重新保存。";
             }
+            // 策略同步点名（保存成功才拼：没落盘就没有"同步"）。
+            saveMessage += BuildPolicySyncNote(syncedLabels);
 
             MessageBox.Show(saveMessage, "提示",
                 MessageBoxButtons.OK, MessageBoxIcon.Information);

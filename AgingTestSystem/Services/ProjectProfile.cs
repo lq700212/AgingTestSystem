@@ -12,7 +12,7 @@ namespace AgingTestSystem.Services
     /// 以前所有运行时文件（配方/工位设置）都堆在程序目录，换一个客户
     /// 就得手动备份一堆 json，出差现场极易弄混。现在按"项目"隔离：
     ///   程序目录/Projects/&lt;项目名&gt;/  =  Recipes.json + StationSettings.json
-    ///                              + Policy.json（策略）
+    ///                              + Policy.json（策略，当前生效）+ CustomPolicy.json（自定义槽）
     /// 出差切项目 = 下拉选个名字即时生效（无需重启），30 秒搞定，不动代码。
     /// 【跟项目的 vs 跟机器的：为什么这样分】
     /// - 跟项目（进 Profile 目录）：配方、工位设置、工艺策略——换客户就换这套。
@@ -32,12 +32,20 @@ namespace AgingTestSystem.Services
         /// <summary>策略文件名（每个项目目录下一份，见 ProjectPolicyStore）。</summary>
         public const string PolicyFileName = "Policy.json";
 
+        /// <summary>
+        /// 自定义策略槽文件名（每个项目目录下一份，与 Policy.json 同目录）。
+        /// 自定义槽初始内容=A 预置快照，之后独立存（改自定义不碰 A/B/C/D，
+        /// A/B/C/D 是代码写死的预置，导入也覆盖不了它们，只进自定义）。
+        /// </summary>
+        public const string CustomPolicyFileName = "CustomPolicy.json";
+
         /// <summary>跟项目走的文件（切换项目即切换这些文件）。</summary>
         public static readonly string[] ProjectScopedFiles = new string[]
         {
             "Recipes.json",
             "StationSettings.json",
-            PolicyFileName
+            PolicyFileName,
+            CustomPolicyFileName
         };
 
         /// <summary>

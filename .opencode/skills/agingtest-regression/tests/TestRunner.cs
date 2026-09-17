@@ -23,6 +23,7 @@
 //   12h. PolicyPresetV185          —— 预置策略 A/B/C（套用/探测纯函数 + 名单/口径/安全锁 + UI 预置行回显）
 //   12i. PolicyNodeComboV1851      —— 节点选项框按预置下拉口径统一（下拉实测拉宽 + 悬停全文 + 切节点清表）
 //   12j. DeployDiagV188_9           —— 调试部署诊断：启动版本水印纯函数 + 崩溃日志文件名/正文/落盘（含null/非Exception兜底）
+//   12k. MainFormIconV107            —— 任务栏窗口图标恒等于 exe 文件图标（反射调静态helper，不构造主窗）
 //  【怎么跑】
 //  不直接运行本文件。用本 skill 目录 scripts\run_unit_tests.ps1：
 //    它把主程序产物拷到独立临时 run 目录 → csc 编译本文件引用主程序集 → 运行。
@@ -209,6 +210,7 @@ namespace AgingTestSystem.Tests
                 { "PolicyPresetV185", PolicyPresetTests },
                 { "PolicyNodeComboV1851", PolicyNodeComboTests },
                 { "DeployDiagV188_9", DeployDiagTests },
+                { "MainFormIconV107", MainFormIconTests },
             };
 
             // 参数约定：无参=全量；"模块A,模块B"=子集（大小写不敏感）；
@@ -1258,6 +1260,7 @@ namespace AgingTestSystem.Tests
             // V1.61：负压阈值默认 -5kPa（公共参数窗 nudThreshold 默认值与之对齐）
             Check("报警压力阈值默认 -5kPa", new DeviceConfig().AlarmPressureThresholdKPa == -5m);
             Check("报警方向默认高于阈值报警", new DeviceConfig().AlarmWhenPressureHigherThanThreshold == true);
+            Check("压力报警默认开启（老配置零变化）", new DeviceConfig().PressureAlarmEnabled == true);
         }
 
         // =====================================================================
@@ -2098,6 +2101,19 @@ namespace AgingTestSystem.Tests
             Check("反方向恰等阈值不越限", !AgingSequencer.IsPressureOutOfRange(-5m, -5m, false));
             Check("常压0恒越限(默认方向)", AgingSequencer.IsPressureOutOfRange(0m, -5m, true));
 
+            // ── 总开关关闭恒不越限（2.0.0 新增：阈值越限与建立超时全不报，常开不报警）──
+            Check("总开关关默认方向不越限", !AgingSequencer.IsPressureOutOfRange(-4m, -5m, true, false));
+            Check("总开关关反方向不越限", !AgingSequencer.IsPressureOutOfRange(-6m, -5m, false, false));
+            Check("总开关关常压也不越限", !AgingSequencer.IsPressureOutOfRange(0m, -5m, true, false));
+            Check("总开关开默认方向越限", AgingSequencer.IsPressureOutOfRange(-4m, -5m, true, true));
+            Check("总开关开反方向越限", AgingSequencer.IsPressureOutOfRange(-6m, -5m, false, true));
+            Check("三参旧口与开关开一致", AgingSequencer.IsPressureOutOfRange(-4m, -5m, true)
+                == AgingSequencer.IsPressureOutOfRange(-4m, -5m, true, true));
+
+            // ── 最高级静默判定口（2.0.0 新增：开即压住一切报警分支）──
+            Check("全关开即压住", AgingSequencer.ShouldSuppressAlarm(true));
+            Check("全关关不压住", !AgingSequencer.ShouldSuppressAlarm(false));
+
             // ── 负时间输入语义锁 ──
             Check("延时为负同样直接上电(未到位也上电)",
                 AgingSequencer.ShouldPowerOn(false, TimeSpan.Zero, -5));
@@ -2249,13 +2265,14 @@ namespace AgingTestSystem.Tests
             foreach (string k in ProjectPolicyStore.PolicyKeys)
             {
                 // VentValveDoPoint/VacuumConfirmTimeoutMs 是数字项、
-                // FanTempShutdownEnabled/SkipVacuum/DisplayModeEnabled
-                // 是布尔项、MesTriggers/MesFieldMap/MesStaticFields/CustomAlarmRules/
+                // FanTempShutdownEnabled/SkipVacuum/DisplayModeEnabled/PressureAlarmEnabled/
+                // MuteAllAlarms 是布尔项、MesTriggers/MesFieldMap/MesStaticFields/CustomAlarmRules/
                 // CompleteExpression/ReportColumns/DisplayModes 是自由文本
-                // （V1.68/V1.69/V1.74/V1.75），都无策略下拉
+                // （V1.68/V1.69/V1.74/V1.75/2.0.0/2.0.0），都无策略下拉
                 if (k == "VentValveDoPoint" || k == "VacuumConfirmTimeoutMs"
                     || k == "FanTempShutdownEnabled" || k == "SkipVacuum"
-                    || k == "DisplayModeEnabled"
+                    || k == "DisplayModeEnabled" || k == "PressureAlarmEnabled"
+                    || k == "MuteAllAlarms"
                     || k == "MesTriggers" || k == "MesFieldMap" || k == "MesStaticFields"
                     || k == "CustomAlarmRules" || k == "CompleteExpression"
                     || k == "ReportColumns" || k == "DisplayModes") continue;
@@ -3293,6 +3310,26 @@ namespace AgingTestSystem.Tests
                 return false;
             };
             Check("阈值挂报警节点", NodeHasKey("alarm", "AlarmPressureThresholdKPa") && hasKey("AlarmWhenPressureHigherThanThreshold"));
+            Check("报警开关挂报警节点首项", NodeHasKey("alarm", "PressureAlarmEnabled"));
+            Check("全关挂报警节点", NodeHasKey("alarm", "MuteAllAlarms"));
+            dc.MuteAllAlarms = true;
+            Check("全关副标题直说全关", linesOf("alarm").Contains("全关"));
+            dc.MuteAllAlarms = false;
+            bool locateOk = true;
+            foreach (string k in ProjectPolicyStore.PolicyKeys)
+            {
+                if (Views.PolicyGraph.LocateKey(k) == null) { locateOk = false; break; }
+            }
+            Check("策略key人人有节点（保存弹窗可点名）", locateOk);
+            Check("报警开关定位报警联动",
+                Views.PolicyGraph.LocateKey("PressureAlarmEnabled") == "【报警联动】压力报警开关");
+            Check("全关定位报警联动",
+                Views.PolicyGraph.LocateKey("MuteAllAlarms") == "【报警联动】报警全关");
+            Check("零时长定位启动开阀",
+                Views.PolicyGraph.LocateKey("ZeroDurationPolicy") == "【启动开阀】0时长策略");
+            Check("无节点key定位null",
+                Views.PolicyGraph.LocateKey("BaudRate") == null
+                && Views.PolicyGraph.LocateKey((string)null) == null);
             Check("破空总闸挂完成节点", NodeHasKey("done", "VentValveEnabled"));
             Check("MES总闸挂上报节点", NodeHasKey("mes", "MesEnabled"));
             Check("画面维度挂上电节点", NodeHasKey("power", "DisplayModeEnabled") && hasKey("DisplayModes"));
@@ -4037,16 +4074,18 @@ namespace AgingTestSystem.Tests
                     !ok("VacuumConfirmTimeoutMs", "abc") && !ok("VacuumConfirmTimeoutMs", "")
                     && !ok("VacuumConfirmTimeoutMs", "600001"));
 
-                // _boolKeys 17 项逐项过校验（防"只加一边"的配置漂移；V1.68 +MesEnabled/MesMockEnabled；V1.69 +SkipVacuum；V1.73 +VentValveEnabled；V1.74 +UsePowerMeter；V1.75 +DisplayModeEnabled）
+                // _boolKeys 19 项逐项过校验（防"只加一边"的配置漂移；V1.68 +MesEnabled/MesMockEnabled；V1.69 +SkipVacuum；V1.73 +VentValveEnabled；V1.74 +UsePowerMeter；V1.75 +DisplayModeEnabled；2.0.0 +PressureAlarmEnabled；2.0.0 +MuteAllAlarms）
                 var boolKeys = (HashSet<string>)typeof(SettingsForm).GetField("_boolKeys",
                     BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
-                Check("布尔键17项", boolKeys != null && boolKeys.Count == 17);
+                Check("布尔键19项", boolKeys != null && boolKeys.Count == 19);
                 if (boolKeys != null)
                 {
                     bool allBoolOk = boolKeys.All(k => ok(k, "true") && ok(k, "false") && !ok(k, "YES"));
                     Check("布尔键true/false过YES不过", allBoolOk);
                     Check("含关键布尔键",
                         boolKeys.Contains("AlarmWhenPressureHigherThanThreshold")
+                        && boolKeys.Contains("PressureAlarmEnabled")
+                        && boolKeys.Contains("MuteAllAlarms")
                         && boolKeys.Contains("ScannerDebugLog")
                         && boolKeys.Contains("UseMockCommunication")
                         && boolKeys.Contains("MesEnabled")
@@ -4056,6 +4095,25 @@ namespace AgingTestSystem.Tests
                         && boolKeys.Contains("UsePowerMeter")
                         && boolKeys.Contains("DisplayModeEnabled"));
                 }
+                Check("改值比对大小写不敏感（True/true同一）",
+                    !SettingsForm.IsValueChanged("True", "true")
+                    && SettingsForm.IsValueChanged("true", "false")
+                    && !SettingsForm.IsValueChanged("warn", "Warn")
+                    && SettingsForm.IsValueChanged("warn", "block")
+                    && !SettingsForm.IsValueChanged(" 15000 ", "15000")
+                    && SettingsForm.IsValueChanged("15000", "0")
+                    && !SettingsForm.IsValueChanged("", "")
+                    && !SettingsForm.IsValueChanged(null, ""));
+                Check("同步提示空进空出",
+                    SettingsForm.BuildPolicySyncNote(null) == ""
+                    && SettingsForm.BuildPolicySyncNote(new List<string>()) == "");
+                string syncNote = SettingsForm.BuildPolicySyncNote(new List<string>
+                    { "【报警联动】压力报警开关", "【上电老化】启用画面维度" });
+                Check("同步提示点名节点与策略优先",
+                    syncNote.Contains("【报警联动】压力报警开关")
+                    && syncNote.Contains("【上电老化】启用画面维度")
+                    && syncNote.Contains("2 项")
+                    && syncNote.Contains("策略优先"));
             }
 
             // —— PersistChanges 统一保存路（V1.70 重构锁：拦截语义与按钮时代逐字一致） ——
@@ -4119,7 +4177,7 @@ namespace AgingTestSystem.Tests
                         File.Exists(policyPath)
                         && File.ReadAllText(policyPath).Contains("VacuumConfirmTimeoutMs"));
 
-                    // 3c) A 常用整包分流（12 开关＋超时 0 全进 Policy.json）+ 内存热回写
+                    // 3c) A 常用整包分流（14 开关＋超时 0 全进 Policy.json）+ 内存热回写
                     // （A 是零门槛预置：不断言 D 严格，D 要超温上限＞0，缺省 0 会被组合校验拦）
                     var c3c = new DeviceConfig();
                     SettingsForm.PersistResult r3c;
@@ -7115,7 +7173,7 @@ namespace AgingTestSystem.Tests
                 && PolicyPresets.All[1].Id == "B"
                 && PolicyPresets.All[2].Id == "C"
                 && PolicyPresets.All[3].Id == "D");
-            Check("管辖12个行为开关", PolicyPresets.GovernedKeys.Count == 12);
+            Check("管辖14个行为开关", PolicyPresets.GovernedKeys.Count == 14);
             bool governedInKeys = true;
             foreach (string k in PolicyPresets.GovernedKeys)
             {
@@ -7140,7 +7198,16 @@ namespace AgingTestSystem.Tests
                 }
                 if (!fullSet) break;
             }
-            Check("每预置都是完整12项集合（切预置不残留）", fullSet);
+            Check("每预置都是完整14项集合（切预置不残留）", fullSet);
+            Check("A管辖缺省回A值（报警关/超时0）",
+                ProjectPolicyStore.ResolvePolicyDefault("PressureAlarmEnabled") == "false"
+                && ProjectPolicyStore.ResolvePolicyDefault("VacuumConfirmTimeoutMs") == "0"
+                && ProjectPolicyStore.ResolvePolicyDefault("ZeroDurationPolicy") != null);
+            Check("不管的自由文本缺省null（走机器缺省）",
+                ProjectPolicyStore.ResolvePolicyDefault("MesTriggers") == null
+                && ProjectPolicyStore.ResolvePolicyDefault("NoSuchKey") == null
+                && ProjectPolicyStore.ResolvePolicyDefault(null) == null
+                && ProjectPolicyStore.ResolvePolicyDefault("") == null);
             bool metaOk = true;
             foreach (var p in PolicyPresets.All)
             {
@@ -7255,19 +7322,26 @@ namespace AgingTestSystem.Tests
             Check("B零门槛组合校验过（上电/风机/阀全默认）",
                 AgingSequencer.ValidatePolicyCombination(
                     false, 0f, CompletionAction.PowerOffAndBeep, 0, false) == null);
-            // —— A 常用（V1.106：C 宽松整套照抄＋超时 0 跟项目） ——
+            // —— A 常用（V1.106：C 宽松整套照抄＋超时 0 跟项目；2.0.0 起 A 再关掉压力报警） ——
             var valsA106 = PolicyPresets.GetPresetValues("A");
             var valsC106 = PolicyPresets.GetPresetValues("C");
-            bool aSameC = valsA106 != null && valsC106 != null;
-            if (aSameC)
+            bool aSameCExceptAlarm = valsA106 != null && valsC106 != null;
+            if (aSameCExceptAlarm)
             {
                 foreach (string k in PolicyPresets.GovernedKeys)
                 {
+                    if (string.Equals(k, "PressureAlarmEnabled", StringComparison.Ordinal)) continue;
                     if (!string.Equals(valsA106[k], valsC106[k], StringComparison.OrdinalIgnoreCase))
-                    { aSameC = false; break; }
+                    { aSameCExceptAlarm = false; break; }
                 }
             }
-            Check("A与C十二项全同（常用以宽松为基准）", aSameC);
+            Check("A与C除报警开关外全同（常用以宽松为基准）", aSameCExceptAlarm);
+            Check("A报警关C报警开（常用常开不报警）",
+                valsA106 != null && valsA106["PressureAlarmEnabled"] == "false"
+                && valsC106 != null && valsC106["PressureAlarmEnabled"] == "true");
+            Check("B/D报警开（标准严格不断电保护）",
+                PolicyPresets.Find("B").Values["PressureAlarmEnabled"] == "true"
+                && PolicyPresets.Find("D").Values["PressureAlarmEnabled"] == "true");
             Check("A失压=只记不停（保持常开核心）",
                 valsA106 != null && valsA106["AgingPressureLossPolicy"] == "KeepRunning");
             Check("A不跳抽真空（只是不限时等，不是不看真空）",
@@ -7298,7 +7372,7 @@ namespace AgingTestSystem.Tests
                 PolicyPresets.GetNumericValues("A")["VacuumConfirmTimeoutMs"] == "0"
                 && numA2["VacuumConfirmTimeoutMs"] == "0");
             var allA = PolicyPresets.GetAllValues("A");
-            Check("合流含12开关+超时0（套用走这一份）",
+            Check("合流含14开关+超时0（套用走这一份）",
                 allA != null && allA.Count == PolicyPresets.GovernedKeys.Count + 1
                 && allA["AgingPressureLossPolicy"] == "KeepRunning"
                 && allA["VacuumConfirmTimeoutMs"] == "0");
@@ -7306,12 +7380,19 @@ namespace AgingTestSystem.Tests
             Check("A零门槛组合校验过（PowerOffOnly无阀）",
                 AgingSequencer.ValidatePolicyCombination(
                     false, 0f, CompletionAction.PowerOffOnly, 0, false) == null);
-            // 数值算身份（V1.106：C 开关＋超时 0 即 A，超时非 0 即 C）
+            // 数值算身份（V1.106：C 开关＋超时 0 即 A，超时非 0 即 C；2.0.0 起 A 还多了报警关）
             var cfgC0 = new DeviceConfig();
             PolicyPresets.ApplyToConfig(cfgC0, "C");
             Check("C开关＋默认超时探测为C", PolicyPresets.DetectPreset(cfgC0) == "C");
             cfgC0.VacuumConfirmTimeoutMs = 0;
-            Check("C开关＋超时0探测为A（数值算身份）", PolicyPresets.DetectPreset(cfgC0) == "A");
+            Check("C开关＋超时0但报警开仍是C（报警开关也算身份）", PolicyPresets.DetectPreset(cfgC0) == "C");
+            cfgC0.PressureAlarmEnabled = false;
+            Check("C开关＋超时0＋报警关探测为A（数值算身份）", PolicyPresets.DetectPreset(cfgC0) == "A");
+            Check("四预置报警全关=false（最高级只走手动/自定义）",
+                PolicyPresets.GetPresetValues("A")["MuteAllAlarms"] == "false"
+                && PolicyPresets.GetPresetValues("B")["MuteAllAlarms"] == "false"
+                && PolicyPresets.GetPresetValues("C")["MuteAllAlarms"] == "false"
+                && PolicyPresets.GetPresetValues("D")["MuteAllAlarms"] == "false");
 
             // —— 序列化口径 ——
             Check("布尔存小写",
@@ -7455,9 +7536,16 @@ namespace AgingTestSystem.Tests
             }
             finally { try { if (titleForm != null) titleForm.Dispose(); } catch { } }
             // —— 下拉即预览（V1.106：切下拉画布即换该预置画面，只看不存不标脏） ——
+            // 自定义槽隔离：本块断言依赖槽内容，先备份并删掉真实槽文件，
+            // 构造时 Ensure 按 A 快照重建（确定性），finally 恢复。
             ProcessPolicyForm pvForm = null;
+            string pvCustomPath = ProjectPolicyStore.CustomFilePath;
+            bool pvHadCustom = File.Exists(pvCustomPath);
+            string pvCustomBackup = pvHadCustom ? File.ReadAllText(pvCustomPath) : null;
             try
             {
+                try { if (File.Exists(pvCustomPath)) File.Delete(pvCustomPath); }
+                catch { }
                 // 基准=B 标准（失压停机＋超时 15000），预览 C/A 时差异一目了然
                 var cfgPv = new DeviceConfig();
                 PolicyPresets.ApplyToConfig(cfgPv, "B");
@@ -7498,24 +7586,38 @@ namespace AgingTestSystem.Tests
                 Check("A预览真实不动（超时15000＋自动PASS）",
                     cfgPv.VacuumConfirmTimeoutMs == 15000
                     && cfgPv.CompletionJudgePolicy == CompletionJudgePolicy.AutoPass);
-                // 切回自定义：预览清空，看回真实
+                // 切回自定义：预览=刚重建的槽快照（A 内容：超时0＋待判定），真实 B 不动
                 propIdx.SetValue(cboPv, 4, null);
-                Check("切自定义清预览（看回真实）",
-                    fPreview.GetValue(canvasPv) == null);
-                // 纯函数口径：BuildPreviewConfig（克隆隔离＋自定义回 null）
-                var mBuild = tP.GetMethod("BuildPreviewConfig",
-                    BindingFlags.NonPublic | BindingFlags.Static);
+                var pvCustom = fPreview.GetValue(canvasPv) as DeviceConfig;
+                Check("切自定义预览=槽快照（超时0＋待判定）",
+                    pvCustom != null && pvCustom.VacuumConfirmTimeoutMs == 0
+                    && pvCustom.CompletionJudgePolicy == CompletionJudgePolicy.PendingReview);
+                Check("自定义预览真实不动（仍是B）",
+                    cfgPv.AgingPressureLossPolicy == AgingPressureLossPolicy.StopOnLoss
+                    && cfgPv.VacuumConfirmTimeoutMs == 15000);
+                // 纯函数口径：BuildPreviewConfig（克隆隔离；两参口自定义回 null 走兼容）
+                // （三参重载已加，GetMethod 单名取法会歧义，这里按参数个数挑两参口）
+                System.Reflection.MethodInfo mBuild = null;
+                foreach (var m in tP.GetMethods(BindingFlags.NonPublic | BindingFlags.Static))
+                {
+                    if (m.Name == "BuildPreviewConfig" && m.GetParameters().Length == 2)
+                    { mBuild = m; break; }
+                }
                 var pvPure = mBuild != null
                     ? mBuild.Invoke(null, new object[] { cfgPv, "C" }) as DeviceConfig
                     : null;
                 Check("BuildPreviewConfig内容=C且真实不动",
                     pvPure != null && pvPure.AgingPressureLossPolicy == AgingPressureLossPolicy.KeepRunning
                     && cfgPv.AgingPressureLossPolicy == AgingPressureLossPolicy.StopOnLoss);
-                Check("BuildPreviewConfig自定义回null",
+                Check("BuildPreviewConfig两参自定义回null（兼容）",
                     mBuild != null && mBuild.Invoke(null, new object[] { cfgPv, "Custom" }) == null);
-                // 关窗提示判定（纯函数 IsPreviewPending＋文案，不弹真框）
-                var mPend = tP.GetMethod("IsPreviewPending",
-                    BindingFlags.NonPublic | BindingFlags.Static);
+                // 关窗提示判定（纯函数 IsPreviewPending＋文案，不弹真框；两参口同理挑）
+                System.Reflection.MethodInfo mPend = null;
+                foreach (var m in tP.GetMethods(BindingFlags.NonPublic | BindingFlags.Static))
+                {
+                    if (m.Name == "IsPreviewPending" && m.GetParameters().Length == 2)
+                    { mPend = m; break; }
+                }
                 var mPrompt = tP.GetMethod("BuildPreviewClosePrompt",
                     BindingFlags.NonPublic | BindingFlags.Static);
                 Check("关窗判定反射口径有效",
@@ -7526,7 +7628,7 @@ namespace AgingTestSystem.Tests
                         (bool)mPend.Invoke(null, new object[] { cfgPv, "C" }) == true);
                     Check("预览即现状不问（B现状看B）",
                         (bool)mPend.Invoke(null, new object[] { cfgPv, "B" }) == false);
-                    Check("自定义不问（没有预览）",
+                    Check("两参自定义不问（兼容：无槽不问）",
                         (bool)mPend.Invoke(null, new object[] { cfgPv, "Custom" }) == false);
                     Check("空配置不问不抛",
                         (bool)mPend.Invoke(null, new object[] { null, "A" }) == false);
@@ -7534,9 +7636,450 @@ namespace AgingTestSystem.Tests
                     Check("关窗文案含预置名＋确定取消两路",
                         !string.IsNullOrWhiteSpace(promptA) && promptA.Contains("常用")
                         && promptA.Contains("确定") && promptA.Contains("取消"));
+                    string promptCustom = (string)mPrompt.Invoke(null, new object[] { "Custom" });
+                    Check("关窗文案自定义无括号",
+                        !string.IsNullOrWhiteSpace(promptCustom)
+                        && promptCustom.Contains("自定义")
+                        && !promptCustom.Contains("（"));
+                }
+                // 三参口（自定义槽参与预览/判定）
+                System.Reflection.MethodInfo mBuild3 = null;
+                System.Reflection.MethodInfo mPend3 = null;
+                foreach (var m in tP.GetMethods(BindingFlags.NonPublic | BindingFlags.Static))
+                {
+                    if (m.Name == "BuildPreviewConfig" && m.GetParameters().Length == 3)
+                    { mBuild3 = m; }
+                    if (m.Name == "IsPreviewPending" && m.GetParameters().Length == 3)
+                    { mPend3 = m; }
+                }
+                Check("三参预览/判定反射口径有效", mBuild3 != null && mPend3 != null);
+                if (mBuild3 != null && mPend3 != null)
+                {
+                    var slotA = ProjectPolicyStore.LoadCustom();
+                    var pvSlot = mBuild3.Invoke(null,
+                        new object[] { cfgPv, "Custom", slotA }) as DeviceConfig;
+                    Check("三参自定义预览=槽内容且真实不动",
+                        pvSlot != null && pvSlot.VacuumConfirmTimeoutMs == 0
+                        && cfgPv.VacuumConfirmTimeoutMs == 15000);
+                    Check("三参槽空自定义回null（看回真实）",
+                        mBuild3.Invoke(null, new object[] { cfgPv, "Custom",
+                            new Dictionary<string, string>() }) == null);
+                    Check("三参槽异即待定（B现状槽A要问）",
+                        (bool)mPend3.Invoke(null,
+                            new object[] { cfgPv, "Custom", slotA }) == true);
+                    var slotSameB = ProjectPolicyStore.ToPolicyDict(cfgPv);
+                    Check("三参槽同即不问",
+                        (bool)mPend3.Invoke(null,
+                            new object[] { cfgPv, "Custom", slotSameB }) == false);
+                    Check("三参槽空不问",
+                        (bool)mPend3.Invoke(null, new object[] { cfgPv, "Custom",
+                            new Dictionary<string, string>() }) == false);
                 }
             }
-            finally { try { if (pvForm != null) pvForm.Dispose(); } catch { } }
+            finally
+            {
+                try { if (pvForm != null) pvForm.Dispose(); }
+                catch { }
+                try
+                {
+                    if (pvHadCustom) File.WriteAllText(pvCustomPath, pvCustomBackup);
+                    else if (File.Exists(pvCustomPath)) File.Delete(pvCustomPath);
+                }
+                catch { }
+            }
+            // —— 右栏跟随预览（2.0.0：下拉切换右栏按有效配置重建，左右同源；
+            // 现象锁：B 现状超时 15000 切 A 预览时画布 0ms，右栏必须同步 0ms，
+            // 右栏以前只看真实，切下拉两边打架） ——
+            // 槽隔离复用上块模式（构造调 Ensure，删槽保证确定性，finally 恢复）。
+            ProcessPolicyForm flForm = null;
+            string flCustomPath = ProjectPolicyStore.CustomFilePath;
+            bool flHadCustom = File.Exists(flCustomPath);
+            string flCustomBackup = flHadCustom ? File.ReadAllText(flCustomPath) : null;
+            try
+            {
+                try { if (File.Exists(flCustomPath)) File.Delete(flCustomPath); }
+                catch { }
+                var cfgFl = new DeviceConfig();
+                PolicyPresets.ApplyToConfig(cfgFl, "B");
+                flForm = new ProcessPolicyForm(cfgFl, null, true);
+                var tF = typeof(ProcessPolicyForm);
+                object cboFl = tF.GetField("_cboPreset",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(flForm);
+                object canvasFl = tF.GetField("_canvas",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(flForm);
+                var fPrevCanvas = canvasFl != null
+                    ? canvasFl.GetType().GetField("_previewConfig",
+                        BindingFlags.NonPublic | BindingFlags.Instance)
+                    : null;
+                var fEditors = tF.GetField("_editorControls",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                var fDirtyFl = tF.GetField("_dirty",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                var fPendFl = tF.GetField("_previewPending",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                var propIdxFl = cboFl != null
+                    ? cboFl.GetType().GetProperty("SelectedIndex")
+                    : null;
+                var mSelect = tF.GetMethod("SelectNode",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                var fStatusFl = tF.GetField("_lblStatus",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Check("跟随反射口径有效（防探针本身失效假绿）",
+                    cboFl != null && canvasFl != null && fPrevCanvas != null
+                    && fEditors != null && fDirtyFl != null && fPendFl != null
+                    && propIdxFl != null && mSelect != null && fStatusFl != null);
+                if (cboFl != null && mSelect != null && fEditors != null)
+                {
+                    Func<string, string> edText = key =>
+                    {
+                        try
+                        {
+                            var dict = fEditors.GetValue(flForm) as System.Collections.IDictionary;
+                            var c = dict != null ? dict[key] as Control : null;
+                            return c != null ? (c.Text ?? "") : null;
+                        }
+                        catch { return null; }
+                    };
+                    // 选中抽真空：真实 B（超时 15000），右栏即 15000
+                    SelectNodeNoHang(flForm, "vacuum");
+                    Check("选中抽真空右栏=真实15000",
+                        edText("VacuumConfirmTimeoutMs") == "15000");
+                    // 切 A 预览：画布超时 0，右栏同步 0，真实不动，不标脏，状态条明示预览
+                    propIdxFl.SetValue(cboFl, 0, null);
+                    var pvFlA = fPrevCanvas.GetValue(canvasFl) as DeviceConfig;
+                    Check("切A画布预览超时0",
+                        pvFlA != null && pvFlA.VacuumConfirmTimeoutMs == 0);
+                    Check("切A右栏同步预览0（左右同源）",
+                        edText("VacuumConfirmTimeoutMs") == "0");
+                    Check("跟随不污染真实（仍15000）",
+                        cfgFl.VacuumConfirmTimeoutMs == 15000);
+                    Check("跟随不标脏",
+                        ((bool)fDirtyFl.GetValue(flForm)) == false);
+                    Check("预览态有标识",
+                        ((bool)fPendFl.GetValue(flForm)) == true);
+                    var stA = fStatusFl.GetValue(flForm) as Control;
+                    Check("状态条明示预览值保存即写入",
+                        stA != null && stA.Text.Contains("预览"));
+                    // 切回 B：右栏回 15000，标识清除
+                    propIdxFl.SetValue(cboFl, 1, null);
+                    Check("切回B右栏回真实15000",
+                        edText("VacuumConfirmTimeoutMs") == "15000");
+                    Check("回B预览态清除",
+                        ((bool)fPendFl.GetValue(flForm)) == false);
+                }
+            }
+            finally
+            {
+                try { if (flForm != null) flForm.Dispose(); }
+                catch { }
+                try
+                {
+                    if (flHadCustom) File.WriteAllText(flCustomPath, flCustomBackup);
+                    else if (File.Exists(flCustomPath)) File.Delete(flCustomPath);
+                }
+                catch { }
+            }
+            // —— 自定义槽：标题去括号/初始=A快照/改后独立存（本次需求） ——
+            Check("自定义标题就叫自定义（无括号描述）",
+                PolicyPresets.CustomTitle == "自定义"
+                && !PolicyPresets.CustomTitle.Contains("（")
+                && !PolicyPresets.CustomTitle.Contains("("));
+            Check("自定义说明与悬停无括号描述",
+                !PolicyPresets.CustomScenario.Contains("（")
+                && !PolicyPresets.CustomScenario.Contains("(")
+                && !PolicyPresets.CustomTip.Contains("（")
+                && !PolicyPresets.CustomTip.Contains("(")
+                && PolicyPresets.CustomTip.Contains("自定义"));
+            Check("自定义槽是跟项目文件（CustomPolicy.json）",
+                ProjectProfile.CustomPolicyFileName == "CustomPolicy.json"
+                && Array.IndexOf(ProjectProfile.ProjectScopedFiles, "CustomPolicy.json") >= 0
+                && ProjectPolicyStore.CustomFilePath.EndsWith("CustomPolicy.json"));
+            string csPath = ProjectPolicyStore.CustomFilePath;
+            bool csHad = File.Exists(csPath);
+            string csBackup = csHad ? File.ReadAllText(csPath) : null;
+            try
+            {
+                try { if (File.Exists(csPath)) File.Delete(csPath); }
+                catch { }
+                var seedB = new DeviceConfig();
+                PolicyPresets.ApplyToConfig(seedB, "B");
+                seedB.MesTriggers = "Complete";
+                Dictionary<string, string> initSlot =
+                    ProjectPolicyStore.EnsureCustomInitialized(seedB);
+                Dictionary<string, string> expectA = PolicyPresets.GetAllValues("A");
+                bool initIsA = expectA != null;
+                if (initIsA)
+                {
+                    foreach (var kv in expectA)
+                    {
+                        string got;
+                        if (!initSlot.TryGetValue(kv.Key, out got) || got != kv.Value)
+                        { initIsA = false; break; }
+                    }
+                }
+                Check("自定义槽初始开关与数值=A快照", initIsA);
+                string trig;
+                Check("自定义槽自由文本取种子现状",
+                    initSlot.TryGetValue("MesTriggers", out trig) && trig == "Complete");
+                Check("建槽即落盘", File.Exists(csPath));
+                Dictionary<string, string> second =
+                    ProjectPolicyStore.EnsureCustomInitialized(new DeviceConfig());
+                Check("二次Ensure不覆盖已存自定义",
+                    second.Count == initSlot.Count
+                    && second["ZeroDurationPolicy"] == initSlot["ZeroDurationPolicy"]);
+                Check("默认说明与悬停无括号",
+                    !PolicyPresets.CustomScenarioDefault.Contains("（")
+                    && !PolicyPresets.CustomScenarioDefault.Contains("(")
+                    && !PolicyPresets.CustomTipDefault.Contains("（")
+                    && !PolicyPresets.CustomTipDefault.Contains("(")
+                    && PolicyPresets.CustomTipDefault.Contains("自定义"));
+                Check("槽初始即未改动（自由文本不算身份）",
+                    PolicyPresets.IsCustomPristine(initSlot));
+                Check("空槽非未改动",
+                    !PolicyPresets.IsCustomPristine(new Dictionary<string, string>()));
+                Check("null槽非未改动",
+                    !PolicyPresets.IsCustomPristine(null));
+                // 改后独立存：改槽一项，A 预置纹丝不动
+                var mod = new Dictionary<string, string>(initSlot, StringComparer.Ordinal);
+                mod["ZeroDurationPolicy"] =
+                    initSlot["ZeroDurationPolicy"] == "Warn" ? "Block" : "Warn";
+                ProjectPolicyStore.SaveCustom(mod);
+                Check("改槽后A预置纹丝不动",
+                    PolicyPresets.GetPresetValues("A")["ZeroDurationPolicy"] == "Warn");
+                Check("槽读回即改后值",
+                    ProjectPolicyStore.LoadCustom()["ZeroDurationPolicy"]
+                    == mod["ZeroDurationPolicy"]);
+                Check("改后槽非未改动",
+                    !PolicyPresets.IsCustomPristine(ProjectPolicyStore.LoadCustom()));
+                // 脏 key 过滤（与 ApplyOverlay 同口径：手改写错也不炸）
+                ProjectPolicyStore.SaveCustom(new Dictionary<string, string>
+                    { { "ZeroDurationPolicy", "Block" }, { "NoSuchKey", "x" } });
+                Dictionary<string, string> filtered = ProjectPolicyStore.LoadCustom();
+                Check("自定义槽脏key被过滤",
+                    filtered.ContainsKey("ZeroDurationPolicy")
+                    && !filtered.ContainsKey("NoSuchKey"));
+                Check("FilterToPolicyKeys空进空出",
+                    ProjectPolicyStore.FilterToPolicyKeys(null).Count == 0
+                    && ProjectPolicyStore.FilterToPolicyKeys(
+                        new Dictionary<string, string> { { "NoSuchKey", "1" } }).Count == 0);
+                // —— 旧槽缺新key按A回填（2.0.0：项目未上线，不兼容缺key旧槽；缺省必须真正等于A）——
+                Dictionary<string, string> staleA =
+                    new Dictionary<string, string>(PolicyPresets.GetAllValues("A"), StringComparer.Ordinal);
+                staleA.Remove("PressureAlarmEnabled");
+                ProjectPolicyStore.SaveCustom(staleA);
+                Dictionary<string, string> healed =
+                    ProjectPolicyStore.EnsureCustomInitialized(new DeviceConfig());
+                string hb;
+                Check("旧槽缺新key按A回填（报警关）",
+                    healed.TryGetValue("PressureAlarmEnabled", out hb) && hb == "false");
+                Check("回填落盘（下次打开即全量）",
+                    ProjectPolicyStore.LoadCustom().ContainsKey("PressureAlarmEnabled"));
+                Check("回填后槽与A一致（缺省真正等于A）",
+                    PolicyPresets.IsCustomPristine(healed));
+                Dictionary<string, string> staleMod =
+                    new Dictionary<string, string>(PolicyPresets.GetAllValues("A"), StringComparer.Ordinal);
+                staleMod.Remove("PressureAlarmEnabled");
+                staleMod["ZeroDurationPolicy"] =
+                    staleMod["ZeroDurationPolicy"] == "Warn" ? "Block" : "Warn";
+                ProjectPolicyStore.SaveCustom(staleMod);
+                Dictionary<string, string> healedMod =
+                    ProjectPolicyStore.EnsureCustomInitialized(new DeviceConfig());
+                Check("回填不动用户已改项",
+                    healedMod["ZeroDurationPolicy"] == staleMod["ZeroDurationPolicy"]
+                    && healedMod["PressureAlarmEnabled"] == "false");
+                Check("改过其它项的旧槽回填后仍是自定义（不吞用户改动）",
+                    !PolicyPresets.IsCustomPristine(healedMod));
+                // —— 生效缺省对齐A（2.0.0：策略层最高优先级；文件缺key按A，存过优先，自由文本不管）——
+                string polPath = ProjectPolicyStore.PolicyFilePath;
+                bool polHad = File.Exists(polPath);
+                string polBackup = polHad ? File.ReadAllText(polPath) : null;
+                try
+                {
+                    if (File.Exists(polPath)) File.Delete(polPath);
+                    var cfgMissing = new DeviceConfig();
+                    ProjectPolicyStore.ApplyOverlay(cfgMissing);
+                    Check("overlay缺key按A回填（报警关）",
+                        cfgMissing.PressureAlarmEnabled == false);
+                    Check("overlay缺数值按A回填（超时0）",
+                        cfgMissing.VacuumConfirmTimeoutMs == 0);
+                    File.WriteAllText(polPath, "{\"PressureAlarmEnabled\":\"true\"}");
+                    var cfgExplicit = new DeviceConfig();
+                    ProjectPolicyStore.ApplyOverlay(cfgExplicit);
+                    Check("overlay存过的值优先（显式开仍开）",
+                        cfgExplicit.PressureAlarmEnabled == true);
+                    Check("overlay自由文本缺key保持现状",
+                        cfgExplicit.MesTriggers == new DeviceConfig().MesTriggers);
+                    File.WriteAllText(polPath, "{\"PressureAlarmEnabled\":\"false\"}");
+                    var cfgFileWins = new DeviceConfig { PressureAlarmEnabled = true };
+                    ProjectPolicyStore.ApplyOverlay(cfgFileWins);
+                    Check("overlay文件压内存（策略优先）",
+                        cfgFileWins.PressureAlarmEnabled == false);
+                }
+                finally
+                {
+                    try
+                    {
+                        if (polHad) File.WriteAllText(polPath, polBackup);
+                        else if (File.Exists(polPath)) File.Delete(polPath);
+                    }
+                    catch { }
+                }
+            }
+            finally
+            {
+                try
+                {
+                    if (csHad) File.WriteAllText(csPath, csBackup);
+                    else if (File.Exists(csPath)) File.Delete(csPath);
+                }
+                catch { }
+            }
+            // —— 导入导出装包（文件装全量策略 key，A/B/C/D 只出不覆） ——
+            var curX = new DeviceConfig();
+            PolicyPresets.ApplyToConfig(curX, "B");
+            curX.MesTriggers = "Complete";
+            var slotX = new Dictionary<string, string>(
+                PolicyPresets.GetAllValues("A"), StringComparer.Ordinal);
+            foreach (var kv in ProjectPolicyStore.ToPolicyDict(curX))
+            {
+                if (!slotX.ContainsKey(kv.Key)) slotX[kv.Key] = kv.Value;
+            }
+            Dictionary<string, string> expA =
+                PolicyPresets.BuildExportValues("A", curX, slotX);
+            Check("导出A开关与数值是A的",
+                expA != null && expA["ZeroDurationPolicy"] == "Warn"
+                && expA["VacuumConfirmTimeoutMs"] == "0");
+            Check("导出A自由文本跟当前走",
+                expA != null && expA["MesTriggers"] == "Complete");
+            bool expAKeysOk = expA != null && expA.Count > PolicyPresets.GovernedKeys.Count;
+            if (expAKeysOk)
+            {
+                foreach (string k in expA.Keys)
+                {
+                    if (!ProjectPolicyStore.PolicyKeys.Contains(k)) { expAKeysOk = false; break; }
+                }
+            }
+            Check("导出装包全是PolicyKeys成员（含自由文本）", expAKeysOk);
+            Dictionary<string, string> expCustom =
+                PolicyPresets.BuildExportValues("Custom", curX, slotX);
+            Check("导出自定义即槽快照",
+                expCustom != null
+                && expCustom["ZeroDurationPolicy"] == slotX["ZeroDurationPolicy"]
+                && expCustom["MesTriggers"] == slotX["MesTriggers"]);
+            Dictionary<string, string> expCustomFallback =
+                PolicyPresets.BuildExportValues("Custom", curX,
+                    new Dictionary<string, string>());
+            Check("自定义槽空时导出退回当前",
+                expCustomFallback != null
+                && expCustomFallback["ZeroDurationPolicy"] == "Block");
+            Check("未知源导出null",
+                PolicyPresets.BuildExportValues("Z", curX, slotX) == null);
+            Check("空源导出null",
+                PolicyPresets.BuildExportValues(null, curX, slotX) == null);
+            // 导出→导入往返（走隔离临时文件，不碰项目目录）
+            string tmpXfer = Path.Combine(Path.GetTempPath(),
+                "PolicyXfer_" + Guid.NewGuid().ToString("N") + ".json");
+            try
+            {
+                ProjectPolicyStore.WriteExportFile(tmpXfer, expA);
+                Dictionary<string, string> back;
+                string backErr;
+                Check("导入文件解析出口径有效",
+                    ProjectPolicyStore.ReadImportFile(tmpXfer, out back, out backErr)
+                    && backErr == null && back.Count == expA.Count);
+                Check("导入往返内容一致",
+                    back["ZeroDurationPolicy"] == "Warn"
+                    && back["MesTriggers"] == "Complete");
+                Check("不存在文件导入拦停",
+                    !ProjectPolicyStore.ReadImportFile(
+                        tmpXfer + ".notfound", out back, out backErr) && backErr != null);
+                File.WriteAllText(tmpXfer, "{not json");
+                Check("坏文件导入拦停",
+                    !ProjectPolicyStore.ReadImportFile(tmpXfer, out back, out backErr)
+                    && backErr != null);
+                File.WriteAllText(tmpXfer, "{\"NoSuchKey\":\"1\"}");
+                Check("无策略项文件导入拦停",
+                    !ProjectPolicyStore.ReadImportFile(tmpXfer, out back, out backErr)
+                    && backErr != null);
+            }
+            finally { try { if (File.Exists(tmpXfer)) File.Delete(tmpXfer); } catch { } }
+            // —— 导入导出按钮＋自定义末项文案（UI，只构造不 Show） ——
+            ProcessPolicyForm xferForm = null;
+            string xferCsPath = ProjectPolicyStore.CustomFilePath;
+            bool xferHad = File.Exists(xferCsPath);
+            string xferBackup = xferHad ? File.ReadAllText(xferCsPath) : null;
+            try
+            {
+                try { if (File.Exists(xferCsPath)) File.Delete(xferCsPath); }
+                catch { }
+                xferForm = new ProcessPolicyForm(new DeviceConfig(), null, true);
+                var tX = typeof(ProcessPolicyForm);
+                object cboX = tX.GetField("_cboPreset",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(xferForm);
+                var btnExp = tX.GetField("_btnExport",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(xferForm) as Control;
+                var btnImp = tX.GetField("_btnImport",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(xferForm) as Control;
+                var descX = tX.GetField("_lblPresetDesc",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(xferForm) as Control;
+                Check("导入导出按钮存在", btnExp != null && btnImp != null && cboX != null);
+                var itemsX = cboX != null
+                    ? cboX.GetType().GetProperty("Items").GetValue(cboX, null)
+                        as System.Collections.IList
+                    : null;
+                string lastText = "";
+                if (itemsX != null && itemsX.Count > 0)
+                {
+                    object last = itemsX[itemsX.Count - 1];
+                    lastText = last != null ? last.ToString() : "";
+                }
+                Check("下拉末项就叫自定义（无括号）", lastText == "自定义");
+                int selX = cboX != null
+                    ? (int)cboX.GetType().GetProperty("SelectedIndex").GetValue(cboX, null)
+                    : -1;
+                Check("缺省配置回显自定义末项",
+                    itemsX != null && selX == itemsX.Count - 1);
+                Check("未改动回显默认文案",
+                    descX != null && descX.Text == PolicyPresets.CustomScenarioDefault);
+                Check("默认文案无括号",
+                    descX != null && !descX.Text.Contains("（")
+                    && !descX.Text.Contains("("));
+                // 改槽一项再回显：说明切到差异文案
+                var slotMod = ProjectPolicyStore.LoadCustom();
+                string zdOld;
+                slotMod.TryGetValue("ZeroDurationPolicy", out zdOld);
+                slotMod["ZeroDurationPolicy"] = (zdOld == "Warn") ? "Block" : "Warn";
+                ProjectPolicyStore.SaveCustom(slotMod);
+                tX.GetMethod("RefreshPresetRow",
+                    BindingFlags.NonPublic | BindingFlags.Instance).Invoke(xferForm, null);
+                Check("自定义改后说明切差异文案",
+                    descX != null && descX.Text == PolicyPresets.CustomScenario);
+                Check("管理员可导可入",
+                    btnExp != null && btnImp != null && btnExp.Enabled && btnImp.Enabled);
+                // 只读模式：可导不可入（同窗内换旗验证，不重建槽文件）
+                var fEdit = tX.GetField("_canEdit",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                bool oldEdit = (bool)fEdit.GetValue(xferForm);
+                try
+                {
+                    fEdit.SetValue(xferForm, false);
+                    tX.GetMethod("RefreshPresetRow",
+                        BindingFlags.NonPublic | BindingFlags.Instance).Invoke(xferForm, null);
+                    Check("只读可导不可入", btnExp.Enabled && !btnImp.Enabled);
+                }
+                finally { try { fEdit.SetValue(xferForm, oldEdit); } catch { } }
+            }
+            finally
+            {
+                try { if (xferForm != null) xferForm.Dispose(); }
+                catch { }
+                try
+                {
+                    if (xferHad) File.WriteAllText(xferCsPath, xferBackup);
+                    else if (File.Exists(xferCsPath)) File.Delete(xferCsPath);
+                }
+                catch { }
+            }
         }
 
         // 12i. PolicyNodeComboV1851 —— 节点选项框按预置下拉口径统一（V1.85.1 新增）
@@ -7545,6 +8088,29 @@ namespace AgingTestSystem.Tests
         // 270 放不下长中文时的第二路）+ 切节点清提示表（不清=已释放控件被钉住泄漏）。
         // 独立再量一遍逐项宽度（与产品同 TextRenderer 口径，但每个数字重新算，
         // 不是复述产品字段），另有 harness 真实展开截图为第二证据（见 CHANGELOG）。
+        /// <summary>
+        /// 无人值守切节点（测试唯一入口：先清脏再调私有 SelectNode，绝不弹"是/否/取消"模态框）。
+        /// 【为什么收成 helper】裸调 SelectNode 时若窗体已脏（前一步改了下拉），模态确认框把测试线程永远卡住，
+        /// 现场复现过"卡在用例中间等人点鼠标"。以后新增切节点用例一律走这里，禁裸调（见 AGENTS 用例防挂起）。
+        /// 只读导航用：清脏=静默丢弃未保存修改；要测脏提示本身走真窗手工，不走用例。
+        /// </summary>
+        /// <param name="form">ProcessPolicyForm 实例（null 直接返回，不抛）</param>
+        /// <param name="id">节点 id（null=清空选择）</param>
+        private static void SelectNodeNoHang(object form, string id)
+        {
+            if (form == null) return;
+            var t = typeof(ProcessPolicyForm);
+            var fDirty = t.GetField("_dirty",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            if (fDirty != null)
+            {
+                try { fDirty.SetValue(form, false); } catch { }
+            }
+            var mSelect = t.GetMethod("SelectNode",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            if (mSelect != null) mSelect.Invoke(form, new object[] { id, false });
+        }
+
         static void PolicyNodeComboTests()
         {
             var t = typeof(ProcessPolicyForm);
@@ -7563,6 +8129,28 @@ namespace AgingTestSystem.Tests
                 form = new ProcessPolicyForm(new DeviceConfig(), null, true);
                 object tipObj = fTip.GetValue(form);
                 Check("节点悬停提示单例已建", tipObj != null);
+                // helper 自锁：存在性（删了即编译错，天然锁）＋行为（置脏照切不弹框；
+                // 以后新增切节点用例一律走 SelectNodeNoHang，禁裸调 SelectNode）。
+                Check("切节点helper存在（以后禁裸调，见AGENTS用例防挂起）",
+                    typeof(TestRunner).GetMethod("SelectNodeNoHang",
+                        BindingFlags.NonPublic | BindingFlags.Static) != null);
+                bool noHangOk = false;
+                try
+                {
+                    var fD = t.GetField("_dirty",
+                        BindingFlags.NonPublic | BindingFlags.Instance);
+                    var fSel = t.GetField("_selectedId",
+                        BindingFlags.NonPublic | BindingFlags.Instance);
+                    if (fD != null && fSel != null)
+                    {
+                        fD.SetValue(form, true);
+                        SelectNodeNoHang(form, "vacuum");
+                        noHangOk = (string)fSel.GetValue(form) == "vacuum"
+                            && ((bool)fD.GetValue(form)) == false;
+                    }
+                }
+                catch { noHangOk = false; }
+                Check("helper置脏照切不弹框（挂起自锁）", noHangOk);
 
                 // 期望数：全部节点 Bool/Enum key 个数（Text/Multiline 不是下拉，不进数；
                 // VentValveDoPoint 藏行是 Text 也不影响，数对不上=有下拉漏网或多算）。
@@ -7585,7 +8173,7 @@ namespace AgingTestSystem.Tests
                 foreach (var node in PolicyGraph.Nodes)
                 {
                     string id = (string)node.GetType().GetField("Id").GetValue(node);
-                    mSelect.Invoke(form, new object[] { id, false });
+                    SelectNodeNoHang(form, id);
                     var editors = fEditors.GetValue(form) as System.Collections.IDictionary;
                     foreach (System.Collections.DictionaryEntry en in editors)
                     {
@@ -7653,7 +8241,7 @@ namespace AgingTestSystem.Tests
                 catch { cleared = false; }
                 Check("切节点后旧下拉提示已清（不清表即泄漏）", cleared);
                 // 改选同步：旧节点重选后换一项，悬停跟着变（提示不是一次性快照）
-                mSelect.Invoke(form, new object[] { "unload", false });
+                SelectNodeNoHang(form, "unload");
                 var ed2 = fEditors.GetValue(form) as System.Collections.IDictionary;
                 var cmb2 = ed2["EventIdentityMode"] as Control;
                 bool syncOk = false;
@@ -7671,6 +8259,42 @@ namespace AgingTestSystem.Tests
                 }
                 catch { syncOk = false; }
                 Check("改选后悬停同步换（非一次性快照）", syncOk);
+                // —— 布尔下拉中文显示（2.0.0：显示关闭/开启，存 false/true 不变） ——
+                bool boolDispOk = false;
+                bool boolStoreOk = false;
+                try
+                {
+                    // 切节点一律走 helper（先清脏，绝不弹"是/否/取消"模态框）。
+                    SelectNodeNoHang(form, "alarm");
+                    var edAlarm = fEditors.GetValue(form) as System.Collections.IDictionary;
+                    var cmbAlarm = edAlarm["PressureAlarmEnabled"] as Control;
+                    var itemsA = cmbAlarm.GetType().GetProperty("Items")
+                        .GetValue(cmbAlarm, null) as System.Collections.IList;
+                    boolDispOk = itemsA != null && itemsA.Count == 2
+                        && itemsA[0].ToString() == "关闭" && itemsA[1].ToString() == "开启";
+                    // 右栏跟有效配置走（本窗自动选中自定义槽预览≈A，开关是关）：
+                    // 选中序号与读存值必须与有效配置一致（关闭↔false，开启↔true）
+                    int selA = (int)cmbAlarm.GetType().GetProperty("SelectedIndex")
+                        .GetValue(cmbAlarm, null);
+                    var mRead = t.GetMethod("ReadEditor",
+                        BindingFlags.NonPublic | BindingFlags.Static);
+                    string stored = mRead != null
+                        ? (string)mRead.Invoke(null, new object[] { cmbAlarm }) : null;
+                    var fPrev = t.GetField("_previewConfig",
+                        BindingFlags.NonPublic | BindingFlags.Instance);
+                    var fCfg = t.GetField("_config",
+                        BindingFlags.NonPublic | BindingFlags.Instance);
+                    DeviceConfig prev = fPrev != null
+                        ? fPrev.GetValue(form) as DeviceConfig : null;
+                    DeviceConfig real = fCfg != null
+                        ? fCfg.GetValue(form) as DeviceConfig : null;
+                    DeviceConfig eff = prev ?? real;
+                    string want = (eff != null && eff.PressureAlarmEnabled) ? "true" : "false";
+                    boolStoreOk = stored == want && ((want == "true") == (selA == 1));
+                }
+                catch { boolDispOk = false; boolStoreOk = false; }
+                Check("布尔下拉显示关闭/开启（不摆true/false）", boolDispOk);
+                Check("布尔下拉存盘仍是true/false（显示存储分离）", boolStoreOk);
                 // —— 每项标题 tooltip（新增：标题悬停看说明，超40字换行） ——
                 // 静态层：全部节点 key 在 SettingsForm 都有说明（与设置表同源，不另写一份）；
                 // 换行层：WrapTooltip 后每行≤40字（全仓唯一换行口）。
@@ -7718,14 +8342,8 @@ namespace AgingTestSystem.Tests
                 bool uiTipsOk = false;
                 try
                 {
-                    // 【防挂起】上面的"改选同步换"故意改了下拉选项（窗体已置脏）：
-                    // 直接切节点会弹"有未保存修改，切换前保存吗"模态框，无人值守下永远卡住
-                    // （现场复现：卡在"说明缺key回空不抛"之后）。这里只读悬停文本，
-                    // 不测脏提示，先把 _dirty 复位再切节点。
-                    var fDirty = t.GetField("_dirty",
-                        BindingFlags.NonPublic | BindingFlags.Instance);
-                    if (fDirty != null) fDirty.SetValue(form, false);
-                    mSelect.Invoke(form, new object[] { "alarm", false });
+                    // 切节点一律走 helper（先清脏，绝不弹模态框；现场复现过卡在"说明缺key回空不抛"之后等人点）。
+                    SelectNodeNoHang(form, "alarm");
                     var pnlF = t.GetField("_pnlEditors",
                         BindingFlags.NonPublic | BindingFlags.Instance);
                     var pnl = pnlF != null ? pnlF.GetValue(form) as Control : null;
@@ -7917,6 +8535,71 @@ namespace AgingTestSystem.Tests
             Check("连写两次文件名不同且都存在", twiceOk);
             try { if (p2 != null && File.Exists(p2)) File.Delete(p2); } catch { }
             try { if (p3 != null && File.Exists(p3)) File.Delete(p3); } catch { }
+        }
+
+        // 12k. MainFormIconV107 —— 任务栏窗口图标恒等于 exe 文件图标（V1.107 新增）
+        // （任务栏取的是 Form.Icon 不是 exe 嵌入图标；构造期 LoadTaskbarIcon 从文件提取。
+        // 反射直调静态 helper，不构造主窗（构造会连硬件），零 UI 零句柄。）
+        private static void MainFormIconTests()
+        {
+            MethodInfo miLoad = typeof(AgingTestSystem.Views.MainForm).GetMethod("LoadTaskbarIcon",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Check("取图标helper存在（私有静态，构造不直测连硬件）", miLoad != null);
+            if (miLoad == null) return;
+
+            // 产品程序集即 run 目录拷贝的中文 exe（图标与 bin 产物同源）
+            string productExe = typeof(AgingTestSystem.Views.MainForm).Assembly.Location;
+            Icon fromHelper = null;
+            bool noThrow = true;
+            try { fromHelper = miLoad.Invoke(null, new object[] { productExe }) as Icon; }
+            catch { noThrow = false; }
+            Check("显式传产品exe返回非空图标", noThrow && fromHelper != null);
+
+            // 同路径直接调 API 必须同尺寸：证明 helper 读的是文件图标，不是写死的旧资源
+            bool sameAsFile = false;
+            try
+            {
+                using (Icon direct = Icon.ExtractAssociatedIcon(productExe))
+                {
+                    sameAsFile = fromHelper != null && direct != null
+                        && fromHelper.Size == direct.Size
+                        && fromHelper.Width > 0 && fromHelper.Height > 0;
+                }
+            }
+            catch { sameAsFile = false; }
+            Check("helper结果与文件关联图标同尺寸（跟app.ico走）", sameAsFile);
+
+            // 反向：不存在的路径必须回 null（fail-safe），与"存在即有图标"形成区分
+            object badResult = new object();
+            bool badNoThrow = true;
+            try { badResult = miLoad.Invoke(null, new object[] { "Z:\\不存在\\假exe.exe" }); }
+            catch { badNoThrow = false; }
+            Check("不存在路径回null且不抛（拿不到图标不影响启动）", badNoThrow && badResult == null);
+
+            // 空串与 null 同路：回退自身 exe（"没给"=用自己的，与"给错"回null区分开）
+            bool emptyOk = false;
+            try
+            {
+                string selfExe2 = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                Icon emptyIcon = miLoad.Invoke(null, new object[] { "" }) as Icon;
+                Icon selfIcon = miLoad.Invoke(null, new object[] { selfExe2 }) as Icon;
+                emptyOk = emptyIcon != null && selfIcon != null && emptyIcon.Size == selfIcon.Size;
+            }
+            catch { emptyOk = false; }
+            Check("空路径与缺省同路（回退自身exe）", emptyOk);
+
+            // 缺省（null）回退到当前可执行文件：与显式传自身路径结果一致
+            bool fallbackOk = false;
+            try
+            {
+                string selfExe = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                Icon viaFallback = miLoad.Invoke(null, new object[] { null }) as Icon;
+                Icon viaExplicit = miLoad.Invoke(null, new object[] { selfExe }) as Icon;
+                fallbackOk = viaFallback != null && viaExplicit != null
+                    && viaFallback.Size == viaExplicit.Size;
+            }
+            catch { fallbackOk = false; }
+            Check("缺省回退自身exe（与显式传自身路径一致）", fallbackOk);
         }
 
     }

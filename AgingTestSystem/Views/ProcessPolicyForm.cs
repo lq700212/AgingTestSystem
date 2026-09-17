@@ -39,12 +39,15 @@ namespace AgingTestSystem.Views
     /// ├──────────────────────────────────────────────┴───────────────┤
     /// │ 状态条：项目名 | 选中节点 | 保存提示                           │
     /// └──────────────────────────────────────────────────────────────┘
-    /// 右栏顶部（标题46/下拉+按钮68/说明100）：下拉选 A/B/C/D
-    /// （或"自定义"回显），下拉改选左侧画布即时预览该预置（克隆+套值的副本，
+    /// 右栏顶部（标题46/下拉+按钮68/说明100/导入导出146）：下拉选 A/B/C/D
+    /// （或"自定义"回显：自定义是独立槽，初始内容=A 快照，改后各存各的），
+    /// 下拉改选左侧画布即时预览该选项（A/B/C/D＝克隆+套值的副本，自定义＝槽快照叠加，
     /// 只看不存不标脏）；"套用预置"一键整套生效（确认框列差异项 + 前置条件，
-    /// 走 PersistChanges 同一条保存路）。关窗时预览还没套用，弹 SunnyUI 确认框
-    /// 问要不要套用（确定=套用后关，取消=直接关；X 与关闭按钮同路）。只动 12 个行为开关（见 PolicyPresets），
-    /// MES/规则/报表/点位/时长阈值不动；只读模式整行禁用。
+    /// 走 PersistChanges 同一条保存路，选自定义即套用槽内容）。关窗时预览还没套用，
+    /// 弹 SunnyUI 确认框问要不要套用（确定=套用后关，取消=直接关；X 与关闭按钮同路）。
+    /// 套用只动 12 个行为开关＋真空超时（见 PolicyPresets），MES/规则/报表/点位/时长阈值不动；
+    /// "导出策略"可选 A/B/C/D/自定义任一源装包（全量策略 key，含自由文本），
+    /// "导入策略"一律进自定义槽并即时生效（A/B/C/D 覆盖不了）。只读模式套用/导入禁用，导出可用。
     /// 全部节点 Bool/Enum 下拉按预置下拉口径统一：
     /// 下拉列表按最长选项实测拉宽（SizeNodeCombo，最长 22 字项原来被截断）+
     /// 悬停看选中项全文（共享 _editorTip，切节点清表防钉住泄漏，随窗体释放）。
@@ -93,6 +96,19 @@ namespace AgingTestSystem.Views
         // RemoveAll() 清表（见该方法注释），窗体释放时这里 Dispose（见 Dispose 重写）。
         private ToolTip _editorTip;
 
+        // 窗体级预览引用（与画布 FlowCanvas._previewConfig 同源：UpdateCanvasPreview
+        // 里配对赋值，null＝看回真实。右栏编辑器一律读 EffectiveConfig（预览??真实），
+        // 与画布同一数据源——下拉切到哪，两边就一起看到哪，不再出现"画布 0ms、
+        // 右栏 15000ms"的两边打架）。
+        private DeviceConfig _previewConfig;
+        // 下拉上次选项（脏确认弹回用：下拉切换时有未保存修改且用户选取消，
+        // 下拉弹回此选项，画布/说明同步恢复，右栏没动过不用重建）。
+        private string _lastPresetId;
+        // 预览态标识（UpdatePresetDesc 里算好存下：右栏状态条直接读，不重复读槽文件。
+        // _previewPending＝下拉选项与真实探测不一致（看了没套用）；_previewTitle＝选项中文名）。
+        private bool _previewPending;
+        private string _previewTitle;
+
         /// <summary>本次会话保存过的 key（主窗体按需热生效，SettingsForm.SavedKeys 同款语义）</summary>
         public HashSet<string> SavedKeys { get; private set; }
 
@@ -133,6 +149,13 @@ namespace AgingTestSystem.Views
             this.Controls.Add(_canvas);
 
             SelectNode(null, false);
+            // 自定义槽就地初始化（首次打开按 A 快照建槽，自由文本取当前种子；
+            // 已有槽内容即直接返回，不覆盖。失败不拦开窗：回显按无槽走，保存/导入时再建）。
+            if (_config != null)
+            {
+                try { ProjectPolicyStore.EnsureCustomInitialized(_config); }
+                catch { /* 开窗不因建槽失败而拦人 */ }
+            }
             RefreshPresetRow();
         }
 
@@ -346,8 +369,10 @@ namespace AgingTestSystem.Views
                 // 无阀本机藏破空点位行：VentValveDoPoint 是"有阀才填"的通道号，
                 // 无阀时露出来只会诱导人填，填了也写不出去（保存校验+执行双拦）。
                 // 开关本身（VentValveEnabled）照常显示——开阀门的总闸不能藏。
+                // 显隐按有效配置判定（与本编辑器显示的值同源，预览态也对得上）。
+                DeviceConfig effForVent = EffectiveConfig();
                 if (string.Equals(key.Key, "VentValveDoPoint", StringComparison.Ordinal)
-                    && (_config == null || !_config.VentValveEnabled))
+                    && (effForVent == null || !effForVent.VentValveEnabled))
                 {
                     continue;
                 }
@@ -438,7 +463,8 @@ namespace AgingTestSystem.Views
                 };
                 _pnlEditors.Controls.Add(foot);
             }
-            UpdateStatus($"已选中【{def.Title}】，改完点“保存本节点”。");
+            UpdateStatus($"已选中【{def.Title}】，改完点“保存本节点”。" +
+                (_previewPending ? $"（当前为【{_previewTitle}】预览值，保存即写入）" : ""));
         }
 
         /// <summary>连线只读信息（条件在哪改指明，不让用户对着线发呆）。</summary>
@@ -462,11 +488,13 @@ namespace AgingTestSystem.Views
         private Control CreateEditor(string key, PolicyGraph.EditorKind kind)
         {
             string current = GetConfigString(key);
+            // 布尔下拉显示中文（关闭/开启），存英文值（false/true，与设置表/落盘口径一致）：
+            // 现场看 true/false 看不懂，显示与存储分离（FlowOpt.Display/Value，读存只认 Value）。
             if (kind == PolicyGraph.EditorKind.Bool)
             {
                 var cmb = new Sunny.UI.UIComboBox { DropDownStyle = Sunny.UI.UIDropDownStyle.DropDownList };
-                cmb.Items.Add(new FlowOpt("false", "false"));
-                cmb.Items.Add(new FlowOpt("true", "true"));
+                cmb.Items.Add(new FlowOpt("关闭", "false"));
+                cmb.Items.Add(new FlowOpt("开启", "true"));
                 SelectOpt(cmb, current.Equals("true", StringComparison.OrdinalIgnoreCase) ? "true" : "false");
                 cmb.SelectedIndexChanged += (s, e) => OnNodeComboChanged(s);
                 return cmb;
@@ -592,20 +620,28 @@ namespace AgingTestSystem.Views
             return current ?? "";
         }
 
-        /// <summary>读内存配置字符串（枚举存英文名，布尔小写，与保存口径一致）。</summary>
+        /// <summary>读有效配置字符串（右栏与画布同源：有预览看预览，平时即真实）。</summary>
         private string GetConfigString(string key)
         {
             try
             {
                 var prop = typeof(DeviceConfig).GetProperty(key);
                 if (prop == null) return "";
-                object v = prop.GetValue(_config, null);
+                object v = prop.GetValue(EffectiveConfig(), null);
                 if (v == null) return "";
                 if (v is bool) return ((bool)v) ? "true" : "false";
                 return v.ToString();
             }
             catch { return ""; }
         }
+
+        /// <summary>
+        /// 右栏/画布统一数据源：有预览看预览（下拉切到哪看到哪），平时即真实 _config。
+        /// 【为什么右栏也要看预览】画布一直是这个口径，右栏以前只看真实，
+        /// 下拉一切两边就打架（画布 0ms、右栏 15000ms）。统一后两边永远同源；
+        /// 预览是只读副本，右栏改了点保存即把该节点的值写入真实（所见即所得）。
+        /// </summary>
+        private DeviceConfig EffectiveConfig() { return _previewConfig ?? _config; }
 
         private void BtnSaveNode_Click(object sender, EventArgs e)
         {
@@ -648,7 +684,8 @@ namespace AgingTestSystem.Views
 
         /// <summary>
         /// 保存当前节点：逐项 ValidateValue → 统一 PersistChanges（与系统设置同一条路：
-        /// 组合校验 + 分流写文件 + 热回写全在里面）。
+        /// 组合校验 + 分流写文件 + 热回写全在里面）→ 预置行重探测回显。
+        /// 右栏编辑器显示的是有效配置（预览??真实），保存即把该节点值写入真实。
         /// </summary>
         /// <returns>true=保存成功（或无节点），false=被拦截（留在本节点）</returns>
         private bool SaveCurrentNode()
@@ -690,14 +727,26 @@ namespace AgingTestSystem.Views
 
             foreach (string k in presult.SavedKeys) SavedKeys.Add(k);
             _dirty = false;
-            // 破空阀总闸翻转后刷新右栏：VentValveDoPoint 行的显隐是按
-            // _config.VentValveEnabled 即时判定的（见 RebuildEditors），刚保存完
-            // 内存已热回写，这里重建一次右栏，点位行当场出现/消失，不用切节点才看到。
-            if (presult.SavedKeys.Contains("VentValveEnabled")) RebuildEditors();
+            // 存成自定义即同步槽：当前已不是 A/B/C/D 任一套，说明用户在改自定义，
+            // 把现值全量存进自定义槽（各存各的：A/B/C/D 是代码写死的不动）。
+            // 套用 A/B/C/D 后探测仍是该预置，不进槽，槽里还是上次的自定义。
+            try
+            {
+                if (PolicyPresets.DetectPreset(_config) == PolicyPresets.CustomId)
+                {
+                    ProjectPolicyStore.SaveCustom(ProjectPolicyStore.ToPolicyDict(_config));
+                }
+            }
+            catch { /* 槽同步失败不拦主保存，下次保存再试 */ }
+            // 真实配置变了：预置行按新真实重探测回显（下拉跟到新探测＋预览同步重造）。
+            // 不刷这一行，下拉还停在旧选项，画布按旧选项整幅预览，看起来就像
+            // "保存一个节点把所有节点都覆盖了"——这正是右栏不动、画布全跳变的根因。
+            RefreshPresetRow();
             if (_canvas != null) _canvas.RefreshCounts();
-            // 真实配置变了：预览是按旧真实造的副本，已过期，按新真实重造
-            // （只重造画布看到的副本，下拉选项不动，不干扰用户的预览选择）。
-            UpdateCanvasPreview();
+            // 破空阀总闸翻转后刷新右栏：VentValveDoPoint 行的显隐是按有效配置
+            // 即时判定的（见 RebuildEditors），放 RefreshPresetRow 之后重建，
+            // 右栏按新预览/真实显隐，点位行当场出现/消失，不用切节点才看到。
+            if (presult.SavedKeys.Contains("VentValveEnabled")) RebuildEditors();
             string msg = "已保存并即时生效。";
             if (presult.StructuralChanged.Count > 0) msg += "（含重启生效项）";
             if (presult.SecretFallbackPlain) msg += "（注：密钥加密失败，已明文保存）";
@@ -744,7 +793,7 @@ namespace AgingTestSystem.Views
                 {
                     _cboPreset.Items.Add(new FlowOpt(p.Title, p.Id));
                 }
-                _cboPreset.Items.Add(new FlowOpt("自定义（当前配置）", PolicyPresets.CustomId));
+                _cboPreset.Items.Add(new FlowOpt(PolicyPresets.CustomTitle, PolicyPresets.CustomId));
             }
             if (_presetTip == null)
             {
@@ -753,10 +802,46 @@ namespace AgingTestSystem.Views
             RefreshPresetRow();
         }
 
-        /// <summary>下拉改选：换说明文字＋左侧画布即时预览该预置（只看不存，真干活只认"套用预置"按钮）。</summary>
+        /// <summary>
+        /// 下拉改选：换说明文字＋左侧画布即时预览该预置（只看不存，真干活只认"套用预置"按钮）
+        /// ＋右侧选中节点的编辑器按新预览值重建（左右两边看同一份数据）。
+        /// 右栏有未保存修改时先问（与切节点同规矩）：取消＝下拉弹回旧选项，
+        /// 画布/说明同步恢复，右栏没动过不用重建。
+        /// </summary>
         private void PresetComboChanged(object sender, EventArgs e)
         {
             if (_presetRefreshing) return;
+            string newId = SelectedPresetId(_cboPreset);
+            if (_dirty && !string.IsNullOrEmpty(_selectedId) && _editorControls.Count > 0)
+            {
+                DialogResult r = MessageBox.Show(this,
+                    "当前节点有未保存的修改，切换预览前保存吗？\n\n【是】保存后切换\n【否】丢弃后切换\n【取消】留在当前预览",
+                    "提示", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                if (r == DialogResult.Cancel)
+                {
+                    RevertPresetCombo();
+                    return;
+                }
+                if (r == DialogResult.Yes && !SaveCurrentNode())
+                {
+                    // 保存被拦（校验不合法）：留在旧预览，右栏不动
+                    RevertPresetCombo();
+                    return;
+                }
+                _dirty = false;
+            }
+            _lastPresetId = newId;
+            UpdatePresetDesc();
+            // 右栏跟随预览：选中节点时按新有效配置重建（无选中/连线只读态不用动）
+            if (!string.IsNullOrEmpty(_selectedId)) RebuildEditors();
+        }
+
+        /// <summary>下拉弹回上次选项（脏确认取消/保存被拦时：画布/说明同步恢复）。</summary>
+        private void RevertPresetCombo()
+        {
+            _presetRefreshing = true;
+            try { SelectPresetOpt(_cboPreset, _lastPresetId); }
+            finally { _presetRefreshing = false; }
             UpdatePresetDesc();
         }
 
@@ -773,10 +858,15 @@ namespace AgingTestSystem.Views
                 SelectPresetOpt(_cboPreset, PolicyPresets.DetectPreset(_config));
             }
             finally { _presetRefreshing = false; }
+            // 程序回显不走事件，手动同步上次选项（脏确认弹回认它）
+            _lastPresetId = SelectedPresetId(_cboPreset);
             UpdatePresetDesc();
             bool editable = _canEdit && _config != null;
             _cboPreset.Enabled = editable;
             _btnApplyPreset.Enabled = editable;
+            // 导出是只读操作（看得见就能带走），有配置即可；导入会写文件，只认管理员
+            if (_btnExport != null && !_btnExport.IsDisposed) _btnExport.Enabled = _config != null;
+            if (_btnImport != null && !_btnImport.IsDisposed) _btnImport.Enabled = editable;
         }
 
         private static void SelectPresetOpt(Sunny.UI.UIComboBox cmb, string id)
@@ -811,10 +901,20 @@ namespace AgingTestSystem.Views
             if (_lblPresetDesc == null || _lblPresetDesc.IsDisposed) return;
             string id = SelectedPresetId(_cboPreset);
             PolicyPresets.PolicyPresetDef def = PolicyPresets.Find(id);
+            // 自定义说明按槽状态动态切：槽没改过（还是 A 快照）即"与A一致"，
+            // 改过才显示差异文案（描述的是槽内容，不是当前配置，见 IsCustomPristine）。
+            Dictionary<string, string> customSlot = null;
+            if (def == null)
+            {
+                try { customSlot = ProjectPolicyStore.LoadCustom(); }
+                catch { customSlot = null; }
+            }
+            bool customPristine = def == null && PolicyPresets.IsCustomPristine(customSlot);
             _lblPresetDesc.Text = def != null
                 ? def.Scenario
-                : "当前配置与A/B/C/D都不完全一致（手动微调过），可重选一套覆盖。";
-            // 悬停提示同步（_cboPreset 闭合显示被截断时，悬停看全文）
+                : (customPristine ? PolicyPresets.CustomScenarioDefault : PolicyPresets.CustomScenario);
+            // 悬停提示同步（_cboPreset 闭合显示被截断时，悬停看全文；
+            // 自定义文案与说明行同源，只叫“自定义”不带括号，见 PolicyPresets.CustomTip）
             try
             {
                 if (_presetTip != null && _cboPreset != null && !_cboPreset.IsDisposed)
@@ -823,9 +923,7 @@ namespace AgingTestSystem.Views
                         ? def.Title + "\r\n\r\n" + def.Scenario + "\r\n\r\n" + def.HowToSwitch
                             + (string.IsNullOrWhiteSpace(def.Requires)
                                 ? "" : "\r\n\r\n前置条件：" + def.Requires)
-                        : "自定义（当前配置）\r\n\r\n"
-                            + "当前 12 个行为开关与A/B/C/D都不完全一致（手动微调过），"
-                            + "下拉重选一套并点“套用预置”可整体覆盖。";
+                        : (customPristine ? PolicyPresets.CustomTipDefault : PolicyPresets.CustomTip);
                     _presetTip.SetToolTip(_cboPreset, tip);
                 }
             }
@@ -838,10 +936,10 @@ namespace AgingTestSystem.Views
         /// 下拉即预览：按下拉当前选项给画布换"预览配置"（只换画布看到的值，
         /// 不碰真实 _config、不标脏、不写文件）。
         /// 选 A/B/C/D 任一项＝把当前真实配置克隆一份、套上该预置的全部落盘值
-        /// （含 D 的超时 0），画布即时重画，所见即"真套用后"的样子；
-        /// 选"自定义"＝清预览（画布看回真实配置）。
+        /// （含 A 的超时 0），画布即时重画，所见即"真套用后"的样子；
+        /// 选"自定义"＝克隆＋叠加自定义槽快照（槽空即清预览看回真实）。
         /// 【为什么是克隆+套用而不是直接读预置值】画布要的是"完整配置"
-        /// （12 开关＋超时＋阈值/时长等不动项），预置只有 12 开关＋数值项；
+        /// （14 开关＋超时＋阈值/时长等不动项），预置只有 14 开关＋数值项；
         /// 克隆保证不动项与当前一致，预览与真套用后的画面一字不差。
         /// 【只读承诺】预览是单独 new 出来的副本，画布只读它；右栏编辑器/保存
         /// 仍读真实 _config，切下拉不产生待保存项（_dirty 不动），点"套用预置"才真写。
@@ -849,23 +947,72 @@ namespace AgingTestSystem.Views
         private void UpdateCanvasPreview()
         {
             if (_canvas == null || _canvas.IsDisposed) return;
-            if (_config == null) { _canvas.SetPreviewConfig(null); return; }
+            // 窗体级预览引用与画布配对（右栏 EffectiveConfig 与画布同源，见字段注释）；
+            // 预览态标识顺手算好（右栏状态条直接读，不重复读槽文件）。
+            if (_config == null)
+            {
+                _previewConfig = null;
+                _previewPending = false;
+                _previewTitle = "";
+                _canvas.SetPreviewConfig(null);
+                return;
+            }
             string id = SelectedPresetId(_cboPreset);
-            _canvas.SetPreviewConfig(BuildPreviewConfig(_config, id));
+            Dictionary<string, string> custom = null;
+            if (string.Equals(id, PolicyPresets.CustomId, StringComparison.OrdinalIgnoreCase))
+            {
+                try { custom = ProjectPolicyStore.LoadCustom(); }
+                catch { custom = null; }
+            }
+            _previewConfig = BuildPreviewConfig(_config, id, custom);
+            _canvas.SetPreviewConfig(_previewConfig);
+            _previewPending = IsPreviewPending(_config, id, custom);
+            PolicyPresets.PolicyPresetDef pvDef = PolicyPresets.Find(id);
+            _previewTitle = pvDef != null ? pvDef.Title
+                : (string.Equals(id, PolicyPresets.CustomId, StringComparison.OrdinalIgnoreCase)
+                    ? PolicyPresets.CustomTitle : (id ?? ""));
         }
 
-        /// <summary>按预置 id 造预览配置（纯函数：克隆现配置＋套预置值；
-        /// 非预置 id（自定义）/失败返回 null＝画布看真实）。</summary>
+        /// <summary>按预置 id 造预览配置（旧两参口：自定义回 null＝看真实；新逻辑走三参口）。</summary>
         private static DeviceConfig BuildPreviewConfig(DeviceConfig current, string presetId)
+        {
+            return BuildPreviewConfig(current, presetId, null);
+        }
+
+        /// <summary>按选项造预览配置（纯函数：A/B/C/D＝克隆现配置＋套预置值；
+        /// 自定义＝克隆＋叠加槽快照，槽空/未知 id/失败返回 null＝画布看真实）。</summary>
+        private static DeviceConfig BuildPreviewConfig(
+            DeviceConfig current, string presetId, Dictionary<string, string> customSnapshot)
         {
             try
             {
                 if (current == null) return null;
+                if (string.Equals(presetId, PolicyPresets.CustomId, StringComparison.OrdinalIgnoreCase))
+                {
+                    Dictionary<string, string> snap =
+                        ProjectPolicyStore.FilterToPolicyKeys(customSnapshot);
+                    if (snap.Count == 0) return null;
+                    var preview = new DeviceConfig();
+                    preview.CopyFrom(current);
+                    foreach (var kv in snap)
+                    {
+                        try
+                        {
+                            var prop = typeof(DeviceConfig).GetProperty(kv.Key);
+                            if (prop == null || !prop.CanWrite) continue;
+                            object converted = ProjectPolicyStore.ParseValue(prop.PropertyType, kv.Value);
+                            if (converted == null) continue;   // 槽里脏项预览时跳过（保存/导入时已拦）
+                            prop.SetValue(preview, converted, null);
+                        }
+                        catch { /* 单项失败跳过，不拦整幅预览 */ }
+                    }
+                    return preview;
+                }
                 if (PolicyPresets.Find(presetId) == null) return null;
-                var preview = new DeviceConfig();
-                preview.CopyFrom(current);
-                if (PolicyPresets.ApplyToConfig(preview, presetId) != null) return null;
-                return preview;
+                var previewPreset = new DeviceConfig();
+                previewPreset.CopyFrom(current);
+                if (PolicyPresets.ApplyToConfig(previewPreset, presetId) != null) return null;
+                return previewPreset;
             }
             catch { return null; }
         }
@@ -888,10 +1035,16 @@ namespace AgingTestSystem.Views
         {
             if (!_canEdit || _config == null) return;
             string id = SelectedPresetId(_cboPreset);
+            // 下拉停在自定义＝套用自定义槽（槽里是上次存的自定义，各存各的，A/B/C/D 不动）
+            if (string.Equals(id, PolicyPresets.CustomId, StringComparison.OrdinalIgnoreCase))
+            {
+                ApplyCustomWithConfirm();
+                return;
+            }
             PolicyPresets.PolicyPresetDef def = PolicyPresets.Find(id);
             if (def == null)
             {
-                MessageBox.Show(this, "请先在下拉里选预置A、B、C 或 D，再点套用。",
+                MessageBox.Show(this, "请先在下拉里选预置A、B、C、D 或自定义，再点套用。",
                     "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
@@ -968,6 +1121,119 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
+        /// 套用自定义槽（下拉停在"自定义"时点套用：脏先问存 → 列差异确认 →
+        /// PersistChanges 同一条保存路 → 刷新右栏编辑器 + 画布 + 预置回显）。
+        /// 【与套用 A/B/C/D 的区别】差异范围是槽快照的全部策略 key（含 MES/规则/报表
+        /// 自由文本）；A/B/C/D 是代码写死的谁也改不了，自定义槽是上次存的自定义。
+        /// </summary>
+        private void ApplyCustomWithConfirm()
+        {
+            if (!_canEdit || _config == null) return;
+            // 脏先问存（与套用预置同规矩：是=先存本节点，否=丢弃，取消=不套用）
+            if (_dirty)
+            {
+                DialogResult r = MessageBox.Show(this,
+                    "当前节点有未保存的修改，套用自定义前保存吗？\n\n【是】保存后套用\n【否】丢弃后套用\n【取消】不套用",
+                    "提示", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                if (r == DialogResult.Cancel) return;
+                if (r == DialogResult.Yes && !SaveCurrentNode()) return;
+                _dirty = false;
+            }
+            Dictionary<string, string> custom;
+            try { custom = ProjectPolicyStore.LoadCustom(); }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "读取自定义槽失败：" + ex.Message,
+                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            if (custom == null || custom.Count == 0)
+            {
+                MessageBox.Show(this, "自定义槽为空（尚未存过自定义），无需套用。",
+                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            // 差异预览：只列"真的会变"的项（中文名＋现值→槽值，一次看全）
+            var diffLines = new List<string>();
+            foreach (var kv in custom)
+            {
+                string cur = GetConfigString(kv.Key);
+                if (string.Equals(cur != null ? cur.Trim() : "",
+                    kv.Value != null ? kv.Value.Trim() : "", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                string label;
+                if (!PolicyPresets.KeyLabels.TryGetValue(kv.Key, out label)) label = kv.Key;
+                diffLines.Add("【" + label + "】 " + cur + " → " + kv.Value);
+            }
+            if (diffLines.Count == 0)
+            {
+                MessageBox.Show(this, "当前已是【自定义】槽的内容，无需套用。",
+                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            string confirm = "套用【自定义】？\r\n\r\n" + PolicyPresets.CustomScenario + "\r\n"
+                + "\r\n将修改 " + diffLines.Count + " 项：\r\n"
+                + string.Join("\r\n", diffLines.ToArray())
+                + "\r\n\r\n只写自定义槽的内容，A/B/C/D 预置不动。";
+            if (MessageBox.Show(this, confirm, "套用自定义",
+                MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK)
+            {
+                return;
+            }
+            if (!ApplyCustomDirect(custom)) return;
+            string msg = "已套用【自定义】并即时生效。";
+            UpdateStatus(msg);
+            MessageBox.Show(this, msg, "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        /// <summary>
+        /// 执行自定义套用：逐项校验 → 同一条保存路（组合校验 + 分流写文件 + 热回写）→
+        /// 刷新（右栏重建＋画布＋预置回显）。
+        /// 调用前必须已确认（套用按钮的差异框 / 关窗前的预览确认二选一），这里不再二次确认。
+        /// </summary>
+        /// <returns>true=套用成功，false=被拦（原因已中文明示，留在窗内）</returns>
+        private bool ApplyCustomDirect(Dictionary<string, string> customValues)
+        {
+            if (customValues == null || customValues.Count == 0) return true;
+            // 逐项校验（槽内容理论上全合法；真被拦多半是手改槽文件写坏了，报出来修文件）
+            var invalid = new List<string>();
+            foreach (var kv in customValues)
+            {
+                string error;
+                if (!Dialogs.SettingsForm.ValidateValue(kv.Key, kv.Value, out error))
+                {
+                    invalid.Add("【" + kv.Key + "】 " + kv.Value + "  →  " + error);
+                }
+            }
+            if (invalid.Count > 0)
+            {
+                MessageBox.Show(this, "自定义槽里有不合法的值，套用已停止：\r\n\r\n" +
+                    string.Join("\r\n", invalid.ToArray()),
+                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
+            Dialogs.SettingsForm.PersistResult presult;
+            string perror;
+            if (!Dialogs.SettingsForm.PersistChanges(_config,
+                new Dictionary<string, string>(customValues, StringComparer.Ordinal),
+                out presult, out perror))
+            {
+                MessageBox.Show(this, perror, "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
+            foreach (string k in presult.SavedKeys) SavedKeys.Add(k);
+            _dirty = false;
+            // 先预置行（下拉重探测＋预览同步到新真实），再重建右栏：
+            // 右栏看有效配置，顺序反了会按旧预览建，显示过期值。
+            RefreshPresetRow();
+            RebuildEditors();
+            if (_canvas != null) _canvas.RefreshCounts();
+            return true;
+        }
+
+        /// <summary>
         /// 执行套用：逐项校验 → 同一条保存路（组合校验 + 分流写文件 + 热回写）→
         /// 刷新（右栏重建＋画布＋预置回显）。
         /// 调用前必须已确认（套用按钮的差异框 / 关闭时的预览确认二选一），这里不再二次确认。
@@ -1004,17 +1270,247 @@ namespace AgingTestSystem.Views
             }
             foreach (string k in presult.SavedKeys) SavedKeys.Add(k);
             _dirty = false;
-            // 内存已热回写：当前节点编辑器重建回显新值（不重建会显示旧值，误导人）
+            // 预置回显先行：下拉落到套用后的预置＋预览同步到新真实，
+            // 再重建右栏回显新值（右栏看有效配置，顺序反了会按旧预览建）。
+            RefreshPresetRow();
             RebuildEditors();
             if (_canvas != null) _canvas.RefreshCounts();
-            // 预置回显：下拉落到套用后的预置（与选择一致），说明＋画布预览同步重造
-            RefreshPresetRow();
             return true;
         }
 
         /// <summary>
-        /// 预览未套用即关：下拉停在"与现状不一致的预置"上，说明用户看中了它却没点套用，
-        /// 直接关会丢意图——弹 SunnyUI 确认框问一嘴（确定=套用后关闭，取消=不套用直接关闭）。
+        /// 导入工艺策略（只进自定义槽：脏先问存 → 选文件 → 解析过滤 → 逐项校验 →
+        /// SunnyUI 确认框明示"只进自定义" → PersistChanges 同一条保存路 → 写槽 → 刷新）。
+        /// 【为什么只进自定义】A/B/C/D 是代码写死的预置，没有"覆盖预置"这个概念；
+        /// 跨工控机搬配置的落点永远是自定义槽，预置在任何机器上都同一套。
+        /// </summary>
+        private void BtnImport_Click(object sender, EventArgs e)
+        {
+            ImportPolicy();
+        }
+
+        private void ImportPolicy()
+        {
+            if (!_canEdit || _config == null) return;
+            // 脏先问存（与套用同规矩：是=先存本节点，否=丢弃，取消=不导入）
+            if (_dirty)
+            {
+                DialogResult r = MessageBox.Show(this,
+                    "当前节点有未保存的修改，导入前保存吗？\n\n【是】保存后导入\n【否】丢弃后导入\n【取消】不导入",
+                    "提示", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                if (r == DialogResult.Cancel) return;
+                if (r == DialogResult.Yes && !SaveCurrentNode()) return;
+                _dirty = false;
+            }
+            string path;
+            using (var dlg = new OpenFileDialog())
+            {
+                dlg.Title = "导入工艺策略（只进自定义槽）";
+                dlg.Filter = "策略文件(*.json)|*.json|全部文件(*.*)|*.*";
+                dlg.CheckFileExists = true;
+                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                path = dlg.FileName;
+            }
+            Dictionary<string, string> values;
+            string readError;
+            if (!ProjectPolicyStore.ReadImportFile(path, out values, out readError))
+            {
+                MessageBox.Show(this, readError, "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            // 逐项校验（文件是手传过来的，脏值在这里拦，不带病写入）
+            var invalid = new List<string>();
+            foreach (var kv in values)
+            {
+                string error;
+                if (!Dialogs.SettingsForm.ValidateValue(kv.Key, kv.Value, out error))
+                {
+                    invalid.Add("【" + kv.Key + "】 " + kv.Value + "  →  " + error);
+                }
+            }
+            if (invalid.Count > 0)
+            {
+                MessageBox.Show(this, "文件里有不合法的策略值，导入已停止：\r\n\r\n" +
+                    string.Join("\r\n", invalid.ToArray()),
+                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            // SunnyUI 确认框：明示落点是自定义槽（防误以为覆盖了预置）
+            bool ok;
+            try
+            {
+                ok = Sunny.UI.UIMessageBox.Show(
+                    "从文件导入工艺策略（共 " + values.Count + " 项）？\r\n\r\n文件：" + path
+                    + "\r\n\r\n配置将导入到【自定义】并即时生效，"
+                    + "A/B/C/D 预置不受影响。",
+                    "导入到自定义？", Sunny.UI.UIStyle.Blue,
+                    Sunny.UI.UIMessageBoxButtons.OKCancel, false, 0);
+            }
+            catch { ok = false; }   // 弹框失败按"不导入"处理，绝不带病写入
+            if (!ok) return;
+            // 同一条保存路：组合校验＋分流写文件＋热回写全在里面
+            Dialogs.SettingsForm.PersistResult presult;
+            string perror;
+            if (!Dialogs.SettingsForm.PersistChanges(_config,
+                new Dictionary<string, string>(values, StringComparer.Ordinal),
+                out presult, out perror))
+            {
+                MessageBox.Show(this, perror, "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            foreach (string k in presult.SavedKeys) SavedKeys.Add(k);
+            try { ProjectPolicyStore.SaveCustom(values); }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "配置已生效，但自定义槽保存失败"
+                    + "（下次打开自定义可能不是这次的内容）：" + ex.Message,
+                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            _dirty = false;
+            // 先预置行（下拉重探测＋预览同步到新真实），再重建右栏
+            // （右栏看有效配置，顺序反了会按旧预览建）。
+            RefreshPresetRow();
+            RebuildEditors();
+            if (_canvas != null) _canvas.RefreshCounts();
+            string msg = "已导入到【自定义】并即时生效（共 " + values.Count + " 项）。";
+            UpdateStatus(msg);
+            MessageBox.Show(this, msg, "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        /// <summary>
+        /// 导出工艺策略（先选源 A/B/C/D/自定义 → 存文件；只读模式也可导，看得见就能带走）。
+        /// 文件装"全部跟项目策略 key"（含 MES 映射/规则/报表自由文本），
+        /// 在另一台工控机上用"导入策略"载入（落点永远是自定义槽）。
+        /// </summary>
+        private void BtnExport_Click(object sender, EventArgs e)
+        {
+            ExportPolicy();
+        }
+
+        private void ExportPolicy()
+        {
+            if (_config == null) return;
+            string source = ShowExportSourceDialog(SelectedPresetId(_cboPreset));
+            if (string.IsNullOrEmpty(source)) return;   // 用户取消
+            Dictionary<string, string> custom = null;
+            try { custom = ProjectPolicyStore.LoadCustom(); }
+            catch { custom = null; }
+            Dictionary<string, string> payload =
+                PolicyPresets.BuildExportValues(source, _config, custom);
+            if (payload == null || payload.Count == 0)
+            {
+                MessageBox.Show(this, "没有可导出的策略内容。",
+                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            bool isCustom = string.Equals(source, PolicyPresets.CustomId,
+                StringComparison.OrdinalIgnoreCase);
+            PolicyPresets.PolicyPresetDef srcDef = PolicyPresets.Find(source);
+            string sourceTitle = isCustom ? PolicyPresets.CustomTitle
+                : (srcDef != null ? srcDef.Title : source);
+            string path;
+            using (var dlg = new SaveFileDialog())
+            {
+                dlg.Title = "导出工艺策略【" + sourceTitle + "】";
+                dlg.Filter = "策略文件(*.json)|*.json|全部文件(*.*)|*.*";
+                dlg.FileName = "工艺策略-" + (isCustom ? "自定义" : source) + ".json";
+                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                path = dlg.FileName;
+            }
+            try { ProjectPolicyStore.WriteExportFile(path, payload); }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "导出失败：" + ex.Message,
+                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            UpdateStatus("已导出【" + sourceTitle + "】。");
+            MessageBox.Show(this,
+                "已导出【" + sourceTitle + "】（共 " + payload.Count + " 项）到：\r\n" + path
+                + "\r\n\r\n在另一台工控机上用“导入策略”载入（只进自定义槽）。",
+                "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        /// <summary>
+        /// 导出源选择框（小模态窗：下拉选 A/B/C/D/自定义，缺省停在当前预置行选项）。
+        /// </summary>
+        /// <returns>源 Id（A/B/C/D/Custom）；取消/关闭返回 null</returns>
+        private string ShowExportSourceDialog(string defaultId)
+        {
+            string picked = null;
+            using (var dlg = new Form())
+            {
+                dlg.Text = "导出哪个配置？";
+                dlg.StartPosition = FormStartPosition.CenterParent;
+                dlg.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dlg.MaximizeBox = false;
+                dlg.MinimizeBox = false;
+                dlg.ShowInTaskbar = false;
+                dlg.ClientSize = new Size(360, 130);
+                var lbl = new Label
+                {
+                    Location = new Point(12, 12),
+                    Size = new Size(336, 20),
+                    Text = "选择要导出的配置（文件含全部策略项，可跨机导入）："
+                };
+                var cmb = new ComboBox
+                {
+                    Location = new Point(12, 38),
+                    Size = new Size(336, 24),
+                    DropDownStyle = ComboBoxStyle.DropDownList
+                };
+                var displayToId = new Dictionary<string, string>();
+                foreach (PolicyPresets.PolicyPresetDef p in PolicyPresets.All)
+                {
+                    cmb.Items.Add(p.Title);
+                    displayToId[p.Title] = p.Id;
+                }
+                cmb.Items.Add(PolicyPresets.CustomTitle);
+                displayToId[PolicyPresets.CustomTitle] = PolicyPresets.CustomId;
+                // 缺省停在当前预置行选项（对不上就停自定义）
+                int defIdx = cmb.Items.Count - 1;
+                foreach (var kv in displayToId)
+                {
+                    if (string.Equals(kv.Value, defaultId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        defIdx = cmb.Items.IndexOf(kv.Key);
+                        break;
+                    }
+                }
+                cmb.SelectedIndex = defIdx >= 0 ? defIdx : cmb.Items.Count - 1;
+                var btnOk = new Button
+                {
+                    Location = new Point(178, 80),
+                    Size = new Size(80, 28),
+                    Text = "导出",
+                    DialogResult = DialogResult.OK
+                };
+                var btnCancel = new Button
+                {
+                    Location = new Point(268, 80),
+                    Size = new Size(80, 28),
+                    Text = "取消",
+                    DialogResult = DialogResult.Cancel
+                };
+                dlg.Controls.Add(lbl);
+                dlg.Controls.Add(cmb);
+                dlg.Controls.Add(btnOk);
+                dlg.Controls.Add(btnCancel);
+                dlg.AcceptButton = btnOk;
+                dlg.CancelButton = btnCancel;
+                try { ThemeManager.ApplyTo(dlg); }
+                catch { /* 换肤失败不拦导出 */ }
+                if (dlg.ShowDialog(this) != DialogResult.OK) return null;
+                object sel = cmb.SelectedItem;
+                if (sel != null) displayToId.TryGetValue(sel.ToString(), out picked);
+            }
+            return picked;
+        }
+
+        /// <summary>
+        /// 预览未套用即关：下拉停在"与现状不一致的选项"上（A/B/C/D 任一预置或自定义槽），
+        /// 说明用户看中了它却没点套用，直接关会丢意图——弹 SunnyUI 确认框问一嘴
+        /// （确定=套用后关闭，取消=不套用直接关闭）。
         /// </summary>
         /// <returns>true=继续关闭，false=留在窗内（用户取消了脏保存 / 套用被拦）</returns>
         private bool ConfirmPreviewOnClose()
@@ -1023,7 +1519,13 @@ namespace AgingTestSystem.Views
             {
                 if (_config == null || !_shownOnce || IsDisposed || Disposing) return true;
                 string selected = SelectedPresetId(_cboPreset);
-                if (!IsPreviewPending(_config, selected)) return true;
+                Dictionary<string, string> custom = null;
+                if (string.Equals(selected, PolicyPresets.CustomId, StringComparison.OrdinalIgnoreCase))
+                {
+                    try { custom = ProjectPolicyStore.LoadCustom(); }
+                    catch { custom = null; }
+                }
+                if (!IsPreviewPending(_config, selected, custom)) return true;
                 bool ok;
                 try
                 {
@@ -1044,20 +1546,57 @@ namespace AgingTestSystem.Views
                     _dirty = false;
                 }
                 // 关闭前的确认即授权，直接执行套用（不再弹差异框）；被拦则留在窗内看原因
+                if (string.Equals(selected, PolicyPresets.CustomId, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (custom == null) return true;   // 槽空=与现状无差，直接关
+                    return ApplyCustomDirect(custom);
+                }
                 return ApplyPresetValues(selected);
             }
             catch { return true; }  // 关闭路径绝不抛异常拦人
         }
 
-        /// <summary>有没有"看了没套用"的预览（纯函数：选中是真预置、且与现状探测不一致）。</summary>
+        /// <summary>有没有"看了没套用"的预览（旧两参口：只认 A/B/C/D；自定义走三参口）。</summary>
         private static bool IsPreviewPending(DeviceConfig config, string selectedId)
+        {
+            return IsPreviewPending(config, selectedId, null);
+        }
+
+        /// <summary>
+        /// 有没有"看了没套用"的预览（纯函数：A/B/C/D＝选中与现状探测不一致；
+        /// 自定义＝槽快照与现状有差异，槽空即无预览；未知选中一律无预览）。
+        /// </summary>
+        private static bool IsPreviewPending(
+            DeviceConfig config, string selectedId, Dictionary<string, string> customSnapshot)
         {
             try
             {
                 if (config == null) return false;
-                if (PolicyPresets.Find(selectedId) == null) return false;  // 自定义/未知：没有"预览"
-                return !string.Equals(PolicyPresets.DetectPreset(config),
-                    selectedId, StringComparison.OrdinalIgnoreCase);
+                if (PolicyPresets.Find(selectedId) != null)
+                {
+                    return !string.Equals(PolicyPresets.DetectPreset(config),
+                        selectedId, StringComparison.OrdinalIgnoreCase);
+                }
+                if (string.Equals(selectedId, PolicyPresets.CustomId, StringComparison.OrdinalIgnoreCase))
+                {
+                    Dictionary<string, string> snap =
+                        ProjectPolicyStore.FilterToPolicyKeys(customSnapshot);
+                    if (snap.Count == 0) return false;
+                    Dictionary<string, string> cur = ProjectPolicyStore.ToPolicyDict(config);
+                    foreach (var kv in snap)
+                    {
+                        string now;
+                        if (!cur.TryGetValue(kv.Key, out now)) now = "";
+                        if (!string.Equals(now != null ? now.Trim() : "",
+                            kv.Value != null ? kv.Value.Trim() : "",
+                            StringComparison.OrdinalIgnoreCase))
+                        {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+                return false;   // 未知选中：没有"预览"
             }
             catch { return false; }
         }
@@ -1066,9 +1605,11 @@ namespace AgingTestSystem.Views
         private static string BuildPreviewClosePrompt(string selectedId)
         {
             PolicyPresets.PolicyPresetDef def = PolicyPresets.Find(selectedId);
-            string title = def != null ? def.Title : (selectedId ?? "");
+            string title = def != null ? def.Title
+                : (string.Equals(selectedId, PolicyPresets.CustomId, StringComparison.OrdinalIgnoreCase)
+                    ? PolicyPresets.CustomTitle : (selectedId ?? ""));
             return "当前正在预览【" + title + "】，尚未套用。\r\n\r\n"
-                + "【确定】套用该预置后关闭\r\n【取消】不套用，直接关闭";
+                + "【确定】套用该配置后关闭\r\n【取消】不套用，直接关闭";
         }
 
         /// <summary>
@@ -1081,7 +1622,7 @@ namespace AgingTestSystem.Views
             private readonly DeviceManager _deviceManager;
 
             // 预览配置（下拉即预览用：非 null 时画布只读它，真实 _config 纹丝不动；
-            // "自定义"即 null＝看真实；保存/套用走真实 _config，与这里无关）。
+            // null＝看真实（含槽空的自定义）；保存/套用/导入走真实 _config，与这里无关）。
             private DeviceConfig _previewConfig;
 
             private readonly Dictionary<string, Point> _positions = new Dictionary<string, Point>();

@@ -16,17 +16,17 @@ namespace AgingTestSystem.Services
     /// 现场工艺没时间逐项核对，
     /// 那就把几种情况提前配好：常用直接套 A；标准误报多切 C；出货放行切 D。
     /// 【设计三原则（改预置内容前必读）】
-    /// 1) 只动"行为开关"，不动"自由文本/配方/机器参数"：12 个开关 key 全在
+    /// 1) 只动"行为开关"，不动"自由文本/配方/机器参数"：14 个开关 key 全在
     ///    <see cref="ProjectPolicyStore.PolicyKeys"/> 里（跟项目，走 Policy.json）。
     ///    MES 映射/自定义规则/完成表达式/报表列/画面字典/破空点位是各现场手填的，
     ///    切预置不能把人填好的东西洗掉；时长/阈值/温度上限是配方或跟机器的参数，
     ///    预置无权碰（超温上限这种涉及安全的更不能代填，必须人按炉温填）。
     ///    例外（V1.105）：跟项目走的策略数值（PolicyKeys 成员，如真空超时）可进
     ///    NumericValues——套用时一并写入本项目 Policy.json（与开关同一条保存路），
-    ///    不参与 DetectPreset（探测只认 12 开关：数值是各项目的微调，不算身份）。
+    ///    不参与 DetectPreset（探测只认 14 开关：数值是各项目的微调，不算身份）。
     ///    配方延时（DelayTime）是配方项，任何预置都不写：无配方默认即 0，有配方按配方来。
     /// 【设计三原则（改预置内容前必读）】
-    /// 1) 只动"行为开关"，不动"自由文本/配方/机器参数"：12 个开关 key 全在
+    /// 1) 只动"行为开关"，不动"自由文本/配方/机器参数"：14 个开关 key 全在
     ///    <see cref="ProjectPolicyStore.PolicyKeys"/> 里（跟项目，走 Policy.json）。
     ///    MES 映射/自定义规则/完成表达式/报表列/画面字典/破空点位是各现场手填的，
     ///    切预置不能把人填好的东西洗掉；时长/阈值/温度上限是配方或跟机器的参数，
@@ -34,8 +34,8 @@ namespace AgingTestSystem.Services
     /// 2) 存的是"英文存储值"（枚举英文名/布尔小写），与 PersistChanges 落盘口径
     ///    一字不差——ApplyToConfig 复用 <see cref="ProjectPolicyStore.ParseValue"/>
     ///    做类型转换，和保存走的是同一套解析，预置值永远"存得进去"。
-    /// 3) 每个预置都是"完整集合"（12 项全列），切 A→B 不会残留 A 的某一项；
-    ///    DetectPreset 只比这 12 项：全对上=该预置，差一项=自定义。
+    /// 3) 每个预置都是"完整集合"（14 项全列），切 A→B 不会残留 A 的某一项；
+    ///    DetectPreset 只比这 14 项：全对上=该预置，差一项=自定义。
     /// 【四个预置速览】
     /// A 常用（默认首选）：宽松试产整套开关＋本项目真空超时写 0（不限时等），
     ///    配方延时填 0 即阀电同开（无配方默认即 0，有配方按配方来），建成后失压
@@ -46,16 +46,68 @@ namespace AgingTestSystem.Services
     /// D 严格出货（放行标准）：B 的严格版 + 启动定格追溯 + 超温联停 + 画面记录。
     ///    开 D 前置：本机【超温上限】必须先填＞0（报警节点里填，按炉子工艺温度定），
     ///    否则保存即拦——这是故意的（fail-safe：没上限的联停等于没配，不能悄悄开）。
-    /// A 与 C 的 12 开关一字不差（A 以 C 为基准，V1.106 起），差的只是超时 0；
-    /// 探测时数值也算身份：C 开关＋超时 0 即 A，超时非 0 即 C（见 DetectPreset）。
+    /// A 与 C 除压力报警开关外全同（A 以 C 为基准，V1.106 起；2.0.0 起 A 关/C 开），差的是报警开关＋超时 0；
+    /// 探测时数值也算身份：C 开关＋超时 0＋报警关即 A（见 DetectPreset）。
+    /// 【自定义槽】下拉末项“自定义”是独立槽（跟项目走，见 ProjectPolicyStore.CustomFilePath）：
+    /// 初始内容＝A 的快照，之后改自定义只写槽文件，A/B/C/D 是代码写死的谁也覆盖不了。
+    /// 【导入导出】文件装“全部跟项目策略 key”（含 MES 映射/规则/报表等自由文本，
+    /// 见 BuildExportValues）：导出可选 A/B/C/D/自定义任一源，导入一律进自定义槽并即时生效。
     /// </summary>
     public static class PolicyPresets
     {
-        /// <summary>自定义：当前 12 项凑不出任何预置（人手微调过），下拉显示此行。</summary>
+        /// <summary>自定义槽 Id（下拉末项，显示名见 CustomTitle，只叫“自定义”不带括号）。</summary>
         public const string CustomId = "Custom";
 
+        /// <summary>自定义下拉显示名（单源：下拉选项/回显/导入导出源选择全读它，不各写一份）。</summary>
+        public const string CustomTitle = "自定义";
+
+        /// <summary>自定义说明行·已改动（槽内容与 A 不一致时回显它，不带括号描述）。</summary>
+        public const string CustomScenario = "当前配置与A/B/C/D都不完全一致，可重选一套覆盖。";
+
+        /// <summary>自定义说明行·未改动（槽内容与 A 一致时回显它：槽还是初始快照）。</summary>
+        public const string CustomScenarioDefault = "当前自定义为默认配置，与预置A一致。";
+
+        /// <summary>自定义悬停全文·已改动（与说明行同源，同样不带括号描述）。</summary>
+        public const string CustomTip = "自定义\r\n\r\n"
+            + "当前 14 个行为开关与A/B/C/D都不完全一致，"
+            + "下拉重选一套并点“套用预置”可整体覆盖。";
+
+        /// <summary>自定义悬停全文·未改动（与默认说明行同源）。</summary>
+        public const string CustomTipDefault = "自定义\r\n\r\n"
+            + "尚未改动过，内容与预置A一致；"
+            + "改动后自动存入自定义槽，预置A不受影响。";
+
         /// <summary>
-        /// 预置管辖的 12 个行为开关（【唯一名单】增减必须同步改三处：
+        /// 自定义槽是否还是初始快照（纯函数：只比 A 管辖的开关＋数值，
+        /// MES/规则等自由文本不算身份——初始槽的自由文本取种子现状，本来就和 A 无关）。
+        /// 槽空/null 即非初始（无槽可比，说明行按"已改动"口径回显差异文案）。
+        /// </summary>
+        public static bool IsCustomPristine(Dictionary<string, string> customSnapshot)
+        {
+            try
+            {
+                Dictionary<string, string> presetA = GetAllValues("A");
+                Dictionary<string, string> snap =
+                    ProjectPolicyStore.FilterToPolicyKeys(customSnapshot);
+                if (presetA == null || snap.Count == 0) return false;
+                foreach (var kv in presetA)
+                {
+                    string got;
+                    if (!snap.TryGetValue(kv.Key, out got)) return false;
+                    if (!string.Equals(got != null ? got.Trim() : "",
+                        kv.Value != null ? kv.Value.Trim() : "",
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>
+        /// 预置管辖的 14 个行为开关（【唯一名单】增减必须同步改三处：
         /// 每个预置的 Values、KeyLabels、回归"管辖全是PolicyKeys成员"用例）。
         /// </summary>
         public static readonly List<string> GovernedKeys = new List<string>
@@ -67,6 +119,8 @@ namespace AgingTestSystem.Services
             "CompletionJudgePolicy",
             "PowerLossPolicy",
             "AgingPressureLossPolicy",
+            "PressureAlarmEnabled",
+            "MuteAllAlarms",
             "CompletionAction",
             "EventIdentityMode",
             "FanTempShutdownEnabled",
@@ -85,6 +139,8 @@ namespace AgingTestSystem.Services
             { "CompletionJudgePolicy", "完成判定" },
             { "PowerLossPolicy", "断电恢复" },
             { "AgingPressureLossPolicy", "老化失压" },
+            { "PressureAlarmEnabled", "压力报警" },
+            { "MuteAllAlarms", "报警全关" },
             { "CompletionAction", "完成动作" },
             { "EventIdentityMode", "事件身份口径" },
             { "FanTempShutdownEnabled", "超温联停" },
@@ -107,12 +163,12 @@ namespace AgingTestSystem.Services
             public string HowToSwitch;
             /// <summary>前置条件（空=零门槛直接套；C 有一条：本机超温上限先填＞0）。</summary>
             public string Requires;
-            /// <summary>12 项存储值（key→英文存储值/小写布尔，与落盘口径一致）。</summary>
+            /// <summary>14 项存储值（key→英文存储值/小写布尔，与落盘口径一致）。</summary>
             public Dictionary<string, string> Values;
             /// <summary>
             /// 数值项存储值（key→存储字符串，如真空超时毫秒数；V1.105 新增）。
             /// 只要 PolicyKeys 成员才收（跟项目走，套用时与 Values 同一条保存路进 Policy.json）。
-            /// 探测口径（见 DetectPreset）：无数值项的预置只认 12 开关；
+            /// 探测口径（见 DetectPreset）：无数值项的预置只认 14 开关；
             /// 带数值项的预置（当前只有 A 常用）数值也算身份（C 开关＋超时 0 即 A）。
             /// B/C/D 为空集合（行为与旧版一致）。
             /// </summary>
@@ -122,8 +178,8 @@ namespace AgingTestSystem.Services
         /// <summary>全部预置（顺序即试用顺序 A→B→C→D，下拉按此排；A 常用放首位，现场先试这个）。</summary>
         public static readonly List<PolicyPresetDef> All = new List<PolicyPresetDef>
         {
-            // A 常用（客户常开工艺，阀电同开保持常开，一键套用免逐项改）：
-            // 12 开关照抄 C 宽松试产（误报变提示、人工复判兜底，常开不报警）；
+                // A 常用（客户常开工艺，阀电同开保持常开，一键套用免逐项改）：
+                // 14 开关照抄 C 宽松试产再关掉压力报警（误报变提示、人工复判兜底，常开不报警；报警全关仍关）；
             // 数值项把本项目真空超时写 0（不限时等）。
             // 配方延时不归预置管：填 0 即阀电同开（无配方默认即 0，有配方按配方来）。
             new PolicyPresetDef
@@ -153,6 +209,10 @@ namespace AgingTestSystem.Services
                     // 老化失压只记不停：保持常开的核心，
                     // 管路波动/失压记一条事件继续烧，不关阀不断电。
                     { "AgingPressureLossPolicy", "KeepRunning" },
+                    // 压力报警=关：阈值越限与建立超时全不报，负压阀保持常开（常用常开的另一半）。
+                    { "PressureAlarmEnabled", "false" },
+                    // 报警全关=关：A 只静默真空类，DI/失联/规则照常（最高级静默只走手动/自定义，预置不带）。
+                    { "MuteAllAlarms", "false" },
                     // 只下电关阀：最安静。
                     { "CompletionAction", "PowerOffOnly" },
                     { "EventIdentityMode", "RecordTime" },
@@ -196,6 +256,10 @@ namespace AgingTestSystem.Services
                     { "PowerLossPolicy", "RestartFull" },
                     // 老化失压停机：失压还烧=带病烧屏；管路波动误报多→切C只记不停。
                     { "AgingPressureLossPolicy", "StopOnLoss" },
+                    // 压力报警=开：阈值越限与建立超时正常报警断电（标准保护）。
+                    { "PressureAlarmEnabled", "true" },
+                    // 报警全关=关：最高级静默只走手动/自定义，预置不带（量产默认必须报警）。
+                    { "MuteAllAlarms", "false" },
                     // 下电+蜂鸣：提醒取料；本机无破空阀，泄压类动作预置里没有（选了保存即拦）。
                     { "CompletionAction", "PowerOffAndBeep" },
                     // 事件口径=现值（现状）；严格追溯→切D定格。
@@ -232,6 +296,10 @@ namespace AgingTestSystem.Services
                     { "PowerLossPolicy", "ResumeRemaining" },
                     // 老化失压只记不停：管路波动/开门看料容忍，边沿记一条事件继续烧，不刷屏。
                     { "AgingPressureLossPolicy", "KeepRunning" },
+                    // 压力报警=开：只靠失压策略容忍波动，抽真空阶段超时仍报警（与 A 的全关是两档）。
+                    { "PressureAlarmEnabled", "true" },
+                    // 报警全关=关：最高级静默只走手动/自定义，预置不带。
+                    { "MuteAllAlarms", "false" },
                     // 只下电关阀：最安静（调试现场够吵了）。
                     { "CompletionAction", "PowerOffOnly" },
                     { "EventIdentityMode", "RecordTime" },
@@ -263,6 +331,10 @@ namespace AgingTestSystem.Services
                     { "CompletionJudgePolicy", "AutoPass" },
                     { "PowerLossPolicy", "RestartFull" },
                     { "AgingPressureLossPolicy", "StopOnLoss" },
+                    // 压力报警=开：放行标准全程无报警才算 PASS，阈值保护全开。
+                    { "PressureAlarmEnabled", "true" },
+                    // 报警全关=关：放行标准不允许任何静默。
+                    { "MuteAllAlarms", "false" },
                     { "CompletionAction", "PowerOffAndBeep" },
                     // 事件口径=启动定格：中途重绑 SN 不污染已跑任务的事件归属（CSV/报表/MES统一）。
                     { "EventIdentityMode", "StartSnapshot" },
@@ -309,7 +381,33 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 取某预置的全部落盘值（12 开关＋数值项合并，V1.105 新增；
+        /// 组装导出文件内容（纯函数：文件装“全部跟项目策略 key”，
+        /// 含 MES 映射/规则/报表等自由文本，不止 14 开关）。
+        /// A/B/C/D＝该预置的开关＋数值叠加到当前配置的自由文本上（预置不管自由文本，
+        /// 导出时把本机已填的一并带走，目标工控机才不用重填）；
+        /// 自定义＝自定义槽的整包快照（槽空时退回当前配置，至少是全量）。
+        /// 未知 Id 返回 null。
+        /// </summary>
+        public static Dictionary<string, string> BuildExportValues(
+            string sourceId, DeviceConfig current, Dictionary<string, string> customSnapshot)
+        {
+            if (string.IsNullOrEmpty(sourceId)) return null;
+            if (string.Equals(sourceId, CustomId, StringComparison.OrdinalIgnoreCase))
+            {
+                Dictionary<string, string> snap =
+                    ProjectPolicyStore.FilterToPolicyKeys(customSnapshot);
+                if (snap.Count > 0) return snap;
+                return ProjectPolicyStore.ToPolicyDict(current);
+            }
+            Dictionary<string, string> preset = GetAllValues(sourceId);
+            if (preset == null) return null;
+            Dictionary<string, string> baseDict = ProjectPolicyStore.ToPolicyDict(current);
+            foreach (var kv in preset) baseDict[kv.Key] = kv.Value;
+            return baseDict;
+        }
+
+        /// <summary>
+        /// 取某预置的全部落盘值（14 开关＋数值项合并，V1.105 新增；
         /// 工艺策略窗"套用预置"走这一份：差异预览/校验/保存看到的是同一集合）。
         /// 未知 Id 返回 null。
         /// </summary>
@@ -334,7 +432,7 @@ namespace AgingTestSystem.Services
         {
             if (config == null) return "配置对象为空，无法套用预置。";
             // 开关＋数值一起写（数值走同一解析口；探测口径见 DetectPreset：
-            // 无数值项的预置只认 12 开关，带数值项的（A 常用）数值也算身份）
+            // 无数值项的预置只认 14 开关，带数值项的（A 常用）数值也算身份）
             Dictionary<string, string> values = GetAllValues(id);
             if (values == null) return "未知预置：" + (id ?? "");
             var bad = new List<string>();
@@ -357,7 +455,7 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 反查当前配置≈哪个预置（纯函数：12 项逐项序列化比对，全对上才算；
+        /// 反查当前配置≈哪个预置（纯函数：13 项逐项序列化比对，全对上才算；
         /// 带数值项的预置（当前只有 A 常用）数值也算身份：C 开关＋超时 0 即 A，
         /// 超时非 0 即 C——A 以 C 为基准，超时 0 是两者唯一的差别，不认数值就分不出来）。
         /// </summary>
@@ -380,7 +478,7 @@ namespace AgingTestSystem.Services
                         break;
                     }
                 }
-                // 数值身份：只对"带数值项"的预置加赛一轮（无数值项的走上面 12 开关即定）。
+                // 数值身份：只对"带数值项"的预置加赛一轮（无数值项的走上面 14 开关即定）。
                 if (allMatch && p.NumericValues != null)
                 {
                     foreach (var kv in p.NumericValues)

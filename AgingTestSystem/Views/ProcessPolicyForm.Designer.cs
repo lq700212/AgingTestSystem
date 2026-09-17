@@ -16,8 +16,8 @@ namespace AgingTestSystem.Views
     /// 画布 Dock=Fill 最后加（代码里加）——顺序错画布会盖住右栏。
     /// 【尺寸】1160×980：画布内容 730×885（8 节点，MES 在最下）默认整窗可见；
     /// MinimumSize 只锁到 950×700（小屏走双滚动条，画布/编辑器都带 AutoScroll）。
-    /// 右栏顶部加预置行（标题46/下拉68/说明100，共占约90px）：
-    /// 编辑器下移到146、高642，底部按钮顺延（保存794/复位关闭830）。
+    /// 右栏顶部加预置行（标题46/下拉68/说明100/导入导出146，共占约134px）：
+    /// 编辑器下移到180、高608，底部按钮不动（保存794/复位关闭830）。
     /// 静态布局（坐标/文本/事件挂接）全在这里，VS 可预览；
     /// 下拉选项填充在 ProcessPolicyForm.cs 里代码做（数据源 PolicyPresets.All，
     /// Designer 里写循环/自定义项会被 VS 重写吞掉，手写保命线）。
@@ -42,6 +42,12 @@ namespace AgingTestSystem.Views
 
         /// <summary>预置说明（选中项一句话场景，灰字；全文另有悬停提示）</summary>
         private Sunny.UI.UILabel _lblPresetDesc;
+
+        /// <summary>导出策略按钮（选 A/B/C/D/自定义任一源装包；只读也可导）</summary>
+        private Sunny.UI.UIButton _btnExport;
+
+        /// <summary>导入策略按钮（只进自定义槽；只读模式禁用）</summary>
+        private Sunny.UI.UIButton _btnImport;
 
         /// <summary>编辑器容器（空壳；内容按选中节点动态重建）</summary>
         private Panel _pnlEditors;
@@ -69,6 +75,8 @@ namespace AgingTestSystem.Views
             this._cboPreset = new Sunny.UI.UIComboBox();
             this._btnApplyPreset = new Sunny.UI.UIButton();
             this._lblPresetDesc = new Sunny.UI.UILabel();
+            this._btnExport = new Sunny.UI.UIButton();
+            this._btnImport = new Sunny.UI.UIButton();
             this._pnlEditors = new Panel();
             this._btnSaveNode = new Sunny.UI.UIButton();
             this._btnResetLayout = new Sunny.UI.UIButton();
@@ -94,6 +102,8 @@ namespace AgingTestSystem.Views
             this._pnlRight.Controls.Add(this._cboPreset);
             this._pnlRight.Controls.Add(this._btnApplyPreset);
             this._pnlRight.Controls.Add(this._lblPresetDesc);
+            this._pnlRight.Controls.Add(this._btnExport);
+            this._pnlRight.Controls.Add(this._btnImport);
             this._pnlRight.Controls.Add(this._pnlEditors);
             this._pnlRight.Controls.Add(this._btnSaveNode);
             this._pnlRight.Controls.Add(this._btnResetLayout);
@@ -121,11 +131,19 @@ namespace AgingTestSystem.Views
             this._lblPresetDesc.Location = new Point(12, 100);
             this._lblPresetDesc.Size = new Size(296, 42);
             this._lblPresetDesc.ForeColor = Color.Gray;
+            this._btnExport.Location = new Point(12, 146);
+            this._btnExport.Size = new Size(144, 28);
+            this._btnExport.Text = "导出策略";
+            this._btnExport.Click += new System.EventHandler(this.BtnExport_Click);
+            this._btnImport.Location = new Point(164, 146);
+            this._btnImport.Size = new Size(144, 28);
+            this._btnImport.Text = "导入策略";
+            this._btnImport.Click += new System.EventHandler(this.BtnImport_Click);
             //
             // _pnlEditors
             //
-            this._pnlEditors.Location = new Point(12, 146);
-            this._pnlEditors.Size = new Size(296, 642);
+            this._pnlEditors.Location = new Point(12, 180);
+            this._pnlEditors.Size = new Size(296, 608);
             this._pnlEditors.AutoScroll = true;
             //
             // _btnSaveNode（Sunny 默认蓝，主操作）

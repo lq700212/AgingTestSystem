@@ -53,12 +53,180 @@ namespace AgingTestSystem.Services
             // 跟项目走（机器缺省 15000 不动）；数字项无策略下拉，同步锁里按
             // VentValveDoPoint 同口径豁免（见回归"三处同步锁"注释）。
             "VacuumConfirmTimeoutMs",
+            // 压力报警总开关（布尔，默认 true=现状报警开；false=阈值越限+建立超时全不报，
+            // 负压阀保持常开；DI触点/通讯失联/自定义规则不受影响。预置 A 默认关闭，跟项目走）。
+            "PressureAlarmEnabled",
+            // 报警全关·最高级（布尔，默认 false=现状；true=阈值/超时/DI/失联/规则/超温联停全不报，
+            // 优先级高于压力报警总开关。四个预置默认全关，只走手动或自定义开启，跟项目走）。
+            "MuteAllAlarms",
         };
 
-        /// <summary>当前项目的策略文件路径（Projects/&lt;项目&gt;/Policy.json）。</summary>
+        /// <summary>当前项目的策略文件路径（Projects/&lt;项目&gt;/Policy.json，当前生效值）。</summary>
         public static string PolicyFilePath
         {
             get { return Path.Combine(ProjectProfile.ActiveProfileDir, ProjectProfile.PolicyFileName); }
+        }
+
+        /// <summary>当前项目的自定义槽文件路径（Projects/&lt;项目&gt;/CustomPolicy.json）。</summary>
+        public static string CustomFilePath
+        {
+            get { return Path.Combine(ProjectProfile.ActiveProfileDir, ProjectProfile.CustomPolicyFileName); }
+        }
+
+        /// <summary>
+        /// 内存配置→策略字典（全部 PolicyKeys，存储口径字符串：布尔小写/枚举英文名/数字原文）。
+        /// 自定义槽快照/导出装包/导入比对全走它，一处口径不分叉。
+        /// 非 PolicyKeys 的机器参数（串口/IP/采集间隔等）不在里面——导入导出只装跟项目的策略。
+        /// </summary>
+        public static Dictionary<string, string> ToPolicyDict(DeviceConfig config)
+        {
+            var dict = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (config == null) return dict;
+            foreach (string key in PolicyKeys)
+            {
+                try
+                {
+                    var prop = typeof(DeviceConfig).GetProperty(key);
+                    if (prop == null || !prop.CanRead) continue;
+                    object v = prop.GetValue(config, null);
+                    if (v == null) dict[key] = "";
+                    else if (v is bool) dict[key] = ((bool)v) ? "true" : "false";
+                    else dict[key] = v.ToString();
+                }
+                catch { /* 单项读失败跳过，不拦整包 */ }
+            }
+            return dict;
+        }
+
+        /// <summary>
+        /// 只留 PolicyKeys 的项（导入/导出/自定义槽三处共用：脏 key 直接丢，
+        /// 与 ApplyOverlay“脏 key 忽略”同口径，手改文件写错也不炸）。
+        /// </summary>
+        public static Dictionary<string, string> FilterToPolicyKeys(Dictionary<string, string> raw)
+        {
+            var dict = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (raw == null) return dict;
+            foreach (var kv in raw)
+            {
+                if (kv.Key != null && PolicyKeys.Contains(kv.Key)) dict[kv.Key] = kv.Value;
+            }
+            return dict;
+        }
+
+        /// <summary>
+        /// 读自定义槽（跟项目走；文件不存在/损坏返回空字典，调用方按“未初始化”处理）。
+        /// 返回的只有 PolicyKeys 项（已过滤）。
+        /// </summary>
+        public static Dictionary<string, string> LoadCustom()
+        {
+            try
+            {
+                string path = CustomFilePath;
+                if (!File.Exists(path)) return new Dictionary<string, string>(StringComparer.Ordinal);
+                string json = AtomicFile.SafeReadAllText(path);
+                var raw = JsonConvert.DeserializeObject<Dictionary<string, string>>(json);
+                return FilterToPolicyKeys(raw);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[项目策略] 自定义槽加载失败回空: {ex.Message}");
+                return new Dictionary<string, string>(StringComparer.Ordinal);
+            }
+        }
+
+        /// <summary>
+        /// 写自定义槽（原子写；只收 PolicyKeys，脏 key 静默丢）。
+        /// 与 Save（写 Policy.json）是两个文件：当前生效值与自定义槽各存各的。
+        /// </summary>
+        public static void SaveCustom(Dictionary<string, string> values)
+        {
+            var dict = FilterToPolicyKeys(values);
+            AtomicFile.WriteAllText(CustomFilePath, JsonConvert.SerializeObject(dict, Formatting.Indented));
+        }
+
+        /// <summary>
+        /// 确保自定义槽已初始化（首次打开即调一次）。
+        /// 空槽按“A 预置快照＋种子配置的自由文本”建初始槽：
+        /// A 管辖的开关＋数值照抄 A，MES 映射/规则/报表等自由文本取种子现状（种子 null 则取缺省），
+        /// 之后用户改自定义只动槽文件，A/B/C/D 是代码写死的动不了。
+        /// 已有槽只补“缺的”A 管辖项（缺 key 即按 A 补，补完落盘；已有的项一律不动，
+        /// 那是用户亲手改的自定义）。为什么补：预置加新管辖项后，旧槽缺该项，
+        /// 套用后生效值会回退机器缺省（如压力报警缺省开），用户看着“和A一样”
+        /// 实际行为是开的；缺省必须真正等于 A（项目未上线，不兼容缺 key 的旧槽）。
+        /// </summary>
+        /// <param name="seed">种子配置（一般是内存现值，自由文本从它来；null=缺省）</param>
+        /// <returns>自定义槽内容副本（初始化后）</returns>
+        public static Dictionary<string, string> EnsureCustomInitialized(DeviceConfig seed)
+        {
+            Dictionary<string, string> exist = LoadCustom();
+            if (exist.Count == 0)
+            {
+                var baseDict = ToPolicyDict(seed ?? new DeviceConfig());
+                Dictionary<string, string> presetA = PolicyPresets.GetAllValues("A");
+                if (presetA != null)
+                {
+                    foreach (var kv in presetA) baseDict[kv.Key] = kv.Value;
+                }
+                SaveCustom(baseDict);
+                return new Dictionary<string, string>(baseDict, StringComparer.Ordinal);
+            }
+            Dictionary<string, string> aVals = PolicyPresets.GetAllValues("A");
+            bool filled = false;
+            if (aVals != null)
+            {
+                foreach (var kv in aVals)
+                {
+                    if (!exist.ContainsKey(kv.Key)) { exist[kv.Key] = kv.Value; filled = true; }
+                }
+            }
+            if (filled) SaveCustom(exist);
+            return exist;
+        }
+
+        /// <summary>
+        /// 读导入文件（纯解析＋过滤，不校验合法性：校验走 SettingsForm.ValidateValue，
+        /// 组合矛盾走 PersistChanges，与保存同一条路，脏文件进不来）。
+        /// </summary>
+        /// <returns>true=解析出可用项，false=error 有原因</returns>
+        public static bool ReadImportFile(string path, out Dictionary<string, string> values, out string error)
+        {
+            values = new Dictionary<string, string>(StringComparer.Ordinal);
+            error = null;
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                error = "导入文件不存在，请重新选择。";
+                return false;
+            }
+            Dictionary<string, string> raw;
+            try
+            {
+                raw = JsonConvert.DeserializeObject<Dictionary<string, string>>(
+                    AtomicFile.SafeReadAllText(path));
+            }
+            catch (Exception ex)
+            {
+                error = "导入文件解析失败（应为本软件导出的策略文件）：" + ex.Message;
+                return false;
+            }
+            if (raw == null || raw.Count == 0)
+            {
+                error = "导入文件内容为空，没有可用的策略项。";
+                return false;
+            }
+            values = FilterToPolicyKeys(raw);
+            if (values.Count == 0)
+            {
+                error = "文件里没有可识别的策略项（只认跟项目的策略 key）。";
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>写导出文件（只装 PolicyKeys，原子写；失败抛异常，调用方弹框）。</summary>
+        public static void WriteExportFile(string path, Dictionary<string, string> values)
+        {
+            var dict = FilterToPolicyKeys(values);
+            AtomicFile.WriteAllText(path, JsonConvert.SerializeObject(dict, Formatting.Indented));
         }
 
         /// <summary>
@@ -184,13 +352,42 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
+        /// 取某策略 key 的项目层缺省（A 管辖的开关＋数值回 A 值；不管的自由文本回 null，
+        /// 调用方继续走机器缺省）。ApplyOverlay（生效内存）与 SettingsForm.GetEffectiveValue
+        /// （设置表显示）同调本函数：缺省只有一份口径，显示与生效永远一致。
+        /// </summary>
+        public static string ResolvePolicyDefault(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return null;
+            Dictionary<string, string> presetA = PolicyPresets.GetAllValues("A");
+            if (presetA == null) return null;
+            string v;
+            if (presetA.TryGetValue(key, out v)) return v;
+            return null;
+        }
+
+        /// <summary>
         /// 把项目策略叠加到内存配置（MainForm.LoadConfig 读完 App.config 后调用）。
         /// 解析失败的项保持 App.config/DeviceConfig 缺省（= 现状行为），不抛异常。
+        /// 缺省分两层：A 管辖的开关＋数值缺 key 时按 A 回填（跟项目的策略缺省 = A，
+        /// 如压力报警缺省关；存过的值一律优先，显式配置永远赢；A 缺省口径见
+        /// ResolvePolicyDefault，设置表显示同调，改一边必须对另一边）；不管的自由文本
+        /// 缺 key 保持机器缺省。为什么：预置加新管辖项后，旧 Policy.json 缺该项，
+        /// 生效值回退机器缺省（如报警缺省开），用户看着"自定义和A一样"实际行为是开的；
+        /// 缺省必须真正等于 A（项目未上线，不兼容缺 key 的旧文件）。
         /// </summary>
         public static void ApplyOverlay(DeviceConfig config)
         {
             if (config == null) return;
             var dict = Load();
+            Dictionary<string, string> presetA = PolicyPresets.GetAllValues("A");
+            if (presetA != null)
+            {
+                foreach (var kv in presetA)
+                {
+                    if (!dict.ContainsKey(kv.Key)) dict[kv.Key] = kv.Value;
+                }
+            }
             foreach (var kv in dict)
             {
                 if (!PolicyKeys.Contains(kv.Key)) continue;   // 脏 key 直接忽略（手改文件写错也不炸）

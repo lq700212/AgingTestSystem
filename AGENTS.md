@@ -106,12 +106,37 @@
   + `ValidateValue` 名单分支 + `CreateValueCell` 下拉分支——枚举不进 `_boolKeys`，
   不归一化就"脏值也能存"）。回归里"三处同步锁"（PolicyKeys↔属性↔选项可解析）看绿才算完。
   预置数值扩展（V1.105 建，V1.106 收紧）：跟项目走的策略数值（如真空超时）可进 `PolicyPresets` 的
-  `NumericValues`（套用时与 12 开关同一条保存路进 Policy.json）；探测口径：
-  无数值项的预置只认 12 开关，带数值项的预置（A 常用）数值也算身份
-  （C 开关＋超时 0 即 A，超时非 0 即 C——A 以 C 为基准，不认数值就分不出来）；
+  `NumericValues`（套用时与 14 开关同一条保存路进 Policy.json）；探测口径：
+  无数值项的预置只认 14 开关，带数值项的预置（A 常用）数值也算身份；
+  布尔型策略开关（如压力报警总开关/报警全关，默认 true/false=现状）不走 `EnumOptions`
+  （只进 `_boolKeys`＋`ValidateValue` 布尔分支＋`PolicyKeys`＋预置 `GovernedKeys`/`Values`/`KeyLabels`），
+  工艺策略窗布尔下拉显示关闭/开启、存 false/true（显示存储分离）；
+  报警全关 `MuteAllAlarms`（2.0.0，最高级静默：压住 L1＋DI/失联/规则/超温联停，
+  判定收 `AgingSequencer.ShouldSuppressAlarm` 纯函数、四处同调；四预置默认全关只走手动/自定义，
+  风机断连与完成表达式不受影响）；
+  A 与 C 除报警开关外全同（A 关/C 开）＋超时 0 即 A，缺一即 C——A 以 C 为基准，不认数值与开关就分不出来；
   配方项（延时/时长）任何预置都不写（无配方默认 0，有配方按配方来）。
   预置顺序即试用顺序（V1.106 起 A=常用/B=标准/C=宽松/D=严格，常用首位；项目未上线，
   改名换序直改，不写迁移分支）。
+  自定义槽与导入导出（2.0.0）：下拉末项只叫"自定义"（`PolicyPresets.CustomTitle` 单源，
+  说明/悬停同源无括号，说明按槽状态动态切——`IsCustomPristine` 未改动回显"与A一致"，
+  改过才显示差异文案）；自定义槽跟项目走（`Projects/<项目>/CustomPolicy.json`，
+  `ProjectScopedFiles` 成员，新建项目自动拷），初始内容=A 快照（开关＋数值照抄 A，
+  自由文本取种子现状）＋旧槽缺 key 按 A 回填（2.0.0：`EnsureCustomInitialized` 只补缺的
+  A 管辖项、已有的不动，缺省真正等于 A；项目未上线，不兼容缺 key 旧槽——旧槽缺新开关
+  套用后生效值回机器缺省，"看着和A一样实际报警开"就是这么来的），
+  存成自定义（探测非 A/B/C/D）即全量同步槽、A/B/C/D 动不了；
+  生效缺省对齐 A（2.0.0：`ApplyOverlay` 对 A 管辖项缺 key 按 A 回填，存过优先、
+  自由文本不管；内存缺省仍是现状，单测口径不动）；
+  策略层最高优先级（2.0.0）：加载 App.config→Policy.json 叠加（策略赢）＋落盘两边同走
+  `PersistChanges`（后写赢，不打架）＋设置表显示生效值（`GetEffectiveValue`：文件→A 缺省→机器，
+  与内存同口径，`ResolvePolicyDefault` 单源）＋保存弹窗点名（只对真改了且有节点管的项，
+  `PolicyGraph.LocateKey` 单一出处，策略 key 人人有节点，`IsValueChanged`/`BuildPolicySyncNote` 纯函数）；
+  槽读写只认 `ProjectPolicyStore`（`LoadCustom`/`SaveCustom`/`EnsureCustomInitialized`，
+  脏 key 过滤与 `ApplyOverlay` 同口径）；导入导出文件装全部 PolicyKeys
+  （`BuildExportValues`：A/B/C/D＝预置叠加当前自由文本，自定义＝槽快照；
+  `ReadImportFile` 只解析过滤，校验走 `ValidateValue`＋`PersistChanges` 同一条路）；
+  导入一律进自定义槽（SunnyUI 确认框明示，A/B/C/D 覆盖不了），导出源用小弹窗选。
 - **判定类分支先写 AgingSequencer 纯函数（V1.67 收紧）**：策略执行侧一律先加纯函数
   （`BuildStartBlockText`/`MapAlarmResult`/`ComputeResumeDurationSeconds`/
   `ValidatePolicyCombination`）并同步用例，`DeviceManager` 只做"调用决策 + IO + 日志"。
@@ -224,6 +249,11 @@
   关窗时预览未套用弹 `UIMessageBox.Show(OKCancel)` 确认（确定=直接套用后关闭，
   取消=直接关闭；脏先问存；X 与关闭按钮同路走 `OnFormClosing`＋`_closingConfirmed` 防重弹；
   只对真开过的窗弹，未 Show 的构造冒烟/回归不扰民）。
+  右栏与画布必须同源（2.0.0 血泪：右栏曾只看真实、画布看预览，下拉一切两边打架，
+  用户报"保存覆盖了所有节点"）：右栏编辑器/显隐一律读窗体级 `EffectiveConfig`
+  （与画布配对，`UpdateCanvasPreview` 里同步），下拉切换时有选中节点即 `RebuildEditors`
+  （有脏先问存/丢/取消，取消弹回 `_lastPresetId`）；保存/套用/导入成功后一律先
+  `RefreshPresetRow`（下拉重探测＋预览同步）再 `RebuildEditors`（顺序反了右栏按旧预览建）。
 - **配方加字段三窗同步（V1.66）**：`RecipeConfig` 加字段 → 三个录入窗
   （`RecipeManagerForm`/`BatchRecipeForm`/`StationSettingsForm`：输入框 + 保存 + 回填 +
   头部 ASCII 图）→ `SetStationRecipe` 下发 → `StationInfo`（+`Clone`）→
@@ -486,6 +516,12 @@
   ④差值 marker 必须互斥（失败行文案含成功子串即双计假红，定 marker 先拿失败行全文做子串检查）。
 - **文案方向错也是 bug**："多于 64 列"写成"≤64列"、注释称"含容差"实际严格——复查要把
   注释/报错文案当代码读；缺省值两处手抄即分叉，收敛唯一工厂（`DefaultRcCurrentValue`）。
+- **用例防挂起（2.0.0 血泪：等人的用例就是坏用例）**：用例里禁裸调一切会弹模态框的方法
+  （工艺策略窗 `SelectNode`/`SelectEdge`/切预置/关窗，设置窗同理）——窗体一脏就弹"是/否/取消"，
+  测试线程永远卡住等人点鼠标。切节点一律走测试 helper `SelectNodeNoHang`
+ （先清脏再调，只读导航；要测脏提示本身走真窗手工）；
+  新增这类用例必须带 helper 自锁（存在性＋置脏照切行为，现场删 helper 即编译错）。
+  脏提示是生产行为不许为测试阉割，只许用例侧绕行。
 
 ## 部署诊断与混淆约定（V1.88.9，客户工控机调试期沉淀）
 

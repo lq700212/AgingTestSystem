@@ -54,7 +54,7 @@ if ($gitStatus -and (-not $AllowDirty)) {
 
 if ($ReleaseLabel -eq "") {
     $wmPath = Join-Path $RepoRoot "AgingTestSystem\Services\BuildWatermark.cs"
-    $m = Select-String -LiteralPath $wmPath -Pattern 'ReleaseLabel\s*=\s*"(V[^"]+)"'
+    $m = Select-String -LiteralPath $wmPath -Pattern 'ReleaseLabel\s*=\s*"([^"]+)"'
     if (-not $m) { Fail "[SETUP-FAIL] 读不到 BuildWatermark.ReleaseLabel" 3 }
     $ReleaseLabel = $m.Matches[0].Groups[1].Value
 }
