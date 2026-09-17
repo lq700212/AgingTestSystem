@@ -421,7 +421,7 @@ namespace AgingTestSystem.Dialogs
             {
                 "UsePowerMeter"
             }),
-            // 工艺策略独立分类（7 个待确认点 + 完成动作 + 破空点位，共 10 项；
+            // 工艺策略独立分类（7 个行为开关 + 完成动作 + 破空阀两项 + 身份口径 + 显示模式两项，共 13 项；
             // FanTempShutdownEnabled 同时是策略，显示在老化测试业务里，这里不再重复列，
             // 但它进 Policy.json——名单以 ProjectPolicyStore.PolicyKeys 为准，不以分类为准）
             ("工艺策略", new string[]

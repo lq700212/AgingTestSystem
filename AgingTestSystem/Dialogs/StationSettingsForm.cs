@@ -33,7 +33,8 @@ namespace AgingTestSystem.Dialogs
     /// - 加入对列（btnAddToQueue）：把当前配置应用到本工位面板 + 保存配方到本地配方列表
     ///   （与"保存"语义一致，仅提示文案不同）；
     /// - 下电（btnPowerOff）：关闭本工位载台上电输出（下电）；
-    /// - 破空（btnBreakVacuum）：业务暂未确认，保留 TODO；
+    /// - 破空（btnBreakVacuum）：本项目无破空阀，恒隐藏；有阀项目打开 VentValveEnabled 后显示，
+    ///   点击动作空实现，有阀项目按其工艺在此补手动破空下发；
     /// - 关闭窗口（btnClose）：直接关闭本窗体。
     /// 【字段映射】
     /// - 延时时间 → 延时时间（DelayTime）
@@ -99,9 +100,9 @@ namespace AgingTestSystem.Dialogs
             _recipes = recipes;
             _deviceId = deviceId;
 
-            // 本机没装破空阀（VentValveEnabled=false，现状）时手动"破空"按钮
+            // 本机没装破空阀（VentValveEnabled=false，本项目现状）时手动"破空"按钮
             // 直接隐藏：点了也没硬件可写，留着只会让人误会功能可用。
-            // 有阀项目打开开关后按钮出现（手动破空具体动作等现场确认后实现，见 btnBreakVacuum_Click）。
+            // 有阀项目打开开关后按钮出现（点击动作空实现，按该项目工艺在 btnBreakVacuum_Click 里补下发）。
             btnBreakVacuum.Visible = ShouldShowBreakVacuum(_config);
 
             // 窗口标题带工位编号，如"工位设置窗口 NO 1"
@@ -486,11 +487,11 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 破空按钮点击事件
-        /// 具体业务功能（如：开启真空电磁阀释放负压 / 手动排空）待确认后实现。
+        /// 当前空实现：本项目无破空阀，按钮恒隐藏，到不了这里；
+        /// 有阀项目打开 VentValveEnabled 后按钮可见，按该项目工艺在此补手动破空下发。
         /// </summary>
         private void btnBreakVacuum_Click(object sender, EventArgs e)
         {
-            // TODO: 破空功能待确认后实现（例如：开启该工位真空电磁阀释放负压 / 手动排空）
         }
 
         /// <summary>
