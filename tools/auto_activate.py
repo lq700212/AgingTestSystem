@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""工控机一键激活脚本（老化测试系统，与 HJVision 同源同口径）。
+"""工控机一键激活脚本（烧屏测试控制中心，与 HJVision 同源同口径）。
 
 把原来四步手工活（一：主窗【关于→软件授权】抄设备ID/设备码；
 二：回办公室用《获取激活码》工具算出激活码；三：回工控机手工输入点激活；
@@ -244,7 +244,7 @@ def backup_ini(path):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="老化测试系统工控机一键激活")
+    ap = argparse.ArgumentParser(description="烧屏测试控制中心工控机一键激活")
     ap.add_argument("--mode", choices=["permanent", "trial"],
                     default="permanent", help="permanent=永久（默认），trial=30天试用")
     ap.add_argument("--ini", default="", help="MainSetting.ini 全路径（缺省自动找程序目录）")
@@ -255,7 +255,7 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     print("=" * 60)
-    print("老化测试系统 一键激活（与软件内【关于→软件授权】同口径）")
+    print("烧屏测试控制中心 一键激活（与软件内【关于→软件授权】同口径）")
     print("=" * 60)
 
     cpu_id = get_cpu_id()
@@ -302,7 +302,7 @@ def main(argv=None):
         return 1
 
     print("-" * 60)
-    print("[成功] 已激活（%s）。请重启老化测试系统，"
+    print("[成功] 已激活（%s）。请重启烧屏测试控制中心，"
           "【关于→软件授权】应显示“%s”。"
           % (status_text(status, days), status_text(status, days)))
     print("      提示：激活前若软件开着，先关掉再跑本脚本，重启后生效。")

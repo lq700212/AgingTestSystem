@@ -351,8 +351,6 @@ namespace AgingTestSystem.Dialogs
             this.cmbDisplayMode.Size = new System.Drawing.Size(180, 29);
             this.cmbDisplayMode.TabIndex = 18;
             //
-            // btnBreakVacuum - 破空按钮（功能待确认）
-            //
             this.btnBreakVacuum.FillColor = System.Drawing.Color.DodgerBlue;
             this.btnBreakVacuum.RectColor = System.Drawing.Color.DodgerBlue;
             this.btnBreakVacuum.ForeColor = System.Drawing.Color.White;
@@ -363,8 +361,6 @@ namespace AgingTestSystem.Dialogs
             this.btnBreakVacuum.TabIndex = 12;
             this.btnBreakVacuum.Text = "破空";
             this.btnBreakVacuum.Click += new System.EventHandler(this.btnBreakVacuum_Click);
-            //
-            // btnPowerOff - 下电按钮（功能待确认）
             //
             this.btnPowerOff.FillColor = System.Drawing.Color.DodgerBlue;
             this.btnPowerOff.RectColor = System.Drawing.Color.DodgerBlue;
@@ -377,8 +373,6 @@ namespace AgingTestSystem.Dialogs
             this.btnPowerOff.Text = "下电";
             this.btnPowerOff.Click += new System.EventHandler(this.btnPowerOff_Click);
             //
-            // btnSave - 保存按钮（功能待确认）
-            //
             this.btnSave.FillColor = System.Drawing.Color.ForestGreen;
             this.btnSave.RectColor = System.Drawing.Color.ForestGreen;
             this.btnSave.ForeColor = System.Drawing.Color.White;
@@ -389,8 +383,6 @@ namespace AgingTestSystem.Dialogs
             this.btnSave.TabIndex = 14;
             this.btnSave.Text = "保存";
             this.btnSave.Click += new System.EventHandler(this.btnSave_Click);
-            //
-            // btnAddToQueue - 加入对列按钮（功能待确认）
             //
             this.btnAddToQueue.FillColor = System.Drawing.Color.ForestGreen;
             this.btnAddToQueue.RectColor = System.Drawing.Color.ForestGreen;
@@ -527,13 +519,13 @@ namespace AgingTestSystem.Dialogs
         private Sunny.UI.UILabel lblDisplayMode;
         /// <summary>显示模式输入框（自由文本，最长50）</summary>
         private Sunny.UI.UIComboBox cmbDisplayMode;
-        /// <summary>破空按钮（功能待确认）</summary>
+        /// <summary>破空按钮（本项目无阀恒隐藏，有阀项目才显示）</summary>
         private Sunny.UI.UIButton btnBreakVacuum;
-        /// <summary>下电按钮（功能待确认）</summary>
+        /// <summary>下电按钮（关闭本工位载台上电输出）</summary>
         private Sunny.UI.UIButton btnPowerOff;
-        /// <summary>保存按钮（功能待确认）</summary>
+        /// <summary>保存按钮（应用到本工位+缓存+存配方）</summary>
         private Sunny.UI.UIButton btnSave;
-        /// <summary>加入对列按钮（功能待确认）</summary>
+        /// <summary>加入对列按钮（应用到本工位+存配方）</summary>
         private Sunny.UI.UIButton btnAddToQueue;
         /// <summary>关闭窗口按钮</summary>
         private Sunny.UI.UIButton btnClose;

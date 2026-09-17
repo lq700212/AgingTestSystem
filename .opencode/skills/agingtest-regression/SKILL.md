@@ -91,7 +91,7 @@ agingtest-regression/
 │   ├── run_unit_tests.ps1    ← 拷贝产物到 %TEMP% 隔离 run 目录 → csc 编译 harness → 运行
 │   └── obfuscated_release.ps1 ← 一键混淆发版（构建→混淆→组包→三项验收→还原标记），见一点六
 └── tests/
-    ├── TestRunner.cs         ← 全部测试用例源码（加用例就改这里）
+    ├── TestRunner.cs         ← 主用例源码（加用例先看这里；DeviceManager 端到端用例在 DeviceManagerIntegrationTests.cs，两个文件都会被回归编译）
     └── ObfuscationAcceptance.cs ← 混淆验收跑器（behavior/dump 双模式，见一点六）
 ```
 
@@ -129,7 +129,7 @@ agingtest-regression/
 | **DeviceManagerExtended(V1.62)** | 状态口/在线数/启动错误、批量 SN、配方名负压联动、副本隔离、非法电池、连接与间隔热生效、批量阈值+定时器恢复、反方向报警端到端、全局时长回退、定格隔离、清理回全局、不限时、2s 延时门、空闲容错、自愈计数、报警驻留、边沿单次(CSV 计数，V1.76 列序4/5)、快照全字段+双台+批号、急停、停止再启动、风机生命周期(MockFan，V1.88.14 追加 E26b：两台到时完成→风机停，省电回归锁)、超长数组与错 id 防火墙、脏快照恢复、显示模式下发/保持/清空+叠加采集可见+GetTestingDeviceIds(V1.66) |
 | PolicyV167(V1.67) | BuildStartBlockText 阻断文案、MapAlarmResult 责任映射、ComputeResumeDuration 剩余/跑超/回拨、ValidatePolicyCombination 矛盾锁、ParseValue 大小写/非法、PolicyKeys↔DeviceConfig↔下拉选项三处同步锁、DeviceConfig 缺省=现状锁（含身份口径RecordTime）、身份口径解析+ResolveEventIdentity五态（现值/定格/无快照回退/半快照/null转空，V1.76）、快照新字段缺省锁、ValidateValue 策略分支+点位、NormalizePolicyValue 脏值兜底、WrapTooltip 40字换行、ProjectProfile 非法名/重复/切换拒绝/路径分流、Policy.json 存取往返、热更往返12条(V1.72.10：切A/切B/切回指针路径缓存跟人走+finally恢复)、Default自愈3条(正主在删+补拷+重名不覆盖/正主不在整体改名)、DeviceConfig.CopyFrom引用不变全量拷脱钩、ClearProjectScopedState清指派+Pause/Resume不擅自启动、DeleteProfile删不存在空名被拒切入当前禁删切回删除列表干净指针不变(V1.72.11)、ApplyLoadedRecipes空null清空替换引用不变(V1.72.12)、ValidatePolicyCombination无阀分支+布尔键15项(V1.73)；V1.84 补齐：Delete/Switch 路径穿越拒绝+野目录不算项目（空backup过滤）、IsValidProfileName名单、原子写（临时文件无残留+内容完整）、密码迭代 DoS 防护（巨量超界判失败）；V1.84.1：策略缓存手改即生效（三元指纹）+破空阀碰撞纯函数5判（阀区/电区拦/预留/输入区放行/0不拦）+原子二次覆盖走Replace；V1.104真空超时跟项目(PolicyKeys名单锁+数字无下拉豁免+缺省15000不动) |
 | **DeviceManagerPolicy(V1.67)** | 治具责任端到端(装夹异常+CSV)、待判定完成+下料录入(收/跳过/null)+CSV明细、失压保持(不停机+边沿单条不刷屏)、续跑(快照阶段/上电时刻+剩余60s+重抽真空)、泄压(破空阀开+CSV+复位关阀不残留) |
-| MesV168(V1.68) | 触发器解析(空全开/中英文分隔/未知进错/去重/命中)、字段映射(合法/未知本站/坏组/坏MES名/重复覆盖/大小写)、静态字段(坏组/空值)、组包(直通/改名/静态合并覆盖)、ParseValue字符串直通、PolicyKeys含MES三key、MES缺省锁(零行为)、ValidateValue鉴权/触发/映射/静态/布尔/整数分支、NormalizeMesAuthType兜底None、上报器Fake传输(发出/映射/静态/地址/开关零发送/触发器零发送/Mock只写CSV/全灭落盘/恢复补发清盘)、DPAPI往返/前缀/明文兼容/篡改回null、自定义头解析与鉴权优先、分地址解析与命中回退 |
+| MesV168(V1.68) | 触发器解析(空全开/中英文分隔/未知进错/去重/命中)、字段映射(合法/未知本站/坏组/坏MES名/重复覆盖/大小写)、静态字段(坏组/空值)、组包(直通/改名/静态合并覆盖)、ParseValue字符串直通、PolicyKeys含MES三key、MES缺省锁(零行为)、ValidateValue鉴权/触发/映射/静态/布尔/整数分支、NormalizeMesAuthType兜底None、上报器Fake传输(发出/映射/静态/地址/开关零发送/触发器零发送/Mock只写CSV/全灭落盘/恢复补发清盘)、DPAPI往返/前缀/明文不兼容回null/篡改回null、自定义头解析与鉴权优先、分地址解析与命中回退 |
 | **DeviceManagerMes(V1.68)** | Fake抓包端到端：启动/完成(PASS+映射+静态+SN)/下料判定(不良代码)/报警(FAIL)四触发器各一条+发往配置地址 |
 | RuleExprV169(V1.69) | 四则优先级/括号/负号/取模/字面量、比较逻辑与或非、变量大小写、短路跳过除零、除零模零未知变量错、语法错位置、NaN恒false、规则表行格式/行号/上限20、执行器持续计时(假时钟/中断复位/同配置不清/换配置清/非在测复位/立即/求值错)、完成表达式(空禁用/到点/求值错)、缺省锁、ValidateValue规则分支；V1.84 补齐：表达式含`||`分隔识别/多`||`/严格变量保存即拦/非严格运行时容错/深嵌套300层被拦+浅嵌套过（防栈溢出）；V1.84.1：深度只计真递归（括号+一元符分支，ParseOr本体不计）+100连写!被拦+浅取反过；V1.97 节点预算 2 条（500节点平坦链被拦+50节点短链过，防求值左斜树栈溢出） |
 | **DeviceManagerRules(V1.69)** | 自定义报警端到端(首轮触发FAIL+CSV规则名)、完成表达式提前完成(CSV原因)、跳过抽真空(直接上电+常压不误报+快照Aging+CSV)、各阶段台数R4(抽真空1/老化1/空闲2) |

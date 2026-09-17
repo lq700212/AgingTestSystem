@@ -1,28 +1,105 @@
 # 烧屏测试控制中心（AgingTestSystem）
 
-WinForms 桌面程序（.NET Framework 4.7.2 / C#）：监控 72 台气压表真空压力，控制 72 路真空电磁阀 + 72 路载台上电，
-接入冷却送风机与扫码枪，实现**老化测试业务闭环 + 报警联动**。
+> 给显示屏做"高温通电老化"的车间软件：一屏看住 **72 台真空负压表 + 72 路真空阀 + 72 路载台电源**，
+> 外加冷却送风机与扫码枪，实现**上料 → 抽真空 → 上电老化 → 下料判定 → 追溯**的业务闭环。
+> Mock 与真实硬件一键切换，不接线也能演示全流程。
 
-## 0. 快速定位（AI / 新人从这里进）
+![软件主界面：72 工位一屏铺满](docs/images/01-main.png)
 
-| 想知道 | 去这里 |
+| 想找什么 | 去这里 |
 | :--- | :--- |
+| 车间怎么用（开机→生产→报警处理） | [`docs/车间操作员使用说明.md`](docs/车间操作员使用说明.md)（真实截图，另有同名 PDF） |
+| 换型/配方/排障/授权（客户口径） | [`docs/客户技术工艺使用说明.md`](docs/客户技术工艺使用说明.md)（另有同名 PDF） |
+| 内部交付/权限/排障清单 | [`docs/内部培训文档.md`](docs/内部培训文档.md)（另有同名 PDF） |
+| 二次开发（架构/通讯/画布/业务子系统） | [`docs/二次开发指导手册.md`](docs/二次开发指导手册.md) |
+| 通讯协议、寄存器、IO 映射、坑点 | [`docs/通讯接入.md`](docs/通讯接入.md)（**唯一协议文档**） |
 | 改代码前必读的约定与红线 | [`AGENTS.md`](AGENTS.md) |
-| 设备通讯协议、寄存器、坑点、排障 | [`docs/通讯接入.md`](docs/通讯接入.md)（**唯一协议文档**） |
-| 各文件职责、代码在哪 | 下文「3. 目录结构与职责」 |
-| 配置项含义 | 下文「5. 配置项速查」 |
-| 业务流（测试/报警/送风机） | 下文「4. 核心业务流」 |
-| 改动历史 | `CHANGELOG.md`（唯一出处，最新在前） |
-| 现场调试 | 主程序"关于"菜单：**通讯测试 / 送风机测试**（技术员及以上；复用主程序共享连接，不自建连接） |
-| 车间操作培训 | [`docs/车间操作员使用说明.md`](docs/车间操作员使用说明.md)（小白照着做：开机→生产→报警处理→点检→禁忌，真实截图；另有同名 PDF） |
-| 二次开发手册 | [`docs/二次开发指导手册.md`](docs/二次开发指导手册.md)（给开发人员：架构军规、通讯接入、自绘画布微调、业务子系统、四张标准动作清单，初级可读、0 到 1 可复刻） |
-| 客户技术工艺 | [`docs/客户技术工艺使用说明.md`](docs/客户技术工艺使用说明.md)（换型/配方设计/排障/授权，无内部口径，同一套截图；另有同名 PDF） |
-| 内部人员培训 | [`docs/内部培训文档.md`](docs/内部培训文档.md)（权限/换型/排障/交付清单，同一套截图；另有同名 PDF） |
+| 改动历史 | [`CHANGELOG.md`](CHANGELOG.md)（唯一出处，最新在前） |
 
-> 原独立测试工程（`ModbusRtuBarometerTest` / `ModbusTcpIoControllerTest` / `ModbusTCPFanControllerTest` / `SerialScannerTest`）
-> 已删除，其测试逻辑已合并进主程序与 `docs/通讯接入.md`。
+---
 
-## 1. 技术栈与设备规模
+## 1. 软件长什么样（图文导览）
+
+### 1.1 主界面：72 台一屏铺满，无滚动条
+
+中间 8×9 工位面板自适应铺满窗口（面板允许宽扁拉伸、字取窄边不变形、小字一律加粗保证可读）；
+右侧是运行状态 / 送风机监视 / 操作区 / 日志四段式布局；每块面板点空白即选中，点【设置】即开该台配置。
+
+![软件主界面：72 工位一屏铺满](docs/images/01-main.png)
+
+- 面板一眼读完一台的状态：真空压力、SN、配方、延时/烧屏计时、上电/真空/下电三块灯、【设置】按钮。
+- 右侧操作区：批量设置配方 / 录入批号 / 启动运行 / 停止运行 / 报警复位 / 下料判定 / 全部停止（急停）。
+- 顶栏只有一行（项目 / 权限 / 通讯 + 4 个菜单按钮），状态栏实时显示在线数与测试中台数。
+
+### 1.2 开机生产三步：登录 → 批号绑定 → 下配方启动
+
+登录按角色进（操作员 / 技术员 / 管理员），密码 PBKDF2 哈希存储，明文不落盘。
+
+![登录窗口](docs/images/02-login.png)
+
+第一步录入批号，第二步把工位和产品 SN 绑上（支持扫码枪自动填充），第三步批量下配方并加入队列，
+最后在主界面勾选工位点【启动运行】。
+
+![录入批号窗口](docs/images/03-inputlot.png)
+
+![工位与SN绑定窗口](docs/images/04-idbinding.png)
+
+![批量设置配方窗口](docs/images/06-batchrecipe.png)
+
+单台要微调就点面板上的绿色【设置】，只改这一台，不影响勾选集；批量改多台只走右侧操作区的批量入口。
+
+![单台工位设置窗口](docs/images/07-stationsettings.png)
+
+做到时自动下电关阀，面板变蓝"已完成·待取料"；判定口径为"待判定"时，在此人工录 PASS / FAIL（FAIL 必填不良代码）。
+
+![下料判定窗口](docs/images/11-unload.png)
+
+### 1.3 工艺配置：配方 → 策略 → 系统设置 → 项目
+
+配方管"一台怎么做"（延时/烧屏时长/极限温度/负压阈值），左侧列表、右侧编辑，增删改即自动落盘。
+
+![配方管理窗口](docs/images/05-recipe.png)
+
+工艺策略是"整线怎么跑"的驾驶舱：拓扑固定、点节点改配置，启动开阀、抽真空、上电老化、完成下电、
+报警联动、下料判定、断电恢复、MES 上报每个环节一个节点；预置 A 常用 / B 标准 / C 宽松 / D 严格一键套用，
+下拉切档即预览，保存与系统设置走同一条落盘路。
+
+![工艺策略窗口](docs/images/10-policy.png)
+
+系统设置是全部配置项的表格（按业务分类，悬停有说明）：改完点【保存设置】即生效，
+连接参数自动重连，只有设备数量/布局/模拟开关等结构型配置需重启。
+
+![系统设置窗口](docs/images/09-settings.png)
+
+公共参数（批量写 72 台气压表设备阈值 0x0010，并同步软件报警阈值，两边一起）与项目切换（配方/策略/工位设置跟项目走，切项目即换工艺，无需重启）。
+
+![公共参数窗口](docs/images/15-commonparam.png)
+
+![项目切换窗口](docs/images/12-projectswitch.png)
+
+### 1.4 追溯运维：历史 → 调试 → 账号 → 授权
+
+历史记录读 CSV 落盘事件，起止日期一查即出，【导出】按项目报表列配置生成 xlsx。
+
+![历史记录窗口](docs/images/08-history.png)
+
+通讯测试（IO 点灯/一键遍历/备用通道可视化连线）与送风机测试（定值启停/温湿度）都复用主程序共享连接，
+不自建连接，状态与主界面实时一致；现场单点点动阀只在这里做，不进测试态。
+
+![通讯测试窗口](docs/images/16-comtest.png)
+
+![送风机测试窗口](docs/images/17-fantest.png)
+
+用户管理（操作员/技术员/管理员三级，另有隐藏 dev 最高权限账号做交付兜底）与软件授权
+（与 HJVision 同源：CPU 序列号 + MD5 码，同一套《获取激活码》工具通用；30 天/永久两档，不阻断生产）。
+
+![用户管理窗口](docs/images/14-usermgmt.png)
+
+![软件授权窗口](docs/images/13-activation.png)
+
+---
+
+## 2. 技术栈与设备规模
 
 | 设备 | 数量 | 协议 / 接入 | 关键实现 |
 | :--- | :---: | :--- | :--- |
@@ -33,7 +110,7 @@ WinForms 桌面程序（.NET Framework 4.7.2 / C#）：监控 72 台气压表真
 
 Mock 与真实实现由 `UseMockCommunication` 一键切换，接现场硬件只改配置、不改代码。
 
-## 2. 架构与分层
+## 3. 架构与分层
 
 ```
 MainForm / WorkstationGridView（Views 视图层，单窗口自绘大画布）
@@ -60,7 +137,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
   慢轮询时另节流触发 `OnScanProgress`（在线数实时爬，首轮"扫描中"秒出数，不等整轮）；
   `OnConnectionStatusChanged` / `OnFanDataUpdated` / `OnDiagnostic`。
 
-## 3. 目录结构与职责（定位用）
+## 4. 目录结构与职责（定位用）
 
 | 文件 | 职责 |
 | :--- | :--- |
@@ -102,9 +179,9 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `.opencode/skills/agingtest-regression/` | 项目最终测试验证技能：一键"构建→冒烟→回归断言"，用例源码 `tests/TestRunner.cs`，新测试用例一律沉淀于此（用法见其 SKILL.md） |
 | `Resources/app.ico` / `Resources/app.png` | 软件图标（ico=exe/桌面图标，csproj `ApplicationIcon` 编进 exe；任务栏图标是窗口图标，主窗构造从自身 exe 文件提取绑定，换 ico 重编即同步；png=同款大图只入库备用） |
 
-## 4. 核心业务流
+## 5. 核心业务流
 
-### 4.1 老化测试单台流程（三阶段状态机）
+### 5.1 老化测试单台流程（三阶段状态机）
 ```
 [准备] 录入批号 → 绑定工位↔SN → 设配方（延时时间/烧屏时间/负压值/显示模式随配方下发，显示模式仅记录）
 [启动] 只开真空阀 + 送风机定值启动；任务参数(时长/延时/阈值)此刻定格
@@ -125,7 +202,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 [配方] 三窗显示模式下拉框按 `DisplayModes` 字典单选（字典外选不进来，老值追加可见存时拦；`DisplayModeEnabled` 开关默认隐藏该行+布局收缩，当前项目零打扰；批量/工位窗在测下发提示"仅对新启动生效"——定格语义，启动瞬间定格）
 ```
 
-### 4.2 报警来源（DeviceManager.IsAlarm）
+### 5.2 报警来源（DeviceManager.IsAlarm）
 1. **压力越限**：真空压力 > `AlarmPressureThresholdKPa`（默认 -5kPa，即真空变差）
 2. **真空建立超时**：开阀后确认超时内压力未进正常区间（设 0=关闭此项）
 3. **通讯失联**：某台连续读取失败 ≥ `CommunicationLossAlarmCount` 次
@@ -135,12 +212,12 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 > 气压表是"双信号"：压力值走 RTU 供软件判报警（**联动只由此触发**）；报警硬件触点走 DI（X000~X107，NPN）只读进 UI 显示，不参与联动。
 
-### 4.3 送风机生命周期（72 台共用，不能随某台停机）
+### 5.3 送风机生命周期（72 台共用，不能随某台停机）
 - 有任一台在测试 → 保持运行；全部停止 → 才允许停机。`UpdateFanLifecycle` 里"只下发一次命令"状态记忆防重复写。
 - 主界面不提供手动定值启/停按钮（与自动生命周期管理重复且误导），维护调试请用"关于→送风机测试"。
 - **IP 自动识别**：连接顺序 = FanLastIp.cache（上次成功）→ FanIpAddress → FanIpCandidates；候选列表配几个识别几个，设备换 IP 自动找到并更新缓存。
 
-### 4.4 主界面操作入口（右侧"操作"区）
+### 5.4 主界面操作入口（右侧"操作"区）
 批量设置配方 / 录入批号 / 启动运行 / 停止运行 / 报警复位 / 下料判定（完成判定=待判定时用，AutoPass 下点它只提示） / 全部停止(急停) / 面板"设置" / 行"全选"。
 
 > 现场单点点动（只开阀不进入测试态）请用"关于→通讯测试(IO)"；送风机维护停机（全停状态下）请用送风机测试窗口。
@@ -158,7 +235,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 > 小屏跟随缩小不挤叠，正文一律加粗保证小字清楚）。
 > 顶栏锁死 30px；每行最右"全选"按钮竖排大字。
 
-## 5. 配置项速查（App.config + 项目 Policy.json，可在"关于→设置"管理员界面编辑；保存后大部分配置立即生效，连接参数自动重连，仅结构型配置重启生效；策略跟项目走 `Projects/<项目>/Policy.json`，切项目即换策略）
+## 6. 配置项速查（App.config + 项目 Policy.json，可在"关于→设置"管理员界面编辑；保存后大部分配置立即生效，连接参数自动重连，仅结构型配置重启生效；策略跟项目走 `Projects/<项目>/Policy.json`，切项目即换策略）
 
 | 配置项 | 默认值 | 说明 |
 | :--- | :--- | :--- |
@@ -171,7 +248,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `InvertInputs` / `InvertOutputs` | false | 输入/输出逻辑取反（NPN/PNP 现场差异，灯亮软件读 OFF 时试 true） |
 | `IoUnitId` | 1 | IO 耦合器从站 |
 | `IoInputRegisterStartAddress` / `IoOutputRegisterStartAddress` | 0x1000 / 0x2000 | DI / DO 起始寄存器 |
-| `IoBackupChannelMappingEnabled` / `IoBackupChannelMappings` | false / `0x2000@0x00->0x2009@0x00;0x2008@0x00->0x2009@0x01` | **备用通道映射**（DQ 通道烧毁时启用，源寄存器@通道->目标，寄存器/通道均十六进制，通道 0x00~0x0F，写/读 DO 自动重定向） |
+| `IoBackupChannelMappingEnabled` / `IoBackupChannelMappings` | false / `0x2000@0x00->0x2009@0x01;0x2000@0x01->0x2009@0x02;0x2008@0x00->0x2009@0x08` | **备用通道映射**（DQ 通道烧毁时启用，源寄存器@通道->目标，寄存器/通道均十六进制，通道 0x00~0x0F，写/读 DO 自动重定向；开关默认关，映射串只是出厂示例） |
 | `BarometerPressureRegisterAddress` | 0x0001 | 压力寄存器（0x0002 为小数位，实测不可靠不再使用） |
 | `BarometerDefaultDecimalPlaces` | 1 | 小数位（压力读取与阈值写入统一用，换气压表改这里） |
 | `BarometerPressureScale` | 1 | 压力额外缩放 |
@@ -208,10 +285,10 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `EventIdentityMode` | RecordTime | 事件行SN/配方取值（跟项目走；RecordTime=记录现值/StartSnapshot=启动定格） |
 | `DisplayModes` | 空 | 显示模式字典（跟项目走；留空=缺省8项，三窗下拉单选；设置表该行点出列表弹窗编辑） |
 | `DisplayModeEnabled` | false | 显示模式维度开关（跟项目走；默认三窗隐藏该行+布局收缩，当前项目零打扰） |
-| `ScannerEnabled` / `ScannerPort` | false / 空 | 扫码枪开关 / 固定串口（空=WMI 自动识别） |
+| `ScannerEnabled` / `ScannerPort` | true / 空 | 扫码枪开关 / 固定串口（空=WMI 自动识别；出厂已开，代码缺省 false） |
 | `ScannerDeviceKeyword` / `ScannerBaudRate` | Xenon 1902 / 115200 | 扫码枪识别关键词 / 波特率 |
 
-## 6. 菜单与权限
+## 7. 菜单与权限
 
 | 按钮 | 下拉项 | 权限 |
 | :--- | :--- | :--- |
@@ -223,7 +300,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 默认账号（Users.json）：operator / technician / admin，密码均 123456（PBKDF2 哈希存储，明文不落盘，见 `Services/PasswordHasher.cs`）。
 最高权限账号 dev / dev123：走"用户权限→管理员"登录框输入即进，界面无任何提示（隐藏入口）；dev 可删改业务管理员（用户管理窗），dev 名注册/改名一律回"该账号名不可用"，dev 自身不允许改名/删除。
 
-## 7. 关键设计决策与坑点（排障/新功能必读）
+## 8. 关键设计决策与坑点（排障/新功能必读）
 
 1. **共享连接**：通讯测试/送风机测试窗体**不自己建 TCP 连接**，复用 `DeviceManager` 的共享连接，
    连接状态与主界面实时一致。测试窗体读送风机状态走缓存（零额外报文）。
@@ -240,7 +317,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 11. **送风机是可选设备**：连接失败不影响整机启动；用独立 2s 定时器轮询，不阻塞气压表采集。
 12. **事件处理一律 IsDisposed 检查 + BeginInvoke**：避免窗体释放后 ObjectDisposedException。
 
-## 8. 构建与验证
+## 9. 构建与验证
 
 ```powershell
 # 构建（若提示找不到 MSBuild，先定位：Get-ChildItem 'C:\Program Files*\Microsoft Visual Studio' -Recurse -Filter MSBuild.exe | Select -First 1）
@@ -249,13 +326,14 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 
 - 构建成功标准：输出 `AgingTestSystem -> ...\bin\Debug\烧屏测试控制中心.exe` 且无 error。
 - **新增 .cs 文件必须手工在 csproj 登记**（老式项目无通配，漏登记报 CS0246）。
-- **所有 .cs 必须 UTF-8 with BOM 编码**（见上文第 7 节第 4 条）。
+- **所有 .cs 必须 UTF-8 with BOM 编码**（见上文第 8 节第 4 条）。
 - 一键验证：`powershell -ExecutionPolicy Bypass -File .opencode\skills\agingtest-regression\scripts\build_and_test.ps1`
   （自动完成"构建 → 真机冒烟 → 全量回归"；日常小改可加 `-Affected` 只测影响面；用法与覆盖范围见 `.opencode/skills/agingtest-regression/SKILL.md`）。
 - 运行时文件不入库：配方/工位设置/策略跟项目走（`Projects/<项目>/`，位于运行目录 bin/ 下）；
   用户/快照/日志/连接缓存/激活文件跟机器（`Users.json` / `TestSession.json` / `Logs/` / `*.cache` / `MainSetting.ini`，见 `.gitignore`）。
+- 界面截图来源：`docs/images/`（培训三件套共用同一套截图；README 门面图即取自该目录）。
 
-## 9. 常见问题排查
+## 10. 常见问题排查
 
 | 现象 | 排查方向 |
 | :--- | :--- |
@@ -269,7 +347,11 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | 送风机连不上 | FanIpAddress/FanIpCandidates 配置、端口 50000、FanEnabled=true |
 | 程序卡顿 | 增大 CollectInterval；确认采集/写操作在后台线程 |
 
-## 10. 待完善项
+## 11. 待完善项
 
-- 批号持久化 + 批号关联生产记录（工位级 SN/配方/延时已有 `StationSettingsCache` 缓存，`InputLotForm` 批号仅事件传递未落盘）
-- 工位设置窗口"破空"按钮业务待确认（下电/保存/加入队列已实现；破空是否恢复为"装夹预吸附"入口待现场确认，见预研 Plan §3 G2）
+- 批号档案缺独立落盘（现状：批号只活在内存 `DeviceManager.CurrentLotNumber`，
+  随每行测试事件 CSV 与断电快照 `TestSession.json` 落盘，`StationSettingsCache` 不存批号；
+  启动不校验批号、批号不在逐台任务快照里定格。后果：空批号可直接启动（CSV 批号列留空）；
+  中途改批号会让同一台的"启动"行与"完成"行批号不一致；正常退出后快照自动清、
+  重启批号归空，同一批次跨重启追溯断裂；批号↔SN↔配方关系只在手动导出 xlsx 时落盘，
+  无批次级汇总与换批防错）

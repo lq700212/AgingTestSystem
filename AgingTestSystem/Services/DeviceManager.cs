@@ -276,7 +276,7 @@ namespace AgingTestSystem.Services
         private bool[] _lossNoted;
 
         /// <summary>
-        /// MES 上报器（二期；构造时建、Dispose 时释放；开关关闭时零开销）。
+        /// MES 上报器（构造时建、Dispose 时释放；开关关闭时零开销）。
         /// </summary>
         private readonly MesReporter _mes;
 

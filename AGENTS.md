@@ -173,7 +173,7 @@
   密钥（token/密码）显示解密/保存加密走 `MesCrypto`（DPAPI + 前缀；内存明文、文件密文）；
   自定义头名只认 ASCII（`IsAsciiLetter`，中文在 .NET 里算 Letter 的坑）。
 - **规则表达式约定（V1.69）**：表达式引擎手写递归下降（不引脚本引擎，现场配错不能卡死采集）；
-  变量 vocabulary 冻结 12 个（加变量要同步改组变量+注释+说明+用例四处）；
+  变量 vocabulary 冻结 13 个（V1.74 加 current；加变量要同步改组变量+注释+说明+用例四处）；
   NaN 比较恒 false（fail-safe，非 IEEE）；`&&` `||` 短路；规则只能加严不能松绑
   （自定义报警只多报、完成表达式 OR 只能提前、内置联锁动不了）；
   规则表解析 `RuleEngine.ParseRuleList`（行号报错，上限 20 条）；持续计时状态变迁
@@ -410,7 +410,7 @@
 | `AgingTestSystem/Services/MesMapping.cs` | MES 映射解析纯函数（V1.68；触发器/字段映射/静态字段/自定义头/分地址 vocabulary 唯一出处） |
 | `AgingTestSystem/Services/MesReporter.cs` | MES 上报器（V1.68；后台 POST+重试+离线缓存；Transport 测试缝） |
 | `AgingTestSystem/Services/MesCrypto.cs` | MES 密钥 DPAPI 加解密（V1.68；前缀+内存明文/文件密文） |
-| `AgingTestSystem/Services/RuleExpr.cs` | 规则表达式引擎（V1.69；沙盒解析求值，变量冻结 12 个） |
+| `AgingTestSystem/Services/RuleExpr.cs` | 规则表达式引擎（V1.69；沙盒解析求值，变量冻结 13 个） |
 | `AgingTestSystem/Services/RuleEngine.cs` | 规则执行器（V1.69；编译缓存+持续计时+完成表达式 OR） |
 | `AgingTestSystem/Controls/RuleListEditorPopup.cs` | 规则表编辑弹窗（V1.69；多行文本+实时校验） |
 | `AgingTestSystem/Views/ProcessPolicyForm.cs` | 工艺策略窗（V1.70 建图；固定拓扑画布+点节点改配置+缩放平移拖拽） |
@@ -556,7 +556,7 @@
 - **新增 .cs 文件必须手工在 csproj 登记**（老式项目无通配，漏登记报 CS0246）：
   在 `<Compile Include="...">` 段按目录加一行（纯代码窗体加 `<SubType>Form</SubType>` 即可，
   无需 Designer/resx）。V1.67 实锤：5 个新文件漏登记编译全红。
-- **最终测试验证手段（V1.58.23 起）**：一键跑 `powershell -ExecutionPolicy Bypass -File .opencode\skills\agingtest-regression\scripts\build_and_test.ps1`，  自动完成"构建 → 真机冒烟（exe 启动存活）→ 全量回归用例（2097 断言，覆盖 PasswordHasher/UserManager/配置归一化/IO 映射/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案/MES映射上报/规则表达式/流程驾驶舱/编排扩展场景/软件激活等核心逻辑类）"。也可单独跑同目录 `smoke_test.ps1`（只冒烟）/ `run_unit_tests.ps1`（只回归）。退出码 0 = 全绿。
+- **最终测试验证手段（V1.58.23 起）**：一键跑 `powershell -ExecutionPolicy Bypass -File .opencode\skills\agingtest-regression\scripts\build_and_test.ps1`，  自动完成"构建 → 真机冒烟（exe 启动存活）→ 全量回归用例（2225 断言，覆盖 PasswordHasher/UserManager/配置归一化/IO 映射/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案/MES映射上报/规则表达式/工艺策略窗/编排扩展场景/软件激活等核心逻辑类）"。也可单独跑同目录 `smoke_test.ps1`（只冒烟）/ `run_unit_tests.ps1`（只回归）。退出码 0 = 全绿。
 - **界面像素级 bug（竖线/横线/颜色/叠色/裁剪/滚动条）**：调用全局技能 `winforms-ui-debug`——编译独立 harness 直接 new 目标窗体（指哪打哪，绕过登录/主流程），用反射探私有字段 + PrintWindow 截图 + 像素扫描定位根因并验证修复。含可复用的 csc 编译命令、坐标映射、色值字典与踩坑清单。
 - **调试完自动沉淀技能**：每次用 `winforms-ui-debug` 排查成功（尤其是"一次性改对"的高光案例）后，**主动把可复用的新套路/新踩坑/新型探针代码回写到全局技能 `winforms-ui-debug` 的 SKILL.md**（新增/补充小节、追加踩坑条目），不用等用户提醒。价值标准：换个人靠这份 skill 能更快解决同类问题。
 - 改构建输出（csproj 路径/bin 目录/主 exe 名）时，同步改全局技能 `winforms-ui-debug` 附录 A 的 AgingTestSystem 行（防开工查表拿到旧值）。
@@ -575,7 +575,7 @@ else 分支已做叠加——改采集/状态显示时勿破坏此机制）。�
    交互模块已含在映射里，如改 CSV 格式会连带全部 DeviceManager*）；
     大重构/发布前/改骨架（csproj/Interfaces/用例自身/scripts）跑全量
     `build_and_test.ps1`（默认）；映射不到的新文件自动兜底全量。
-    纯用例改动（只碰 tests 两份用例源码）走 TESTONLY：按 diff 反查命中模块只跑子集、
+    纯用例改动（只碰 tests 三份用例源码）走 TESTONLY：按 diff 反查命中模块只跑子集、
     产品未变跳过冒烟，碰公共脚手架/超 3 个模块仍兜底全量。
    **新增产品 .cs 文件必须在 `get_affected_modules.ps1` 的 `$Map` 登记**，
    否则每次改它都付全量代价。
@@ -589,8 +589,7 @@ else 分支已做叠加——改采集/状态显示时勿破坏此机制）。�
   确认无残留引用（合法语境除外，如 CHANGELOG 历史条目按惯例不回改、确认框流程文案）：
   - `CHANGELOG.md`（新增/更新当前版本小节）
   - `README.md`（目录结构、业务流、操作入口、构建方式）
-  - `docs/通讯接入.md`（寄存器/协议/串口参数/IO 映射/业务流程时序/测试入口）
-  - `docs/现场业务预研Plan.md`（软件能力现状、已实现清单）
+   - `docs/通讯接入.md`（寄存器/协议/串口参数/IO 映射/业务流程时序/测试入口）
   - 代码头部注释与 ASCII 布局图（界面文件）、方法 XML 注释
 - **`CHANGELOG.md`**：功能/修复完成后必须在顶部新增或更新当前版本小节，写明"改动范围、为什么这么改、优化点"三部分（参考既有 V1.xx 小节格式）。改动再小也要记，防止现场追溯不到。
 - **`README.md`**：若改动了目录结构、新增/删除文件、核心业务流、构建方式，同步更新对应章节（如"目录结构表"、`WorkstationGridView` 等条目），保持与实际代码一致。

@@ -232,7 +232,7 @@ namespace AgingTestSystem.Services
             new PolicyPresetDef
             {
                 Id = "B",
-                Title = "预置B·标准烧屏（推荐首试）",
+                Title = "预置B·标准烧屏（量产标准）",
                 Scenario = "量产标准跑：72 台真空吸附 + 载台上电，炉子加热、风机冷却，"
                     + "到时自动下电蜂鸣提醒取料。",
                 HowToSwitch = "启动被拦就按提示填（时长/SN/风机）；误报多（装夹/管路波动）→切C；"
