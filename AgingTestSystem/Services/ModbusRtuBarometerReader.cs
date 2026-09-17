@@ -659,6 +659,10 @@ namespace AgingTestSystem.Services
 
         private bool IsAlarm(decimal pressureKPa)
         {
+            // 总开关关闭时恒不报（与 DeviceManager 同口径，见 PressureAlarmEnabled 说明）。
+            if (_config != null && !_config.PressureAlarmEnabled) return false;
+            // 最高级静默时负压灯也不亮红（显示与判定同口径，见 MuteAllAlarms 说明）。
+            if (_config != null && _config.MuteAllAlarms) return false;
             // 判定口径收拢进 AgingSequencer.IsPressureOutOfRange，
             // 本方法只剩"取配置阈值与方向后转调"（行为与原来逐字一致）。
             return AgingSequencer.IsPressureOutOfRange(

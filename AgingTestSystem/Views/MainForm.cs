@@ -157,6 +157,12 @@ namespace AgingTestSystem.Views
             // 界面控件最先初始化，后续代码才能碰控件
             InitializeComponent();
 
+            // 任务栏图标恒等于 exe 文件图标（即 Resources/app.ico）：
+            // 任务栏取的是窗口图标（Form.Icon），不是 exe 嵌入图标，缺省不设样式不可控；
+            // 这里每次从自身 exe 文件提取，换 app.ico 重编即同步，永不分叉
+            Icon taskIcon = LoadTaskbarIcon();
+            if (taskIcon != null) this.Icon = taskIcon;
+
             // 顶栏加粗/字号走代码（Sunny 继承样式字号，Designer 写死会分叉；见两方法注释）
             ApplyHeaderBoldFonts();
             ApplyHeaderFonts();
@@ -363,6 +369,22 @@ namespace AgingTestSystem.Views
 
         /// <summary>当前悬停的窗口按钮（null=都没悬停；Paint 按它画悬停底）</summary>
         private Button _hoverWinBtn;
+
+        /// <summary>
+        /// 取任务栏窗口图标：从指定的 exe 文件提取关联图标（缺省为自身 exe，即 app.ico 样式）。
+        /// 失败（路径无效/文件不存在）返回 null，调用方保持缺省图标；一律不抛异常
+        /// （构造期图标拿不到不能影响启动）。
+        /// </summary>
+        private static Icon LoadTaskbarIcon(string exePath = null)
+        {
+            try
+            {
+                string path = string.IsNullOrEmpty(exePath) ? Application.ExecutablePath : exePath;
+                if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return null;
+                return Icon.ExtractAssociatedIcon(path);
+            }
+            catch { return null; }
+        }
 
         /// <summary>
         /// 接线窗口三按钮：自绘字形＋悬停底＋点击行为＋提示＋任务栏标题。
@@ -946,6 +968,18 @@ namespace AgingTestSystem.Views
             if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["AlarmWhenPressureHigherThanThreshold"], out bool alarmHigher))
             {
                 config.AlarmWhenPressureHigherThanThreshold = alarmHigher;
+            }
+
+            // 压力报警总开关：默认 true（现状报警开）；false=阈值越限与真空建立超时全不报，常开不报警。
+            if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["PressureAlarmEnabled"], out bool pressureAlarmEnabled))
+            {
+                config.PressureAlarmEnabled = pressureAlarmEnabled;
+            }
+
+            // 报警全关·最高级：默认 false（现状）；true=全部静默（DI/失联/规则也不报），优先级高于压力报警总开关。
+            if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["MuteAllAlarms"], out bool muteAllAlarms))
+            {
+                config.MuteAllAlarms = muteAllAlarms;
             }
 
             // ===== 冷却送风机配置读取（V1.10 新增） =====
@@ -1869,7 +1903,8 @@ namespace AgingTestSystem.Views
             // 不用二次开发。边沿触发：停过一次后必须回温（≤上限）才允许再停，避免每秒重复停；
             // StopTesting 空数组是 no-op，无在测时只记一行日志。
             if (AgingSequencer.IsFanOverTempShutdown(
-                data.Temperature, _config.FanTempAlarmLimitC, _config.FanTempShutdownEnabled))
+                data.Temperature, _config.FanTempAlarmLimitC, _config.FanTempShutdownEnabled)
+                && !AgingSequencer.ShouldSuppressAlarm(_config.MuteAllAlarms))
             {
                 if (!_fanShutdownTriggered)
                 {

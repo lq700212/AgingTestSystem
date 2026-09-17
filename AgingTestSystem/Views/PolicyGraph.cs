@@ -150,6 +150,11 @@ namespace AgingTestSystem.Views
                 DefaultRect = new Rectangle(430, 340, 240, 150),
                 Keys = new List<NodeKey>
                 {
+                    // 压力报警总开关是第一项：关了阈值/方向都不看（常开不报警），先翻它再调阈值。
+                    new NodeKey("PressureAlarmEnabled", "压力报警开关", EditorKind.Bool),
+                    // 报警全关是第二项：最高级静默（DI/失联/规则/超温联停也不报），压住上面第一项；
+                    // 四个预置默认全关，只走手动或自定义开启。
+                    new NodeKey("MuteAllAlarms", "报警全关", EditorKind.Bool),
                     // 压力报警阈值/方向是报警联动的核心：以前只能去系统设置
                     // "报警参数"或公共参数窗改，驾驶舱看得到报警却改不了阈值，收进本节点。
                     new NodeKey("AlarmPressureThresholdKPa", "报警阈值(kPa)", EditorKind.Text),
@@ -229,6 +234,28 @@ namespace AgingTestSystem.Views
             return null;
         }
 
+        /// <summary>
+        /// 按配置 key 反查它在哪个节点的哪一项（纯函数：设置表保存弹窗点名用）。
+        /// 策略层是最高优先级：设置表里改了节点可配的项，保存后即进策略层，
+        /// 弹窗点出"【节点】事项"让用户知道去哪看。找不到返回 null（纯机器项，
+        /// 如串口参数，驾驶舱不管，保存不打扰）。
+        /// </summary>
+        /// <returns>"【节点标题】事项名"（如"【报警联动】压力报警开关"），无节点管返回 null</returns>
+        public static string LocateKey(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return null;
+            foreach (var n in Nodes)
+            {
+                if (n.Keys == null) continue;
+                foreach (var k in n.Keys)
+                {
+                    if (string.Equals(k.Key, key, StringComparison.Ordinal))
+                        return "【" + n.Title + "】" + k.Label;
+                }
+            }
+            return null;
+        }
+
         /// <summary>按 id 找连线（找不到返回 null）。</summary>
         public static EdgeDef FindEdge(string id)
         {
@@ -304,8 +331,14 @@ namespace AgingTestSystem.Views
                     };
                 case "alarm":
                     // 阈值进副标题：报警联动改完阈值当场看得见，不用再去设置表核对。
-                    string thr = "阈值：" + config.AlarmPressureThresholdKPa.ToString("0.##")
-                        + "kPa" + (config.AlarmWhenPressureHigherThanThreshold ? "(高于报)" : "(低于报)");
+                    // 总开关关闭时阈值/方向都不看（常开不报警），副标题直说关闭，不摆阈值误导。
+                    // 全关时 DI/失联/规则/超温联停也不报，副标题直说全关（压住总开关）。
+                    string thr = config.MuteAllAlarms
+                        ? "阈值：全关（DI/失联/规则也不报）"
+                        : (!config.PressureAlarmEnabled
+                        ? "阈值：关闭（常开不报警）"
+                        : "阈值：" + config.AlarmPressureThresholdKPa.ToString("0.##")
+                        + "kPa" + (config.AlarmWhenPressureHigherThanThreshold ? "(高于报)" : "(低于报)"));
                     return new string[]
                     {
                         thr,

@@ -477,6 +477,69 @@ namespace AgingTestSystem.Tests
                 dm.ResetDevices(new[] { 2, 3 });
                 config.AlarmWhenPressureHigherThanThreshold = true;
 
+                // ---------- E15b 压力报警总开关关闭端到端（常开不报警） ----------
+                config.PressureAlarmEnabled = false;
+                reader.SetPressure(2, -4m); // -4>-5：方向高于报本该越限，开关关了不报
+                reader.SetPressure(3, -4m);
+                dm.SetStationDelayTimes(2, TimeSpan.Zero, TimeSpan.FromSeconds(60));
+                dm.SetStationDelayTimes(3, TimeSpan.Zero, TimeSpan.FromSeconds(60));
+                dm.StartTesting(new[] { 2, 3 });
+                Thread.Sleep(900); // 超过真空建立宽限 600ms：超时同样被总开关压住
+                Check("[扩展][报警关] 越限台不报警仍在测",
+                    dm.GetBarometerData(2) != null && dm.GetBarometerData(2).Status == DeviceStatus.Testing
+                    && dm.GetBarometerData(3) != null && dm.GetBarometerData(3).Status == DeviceStatus.Testing);
+                Check("[扩展][报警关] 阀电保持常开",
+                    io.ReadOutput(ValveOut(config, 2)) && io.ReadOutput(PowerOut(config, 2)));
+                Check("[扩展][报警关] 无报警结果",
+                    dm.GetBarometerData(2).LastTestResult == "" && dm.GetTestingCount() == 2);
+                config.PressureAlarmEnabled = true;
+                dm.ResetDevices(new[] { 2, 3 });
+
+                // ---------- E15c 停止/复位即时刷屏（不等下轮采集） ----------
+                reader.SetPressure(2, -6m); // 到位压力，正常在测
+                dm.SetStationDelayTimes(2, TimeSpan.Zero, TimeSpan.FromSeconds(60));
+                dm.StartTesting(new[] { 2 });
+                Check("[扩展][即时] 启动后在测",
+                    WaitUntil(() => dm.GetTestingCount() == 1, 2000));
+                int batchFired = 0;
+                EventHandler<BarometerData[]> counter = (s, d) => { System.Threading.Interlocked.Increment(ref batchFired); };
+                dm.OnBatchDataUpdated += counter;
+                try
+                {
+                    dm.StopTesting(new[] { 2 });
+                    Check("[扩展][即时] 停止当场广播（不等采集）", batchFired >= 1);
+                    var stopped = dm.GetBarometerData(2);
+                    Check("[扩展][即时] 停止当场回空闲",
+                        stopped != null && stopped.Status == DeviceStatus.Idle);
+                    Check("[扩展][即时] 停止当场输出OFF",
+                        stopped != null && stopped.OutputStatus != null && stopped.OutputStatus.Length >= 2
+                        && !stopped.OutputStatus[0] && !stopped.OutputStatus[1]);
+                }
+                finally { try { dm.OnBatchDataUpdated -= counter; } catch { } }
+                reader.SetPressure(3, -4m); // 越限压力，造一个 Fault 台
+                dm.SetStationDelayTimes(3, TimeSpan.Zero, TimeSpan.FromSeconds(60));
+                dm.StartTesting(new[] { 3 });
+                Check("[扩展][即时] 越限台报警Fault",
+                    WaitUntil(() => { var dd = dm.GetBarometerData(3); return dd != null && dd.Status == DeviceStatus.Fault; }, 3000));
+                int batchFired2 = 0;
+                EventHandler<BarometerData[]> counter2 = (s, d) => { System.Threading.Interlocked.Increment(ref batchFired2); };
+                dm.OnBatchDataUpdated += counter2;
+                try
+                {
+                    dm.ResetDevices(new[] { 3 });
+                    Check("[扩展][即时] 复位当场广播", batchFired2 >= 1);
+                    var reset = dm.GetBarometerData(3);
+                    Check("[扩展][即时] 复位当场回空闲清结果",
+                        reset != null && reset.Status == DeviceStatus.Idle && reset.LastTestResult == "");
+                }
+                finally { try { dm.OnBatchDataUpdated -= counter2; } catch { } }
+                // 现场复位：E15b/c 借 2/3 号台加的延时/压力复原（E2 快照断言 2 号用全局兜底：时长延时双 0；
+                // Zero/Zero 与"从未设置"快照等价，方向/开关已在块内复原，压力回 setup 常压）。
+                dm.SetStationDelayTimes(2, TimeSpan.Zero, TimeSpan.Zero);
+                dm.SetStationDelayTimes(3, TimeSpan.Zero, TimeSpan.Zero);
+                reader.SetPressure(2, 0m);
+                reader.SetPressure(3, 0m);
+
                 // ---------- E16 全局时长回退完成（无配方，MaxTestDuration=2s） ----------
                 config.MaxTestDurationSeconds = 2;
                 reader.SetPressure(1, -6m);
@@ -1635,6 +1698,7 @@ namespace AgingTestSystem.Tests
                 SweepShortArrayAndBroadcast();
                 SweepSkipVacuumFreeze();
                 SweepAlarmReasons();
+                SweepMuteAll();
                 SweepJudgeClaim();
                 SweepRebuildArrays();
                 SweepStopAllVent();
@@ -2034,6 +2098,151 @@ namespace AgingTestSystem.Tests
                 try { config.UseDiAlarmContact = false; } catch { }
                 try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { }
             }
+        }
+
+        // ---------- S6b 报警全关·最高级：DI/失联/规则/真空全压住（L2 压住 L1） ----------
+        private static void SweepMuteAll()
+        {
+            // —— classify 层（停采集直调，零抖动） ——
+            FakeBarometerReader reader; FakeIoController io; DeviceConfig config;
+            DeviceManager dm = BuildTestManager(out reader, out io, out config);
+            int origTimeout = config.VacuumConfirmTimeoutMs;
+            try
+            {
+                dm.StartTesting(new[] { 4 });
+                Check("[全关] 4号进入在测",
+                    WaitUntil(() => dm.GetTestingStates()[3], 2000));
+                PauseCollect(dm);
+                try
+                {
+                    var confirms = GetDmField(dm, "_vacuumConfirmTimes") as DateTime[];
+                    var opens = GetDmField(dm, "_valveOpenTimes") as DateTime[];
+                    config.UseDiAlarmContact = true;
+                    config.PressureAlarmEnabled = true;   // L1 开着，证明 L2 压住 L1
+                    config.MuteAllAlarms = true;
+                    config.VacuumConfirmTimeoutMs = 600;
+                    confirms[3] = DateTime.MinValue;      // 窗口已过：越限分支
+                    object r1 = InvokeDm(dm, "ClassifyAlarm",
+                        new BarometerData { DeviceId = 4, VacuumPressure = 0m });
+                    Check("[全关] 越限不报（压住L1）",
+                        !(bool)r1.GetType().GetField("IsAlarm").GetValue(r1));
+                    confirms[3] = DateTime.Now;           // 窗口内 + 开阀 5 秒前 + 不到位：超时分支
+                    opens[3] = DateTime.Now.AddSeconds(-5);
+                    object r2 = InvokeDm(dm, "ClassifyAlarm",
+                        new BarometerData { DeviceId = 4, VacuumPressure = 0m });
+                    Check("[全关] 超时不报",
+                        !(bool)r2.GetType().GetField("IsAlarm").GetValue(r2));
+                    confirms[3] = DateTime.MinValue;      // 窗口已过 + 到位 + 触点闭合：DI 分支
+                    object r3 = InvokeDm(dm, "ClassifyAlarm",
+                        new BarometerData
+                        {
+                            DeviceId = 4,
+                            VacuumPressure = -95m,
+                            InputStatus = new bool[] { true }
+                        });
+                    Check("[全关] DI不报",
+                        !(bool)r3.GetType().GetField("IsAlarm").GetValue(r3));
+                    object r4 = InvokeDm(dm, "ClassifyAlarm", new object[] { null });
+                    Check("[全关] 空数据不报",
+                        !(bool)r4.GetType().GetField("IsAlarm").GetValue(r4));
+                    config.MuteAllAlarms = false;         // 对照：关掉全关，DI 照报
+                    object r5 = InvokeDm(dm, "ClassifyAlarm",
+                        new BarometerData
+                        {
+                            DeviceId = 4,
+                            VacuumPressure = -95m,
+                            InputStatus = new bool[] { true }
+                        });
+                    string reason5 = (string)r5.GetType().GetField("Reason").GetValue(r5);
+                    Check("[全关] 不开全关DI照报",
+                        (bool)r5.GetType().GetField("IsAlarm").GetValue(r5)
+                        && reason5 != null && reason5.Contains("DI"));
+                }
+                finally { ResumeCollect(dm); }
+            }
+            finally
+            {
+                try { config.UseDiAlarmContact = false; } catch { }
+                try { config.MuteAllAlarms = false; } catch { }
+                try { config.VacuumConfirmTimeoutMs = origTimeout; } catch { }
+                try { dm.StopAll(); } catch { } try { dm.Dispose(); } catch { }
+            }
+
+            // —— live 失联：失败计数到阈值（刺激已发生）仍不标故障 ——
+            FakeBarometerReader rL; FakeIoController ioL; DeviceConfig cL;
+            DeviceManager dmL = BuildTestManager(out rL, out ioL, out cL);
+            try
+            {
+                cL.MuteAllAlarms = true;
+                dmL.StartTesting(new[] { 3 });
+                Check("[全关失联] 3号进入在测",
+                    WaitUntil(() => dmL.GetTestingStates()[2], 2000));
+                rL.SetFail(3, true);
+                bool stimulus = WaitUntil(() =>     // 失败计数到阈值 = 不静默的话本该报了
+                {
+                    var fc = GetDmField(dmL, "_readFailCounts") as int[];
+                    return fc != null && fc.Length > 2 && fc[2] >= cL.CommunicationLossAlarmCount;
+                }, 5000);
+                Check("[全关失联] 失败计数到阈值（刺激非空证明）", stimulus);
+                System.Threading.Thread.Sleep(600);
+                var dL = dmL.GetBarometerData(3);
+                Check("[全关失联] 不标故障不断电",
+                    dmL.GetTestingStates()[2] && dL != null && dL.Status != DeviceStatus.Fault
+                    && dL.LastTestResult != "设备异常");
+                rL.SetFail(3, false);
+            }
+            finally { try { dmL.StopAll(); } catch { } try { dmL.Dispose(); } catch { } }
+
+            // —— live 自定义规则：恒成立规则仍不触发 ——
+            FakeBarometerReader rR; FakeIoController ioR; DeviceConfig cR;
+            DeviceManager dmR = BuildTestManager(out rR, out ioR, out cR);
+            try
+            {
+                cR.VacuumConfirmTimeoutMs = 60000;   // 内置超时靠边，只看规则
+                cR.CustomAlarmRules = "失压测试 | pressure > -1 | 0";
+                cR.MuteAllAlarms = true;
+                dmR.StartTesting(new[] { 1 });
+                Check("[全关规则] 阀已开（轮次在流）",
+                    WaitUntil(() => ioR.ReadOutput(ValveOut(cR, 1)), 2500));
+                System.Threading.Thread.Sleep(2000);   // 常压 0 > -1：不静默首轮即触发
+                var dR = dmR.GetBarometerData(1);
+                Check("[全关规则] 恒成立规则不触发",
+                    dR != null && dR.Status == DeviceStatus.Testing
+                    && dR.LastTestResult != "FAIL");
+            }
+            finally { try { dmR.StopAll(); } catch { } try { dmR.Dispose(); } catch { } }
+
+            // —— live 越限：L1 开 + 全关开，仍在测（压制对照见[扩展][反向]） ——
+            FakeBarometerReader rO; FakeIoController ioO; DeviceConfig cO;
+            DeviceManager dmO = BuildTestManager(out rO, out ioO, out cO);
+            try
+            {
+                cO.VacuumConfirmTimeoutMs = 60000;
+                cO.PressureAlarmEnabled = true;
+                cO.MuteAllAlarms = true;
+                dmO.StartTesting(new[] { 1 });
+                Check("[全关越限] 1号进入在测",
+                    WaitUntil(() => dmO.GetTestingStates()[0], 2000));
+                rO.SetPressure(1, 0m);   // 0 > -5 恒越限
+                PauseCollect(dmO);
+                try
+                {
+                    var confirmsO = GetDmField(dmO, "_vacuumConfirmTimes") as DateTime[];
+                    confirmsO[0] = DateTime.MinValue;   // 窗口已过，走越限分支
+                }
+                finally { ResumeCollect(dmO); }
+                bool seen = WaitUntil(() =>   // 缓存读到 0 = 刺激轮次已消费
+                {
+                    var d = dmO.GetBarometerData(1);
+                    return d != null && d.VacuumPressure == 0m;
+                }, 5000);
+                Check("[全关越限] 刺激轮次已消费（非空证明）", seen);
+                System.Threading.Thread.Sleep(800);
+                var dO = dmO.GetBarometerData(1);
+                Check("[全关越限] 越限不报仍在测",
+                    dmO.GetTestingStates()[0] && dO != null && dO.Status != DeviceStatus.Fault);
+            }
+            finally { try { dmO.StopAll(); } catch { } try { dmO.Dispose(); } catch { } }
         }
 
         // ---------- S7 负延时钳零 ----------

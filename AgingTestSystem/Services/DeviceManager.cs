@@ -2258,6 +2258,14 @@ namespace AgingTestSystem.Services
 
             // 在测任务清单变化 → 快照落盘（全部停完时 SaveSessionSnapshot 会自动清文件）
             SaveSessionSnapshot();
+
+            // 停止成功即时刷屏：缓存 Testing→Idle + 输出 OFF 已是已知事实，不等下轮采集；
+            // 压力回落由上面的快速跟踪 250ms 内补读，状态先行、数值随后。
+            if (validIds.Count > 0)
+            {
+                MarkTestingCacheIdle(validIds.ToArray());
+                BroadcastCacheSnapshot();
+            }
         }
 
         /// <summary>
@@ -2354,12 +2362,102 @@ namespace AgingTestSystem.Services
                     {
                         cached.Status = DeviceStatus.Idle;
                         cached.LastTestResult = "";
+                        // 输出 OFF 是刚写过 IO 的已知事实，面板阀/电块当场灭，不等下轮采集。
+                        if (cached.OutputStatus == null || cached.OutputStatus.Length < 2)
+                        {
+                            cached.OutputStatus = new bool[2];
+                        }
+                        cached.OutputStatus[0] = false;
+                        cached.OutputStatus[1] = false;
                     }
                 }
             }
 
             // 在测任务清单变化 → 快照落盘
             SaveSessionSnapshot();
+
+            // 复位成功即时刷屏：只推写成功的台（写失败的保持原态可重试，绝不谎报已复位）。
+            if (resetOkIds.Count > 0)
+            {
+                BroadcastCacheSnapshot();
+            }
+        }
+
+        /// <summary>
+        /// 本地状态变化后立即推缓存快照刷界面（停止/复位/急停成功路径用）。
+        /// <para>做什么：按缓存现状组装全量广播并触发 <see cref="OnBatchDataUpdated"/>，面板与右下角汇总当场刷新，不等下一轮采集（72 台轮询一轮远超采集间隔，干等会被误会"点了没反应"）。</para>
+        /// <para>为什么安全：推的只是"已知正确"的状态（阀/电已写 OFF、测试态已清）；压力值是旧值，下轮采集/快速跟踪自然补新，不造假数据。订阅异常逐个隔离，与采集广播同口径。</para>
+        /// <para>怎么改：只在 IO 写成功、状态已清的成功路径调；写失败保持原态可重试，绝不推（推了就是谎报已停）。</para>
+        /// </summary>
+        private void BroadcastCacheSnapshot()
+        {
+            BarometerData[] snapshot;
+            lock (_cacheLock)
+            {
+                snapshot = new BarometerData[_config.TotalBarometers];
+                for (int i = 0; i < snapshot.Length; i++)
+                {
+                    BarometerData cached;
+                    if (_barometerDataCache.TryGetValue(i + 1, out cached) && cached != null)
+                    {
+                        snapshot[i] = cached.Clone();
+                    }
+                }
+            }
+            var batchHandler = OnBatchDataUpdated;
+            if (batchHandler == null) return;
+            foreach (EventHandler<BarometerData[]> single in batchHandler.GetInvocationList())
+            {
+                try
+                {
+                    single(this, snapshot);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(
+                        $"[本地刷新] 界面订阅异常（非状态故障）: {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 把缓存里"还在显示测试中"的台翻成空闲并记输出已关（停止/急停用，null=全部台）。
+        /// <para>只翻 Testing→Idle：完成待取料/故障必须留给报警复位清（点停止清不掉红蓝屏是既定语义）；输出两位置 OFF 是刚写过 IO 的已知事实，面板阀/电块当场灭。</para>
+        /// </summary>
+        /// <param name="deviceIds">工位号；null=全部工位</param>
+        private void MarkTestingCacheIdle(int[] deviceIds)
+        {
+            lock (_cacheLock)
+            {
+                if (deviceIds == null)
+                {
+                    for (int deviceId = 1; deviceId <= _config.TotalBarometers; deviceId++)
+                    {
+                        MarkSingleTestingCacheIdle(deviceId);
+                    }
+                    return;
+                }
+                foreach (int deviceId in deviceIds)
+                {
+                    MarkSingleTestingCacheIdle(deviceId);
+                }
+            }
+        }
+
+        /// <summary>单台翻转（调用方已持 _cacheLock；非法编号直接跳过）。</summary>
+        private void MarkSingleTestingCacheIdle(int deviceId)
+        {
+            if (deviceId < 1 || deviceId > _config.TotalBarometers) return;
+            BarometerData cached;
+            if (!_barometerDataCache.TryGetValue(deviceId, out cached) || cached == null) return;
+            if (cached.Status != DeviceStatus.Testing) return;
+            cached.Status = DeviceStatus.Idle;
+            if (cached.OutputStatus == null || cached.OutputStatus.Length < 2)
+            {
+                cached.OutputStatus = new bool[2];
+            }
+            cached.OutputStatus[0] = false;
+            cached.OutputStatus[1] = false;
         }
 
         /// <summary>数组是否包含指定工位号（复位/判定批量语义用，null 安全）。</summary>
@@ -2710,6 +2808,10 @@ namespace AgingTestSystem.Services
                     _rules.ResetStation(i + 1);   // 清规则持续计时
                 }
             }
+
+            // 急停成功即时刷屏（与停止/复位同口径：只翻 Testing→Idle，完成/故障留给复位）。
+            MarkTestingCacheIdle(null);
+            BroadcastCacheSnapshot();
 
             // 停止送风机（急停时也停）
             // 【复查补齐】风机停失败不能跳过快照清理+急停记账：以前 Stop() 一抛，
@@ -3287,7 +3389,10 @@ namespace AgingTestSystem.Services
                             _readFailCounts[i]++;
                             wasTesting = _testingStates[i];
                             // 连续失败达到阈值，且还没报过警 → 触发通讯故障报警
-                            if (_readFailCounts[i] >= _config.CommunicationLossAlarmCount && !_lastAlarmStates[i])
+                            // （最高级静默下只计数不触发：恢复照自愈，状态栏在线数照实显示，
+                            // 面板不标故障不断电——空载调试显式 opt-in，正常生产不受影响）
+                            if (_readFailCounts[i] >= _config.CommunicationLossAlarmCount && !_lastAlarmStates[i]
+                                && !AgingSequencer.ShouldSuppressAlarm(_config.MuteAllAlarms))
                             {
                                 _lastAlarmStates[i] = true;
                                 _testingStates[i] = false;
@@ -3482,7 +3587,9 @@ namespace AgingTestSystem.Services
                             bool alarmEdge = false;
                             string alarmReason = null;
                             bool alarmVacuumCause = false;
-                            if (isAlarm == false)
+                            // 最高级静默下自定义规则不求值（求值失败日志也不出，彻底静默；
+                            // 完成表达式 R2 不是报警，不受影响，照常提前完成）。
+                            if (isAlarm == false && !AgingSequencer.ShouldSuppressAlarm(_config.MuteAllAlarms))
                             {
                                 customRule = _rules.EvalAlarms(deviceId,
                                     BuildRuleVars(deviceId, data, now), true);
@@ -4202,9 +4309,10 @@ namespace AgingTestSystem.Services
         private bool PressureOutOfRange(decimal pressureKPa, decimal thresholdKPa)
         {
             // 判定口径收拢进 AgingSequencer.IsPressureOutOfRange，
-            // 本方法只剩"取配置方向后转调"（行为与原来逐字一致）。
+            // 本方法只剩"取配置方向与总开关后转调"（总开关关闭恒不越限，见 PressureAlarmEnabled）。
             return AgingSequencer.IsPressureOutOfRange(
-                pressureKPa, thresholdKPa, _config.AlarmWhenPressureHigherThanThreshold);
+                pressureKPa, thresholdKPa, _config.AlarmWhenPressureHigherThanThreshold,
+                _config.PressureAlarmEnabled);
         }
 
         /// <summary>
@@ -4233,6 +4341,9 @@ namespace AgingTestSystem.Services
         private AlarmClassification ClassifyAlarm(BarometerData data)
         {
             var none = new AlarmClassification { IsAlarm = false };
+            // 最高级静默（MuteAllAlarms）：压住本函数全部三条分支（建立超时/越限/DI），
+            // 空数据也一并压住（失联走下面 CollectData 空分支，同样被压，见该处）。
+            if (AgingSequencer.ShouldSuppressAlarm(_config.MuteAllAlarms)) return none;
             if (data == null) return new AlarmClassification { IsAlarm = true }; // 空数据视为异常
 
             int idx = data.DeviceId - 1;
