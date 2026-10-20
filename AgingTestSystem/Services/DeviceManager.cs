@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Timers;
 using AgingTestSystem.Interfaces;
 using AgingTestSystem.Models;
@@ -1805,6 +1806,30 @@ namespace AgingTestSystem.Services
         public bool IsFanConnected => _fanController != null && _fanController.IsConnected;
 
         /// <summary>
+        /// 读取送风机温度/湿度斜率（客户标定用；寄存器 0x0020 / 0x0021）
+        /// </summary>
+        /// <param name="scaleDivisor">定点换算除数（现场可配，见 DeviceConfig.FanScaleDivisor）</param>
+        /// <returns>斜率数据；未启用/未连接/读取失败返回 null</returns>
+        public FanSlopeData GetFanSlope(float scaleDivisor)
+        {
+            if (_fanController == null) return null;
+            return _fanController.ReadSlope(scaleDivisor);
+        }
+
+        /// <summary>
+        /// 写入送风机温度/湿度斜率（客户标定用；寄存器 0x0020 / 0x0021）
+        /// 【注意】会改变设备实际行为（升降温速率），仅在客户确认后调用。
+        /// </summary>
+        /// <param name="temperatureRaw">温度斜率原始值</param>
+        /// <param name="humidityRaw">湿度斜率原始值</param>
+        /// <returns>是否写成功</returns>
+        public bool SetFanSlope(ushort temperatureRaw, ushort humidityRaw)
+        {
+            if (_fanController == null) return false;
+            return _fanController.WriteSlope(temperatureRaw, humidityRaw);
+        }
+
+        /// <summary>
         /// 电表是否已连接（Q2 骨架：供面板/诊断显示"电流有没有数"；
         /// false = 未启用或未连上，电流恒 NaN）。
         /// </summary>
@@ -1845,6 +1870,39 @@ namespace AgingTestSystem.Services
             {
                 Monitor.Exit(_fanPollLock);
             }
+        }
+
+        /// <summary>
+        /// 强制重新轮询一次送风机状态（后台线程，不阻塞调用方）。
+        /// 【为什么需要】定点除数（FanScaleDivisor）校准后，主界面温度显示应该立刻按新比例刷新，
+        /// 不能等下一个 2 秒采集周期 —— 操作员点完【确定】就该看到正确的温度。
+        /// 【为什么放后台】Modbus TCP 读最多阻塞几秒（超时配置），卡 UI 会被当成"程序卡死"。
+        /// 定时器正在轮询时跳过即可：那个周期本来就会用新除数。
+        /// </summary>
+        public void RefreshFanData()
+        {
+            if (_disposed) return;
+            if (_fanController == null) return;
+
+            Task.Run(() =>
+            {
+                try
+                {
+                    if (!Monitor.TryEnter(_fanPollLock)) return;   // 定时器正在轮询，下个周期自然刷新
+                    try
+                    {
+                        PollFanData();
+                    }
+                    finally
+                    {
+                        Monitor.Exit(_fanPollLock);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Diagnostic("送风机状态刷新失败：" + ex.Message);
+                }
+            });
         }
 
         /// <summary>

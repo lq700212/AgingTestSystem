@@ -123,6 +123,34 @@ namespace AgingTestSystem.Services
         /// </summary>
         public string ActiveIp => _activeIp;
 
+        // ================================================================
+        // 斜率寄存器（客户现场标定用；协议事实见客户文档《ModBus通讯协议使用说明》第 6 章）
+        // ================================================================
+
+        /// <summary>
+        /// 温度斜率寄存器地址（保持寄存器，RW）
+        /// 【协议来源】客户文档《ModBus-TH-2026-03-31.doc》第 6 章"程式相关寄存器地址说明解析"：
+        ///   40033[32][0x20] 温度斜率 RW 乘数 0.01，备注"实际倍数以控制器当前显示精度为准"
+        /// 【为什么留着这个寄存器】控制器的小数位是"仪表侧参数"（可在控制器屏上改），
+        /// Modbus 寄存器表里不暴露"当前小数位/当前除数"这个字段，所以上位机读不出除数。
+        /// 【校准不用它】写斜率会改设备实际升降温速率（客户工艺参数），
+        /// 客户校准走的是"温湿度当前读数 + 控制屏真值"对照反推（见 FanCalibrationForm），只读不写。
+        /// </summary>
+        public const ushort TempSlopeRegister = 0x0020;
+
+        /// <summary>
+        /// 湿度斜率寄存器地址（保持寄存器，RW）
+        /// 【协议来源】客户文档第 6 章：40034[33][0x21] 湿度斜率 RW 乘数 0.1
+        /// </summary>
+        public const ushort HumiditySlopeRegister = 0x0021;
+
+        /// <summary>
+        /// 斜率除数的缺省值（寄存器原始值 ÷ 该值 = 实际斜率）
+        /// 沿用温湿度同一套缺省（<see cref="DeviceConfig.DefaultFanScaleDivisor"/>），
+        /// 客户标定后可在设置表改；这里只是"没标定过"时的兜底。
+        /// </summary>
+        public const float DefaultSlopeDivisor = DeviceConfig.DefaultFanScaleDivisor;
+
         public event EventHandler<string> OnError;
 
         /// <summary>
@@ -435,6 +463,154 @@ namespace AgingTestSystem.Services
         public static FanData ParseFanRegisters(ushort[] values)
         {
             return ParseFanRegisters(values, DeviceConfig.DefaultFanScaleDivisor);
+        }
+
+        // ================================================================
+        // 斜率：读 / 写 / 标定（客户现场自校准小数点位置）
+        // ================================================================
+
+        /// <summary>
+        /// 读斜率寄存器（纯函数，回归可直接断言）。
+        /// 【寄存器映射】客户文档第 6 章：0x0020 温度斜率、0x0021 湿度斜率（均 RW）。
+        /// 一次读 2 个连续寄存器（0x0020~0x0021），比逐个读省一半报文。
+        /// 【定点比例】与温湿度同一套除数口径：实际斜率 = 原始值 ÷ 除数。
+        /// 数量不足 2 个（设备返回异常）返回 null，由调用方按"读不到"处理。
+        /// </summary>
+        /// <param name="values">一次读回的 2 个寄存器值（[0]=温度斜率，[1]=湿度斜率）</param>
+        /// <param name="scaleDivisor">定点换算除数；非正数时兜底用缺省（防除零/翻符号）</param>
+        /// <returns>解析出的斜率；数量不足返回 null</returns>
+        public static FanSlopeData ParseSlopeRegisters(ushort[] values, float scaleDivisor)
+        {
+            if (values == null || values.Length < 2) return null;
+
+            float divisor = scaleDivisor > 0 ? scaleDivisor : DeviceConfig.DefaultFanScaleDivisor;
+
+            return new FanSlopeData
+            {
+                TemperatureSlope = values[0] / divisor,
+                HumiditySlope = values[1] / divisor,
+                RawTemperature = values[0],
+                RawHumidity = values[1],
+                Divisor = divisor,
+                CollectTime = DateTime.Now
+            };
+        }
+
+        /// <summary>
+        /// 按缺省除数解析斜率（供回归用例与不需要指定除数的调用方使用）。
+        /// </summary>
+        public static FanSlopeData ParseSlopeRegisters(ushort[] values)
+        {
+            return ParseSlopeRegisters(values, DeviceConfig.DefaultFanScaleDivisor);
+        }
+
+        /// <summary>
+        /// 实际斜率 → 寄存器原始值（纯函数，写入前用）。
+        /// 反向乘回除数：raw = 实际值 × 除数。
+        /// 超出 ushort 范围（0~65535）时钳到边界，不让客户写出一个回读不出来的值。
+        /// </summary>
+        /// <param name="actualValue">客户输入的实际斜率（如 0.5 表示 0.5℃/分）</param>
+        /// <param name="scaleDivisor">定点换算除数；非正数时兜底用缺省</param>
+        /// <returns>应写入寄存器的原始值</returns>
+        public static ushort SlopeValueToRaw(double actualValue, float scaleDivisor)
+        {
+            float divisor = scaleDivisor > 0 ? scaleDivisor : DeviceConfig.DefaultFanScaleDivisor;
+            double raw = actualValue * divisor;
+            if (raw < 0) return 0;
+            if (raw > ushort.MaxValue) return ushort.MaxValue;
+            return (ushort)Math.Round(raw, MidpointRounding.AwayFromZero);
+        }
+
+        /// <summary>
+        /// 由"写进去的原始值 + 控制器屏上显示的值"反推该屏的定点除数（纯函数）。
+        /// 【标定原理】原始值 ÷ 除数 = 屏显值  ⇒  除数 = 原始值 ÷ 屏显值。
+        /// 客户往斜率寄存器写一个已知原始值（如 100），再照控制器屏上显示的数字填进来，
+        /// 程序就算出这台屏实际的除数（1 / 10 / 100 / 1000 这类定点格式）。
+        /// 屏显值为 0（除数算不出）、输入非法、或算出来的除数不是合法定点格式时返回 0，
+        /// 表示"标定失败"——宁可报失败也不给客户一个错的除数（错的除数=温度差 10 倍/100 倍）。
+        /// </summary>
+        /// <param name="rawValue">已写入（或读回）的寄存器原始值</param>
+        /// <param name="displayedValue">客户在控制器屏上看到的斜率显示值</param>
+        /// <returns>推算出的除数；无法推算时返回 0</returns>
+        public static double InferDivisorFromDisplay(ushort rawValue, double displayedValue)
+        {
+            if (displayedValue == 0) return 0;
+            double divisor = rawValue / displayedValue;
+            if (divisor <= 0) return 0;
+            // 定点格式只可能是 10 的整数次幂（0.1 / 0.01 / 1）——这是温控仪表的通用约定。
+            // 算出来不是 10 的幂（如 100÷3=33.33），说明客户抄错了屏显值或写错了原始值。
+            double log10 = Math.Log10(divisor);
+            int exp = (int)Math.Round(log10);
+            if (exp < 0 || exp > 4) return 0;                 // 超出 1~10000 范围
+            if (Math.Abs(log10 - exp) > 0.0001) return 0;     // 不是 10 的整数次幂
+            return Math.Pow(10, exp);
+        }
+
+        /// <summary>
+        /// 读取送风机温度/湿度斜率（一次读 0x0020~0x0021 两个连续寄存器）
+        /// </summary>
+        /// <param name="scaleDivisor">定点换算除数（现场可配，见 <see cref="DeviceConfig.FanScaleDivisor"/>）</param>
+        /// <returns>斜率数据；读取失败返回 null（上层显示"读不到"）</returns>
+        public FanSlopeData ReadSlope(float scaleDivisor)
+        {
+            if (_config == null || !_config.FanEnabled)
+            {
+                OnError?.Invoke(this, "送风机未启用");
+                return null;
+            }
+
+            try
+            {
+                ushort[] values;
+                lock (_syncRoot)
+                {
+                    if (!EnsureConnected()) return null;
+                    values = _master.ReadHoldingRegisters(_config.FanUnitId, TempSlopeRegister, 2);
+                }
+                return ParseSlopeRegisters(values, scaleDivisor);
+            }
+            catch (Exception ex)
+            {
+                _isConnected = false;
+                OnError?.Invoke(this, $"送风机斜率读取失败: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 写入送风机温度/湿度斜率（两个寄存器分别写，功能码 06H）。
+        /// 【为什么要开放给客户】控制器的小数位在仪表侧设置，Modbus 不暴露；
+        /// 客户写一个已知原始值、看屏上显示成多少，就能反推出这台屏的除数（自标定）。
+        /// </summary>
+        /// <param name="temperatureRaw">温度斜率原始值（写 <see cref="TempSlopeRegister"/>）</param>
+        /// <param name="humidityRaw">湿度斜率原始值（写 <see cref="HumiditySlopeRegister"/>）</param>
+        /// <returns>是否写成功</returns>
+        public bool WriteSlope(ushort temperatureRaw, ushort humidityRaw)
+        {
+            if (_config == null || !_config.FanEnabled)
+            {
+                OnError?.Invoke(this, "送风机未启用");
+                return false;
+            }
+
+            try
+            {
+                lock (_syncRoot)
+                {
+                    if (!EnsureConnected()) return false;
+                    // 先写温度再写湿度：温度写成功、湿度失败时，屏上至少能看出温度那一路生效了，
+                    // 比"两路都写不进去"更容易定位（客户标定正是靠看屏上显示值）。
+                    _master.WriteSingleRegister(_config.FanUnitId, TempSlopeRegister, temperatureRaw);
+                    _master.WriteSingleRegister(_config.FanUnitId, HumiditySlopeRegister, humidityRaw);
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _isConnected = false;
+                OnError?.Invoke(this, $"送风机斜率写入失败: {ex.Message}");
+                return false;
+            }
         }
 
         /// <summary>

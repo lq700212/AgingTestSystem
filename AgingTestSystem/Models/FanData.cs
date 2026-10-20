@@ -99,7 +99,7 @@ namespace AgingTestSystem.Models
         /// <summary>程式停止</summary>
         ProgramStopped = 0x0000,
 
-        /// <summary>程式启动</summary>
+        /// <summary>程式运行中</summary>
         ProgramRunning = 0x0001,
 
         /// <summary>定值停止</summary>
@@ -107,5 +107,40 @@ namespace AgingTestSystem.Models
 
         /// <summary>定值启动</summary>
         FixedValueRunning = 0x0003
+    }
+
+    /// <summary>
+    /// 冷却送风机温度/湿度斜率（升降温速率）
+    ///
+    /// 【用途】客户现场标定用。
+    /// 控制器的定点小数位是"仪表侧参数"（可在控制器屏上改），Modbus 寄存器表里没有
+    /// "当前小数位/当前除数"这个字段，上位机读不出来。但斜率寄存器可写（客户文档第 6 章：
+    /// 0x0020 温度斜率 RW、0x0021 湿度斜率 RW），客户按"写一个已知原始值 → 看屏上显示成多少"
+    /// 的流程，就能自己反推出这台屏的定点除数（10 / 100 / 1）。
+    ///
+    /// 【字段说明】
+    /// - TemperatureSlope / HumiditySlope：按当前除数换算出来的实际斜率（显示用）
+    /// - RawTemperature / RawHumidity：寄存器原始值（标定时要填进"屏显对照"用）
+    /// - Divisor：本次换算用的除数（标定结果就落在这里）
+    /// </summary>
+    public class FanSlopeData
+    {
+        /// <summary>温度斜率（换算后的实际值，单位：℃/分）</summary>
+        public float TemperatureSlope { get; set; }
+
+        /// <summary>湿度斜率（换算后的实际值，单位：%RH/分）</summary>
+        public float HumiditySlope { get; set; }
+
+        /// <summary>温度斜率寄存器原始值（0x0020 读回/写入的那个数）</summary>
+        public ushort RawTemperature { get; set; }
+
+        /// <summary>湿度斜率寄存器原始值（0x0021 读回/写入的那个数）</summary>
+        public ushort RawHumidity { get; set; }
+
+        /// <summary>本次换算使用的定点除数（标定出来的就是它）</summary>
+        public float Divisor { get; set; }
+
+        /// <summary>采集/读写时间戳</summary>
+        public DateTime CollectTime { get; set; }
     }
 }

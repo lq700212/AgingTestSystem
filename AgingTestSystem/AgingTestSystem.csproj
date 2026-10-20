@@ -114,6 +114,7 @@
     <Compile Include="Services\ModbusTcpIoController.cs" />
     <Compile Include="Services\ScannerService.cs" />
     <Compile Include="Services\FanControllerClient.cs" />
+    <Compile Include="Services\FanCalibration.cs" />
     <Compile Include="Services\PowerMeterClient.cs" />
     <Compile Include="Services\IoMapBuilder.cs" />
     <Compile Include="Services\SerialPortHelper.cs" />
@@ -309,6 +310,12 @@
     </Compile>
     <Compile Include="Dialogs\FanTestForm.Designer.cs">
       <DependentUpon>FanTestForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Dialogs\FanCalibrationForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Dialogs\FanCalibrationForm.Designer.cs">
+      <DependentUpon>FanCalibrationForm.cs</DependentUpon>
     </Compile>
     <Compile Include="Program.cs" />
   </ItemGroup>

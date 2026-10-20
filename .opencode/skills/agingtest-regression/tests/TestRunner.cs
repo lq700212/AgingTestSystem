@@ -1838,6 +1838,48 @@ namespace AgingTestSystem.Tests
                 && mfType.GetField("btnParameter", MFF) != null
                 && mfType.GetField("btnLog", MFF) != null
                 && mfType.GetField("btnAbout", MFF) != null);
+            // 定点校准入口（V2.0.1）：监视区空间有限放不下按钮，改为**长按温度标签**触发。
+            // 只锁字段/事件存在性——MainForm 构造太重不进回归（几何由真窗 harness 量）。
+            Check("长按校准入口：鼠标按下处理已接",
+                mfType.GetMethod("FanTempLabel_MouseDown", MFF) != null);
+            Check("长按校准入口：松开处理已接",
+                mfType.GetMethod("FanTempLabel_MouseUp", MFF) != null);
+            Check("长按校准入口：移出取消处理已接",
+                mfType.GetMethod("FanTempLabel_MouseLeave", MFF) != null);
+            Check("长按校准入口：计时 Tick 处理已接",
+                mfType.GetMethod("FanLongPressTimer_Tick", MFF) != null);
+            Check("长按校准入口：校准窗打开方法已接",
+                mfType.GetMethod("ShowFanCalibration", MFF) != null);
+            // 长按计时器必须挂 components 容器（自动释放；R6 关窗竞态审计口径）
+            var lpTimerField = mfType.GetField("fanLongPressTimer", MFF);
+            Check("长按计时器字段存在且类型是Timer",
+                lpTimerField != null && lpTimerField.FieldType == typeof(System.Windows.Forms.Timer));
+            // 长按时长阈值：太短会误触发（单击就弹模态窗挡界面），太长会以为没反应
+            // （const 与 static 方法都在"静态"区，反射标志必须带 Static，只带 Instance 恒找不到）
+            const System.Reflection.BindingFlags MFS = System.Reflection.BindingFlags.NonPublic
+                | System.Reflection.BindingFlags.Static;
+            var lpConst = mfType.GetField("FanLongPressMs", MFS);
+            Check("长按阈值=600ms（短按不弹窗，防误触）",
+                lpConst != null && lpConst.IsLiteral && (int)lpConst.GetRawConstantValue() == 600);
+            // 长按判定纯函数（不依赖窗体实例，直接反射调 static）
+            var isLp = mfType.GetMethod("IsLongPress", MFS);
+            bool lpOk = isLp != null;
+            if (lpOk)
+            {
+                DateTime t0 = new DateTime(2026, 1, 1, 0, 0, 0);
+                lpOk &= (bool)isLp.Invoke(null, new object[] { t0, t0.AddMilliseconds(599), 600 }) == false;
+                lpOk &= (bool)isLp.Invoke(null, new object[] { t0, t0.AddMilliseconds(600), 600 }) == true;
+                lpOk &= (bool)isLp.Invoke(null, new object[] { t0, t0.AddMilliseconds(1500), 600 }) == true;
+                lpOk &= (bool)isLp.Invoke(null, new object[] { t0, t0, 600 }) == false;              // 刚按下
+                lpOk &= (bool)isLp.Invoke(null, new object[] { t0, t0.AddSeconds(-5), 600 }) == false; // 时钟拨慢钳零
+            }
+            Check("长按判定纯函数（599ms不触发/600ms触发/负跨度钳零）", lpOk);
+            // 旧按钮不得残留（改成长按后按钮必须清干净，界面上不能出现两个入口）
+            Check("旧校准按钮名已清除（不并存两个入口）",
+                mfType.GetField("btnFanCalibration", MFF) == null
+                && mfType.GetMethod("btnFanCalibration_Click", MFF) == null
+                && mfType.GetField("btnFanSlope", MFF) == null
+                && mfType.GetMethod("btnFanSlope_Click", MFF) == null);
             // 权限区与项目区同构锁（V1.88.27：panelPermission 必须是 Panel＋Dock 全高＋MiddleLeft，
             // FlowLayoutPanel＋Padding.Top 硬垫行高一变就偏——只验字段类型，不构造 MainForm）。
             var permField = mfType.GetField("panelPermission", MFF);
@@ -4730,12 +4772,82 @@ namespace AgingTestSystem.Tests
             }
             Check("配置文件含定点除数key", cfgHasKey);
 
+            // —— 斜率（V2.0.1 客户现场标定用；协议见客户文档第 6 章）——
+            // 背景：控制器的小数位是仪表侧参数，Modbus 寄存器表里不暴露"当前除数"，
+            // 上位机读不出来；但斜率寄存器可写（0x0020 温度斜率 RW / 0x0021 湿度斜率 RW），
+            // 客户"写一个已知原始值 → 看屏上显示成多少"就能自己反推除数。
+            Check("斜率寄存器地址=0x20/0x21",
+                FanControllerClient.TempSlopeRegister == 0x0020
+                && FanControllerClient.HumiditySlopeRegister == 0x0021);
+            Check("斜率缺省除数常量=10", FanControllerClient.DefaultSlopeDivisor == 10f);
+            // 解析：两个寄存器 → 斜率数据（原始值 + 换算值都要留，标定要靠原始值）
+            var sd = FanControllerClient.ParseSlopeRegisters(new ushort[] { 50, 20 });
+            Check("斜率解析（÷10）",
+                sd != null && sd.TemperatureSlope == 5f && sd.HumiditySlope == 2f
+                && sd.RawTemperature == 50 && sd.RawHumidity == 20 && sd.Divisor == 10f);
+            Check("斜率null→null", FanControllerClient.ParseSlopeRegisters(null) == null);
+            Check("斜率不足2个→null", FanControllerClient.ParseSlopeRegisters(new ushort[] { 50 }) == null);
+            var sd100 = FanControllerClient.ParseSlopeRegisters(new ushort[] { 500, 200 }, 100);
+            Check("斜率除数100→0.01精度",
+                sd100.TemperatureSlope == 5f && sd100.RawTemperature == 500);
+            var sdDiv0 = FanControllerClient.ParseSlopeRegisters(new ushort[] { 50, 20 }, 0);
+            Check("斜率除数0兜底回缺省（不无穷大）",
+                sdDiv0.TemperatureSlope == 5f && !float.IsInfinity(sdDiv0.TemperatureSlope));
+            var sdDivNeg = FanControllerClient.ParseSlopeRegisters(new ushort[] { 50, 20 }, -10);
+            Check("斜率除数负数兜底回缺省（不翻符号）", sdDivNeg.TemperatureSlope == 5f);
+            Check("斜率缺省重载与显式10等价",
+                FanControllerClient.ParseSlopeRegisters(new ushort[] { 50, 20 }).TemperatureSlope
+                    == FanControllerClient.ParseSlopeRegisters(new ushort[] { 50, 20 }, 10).TemperatureSlope);
+
+            // 反推除数：除数 = 原始值 ÷ 屏显值（客户把屏上看到的数字填进来）
+            Check("反推:100÷1.00=100",
+                FanControllerClient.InferDivisorFromDisplay(100, 1.0) == 100.0);
+            Check("反推:222÷22.2=10",
+                FanControllerClient.InferDivisorFromDisplay(222, 22.2) == 10.0);
+            Check("反推:2220÷22.20=100",
+                FanControllerClient.InferDivisorFromDisplay(2220, 22.20) == 100.0);
+            Check("反推:屏显0→失败(除0)",
+                FanControllerClient.InferDivisorFromDisplay(100, 0) == 0);
+            Check("反推:屏显为负→失败",
+                FanControllerClient.InferDivisorFromDisplay(100, -1) == 0);
+            Check("反推:非整十倍→失败（屏显抄错就不给错除数）",
+                FanControllerClient.InferDivisorFromDisplay(100, 3) == 0);
+            Check("反推:除数1（整数精度）",
+                FanControllerClient.InferDivisorFromDisplay(22, 22) == 1.0);
+            Check("反推:除数1000",
+                FanControllerClient.InferDivisorFromDisplay(1000, 1) == 1000.0);
+            Check("反推:除数超范围(100000)→失败",
+                FanControllerClient.InferDivisorFromDisplay(65535, 0.65535) == 0);
+            // 实际值 ↔ 原始值互转（写入前换算用）
+            Check("实际值0.5×除数10→原始5",
+                FanControllerClient.SlopeValueToRaw(0.5, 10) == 5);
+            Check("实际值0.5×除数100→原始50",
+                FanControllerClient.SlopeValueToRaw(0.5, 100) == 50);
+            Check("实际值超范围钳到65535",
+                FanControllerClient.SlopeValueToRaw(99999, 100) == ushort.MaxValue);
+            Check("实际值负数钳到0",
+                FanControllerClient.SlopeValueToRaw(-1, 10) == 0);
+            Check("实际值换算除数0兜底回缺省",
+                FanControllerClient.SlopeValueToRaw(1, 0) == 10);
+
+            // Mock 往返：斜率是"写→读"，Mock 必须能存住（标定流程靠这个）
+            var mockFan = new MockFanController();
+            mockFan.Connect(new DeviceConfig());
+            Check("Mock写斜率成功", mockFan.WriteSlope(100, 50));
+            var mockRead = mockFan.ReadSlope(10);
+            Check("Mock斜率写后读回一致",
+                mockRead != null && mockRead.RawTemperature == 100 && mockRead.RawHumidity == 50
+                && mockRead.TemperatureSlope == 10f && mockRead.HumiditySlope == 5f);
+            mockFan.Dispose();
+
             // 未连接约定（全新实例，不碰网络） ——
             var fan = new FanControllerClient();
             Check("初始未连接", fan.IsConnected == false);
             Check("配置空读状态=null", fan.ReadStatus() == null);
             Check("配置空启动=false", fan.StartFixedValue() == false);
             Check("配置空停止=false", fan.Stop() == false);
+            Check("配置空读斜率=null", fan.ReadSlope(10) == null);
+            Check("配置空写斜率=false", fan.WriteSlope(100, 100) == false);
             bool threw = false;
             bool rc = false;
             try { rc = fan.ReconnectNow(); }
@@ -4748,6 +4860,98 @@ namespace AgingTestSystem.Tests
             Check("Connect(null)返回false不抛", !threw && cnull == false);
             Check("ActiveIp初始null", fan.ActiveIp == null);
             fan.Dispose(); // 未连接释放不抛
+
+            // —— 定点校准纯函数（V2.0.1）：由"上位机读到的值"与"控制屏真值"反推除数 ——
+            // 场景：上位机除数 10，读到 222.0；控制屏显示 22.20 → 真实除数应是 100。
+            int calDiv; string calErr;
+            Check("校准：显示222.0+屏显22.20→除数100",
+                FanCalibration.TryComputeDivisor(222.0, 22.20, 10, out calDiv, out calErr) && calDiv == 100);
+            Check("校准：显示22.2+屏显22.20→除数10（本来就对）",
+                FanCalibration.TryComputeDivisor(22.2, 22.20, 10, out calDiv, out calErr) && calDiv == 10);
+            Check("校准：显示22.2+屏显22.2→除数10",
+                FanCalibration.TryComputeDivisor(22.2, 22.2, 10, out calDiv, out calErr) && calDiv == 10);
+            Check("校准：除数100时读22.20/屏显22.20→除数100（幂等，不越乘）",
+                FanCalibration.TryComputeDivisor(22.20, 22.20, 100, out calDiv, out calErr) && calDiv == 100);
+            Check("校准：读数与屏显差0.3仍落在10的幂（5%容差）",
+                FanCalibration.TryComputeDivisor(22.5, 22.2, 10, out calDiv, out calErr) && calDiv == 10);
+            Check("校准：推算结果不在10的幂附近(屏显填错)判失败不乱乘",
+                !FanCalibration.TryComputeDivisor(222.0, 1.5, 10, out calDiv, out calErr) && calErr != null);
+            Check("校准：屏显0判失败",
+                !FanCalibration.TryComputeDivisor(22.2, 0, 10, out calDiv, out calErr) && calErr != null);
+            Check("校准：屏显负数判失败",
+                !FanCalibration.TryComputeDivisor(22.2, -1, 10, out calDiv, out calErr) && calErr != null);
+            Check("校准：上位机读数无效(NaN)判失败",
+                !FanCalibration.TryComputeDivisor(double.NaN, 22.2, 10, out calDiv, out calErr) && calErr != null);
+            Check("校准：上位机读数0判失败",
+                !FanCalibration.TryComputeDivisor(0, 22.2, 10, out calDiv, out calErr) && calErr != null);
+            Check("校准：当前除数非法(0)时按缺省10算",
+                FanCalibration.TryComputeDivisor(222.0, 22.20, 0, out calDiv, out calErr) && calDiv == 100);
+            Check("校准：结果越界(除数100000)判失败",
+                !FanCalibration.TryComputeDivisor(222000.0, 2.22, 100, out calDiv, out calErr) && calErr != null);
+            // 归一：候选除数落到最近的 10 的幂
+            Check("归一：99.5→100",
+                FanCalibration.TryNormalizeToPowerOfTen(99.5, out calDiv, out calErr) && calDiv == 100);
+            Check("归一：9.95→10",
+                FanCalibration.TryNormalizeToPowerOfTen(9.95, out calDiv, out calErr) && calDiv == 10);
+            Check("归一：0.995→1",
+                FanCalibration.TryNormalizeToPowerOfTen(0.995, out calDiv, out calErr) && calDiv == 1);
+            Check("归一：110超出5%容差判失败",
+                !FanCalibration.TryNormalizeToPowerOfTen(110, out calDiv, out calErr) && calErr != null);
+            Check("归一：负数判失败",
+                !FanCalibration.TryNormalizeToPowerOfTen(-10, out calDiv, out calErr) && calErr != null);
+            Check("归一：0判失败",
+                !FanCalibration.TryNormalizeToPowerOfTen(0, out calDiv, out calErr) && calErr != null);
+
+            // —— 校准窗（V2.0.1）：构造 + 布局不溢出 + 控件齐全 ——
+            // 只构造不 Show（Show 会连设备/起后台线程；AGENTS：回归用例禁裸调会弹模态框的方法）。
+            var calForm = new Dialogs.FanCalibrationForm(null, new DeviceConfig());
+            try
+            {
+                // 缩放口径：AutoScaleMode.None + ZoomScaleRect（照抄 UnloadJudgeForm canonical）。
+                // 早先按纯代码窗三要素设 AutoScaleDimensions(6,12) + Font 模式，
+                // 实测 AutoScaleDimensions 被固化成 7×17、客户区缩小，内容全溢出。
+                Check("校准窗AutoScale=None（Sunny canonical）",
+                    calForm.AutoScaleMode == AutoScaleMode.None);
+                Check("校准窗客户区=设计值480×300",
+                    calForm.ClientSize.Width == 480 && calForm.ClientSize.Height == 300);
+                // 内容不得超出客户区（溢出 = 控件被裁/看不见）
+                int maxRight = 0, maxBottom = 0;
+                foreach (Control c in calForm.Controls)
+                {
+                    if (c.Right > maxRight) maxRight = c.Right;
+                    if (c.Bottom > maxBottom) maxBottom = c.Bottom;
+                }
+                Check("校准窗内容不超出客户区",
+                    maxRight <= calForm.ClientSize.Width && maxBottom <= calForm.ClientSize.Height);
+                // Sunny UIForm 自绘标题占 35px：内容从 y=47 起（Y<35 会被静默搬到 35 压标题）
+                int minTop = int.MaxValue;
+                foreach (Control c in calForm.Controls) if (c.Top < minTop) minTop = c.Top;
+                Check("校准窗内容避开标题禁区(Y≥47)", minTop >= 47);
+                // 关键控件齐全（少一个就是功能残缺）：标题标签 + 两个输入框 + 当前值回显 + 确认/取消
+                var calFlags = BindingFlags.NonPublic | BindingFlags.Instance;
+                Check("校准窗关键控件齐全",
+                    typeof(Dialogs.FanCalibrationForm).GetField("_lblTempTitle", calFlags)?.GetValue(calForm) != null
+                    && typeof(Dialogs.FanCalibrationForm).GetField("_lblHumidityTitle", calFlags)?.GetValue(calForm) != null
+                    && typeof(Dialogs.FanCalibrationForm).GetField("_txtScreenTemp", calFlags)?.GetValue(calForm) != null
+                    && typeof(Dialogs.FanCalibrationForm).GetField("_txtScreenHumidity", calFlags)?.GetValue(calForm) != null
+                    && typeof(Dialogs.FanCalibrationForm).GetField("_lblCurrentTemp", calFlags)?.GetValue(calForm) != null
+                    && typeof(Dialogs.FanCalibrationForm).GetField("_lblCurrentHumidity", calFlags)?.GetValue(calForm) != null
+                    && typeof(Dialogs.FanCalibrationForm).GetField("_lblCurrentDivisor", calFlags)?.GetValue(calForm) != null
+                    && typeof(Dialogs.FanCalibrationForm).GetField("_lblResult", calFlags)?.GetValue(calForm) != null
+                    && typeof(Dialogs.FanCalibrationForm).GetField("_btnOk", calFlags)?.GetValue(calForm) != null
+                    && typeof(Dialogs.FanCalibrationForm).GetField("_btnCancel", calFlags)?.GetValue(calForm) != null);
+                // 标题标签在输入框左侧（用户明确要求：输入框左侧是 title）
+                var titleLbl = typeof(Dialogs.FanCalibrationForm).GetField("_lblTempTitle", calFlags)?.GetValue(calForm) as Control;
+                var tempBox = typeof(Dialogs.FanCalibrationForm).GetField("_txtScreenTemp", calFlags)?.GetValue(calForm) as Control;
+                Check("校准窗标题在输入框左侧",
+                    titleLbl != null && tempBox != null && titleLbl.Right <= tempBox.Left);
+                // 无参构造（设计器预览用，不能抛）
+                bool calNoArgOk = true;
+                try { using (var s2 = new Dialogs.FanCalibrationForm()) { } }
+                catch { calNoArgOk = false; }
+                Check("校准窗无参构造不抛（设计器可预览）", calNoArgOk);
+            }
+            finally { try { calForm.Dispose(); } catch { } }
         }
 
         // =====================================================================

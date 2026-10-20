@@ -43,6 +43,36 @@
     `DeviceConfig.ParseFanScaleDivisor` 一律回缺省，解析层 `ParseFanRegisters(values, divisor)` 再兜一道
     （防手改 App.config 让温度变无穷大/反号）。**改前先拿屏显值对一遍寄存器**（屏显 22.2 → 寄存器 222 ⇒ 除数 10）；
     改完必须让现场拿主界面与控制屏对一眼，错一位就是 10 倍/100 倍的差。
+    **"读出除数"这条路走不通**（客户协议手册第 6 章整张表没有"当前小数位/除数"字段，小数位是仪表侧参数），
+    2.0.1 起另开**客户自助校准**通道：拿**控制屏上的真值**当参照 —— 程序按
+    `新除数 = 当前除数 × (上位机当前读数 ÷ 屏显真值)` 反推（`Services/FanCalibration.cs` 纯函数，
+    只接受 10 的整数次幂，留 5% 容差吸收两边读数时刻不同造成的温差；抄错屏显宁可报失败也不给错除数）。
+    入口：主界面右栏"监视"分组、**长按"当前温度/设置温度"**（按住 600ms，字变蓝表示已识别）→ `Dialogs/FanCalibrationForm`
+    （温度/湿度各一行：**输入框左侧是标题、右侧回显"当前"读数**；填控制屏真值→点【确定】→ 落盘热生效
+    ＋ `DeviceManager.RefreshFanData()` 立即刷新主界面显示）。
+    **长按而非按钮**：右栏只有 290px 宽，放不下独立按钮（用户明确"空间有限"）；温度标签单击本无业务含义，
+    把"按住不放"让给校准最省空间。**长按判定必须是纯函数**（`MainForm.IsLongPress`：599ms 不触发/600ms 触发/
+    负跨度钳零）＋ `fanLongPressTimer` 放 `components` 容器（随窗体释放）；**绑定集中在 MainForm 构造里，
+    Designer 里不挂 MouseDown**（两处都挂会双触发、弹两次模态窗）。
+    **校准探针用温湿度当前读数、不用斜率寄存器**（`0x0020/0x0021` 虽可读可写，但写它会改设备实际
+    升降温速率 —— 那是客户工艺参数，不该被一个标定动作动到）。
+    **再有人问"能不能自动获取除数"：读寄存器不行（协议没这字段），只能靠屏显对照反推。**
+  - **纯代码 Sunny 窗体（无 Designer）缩放口径：AutoScaleMode=None + ZoomScaleRect，别用 AutoScaleDimensions(6,12)**（2.0.1 血泪，harness 实测）：
+    纯代码窗三要素那套（`AutoScaleDimensions(6,12)` + `AutoScaleMode.Font`）是给**宋体 8.25pt** 基准用的；
+    窗体字体换成微软雅黑 9F 后基准对不上，实测 `AutoScaleDimensions` 被固化成 **7×17**、
+    客户区从 720×470 缩成 **455×425** → 内容全部溢出客户区（控件被裁、字被切）。
+    **正解照抄 `UnloadJudgeForm`（本项目预览正常的 canonical）**：`AutoScaleMode = None` + 设 `ZoomScaleRect`
+    （Sunny 自己做缩放）+ 绝对定位内容从 y=47 起排（UIForm 自绘标题占 35px，Y<35 会被静默搬到 35 压标题）。
+    另注：Sunny `UITextBox` **没有 `ClearButton` 属性**（3.9.8 实测），写了编译不过。
+  - **界面改动后必须 harness 真窗量几何，别信 Designer 里写的坐标**（2.0.1 血泪，本项目 4 个真问题全是这么抓到的）：
+    ①`UILabel` 设了 `AutoSize=true` 时**实测高度比 Designer 写的 16px 大**（宋体 12F 实测 21px）→
+    下一行控件按 Designer 坐标排就会**重叠**；②**AutoSize 标签的宽度随内容变**（"222.00 °C" 实测 88px，
+    "---" 才 31px）→ 放在它右侧的控件**必须按最坏情况留位**
+    （否则温度显示成三位小数时会把旁边的控件盖住）；③绝对定位控件的坐标是相对**客户区**，
+    组框 `Padding(0,32,0,0)` 的 32px 只是给标题让位，不影响子控件坐标；④同一个 y 上的两个控件会**互相盖住**
+    （关闭按钮放结果标签同一行 → 按钮被盖看不见）；⑤标签宽度给不够会**自动换行**（"写入模式"被拆成两行）。
+    量法：`Controls` 遍历打印 `Bounds`，两两 `IntersectsWith` 查重叠，再比 `Right/Bottom` 与 `ClientSize` 查溢出；
+    标签宽高用 `PreferredSize`（AutoSize 下才是真值）或 `TextRenderer.MeasureText` 量。
   - **可视化端口映射三层分工（V1.81）**：`IoRemapValidator`（新建拦截唯一口：源唯一/目标独占/自环/越界 + 唯一序列化口 `Serialize`，与 `ParseAll` 互逆）+ `IoRemapCatalog`（点位池唯一口：源=全部输出/目标=预留或全空闲，点位来自 `IoMapBuilder` 不手写）+ `IoRemapGraphControl`/`IoRemapVisualForm`（只管画与选，不管落盘；实时/草稿两种提交由调用方定）。新增映射入口（右键/表格/连线）只调这三层，不各写一份规则；目标独占只拦新建，老配置多源同目标照常加载执行。
   - **自绘画布三不（V1.81.2~3 血泪）**：①不用 `DoubleBuffered`（逼全部 `TextRenderer` 走离屏慢路径，每处 2.2ms，见上性能红线）——直画屏幕 DC + 禁默认擦除 + 按裁剪自填底；②`TextRenderer` 下不挂任何变换矩阵（V1.51 栽过 Scale，位移也不赌），滚动偏移手工加到矩形上；③徽标/标题/截断全放布局态预计算，`Paint` 里不量字不扫表不拼串。滚动过的无缓冲画布 `PrintWindow` 会丢 GDI 文字（框在字无），视觉证据走置顶真屏截图。
   - **连线裁剪按包围盒判交（V1.81.4 血泪）**：贝塞尔中段穿屏、两端屏外的长线，"两端点判交"会整条裁掉，滚屏后新露出的条带只有白底没有线（平时有线、一滚就断）；改控制点包围盒判交（曲线必在盒内，无漏网），箭头仍只在目标可见时画；细连线开抗锯齿（文字/边框不动）。**通用铁律（下次一步到位）**：裁剪判交的对象是图元的实际覆盖范围，不是定义点——以后画布加任何新图元（线/区/徽标），布局时就把它的包围盒/可见性规则一起定掉；修裁剪类 bug 必须配"两端出屏+中段穿屏"场景用例，并对旧条件做反向验证（精准 FAIL 才算找到病，38号坑）。
@@ -574,7 +604,7 @@
 - **新增 .cs 文件必须手工在 csproj 登记**（老式项目无通配，漏登记报 CS0246）：
   在 `<Compile Include="...">` 段按目录加一行（纯代码窗体加 `<SubType>Form</SubType>` 即可，
   无需 Designer/resx）。V1.67 实锤：5 个新文件漏登记编译全红。
-- **最终测试验证手段（V1.58.23 起）**：一键跑 `powershell -ExecutionPolicy Bypass -File .opencode\skills\agingtest-regression\scripts\build_and_test.ps1`，  自动完成"构建 → 真机冒烟（exe 启动存活）→ 全量回归用例（2225 断言，覆盖 PasswordHasher/UserManager/配置归一化/IO 映射/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案/MES映射上报/规则表达式/工艺策略窗/编排扩展场景/软件激活等核心逻辑类）"。也可单独跑同目录 `smoke_test.ps1`（只冒烟）/ `run_unit_tests.ps1`（只回归）。退出码 0 = 全绿。
+- **最终测试验证手段（V1.58.23 起）**：一键跑 `powershell -ExecutionPolicy Bypass -File .opencode\skills\agingtest-regression\scripts\build_and_test.ps1`，  自动完成"构建 → 真机冒烟（exe 启动存活）→ 全量回归用例（2300 断言，覆盖 PasswordHasher/UserManager/配置归一化/IO 映射/配方存储/双日志器/面板布局锚定联动/工艺策略/项目档案/MES映射上报/规则表达式/工艺策略窗/编排扩展场景/软件激活等核心逻辑类）"。也可单独跑同目录 `smoke_test.ps1`（只冒烟）/ `run_unit_tests.ps1`（只回归）。退出码 0 = 全绿。
 - **界面像素级 bug（竖线/横线/颜色/叠色/裁剪/滚动条）**：调用全局技能 `winforms-ui-debug`——编译独立 harness 直接 new 目标窗体（指哪打哪，绕过登录/主流程），用反射探私有字段 + PrintWindow 截图 + 像素扫描定位根因并验证修复。含可复用的 csc 编译命令、坐标映射、色值字典与踩坑清单。
 - **调试完自动沉淀技能**：每次用 `winforms-ui-debug` 排查成功（尤其是"一次性改对"的高光案例）后，**主动把可复用的新套路/新踩坑/新型探针代码回写到全局技能 `winforms-ui-debug` 的 SKILL.md**（新增/补充小节、追加踩坑条目），不用等用户提醒。价值标准：换个人靠这份 skill 能更快解决同类问题。
 - 改构建输出（csproj 路径/bin 目录/主 exe 名）时，同步改全局技能 `winforms-ui-debug` 附录 A 的 AgingTestSystem 行（防开工查表拿到旧值）。

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Threading.Tasks;
@@ -31,9 +31,9 @@ namespace AgingTestSystem.Views
     /// │   工位显示区域               │ │ 空闲/测试中        │   │
     /// │   (72 面板自绘一屏铺满)       │ └────────────────────┘   │
     /// │                              │                         │
-    /// │   自绘大画布                 │ 监视                    │
-    /// │   WorkstationGridView       │ 当前温度 / 设置温度 /    │
-    /// │   (8列 × 9行，无滚动条)      │ 送风机状态              │
+    ///   自绘大画布                 │ 监视  当前温度(长按校准)│
+    ///   WorkstationGridView       │ 送风机状态 设置温度      │
+    ///   (8列 × 9行，无滚动条)      │ (长按温度值=定点校准)   │
     /// │                              │                         │
     /// │                              │ 操作（7按钮）           │
     /// │                              │ [批量设置配方]          │
@@ -97,6 +97,22 @@ namespace AgingTestSystem.Views
         /// 防句柄销毁后执行崩溃；volatile 保证采集线程立即可见）。
         /// </summary>
         private volatile bool _mainClosing;
+
+        /// <summary>
+        /// 温度标签长按触发校准的判定时长（毫秒）。
+        /// 600ms 是"明显在按住"与"顺手点一下"的分界：短按不弹窗（弹窗是模态，会挡界面）。
+        /// </summary>
+        private const int FanLongPressMs = 600;
+
+        /// <summary>
+        /// 长按计时起点（MouseDown 时刻）。
+        /// </summary>
+        private DateTime _fanLongPressDownAt;
+
+        /// <summary>
+        /// 正在长按的温度标签（触发时用它做视觉反馈）。
+        /// </summary>
+        private Sunny.UI.UILabel _fanLongPressTarget;
 
         /// <summary>
         /// 用户管理器（登录验证/改密；默认 admin/technician/operator 均 123456；
@@ -408,6 +424,17 @@ namespace AgingTestSystem.Views
             tip.SetToolTip(btnWinMin, "最小化");
             tip.SetToolTip(btnWinMax, "最大化/还原");
             tip.SetToolTip(btnWinClose, "关闭");
+            // 校准入口藏在长按里（监视区没空间放按钮），必须给个提示否则没人知道
+            tip.SetToolTip(lblUpperTemp, "长按可校准送风机温湿度的小数点位置");
+            tip.SetToolTip(lblSetTemp, "长按可校准送风机温湿度的小数点位置");
+            // 长按校准：两个温度标签都挂上（绑定集中在这里，Designer 里不挂 ——
+            // 两处都挂会双触发，弹两次模态窗；集中一处也省得"改了一个漏了另一个"）
+            lblUpperTemp.MouseDown += FanTempLabel_MouseDown;
+            lblUpperTemp.MouseUp += FanTempLabel_MouseUp;
+            lblUpperTemp.MouseLeave += FanTempLabel_MouseLeave;
+            lblSetTemp.MouseDown += FanTempLabel_MouseDown;
+            lblSetTemp.MouseUp += FanTempLabel_MouseUp;
+            lblSetTemp.MouseLeave += FanTempLabel_MouseLeave;
             // 最大化↔还原切换时方框字形跟着换（画还原叠框），状态变即重画
             this.SizeChanged += (s, e) =>
             {
@@ -3145,6 +3172,107 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
+        /// 温度标签长按 → 弹出送风机定点校准窗。
+        /// 【为什么是长按】右栏"监视"区空间有限，放不下独立的校准按钮；
+        /// 而单击温度标签没有业务含义（只是显示），正好把"按住不放"这个手势让给校准。
+        /// 【为什么要防误触】长按判定 600ms：短按（<600ms）什么都不做，
+        /// 避免操作员点一下/划一下就弹窗（弹窗是模态，会挡住整个界面）。
+        /// 【手感反馈】长按判定成立后先把标签字变蓝，弹窗关闭再恢复原色 ——
+        /// 让用户确认"长按被识别了"，而不是突然弹窗。
+        /// 【释放】计时器在 components 容器里（Designer 构造），窗体 Dispose 时自动停。
+        /// </summary>
+        private void FanTempLabel_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Left) return;
+            if (_mainClosing || this.IsDisposed || this.Disposing) return;
+
+            _fanLongPressTarget = sender as Sunny.UI.UILabel;
+            _fanLongPressDownAt = DateTime.Now;
+            if (fanLongPressTimer != null) fanLongPressTimer.Start();
+        }
+
+        /// <summary>
+        /// 松开鼠标：停止长按计时（未达 600ms 的短按什么都不做）。
+        /// </summary>
+        private void FanTempLabel_MouseUp(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Left) return;
+            StopFanLongPress();
+        }
+
+        /// <summary>
+        /// 鼠标移出标签：取消长按（按住后拖走不算长按）。
+        /// </summary>
+        private void FanTempLabel_MouseLeave(object sender, EventArgs e)
+        {
+            StopFanLongPress();
+        }
+
+        /// <summary>
+        /// 长按判定纯函数（回归可直接断言，不依赖窗体实例）。
+        /// 按住时长达到阈值才算长按；未达阈值是短按（什么都不做）。
+        /// 负跨度（系统时钟被拨慢）按 0 处理，不当成"按了很久"。
+        /// </summary>
+        /// <param name="downAt">按下时刻</param>
+        /// <param name="now">当前时刻</param>
+        /// <param name="thresholdMs">阈值（毫秒）</param>
+        /// <returns>true=算长按</returns>
+        private static bool IsLongPress(DateTime downAt, DateTime now, int thresholdMs)
+        {
+            double elapsed = (now - downAt).TotalMilliseconds;
+            if (elapsed < 0) elapsed = 0;      // 时钟拨慢：钳零，不误判成长按
+            return elapsed >= thresholdMs;
+        }
+
+        /// <summary>
+        /// 长按计时 Tick：按住够 600ms 就弹校准窗。
+        /// </summary>
+        private void FanLongPressTimer_Tick(object sender, EventArgs e)
+        {
+            if (_mainClosing || this.IsDisposed || this.Disposing) { StopFanLongPress(); return; }
+            if (_fanLongPressTarget == null) { StopFanLongPress(); return; }
+            if (!IsLongPress(_fanLongPressDownAt, DateTime.Now, FanLongPressMs)) return;
+
+            Sunny.UI.UILabel target = _fanLongPressTarget;
+            StopFanLongPress();            // 先停表：弹窗是模态，Tick 不能再进
+
+            Color oldColor = target.ForeColor;
+            target.ForeColor = Color.DodgerBlue;      // 视觉反馈：长按被识别
+            try
+            {
+                ShowFanCalibration();
+            }
+            finally
+            {
+                if (!target.IsDisposed && !target.Disposing) target.ForeColor = oldColor;
+            }
+        }
+
+        /// <summary>
+        /// 停止长按计时并清状态（MouseUp / MouseLeave / Tick 里调用）。
+        /// </summary>
+        private void StopFanLongPress()
+        {
+            if (fanLongPressTimer != null) fanLongPressTimer.Stop();
+            _fanLongPressTarget = null;
+        }
+
+        /// <summary>
+        /// 打开送风机定点校准窗（长按温度标签的入口）。
+        /// 【权限】不限角色（与"开放给客户自行标定"一致）。
+        /// 模态：设置类弹窗，与"参数设置/配方管理"同一口径；using 保证释放。
+        /// </summary>
+        private void ShowFanCalibration()
+        {
+            if (_mainClosing || this.IsDisposed || this.Disposing) return;
+            using (var form = new Dialogs.FanCalibrationForm(_deviceManager, _config))
+            {
+                ThemeManager.ApplyTo(form);
+                form.ShowDialog(this);
+            }
+        }
+
+        /// <summary>
         /// 版本说明弹窗（内容口径：全称→版本号→简介→环境→功能→版权；版本号取水印常量，改版零维护）。
         /// 不用 MessageBox：系统弹窗跟不了深色主题；弹窗走 SunnyUI 风格（蓝标题＋确认蓝钮）。
         /// </summary>
@@ -3813,6 +3941,9 @@ namespace AgingTestSystem.Views
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
         {
             _mainClosing = true;
+            // 长按计时器停手（关窗期间不该再弹校准窗；它虽在 components 容器里会随窗体释放，
+            // 但这里先停可避免"关窗瞬间长按到点"的竞态）。
+            StopFanLongPress();
             // 退出恰撞后台连接时，"连接中"提示窗靠 async finally 才关，会成孤儿泄漏：
             // 这里先关（HideConnecting 已做空/释放判空，后台 finally 再调一次无害）。
             HideConnecting();
