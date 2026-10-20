@@ -65,7 +65,7 @@ namespace AgingTestSystem.Dialogs
             // _lblCurrentScale
             // 
             this._lblCurrentScale.Font = new System.Drawing.Font("微软雅黑", 9F);
-            this._lblCurrentScale.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(80)))), ((int)(((byte)(80)))), ((int)(((byte)(80)))));
+            this._lblCurrentScale.ForeColor = System.Drawing.Color.ForestGreen;
             this._lblCurrentScale.Location = new System.Drawing.Point(280, 47);
             this._lblCurrentScale.Name = "_lblCurrentScale";
             this._lblCurrentScale.Size = new System.Drawing.Size(144, 18);
