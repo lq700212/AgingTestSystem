@@ -140,7 +140,9 @@ namespace AgingTestSystem.Dialogs
 
         /// <summary>
         /// 读当前读数与当前斜率并回显。
-        /// 设备未连接时提示"未连接"，此时无法校准（没有可信的对照值）。
+        /// 设备未连接时只把读数显示成"--"，**不在窗里再写一遍"未连接"** ——
+        /// 未连接压根不会开这个窗（见 <see cref="TryShow"/>），能走到这里的只可能是
+        /// "开窗之后掉线"，那种情况留给【确定】按钮点击时再报。
         /// </summary>
         private void LoadCurrentReading()
         {
@@ -155,14 +157,45 @@ namespace AgingTestSystem.Dialogs
             if (data == null || !data.IsOnline)
             {
                 _lblCurrent.Text = "--";
-                ShowError("送风机未连接，无法校准");
+                _lblResult.Text = string.Empty;
                 return;
             }
-
             double reading = FanCalibration.GetReading(data, _target);
             _lblCurrent.Text = reading.ToString("0.00") + " " + unit;
             _lblResult.Text = string.Empty;
             _lblResult.ForeColor = Color.FromArgb(48, 48, 48);
+        }
+
+        /// <summary>
+        /// 打开校准窗的统一入口（**先检查送风机是否连接**）。
+        /// <para><b>为什么在这里挡</b>：送风机没连上就没有"上位机当前读数"这个参照物，
+        /// 校准无从谈起 —— 与其弹个窗让客户对着"--"发呆，不如直接弹一句提示就完事。
+        /// 窗内因此不再重复显示"送风机未连接"（红字只留给"开窗之后掉线"这一种情况，
+        /// 那时点【确定】会报出来）。</para>
+        /// <para><b>为什么统一走这里</b>：入口有两处（主界面长按温度 / 系统设置校准湿度），
+        /// 判定与弹窗必须同源，不能各写一份。</para>
+        /// </summary>
+        /// <param name="deviceManager">送风机通讯门面（读当前温湿度）</param>
+        /// <param name="config">内存中的设备配置（校准结果写回这里）</param>
+        /// <param name="target">本次校准的目标项（温度 / 湿度）</param>
+        /// <param name="owner">父窗体（模态归属用，可为 null）</param>
+        /// <returns>true=已开窗；false=送风机未连接，只弹了提示没开窗</returns>
+        public static bool TryShow(DeviceManager deviceManager, DeviceConfig config,
+            FanCalibrationTarget target, IWin32Window owner)
+        {
+            if (!FanCalibration.IsDeviceOnline(deviceManager))
+            {
+                UIMessageBox.Show("送风机未连接，无法校准", "提示",
+                    UIStyle.Orange, UIMessageBoxButtons.OK, true, 0);
+                return false;
+            }
+
+            using (var form = new FanCalibrationForm(deviceManager, config, target))
+            {
+                ThemeManager.ApplyTo(form);
+                form.ShowDialog(owner);
+            }
+            return true;
         }
 
         /// <summary>

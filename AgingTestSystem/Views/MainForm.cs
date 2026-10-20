@@ -3277,16 +3277,14 @@ namespace AgingTestSystem.Views
         /// （温度、湿度各有各的斜率，互不影响）。
         /// 【权限】不限角色（与"开放给客户自行标定"一致）。
         /// 模态：设置类弹窗，与"参数设置/配方管理"同一口径；using 保证释放。
+        /// 【未连接不开窗】送风机没连上就没有对照值，校准无从谈起 ——
+        /// 走 FanCalibrationForm.TryShow 统一入口，未连接只弹一句提示。
         /// </summary>
         private void ShowFanCalibration()
         {
             if (_mainClosing || this.IsDisposed || this.Disposing) return;
-            using (var form = new Dialogs.FanCalibrationForm(_deviceManager, _config,
-                Services.FanCalibrationTarget.Temperature))
-            {
-                ThemeManager.ApplyTo(form);
-                form.ShowDialog(this);
-            }
+            Dialogs.FanCalibrationForm.TryShow(_deviceManager, _config,
+                Services.FanCalibrationTarget.Temperature, this);
         }
 
         /// <summary>

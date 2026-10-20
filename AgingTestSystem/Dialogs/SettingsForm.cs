@@ -2607,22 +2607,19 @@ namespace AgingTestSystem.Dialogs
 
             if (_deviceManager == null)
             {
-                MessageBox.Show("当前窗口没有连接到设备管理器，无法校准。", "提示",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                Sunny.UI.UIMessageBox.Show("当前窗口没有连接到设备管理器，无法校准。", "提示",
+                    Sunny.UI.UIStyle.Orange, Sunny.UI.UIMessageBoxButtons.OK, true, 0);
                 return;
             }
             if (_config != null && !_config.FanEnabled)
             {
-                MessageBox.Show("冷却送风机未启用（设置表 → 冷却送风机 → 是否启用冷却送风机），无法校准。", "提示",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                Sunny.UI.UIMessageBox.Show("冷却送风机未启用（设置表 → 冷却送风机 → 是否启用冷却送风机），无法校准。", "提示",
+                    Sunny.UI.UIStyle.Orange, Sunny.UI.UIMessageBoxButtons.OK, true, 0);
                 return;
             }
 
-            using (var form = new FanCalibrationForm(_deviceManager, _config, FanCalibrationTarget.Humidity))
-            {
-                ThemeManager.ApplyTo(form);
-                form.ShowDialog(this);
-            }
+            // 送风机未连接时不开窗，只弹一句提示（统一入口，判定与主界面长按同源）
+            FanCalibrationForm.TryShow(_deviceManager, _config, FanCalibrationTarget.Humidity, this);
 
             // 校准窗已把新斜率写进 _config（热回写），这里只把那一行显示值刷新成新值
             RefreshKeyCellValue("FanHumidityScale", FormatScaleValue(_config != null ? _config.FanHumidityScale : 0));
