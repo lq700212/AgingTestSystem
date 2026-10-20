@@ -41,7 +41,7 @@ namespace AgingTestSystem.Views
     /// └──────────────────────────────────────────────────────────────┘
     /// 右栏顶部（标题46/下拉+按钮68/说明100/导入导出146）：下拉选 A/B/C/D
     /// （或"自定义"回显：自定义是独立槽，初始内容=A 快照，改后各存各的），
-    /// 下拉改选左侧画布即时预览该选项（A/B/C/D＝克隆+套值的副本，自定义＝槽快照叠加，
+    /// 下拉改选左侧画布即时预览该选项（A/B/C/D＝克隆+套值的副本，自定义＝看回真实，
     /// 只看不存不标脏）；"套用预置"一键整套生效（确认框列差异项 + 前置条件，
     /// 走 PersistChanges 同一条保存路，选自定义即套用槽内容）。关窗时预览还没套用，
     /// 弹 SunnyUI 确认框问要不要套用（确定=套用后关，取消=直接关；X 与关闭按钮同路）。
@@ -157,6 +157,10 @@ namespace AgingTestSystem.Views
                 catch { /* 开窗不因建槽失败而拦人 */ }
             }
             RefreshPresetRow();
+            // 开窗按真实重造预览：下拉显示的是"当前配置属于哪套预置"，
+            // 画面必须显示真实生效值（否则预置的数值项会把真实盖掉，
+            // 现场看着像"配置没生效"）。用户主动切下拉时才按预置预览。
+            RebuildPreviewFromReal();
         }
 
         protected override void OnShown(EventArgs e)
@@ -727,12 +731,15 @@ namespace AgingTestSystem.Views
 
             foreach (string k in presult.SavedKeys) SavedKeys.Add(k);
             _dirty = false;
-            // 存成自定义即同步槽：当前已不是 A/B/C/D 任一套，说明用户在改自定义，
-            // 把现值全量存进自定义槽（各存各的：A/B/C/D 是代码写死的不动）。
-            // 套用 A/B/C/D 后探测仍是该预置，不进槽，槽里还是上次的自定义。
+            // 存成自定义即同步槽：下拉停在"自定义"＝用户在改自定义，把现值全量存进
+            // 自定义槽（各存各的：A/B/C/D 是代码写死的不动）。
+            // 【为什么按下拉判而不是按探测判】探测口径改了（数值项不参与身份），
+            // 用户视角是"我停在自定义上改的"就存槽；探测判会在"改完恰好凑成某个预置"
+            // 时漏存，下次套用自定义还是老值。
             try
             {
-                if (PolicyPresets.DetectPreset(_config) == PolicyPresets.CustomId)
+                if (string.Equals(SelectedPresetId(_cboPreset), PolicyPresets.CustomId,
+                    StringComparison.OrdinalIgnoreCase))
                 {
                     ProjectPolicyStore.SaveCustom(ProjectPolicyStore.ToPolicyDict(_config));
                 }
@@ -742,11 +749,13 @@ namespace AgingTestSystem.Views
             // 不刷这一行，下拉还停在旧选项，画布按旧选项整幅预览，看起来就像
             // "保存一个节点把所有节点都覆盖了"——这正是右栏不动、画布全跳变的根因。
             RefreshPresetRow();
+            // 保存后按新真实重造预览（画面/右栏都显示刚存下去的值）
+            RebuildPreviewFromReal();
             if (_canvas != null) _canvas.RefreshCounts();
-            // 破空阀总闸翻转后刷新右栏：VentValveDoPoint 行的显隐是按有效配置
-            // 即时判定的（见 RebuildEditors），放 RefreshPresetRow 之后重建，
-            // 右栏按新预览/真实显隐，点位行当场出现/消失，不用切节点才看到。
-            if (presult.SavedKeys.Contains("VentValveEnabled")) RebuildEditors();
+            // 右栏按新真实重建：保存后右栏必须显示刚存下去的值（不是旧控件残留），
+            // 且破空阀总闸翻转时点位行的显隐当场跟着变（显隐按有效配置判定，
+            // 见 RebuildEditors）——不用切节点才看到。
+            RebuildEditors();
             string msg = "已保存并即时生效。";
             if (presult.StructuralChanged.Count > 0) msg += "（含重启生效项）";
             if (presult.SecretFallbackPlain) msg += "（注：密钥加密失败，已明文保存）";
@@ -933,11 +942,31 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
+        /// 按新真实重造预览（清预览＝画面与右栏都看回真实配置）。
+        /// 【为什么需要它】下拉是"当前选中的预置"，保存/套用之后真实配置已经等于
+        /// 该预置（或用户自己的自定义），这时再按预置套一遍会把预置的数值项
+        /// （如 A 的真空超时 0）盖回真实值——画面显示 0、真实是 15000，
+        /// 看着就像"保存没生效，配置还是老的"（现场实锤：改完保存、关窗重开
+        /// 仍是老配置，只能重启软件才更新）。
+        /// 【与"下拉即预览"不冲突】用户主动切下拉时仍按预置预览（所见即套用后），
+        /// 只有"开窗/保存/套用后"这几个"按真实重造"的时点用本方法。
+        /// </summary>
+        private void RebuildPreviewFromReal()
+        {
+            _previewConfig = null;
+            _previewPending = false;
+            if (_canvas != null && !_canvas.IsDisposed) _canvas.SetPreviewConfig(null);
+        }
+
+        /// <summary>
         /// 下拉即预览：按下拉当前选项给画布换"预览配置"（只换画布看到的值，
         /// 不碰真实 _config、不标脏、不写文件）。
         /// 选 A/B/C/D 任一项＝把当前真实配置克隆一份、套上该预置的全部落盘值
         /// （含 A 的超时 0），画布即时重画，所见即"真套用后"的样子；
-        /// 选"自定义"＝克隆＋叠加自定义槽快照（槽空即清预览看回真实）。
+        /// 选"自定义"＝看回真实（清预览）。
+        /// 【为什么"自定义"看真实】自定义槽是"上次存的自定义方案"，供【套用自定义】
+        /// 一键套用；拿旧槽盖住当前配置，策略窗就会显示与真实生效值不一致的过期值
+        /// （现场实锤：改完保存、关窗重开仍是老配置）。显示一律以真实为准。
         /// 【为什么是克隆+套用而不是直接读预置值】画布要的是"完整配置"
         /// （14 开关＋超时＋阈值/时长等不动项），预置只有 14 开关＋数值项；
         /// 克隆保证不动项与当前一致，预览与真套用后的画面一字不差。
@@ -979,8 +1008,11 @@ namespace AgingTestSystem.Views
             return BuildPreviewConfig(current, presetId, null);
         }
 
-        /// <summary>按选项造预览配置（纯函数：A/B/C/D＝克隆现配置＋套预置值；
-        /// 自定义＝克隆＋叠加槽快照，槽空/未知 id/失败返回 null＝画布看真实）。</summary>
+        /// <summary>按预置 id 造预览配置（纯函数：A/B/C/D＝克隆现配置＋套预置值；
+        /// 自定义＝看真实（返回 null）——"自定义"不是一套固定值，
+        /// 它只是"上次存的自定义方案"（供【套用自定义】一键套用），
+        /// 拿旧槽盖住当前配置会让策略窗显示过期值（现场实锤：改完保存、
+        /// 关窗重开仍是老配置——预览被旧槽盖住，真值反而看不见）。</summary>
         private static DeviceConfig BuildPreviewConfig(
             DeviceConfig current, string presetId, Dictionary<string, string> customSnapshot)
         {
@@ -989,24 +1021,8 @@ namespace AgingTestSystem.Views
                 if (current == null) return null;
                 if (string.Equals(presetId, PolicyPresets.CustomId, StringComparison.OrdinalIgnoreCase))
                 {
-                    Dictionary<string, string> snap =
-                        ProjectPolicyStore.FilterToPolicyKeys(customSnapshot);
-                    if (snap.Count == 0) return null;
-                    var preview = new DeviceConfig();
-                    preview.CopyFrom(current);
-                    foreach (var kv in snap)
-                    {
-                        try
-                        {
-                            var prop = typeof(DeviceConfig).GetProperty(kv.Key);
-                            if (prop == null || !prop.CanWrite) continue;
-                            object converted = ProjectPolicyStore.ParseValue(prop.PropertyType, kv.Value);
-                            if (converted == null) continue;   // 槽里脏项预览时跳过（保存/导入时已拦）
-                            prop.SetValue(preview, converted, null);
-                        }
-                        catch { /* 单项失败跳过，不拦整幅预览 */ }
-                    }
-                    return preview;
+                    // 看真实：自定义槽只服务于"套用自定义"，不参与显示预览。
+                    return null;
                 }
                 if (PolicyPresets.Find(presetId) == null) return null;
                 var previewPreset = new DeviceConfig();
@@ -1228,6 +1244,7 @@ namespace AgingTestSystem.Views
             // 先预置行（下拉重探测＋预览同步到新真实），再重建右栏：
             // 右栏看有效配置，顺序反了会按旧预览建，显示过期值。
             RefreshPresetRow();
+            RebuildPreviewFromReal();
             RebuildEditors();
             if (_canvas != null) _canvas.RefreshCounts();
             return true;
@@ -1273,6 +1290,7 @@ namespace AgingTestSystem.Views
             // 预置回显先行：下拉落到套用后的预置＋预览同步到新真实，
             // 再重建右栏回显新值（右栏看有效配置，顺序反了会按旧预览建）。
             RefreshPresetRow();
+            RebuildPreviewFromReal();
             RebuildEditors();
             if (_canvas != null) _canvas.RefreshCounts();
             return true;
@@ -1370,6 +1388,7 @@ namespace AgingTestSystem.Views
             // 先预置行（下拉重探测＋预览同步到新真实），再重建右栏
             // （右栏看有效配置，顺序反了会按旧预览建）。
             RefreshPresetRow();
+            RebuildPreviewFromReal();
             RebuildEditors();
             if (_canvas != null) _canvas.RefreshCounts();
             string msg = "已导入到【自定义】并即时生效（共 " + values.Count + " 项）。";
