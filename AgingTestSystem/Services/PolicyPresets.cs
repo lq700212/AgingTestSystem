@@ -46,8 +46,9 @@ namespace AgingTestSystem.Services
     /// D 严格出货（放行标准）：B 的严格版 + 启动定格追溯 + 超温联停 + 画面记录。
     ///    开 D 前置：本机【超温上限】必须先填＞0（报警节点里填，按炉子工艺温度定），
     ///    否则保存即拦——这是故意的（fail-safe：没上限的联停等于没配，不能悄悄开）。
-    /// A 与 C 除压力报警开关外全同（A 以 C 为基准，V1.106 起；2.0.0 起 A 关/C 开），差的是报警开关＋超时 0；
-    /// 探测时数值也算身份：C 开关＋超时 0＋报警关即 A（见 DetectPreset）。
+    /// A 与 C 除压力报警开关外全同（A 以 C 为基准，V1.106 起；2.0.0 起 A 关/C 开），
+    /// A 另带数值项"真空超时 0"（跟项目写，套用时一并写入）。
+    /// 探测口径：只认 14 个行为开关，数值项不参与身份（见 DetectPreset）。
     /// 【自定义槽】下拉末项“自定义”是独立槽（跟项目走，见 ProjectPolicyStore.CustomFilePath）：
     /// 初始内容＝A 的快照，之后改自定义只写槽文件，A/B/C/D 是代码写死的谁也覆盖不了。
     /// 【导入导出】文件装“全部跟项目策略 key”（含 MES 映射/规则/报表等自由文本，
@@ -168,8 +169,9 @@ namespace AgingTestSystem.Services
             /// <summary>
             /// 数值项存储值（key→存储字符串，如真空超时毫秒数；V1.105 新增）。
             /// 只要 PolicyKeys 成员才收（跟项目走，套用时与 Values 同一条保存路进 Policy.json）。
-            /// 探测口径（见 DetectPreset）：无数值项的预置只认 14 开关；
-            /// 带数值项的预置（当前只有 A 常用）数值也算身份（C 开关＋超时 0 即 A）。
+            /// 探测口径（见 DetectPreset）：数值项【不参与身份判定】——数值是各项目的微调，
+            /// 参与身份只会造成"改了一下数值 → 下拉永远显示自定义"的误伤；
+            /// 数值只影响"套用"（套 A 时一并写入本项目）。
             /// B/C/D 为空集合（行为与旧版一致）。
             /// </summary>
             public Dictionary<string, string> NumericValues;
@@ -432,7 +434,7 @@ namespace AgingTestSystem.Services
         {
             if (config == null) return "配置对象为空，无法套用预置。";
             // 开关＋数值一起写（数值走同一解析口；探测口径见 DetectPreset：
-            // 无数值项的预置只认 14 开关，带数值项的（A 常用）数值也算身份）
+            // 身份判定只认 14 开关，数值项不参与身份——套用时数值照样写进去）
             Dictionary<string, string> values = GetAllValues(id);
             if (values == null) return "未知预置：" + (id ?? "");
             var bad = new List<string>();
@@ -453,11 +455,13 @@ namespace AgingTestSystem.Services
             if (bad.Count > 0) return "预置写入失败：" + string.Join("、", bad.ToArray());
             return null;
         }
-
         /// <summary>
-        /// 反查当前配置≈哪个预置（纯函数：13 项逐项序列化比对，全对上才算；
-        /// 带数值项的预置（当前只有 A 常用）数值也算身份：C 开关＋超时 0 即 A，
-        /// 超时非 0 即 C——A 以 C 为基准，超时 0 是两者唯一的差别，不认数值就分不出来）。
+        /// 反查当前配置≈哪个预置（纯函数：14 项逐项序列化比对，全对上才算）。
+        /// 【数值项不参与身份判定】数值是"各项目的微调"（如真空建立确认超时），
+        /// 不参与身份：A 与 C 已靠 PressureAlarmEnabled（压力报警开关）区分得开，
+        /// 数值再参与只会造成"改了一下真空超时 → 下拉永远显示【自定义】"的误伤
+        /// （现场踩过：套了 A 之后又把真空超时调成 15000，策略窗再也认不出 A，
+        ///  客户以为程序坏了）。数值仍参与"套用"（GetAllValues/ApplyToConfig 照写 0）。
         /// </summary>
         /// <returns>预置 Id（"A"/"B"/"C"/"D"）；凑不上任何一个返回 <see cref="CustomId"/>。</returns>
         public static string DetectPreset(DeviceConfig config)
@@ -476,19 +480,6 @@ namespace AgingTestSystem.Services
                     {
                         allMatch = false;
                         break;
-                    }
-                }
-                // 数值身份：只对"带数值项"的预置加赛一轮（无数值项的走上面 14 开关即定）。
-                if (allMatch && p.NumericValues != null)
-                {
-                    foreach (var kv in p.NumericValues)
-                    {
-                        if (!string.Equals(ToStorageString(GetProp(config, kv.Key)),
-                            kv.Value != null ? kv.Value.Trim() : "", StringComparison.OrdinalIgnoreCase))
-                        {
-                            allMatch = false;
-                            break;
-                        }
                     }
                 }
                 if (allMatch) return p.Id;

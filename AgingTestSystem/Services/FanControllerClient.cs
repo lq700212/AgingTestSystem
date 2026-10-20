@@ -18,10 +18,13 @@ namespace AgingTestSystem.Services
     /// 【寄存器映射】（实测，见 Demo 文档）
     ///   0x0000 组合状态（未使用，忽略）
     ///   0x0001 控制/状态（写：0x0003=定值启动，0x0002=定值停止；读回同值）
-    ///   0x0002 当前温度（值/100 = °C）
-    ///   0x0003 当前湿度（值/100 = %RH）
-    ///   0x0004 温度设定值（值/100 = °C）
-    ///   0x0005 湿度设定值（值/100 = %RH）
+    ///   0x0002 当前温度（值/10 = °C）
+    ///   0x0003 当前湿度（值/10 = %RH）
+    ///   0x0004 温度设定值（值/10 = °C）
+    ///   0x0005 湿度设定值（值/10 = %RH）
+    /// 【定点比例实测】控制屏按 0.1 精度定点（值 = 实际 × 10）：现场屏显 22.2°C 时
+    /// 寄存器读回 222。之前按 ÷100 解析，小数点错一位（显示 2.22°C，比屏显小 10 倍）。
+    /// 温度/湿度/两个设定值同属一块屏的同一寄存器组，格式一致，统一 ÷10。
     /// 【物理层】
     /// - 传输：TCP/IP（以太网）
     /// - 端口：默认 50000（非标准 502，来自 Demo 实测）
@@ -45,6 +48,15 @@ namespace AgingTestSystem.Services
         /// 主站/连接对象的互斥锁（线程安全，见类注释）
         /// </summary>
         private readonly object _syncRoot = new object();
+
+        /// <summary>
+        /// 温湿度定点换算除数（协议常数，勿改）。
+        /// 【为什么是 10 不是 100】控制屏按 0.1 精度定点：现场屏显 22.2°C 时
+        /// 寄存器读回 222（222 ÷ 10 = 22.2）。早先按 ÷100 解析，小数点错一位，
+        /// 上位机显示 2.22°C（比屏显小 10 倍），现场据此判断"温度不对"。
+        /// 温度/湿度/两个设定值同属一块屏的同一寄存器组，格式一致，统一用这一个除数。
+        /// </summary>
+        private const float FanScaleDivisor = 10.0f;
 
         /// <summary>
         /// 全局配置（来自 App.config / 通讯设置界面）
@@ -381,8 +393,9 @@ namespace AgingTestSystem.Services
         /// 6 个原始寄存器 → 送风机数据（纯函数，回归可直接断言）。
         /// 【寄存器映射】（实测定论，一次读 0x0000~0x0005）：
         /// values[0]=0x0000 组合状态（未使用，忽略）；[1]=0x0001 控制/状态；
-        /// [2]=0x0002 当前温度 /100=°C；[3]=0x0003 当前湿度 /100=%RH；
-        /// [4]=0x0004 温度设定值 /100；[5]=0x0005 湿度设定值 /100。
+        /// [2]=0x0002 当前温度 /10=°C；[3]=0x0003 当前湿度 /10=%RH；
+        /// [4]=0x0004 温度设定值 /10；[5]=0x0005 湿度设定值 /10。
+        /// 【定点比例】÷10（控制屏 0.1 精度定点：屏显 22.2°C ↔ 寄存器 222）。
         /// 数量不足 6 个（设备返回异常）返回 null，由调用方按离线处理。
         /// 注意：状态枚举值不做合法性校验（与旧行为一致，非法值透传，显示层兜底）。
         /// </summary>
@@ -396,10 +409,10 @@ namespace AgingTestSystem.Services
             return new FanData
             {
                 RunState = (FanRunState)values[1],
-                Temperature = values[2] / 100.0f,
-                Humidity = values[3] / 100.0f,
-                TempSetpoint = values[4] / 100.0f,
-                HumSetpoint = values[5] / 100.0f,
+                Temperature = values[2] / FanScaleDivisor,
+                Humidity = values[3] / FanScaleDivisor,
+                TempSetpoint = values[4] / FanScaleDivisor,
+                HumSetpoint = values[5] / FanScaleDivisor,
                 IsOnline = true,
                 CollectTime = DateTime.Now
             };

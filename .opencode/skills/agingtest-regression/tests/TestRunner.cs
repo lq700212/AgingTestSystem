@@ -4621,11 +4621,18 @@ namespace AgingTestSystem.Tests
             // —— 纯解析（公开静态，直接调；数值全选二进制精确值防抖动） ——
             Check("null→null", FanControllerClient.ParseFanRegisters(null) == null);
             Check("不足6个→null", FanControllerClient.ParseFanRegisters(new ushort[] { 1, 2, 3 }) == null);
-            var fd = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 2500, 6000, 3700, 5000 });
-            Check("6寄存器解析全字段",
+            // 定点比例 ÷10（0.1 精度：屏显 22.2°C ↔ 寄存器 222）。
+            // 早先按 ÷100 解析，小数点错一位（显示 2.22°C，比屏显小 10 倍），此处锁死新口径。
+            var fd = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 250, 600, 370, 500 });
+            Check("6寄存器解析全字段（÷10定点）",
                 fd != null && fd.RunState == FanRunState.FixedValueRunning
                 && fd.Temperature == 25f && fd.Humidity == 60f
                 && fd.TempSetpoint == 37f && fd.HumSetpoint == 50f && fd.IsOnline);
+            // 现场实锤值：屏显 22.2°C ↔ 寄存器 222（旧口径会显示成 2.22）
+            var fd222 = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 222, 555, 222, 555 });
+            Check("现场值222→22.2°C（不是2.22）",
+                fd222.Temperature == 22.2f && fd222.Humidity == 55.5f
+                && fd222.TempSetpoint == 22.2f && fd222.HumSetpoint == 55.5f);
             var fd0 = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 0, 0, 0, 0, 0 });
             Check("全0→程式停止+零值", fd0.RunState == FanRunState.ProgramStopped && fd0.Temperature == 0f);
             var fdbad = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 9, 0, 0, 0, 0 });
@@ -7347,7 +7354,7 @@ namespace AgingTestSystem.Tests
             Check("A不跳抽真空（只是不限时等，不是不看真空）",
                 valsA106 != null && valsA106["SkipVacuum"] == "false");
             var numA = PolicyPresets.GetNumericValues("A");
-            Check("A数值项超时0（跟项目写，参与探测）",
+            Check("A数值项超时0（跟项目写；套用时写入，不参与身份判定）",
                 numA != null && numA.Count == 1 && numA["VacuumConfirmTimeoutMs"] == "0");
             Check("D数值键是PolicyKeys成员（存得进项目文件）",
                 ProjectPolicyStore.PolicyKeys.Contains("VacuumConfirmTimeoutMs"));
@@ -7380,14 +7387,22 @@ namespace AgingTestSystem.Tests
             Check("A零门槛组合校验过（PowerOffOnly无阀）",
                 AgingSequencer.ValidatePolicyCombination(
                     false, 0f, CompletionAction.PowerOffOnly, 0, false) == null);
-            // 数值算身份（V1.106：C 开关＋超时 0 即 A，超时非 0 即 C；2.0.0 起 A 还多了报警关）
+            // 身份判定只看 14 个行为开关（数值项不参与：现场实锤——套了 A 之后又
+            // 把真空超时调成 15000，策略窗下拉从此永远显示【自定义】，客户以为程序坏了）
             var cfgC0 = new DeviceConfig();
             PolicyPresets.ApplyToConfig(cfgC0, "C");
             Check("C开关＋默认超时探测为C", PolicyPresets.DetectPreset(cfgC0) == "C");
             cfgC0.VacuumConfirmTimeoutMs = 0;
-            Check("C开关＋超时0但报警开仍是C（报警开关也算身份）", PolicyPresets.DetectPreset(cfgC0) == "C");
+            Check("C开关＋超时0但报警开仍是C（报警开关是A/C分界）", PolicyPresets.DetectPreset(cfgC0) == "C");
             cfgC0.PressureAlarmEnabled = false;
-            Check("C开关＋超时0＋报警关探测为A（数值算身份）", PolicyPresets.DetectPreset(cfgC0) == "A");
+            Check("C开关＋超时0＋报警关探测为A", PolicyPresets.DetectPreset(cfgC0) == "A");
+            // 数值项不参与身份：改数值后仍认得出原来的预置
+            var cfgNumId = new DeviceConfig();
+            PolicyPresets.ApplyToConfig(cfgNumId, "A");
+            Check("套A后探测为A", PolicyPresets.DetectPreset(cfgNumId) == "A");
+            cfgNumId.VacuumConfirmTimeoutMs = 15000;
+            Check("改数值项后仍探测为A（数值不算身份）",
+                PolicyPresets.DetectPreset(cfgNumId) == "A");
             Check("四预置报警全关=false（最高级只走手动/自定义）",
                 PolicyPresets.GetPresetValues("A")["MuteAllAlarms"] == "false"
                 && PolicyPresets.GetPresetValues("B")["MuteAllAlarms"] == "false"
@@ -7586,15 +7601,30 @@ namespace AgingTestSystem.Tests
                 Check("A预览真实不动（超时15000＋自动PASS）",
                     cfgPv.VacuumConfirmTimeoutMs == 15000
                     && cfgPv.CompletionJudgePolicy == CompletionJudgePolicy.AutoPass);
-                // 切回自定义：预览=刚重建的槽快照（A 内容：超时0＋待判定），真实 B 不动
+                // 切回自定义：预览=看回真实。
+                // 【为什么改了口径】自定义槽是"上次存的自定义方案"，只服务【套用自定义】；
+                // 拿旧槽盖住当前配置，策略窗会显示与真实生效值不一致的过期值
+                // （现场实锤：改完保存、关窗重开仍是老配置，只能重启软件才更新）。
                 propIdx.SetValue(cboPv, 4, null);
                 var pvCustom = fPreview.GetValue(canvasPv) as DeviceConfig;
-                Check("切自定义预览=槽快照（超时0＋待判定）",
-                    pvCustom != null && pvCustom.VacuumConfirmTimeoutMs == 0
-                    && pvCustom.CompletionJudgePolicy == CompletionJudgePolicy.PendingReview);
+                Check("切自定义预览=看真实（null，不再被旧槽盖住）", pvCustom == null);
                 Check("自定义预览真实不动（仍是B）",
                     cfgPv.AgingPressureLossPolicy == AgingPressureLossPolicy.StopOnLoss
                     && cfgPv.VacuumConfirmTimeoutMs == 15000);
+                // 开窗/保存后按新真实重造预览（RebuildPreviewFromReal：纯重画，不弹框可安全调）
+                var mRebuild = tP.GetMethod("RebuildPreviewFromReal",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Check("RebuildPreviewFromReal反射口径有效", mRebuild != null);
+                if (mRebuild != null)
+                {
+                    propIdx.SetValue(cboPv, 0, null);   // 切 A：预览=套A（超时0）
+                    var pvBefore = fPreview.GetValue(canvasPv) as DeviceConfig;
+                    Check("切A预览非null（套预置生效）", pvBefore != null);
+                    mRebuild.Invoke(pvForm, null);
+                    Check("按新真实重造后预览=看真实（null）",
+                        (fPreview.GetValue(canvasPv) as DeviceConfig) == null);
+                    Check("重造不动真实配置", cfgPv.VacuumConfirmTimeoutMs == 15000);
+                }
                 // 纯函数口径：BuildPreviewConfig（克隆隔离；两参口自定义回 null 走兼容）
                 // （三参重载已加，GetMethod 单名取法会歧义，这里按参数个数挑两参口）
                 System.Reflection.MethodInfo mBuild = null;
@@ -7658,9 +7688,8 @@ namespace AgingTestSystem.Tests
                     var slotA = ProjectPolicyStore.LoadCustom();
                     var pvSlot = mBuild3.Invoke(null,
                         new object[] { cfgPv, "Custom", slotA }) as DeviceConfig;
-                    Check("三参自定义预览=槽内容且真实不动",
-                        pvSlot != null && pvSlot.VacuumConfirmTimeoutMs == 0
-                        && cfgPv.VacuumConfirmTimeoutMs == 15000);
+                    Check("三参自定义预览=看真实（null，槽只供套用不参与显示）",
+                        pvSlot == null && cfgPv.VacuumConfirmTimeoutMs == 15000);
                     Check("三参槽空自定义回null（看回真实）",
                         mBuild3.Invoke(null, new object[] { cfgPv, "Custom",
                             new Dictionary<string, string>() }) == null);
