@@ -77,6 +77,25 @@ namespace AgingTestSystem.Interfaces
         bool Stop();
 
         /// <summary>
+        /// 读取送风机温度/湿度斜率（寄存器 0x0020 / 0x0021，RW）
+        /// 【用途】读出设备当前的升降温速率参数（协议层能力，界面暂未用；
+        /// 客户现场校准定点小数位走的是"温湿度当前读数 + 控制屏真值"对照，见 FanCalibrationForm）。
+        /// </summary>
+        /// <param name="scaleDivisor">定点换算除数（现场可配，见 DeviceConfig.FanScaleDivisor）</param>
+        /// <returns>斜率数据；读取失败返回 null（上层显示"读不到"）</returns>
+        FanSlopeData ReadSlope(float scaleDivisor);
+
+        /// <summary>
+        /// 写入送风机温度/湿度斜率（寄存器 0x0020 / 0x0021）
+        /// 【注意】这是会改变设备实际行为的写操作（改升降温速率），
+        /// 属于客户工艺参数，**校准流程不用它**（校准只读不写，零副作用）。
+        /// </summary>
+        /// <param name="temperatureRaw">温度斜率原始值</param>
+        /// <param name="humidityRaw">湿度斜率原始值</param>
+        /// <returns>是否写成功</returns>
+        bool WriteSlope(ushort temperatureRaw, ushort humidityRaw);
+
+        /// <summary>
         /// 通讯错误事件（连接失败、读写超时等）
         /// </summary>
         event EventHandler<string> OnError;

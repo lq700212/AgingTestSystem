@@ -173,6 +173,45 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
+        /// 温度斜率原始值（模拟；客户标定界面会写它再读它，模拟实现要能往返）
+        /// </summary>
+        private ushort _tempSlopeRaw = 50;
+
+        /// <summary>
+        /// 湿度斜率原始值（模拟）
+        /// </summary>
+        private ushort _humiditySlopeRaw = 20;
+
+        /// <summary>
+        /// 读取温度/湿度斜率（模拟）：按传入除数换算返回。
+        /// </summary>
+        public FanSlopeData ReadSlope(float scaleDivisor)
+        {
+            if (!_isConnected)
+            {
+                OnError?.Invoke(this, "设备未连接");
+                return null;
+            }
+            return FanControllerClient.ParseSlopeRegisters(
+                new ushort[] { _tempSlopeRaw, _humiditySlopeRaw }, scaleDivisor);
+        }
+
+        /// <summary>
+        /// 写入温度/湿度斜率（模拟）：存下来，供后续读回（标定流程要写→读）。
+        /// </summary>
+        public bool WriteSlope(ushort temperatureRaw, ushort humidityRaw)
+        {
+            if (!_isConnected)
+            {
+                OnError?.Invoke(this, "设备未连接");
+                return false;
+            }
+            _tempSlopeRaw = temperatureRaw;
+            _humiditySlopeRaw = humidityRaw;
+            return true;
+        }
+
+        /// <summary>
         /// 释放资源
         /// </summary>
         public void Dispose()

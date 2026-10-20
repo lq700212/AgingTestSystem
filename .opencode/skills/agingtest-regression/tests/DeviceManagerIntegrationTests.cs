@@ -2505,6 +2505,9 @@ namespace AgingTestSystem.Tests
             public FanData ReadStatus() { return null; }
             public bool StartFixedValue() { return true; }
             public bool Stop() { throw new InvalidOperationException("Fake 风机停失败注入"); }
+            // 斜率（V2.0.1 客户标定用）：假件不实现业务，只满足接口（编译期强制）
+            public FanSlopeData ReadSlope(float scaleDivisor) { return null; }
+            public bool WriteSlope(ushort temperatureRaw, ushort humidityRaw) { return false; }
             public void Dispose() { }
         }
 

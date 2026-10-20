@@ -1,4 +1,4 @@
-﻿# ============================================================================
+# ============================================================================
 #  get_affected_modules.ps1 - Impact analysis: changed files -> test modules.
 #
 #  What it does:
@@ -52,7 +52,7 @@ $Map = @(
     @{ Pat = @("*ChangePasswordForm*", "*LoginForm*", "*UserManagementForm*"); Mods = @("UserManager") },
     @{ Pat = @("*UnloadJudgeForm*");                Mods = @("PolicyV167", "DeviceManagerPolicy", "UiFinalizerV172_14", "DesignerStabilityV172_16") },
     @{ Pat = @("*ProjectSwitchForm*");              Mods = @("PolicyV167") },
-    @{ Pat = @("*CommunicationTestForm*", "*FanTestForm*", "*IoRemapVisualForm*"); Mods = @("ScannerParse", "ModbusConvert", "FanParse", "IoOutputChannelRemap", "SettingsValidate", "UiFinalizerV172_14", "DesignerStabilityV172_16") },
+    @{ Pat = @("*CommunicationTestForm*", "*FanTestForm*", "*IoRemapVisualForm*", "*FanCalibrationForm*"); Mods = @("ScannerParse", "ModbusConvert", "FanParse", "IoOutputChannelRemap", "SettingsValidate", "UiFinalizerV172_14", "DesignerStabilityV172_16") },
     @{ Pat = @("*ProcessPolicyForm*", "*PolicyGraph*"); Mods = @("ProcessPolicyV170", "PolicyV167", "PolicyNodeComboV1851", "UiFinalizerV172_14", "DesignerStabilityV172_16") },
     @{ Pat = @("*MainForm*");                       Mods = @("HomeLayoutConfig", "UiPureHelpers", "UiStyleV172_1", "ThemeManager", "SettingsValidate", "UiFinalizerV172_14", "DesignerStabilityV172_16", "MainFormIconV107") },
     @{ Pat = @("*WorkstationGridView*");            Mods = @("PanelLayoutConfig", "UiPureHelpers") },
@@ -72,7 +72,7 @@ $Map = @(
     @{ Pat = @("*ScannerService*");                 Mods = @("ScannerParse", "SettingsValidate") },
     @{ Pat = @("*SerialPortHelper*");               Mods = @("ScannerParse", "ModbusConvert", "FanParse") },
     @{ Pat = @("*ModbusRtuBarometerReader*");       Mods = @("ModbusConvert") },
-    @{ Pat = @("*FanControllerClient*");            Mods = @("FanParse") },
+    @{ Pat = @("*FanControllerClient*", "*IFanController*", "*FanCalibration*"); Mods = @("FanParse") },
     @{ Pat = @("*ModbusTcpIoController*");          Mods = @("IoMapBuilder", "MockDevices", "IoOutputChannelRemap") },
     @{ Pat = @("*IoRemapValidator*", "*IoRemapCatalog*"); Mods = @("IoOutputChannelRemap", "SettingsValidate") },
     @{ Pat = @("*IoMapBuilder*", "*IoPointDefinition*", "*IoStatus*"); Mods = @("IoMapBuilder", "IoOutputChannelRemap", "MockDevices") },
@@ -91,7 +91,7 @@ $Map = @(
     # --- Models ---
     @{ Pat = @("*DeviceConfig*");                   Mods = @("ModelDefaults", "SettingsValidate", "PolicyV167", "MesV168", "ProcessPolicyV170", "DeviceConfig.ParseFanIpCandidates", "DeviceManagerIntegration", "PowerReportV174") },
     @{ Pat = @("*IoOutputChannelRemap*");           Mods = @("IoOutputChannelRemap", "SettingsValidate") },
-    @{ Pat = @("*BarometerData*", "*FanData*");     Mods = @("AgingBusinessModel", "ModelRoundtrip", "MockDevices", "PowerReportV174") },
+    @{ Pat = @("*BarometerData*", "*FanData*");     Mods = @("AgingBusinessModel", "ModelRoundtrip", "MockDevices", "FanParse", "PowerReportV174") },
     @{ Pat = @("*RecipeConfig*");                   Mods = @("RecipeStorage", "ModelRoundtrip", "LegacyRecipeGuard", "UiPureHelpers", "DeviceManagerExtended") },
     @{ Pat = @("*StationInfo*");                    Mods = @("AgingBusinessModel", "ModelRoundtrip", "StationCache", "DeviceManagerExtended") },
     @{ Pat = @("*PanelLayoutConfig*");              Mods = @("PanelLayoutConfig", "UiPureHelpers") },

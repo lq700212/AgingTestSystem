@@ -1,4 +1,4 @@
-﻿namespace AgingTestSystem.Views
+namespace AgingTestSystem.Views
 {
     /// <summary>
     /// 主窗体 —— 设计器自动生成部分
@@ -91,6 +91,7 @@
             this.toolStripStatusLabelTime = new System.Windows.Forms.ToolStripStatusLabel();
             this.timerTime = new System.Windows.Forms.Timer(this.components);
             this.hashTimer = new System.Windows.Forms.Timer(this.components);
+            this.fanLongPressTimer = new System.Windows.Forms.Timer(this.components);
             this.rootScrollPanel.SuspendLayout();
             this.tableLayoutPanelMain.SuspendLayout();
             this.tableLayoutPanelHeader.SuspendLayout();
@@ -524,6 +525,7 @@
             this.lblFanState.Size = new System.Drawing.Size(55, 16);
             this.lblFanState.TabIndex = 7;
             this.lblFanState.Text = "未连接";
+            //
             // 
             // groupBoxOperation
             // 
@@ -771,12 +773,17 @@
             this.timerTime.Tick += new System.EventHandler(this.timerTime_Tick);
             // 
             // hashTimer
-            // 
+            //
             this.hashTimer.Interval = 3600000;
             this.hashTimer.Tick += new System.EventHandler(this.HashTimer_Tick);
-            // 
+            //
+            // fanLongPressTimer（温度标签长按 → 定点校准窗；放 components 容器自动释放）
+            //
+            this.fanLongPressTimer.Interval = 50;
+            this.fanLongPressTimer.Tick += new System.EventHandler(this.FanLongPressTimer_Tick);
+            //
             // MainForm
-            // 
+            //
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
             this.ClientSize = new System.Drawing.Size(1280, 900);
             this.Controls.Add(this.rootScrollPanel);
@@ -845,6 +852,7 @@
         private Sunny.UI.UILabel lblFanStateLabel;
         /// <summary>送风机运行状态值标签（V1.16.1：未连接=红/定值启动·已连接=绿/定值停止=灰）</summary>
         private Sunny.UI.UILabel lblFanState;
+        /// <summary>送风机斜率设置按钮（标题带右侧；客户现场标定温湿度定点小数位用）</summary>
         /// <summary>用户权限按钮</summary>
         private Sunny.UI.UIButton btnUserPermission;
         /// <summary>参数设置按钮</summary>
@@ -915,5 +923,7 @@
         private System.Windows.Forms.Timer timerTime;
         /// <summary>授权计时器（V1.87：1 小时一格，与 HJVision 的 HashTimer 一致）</summary>
         private System.Windows.Forms.Timer hashTimer;
+        /// <summary>温度标签长按计时器（按住 600ms 弹定点校准窗；放 components 容器自动释放）</summary>
+        private System.Windows.Forms.Timer fanLongPressTimer;
     }
 }
