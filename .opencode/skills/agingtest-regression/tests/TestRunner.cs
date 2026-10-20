@@ -7937,6 +7937,35 @@ namespace AgingTestSystem.Tests
                 Check("关窗后悬停提示已释放（不进终结器）", tipGone);
             }
             finally { try { if (full != null) full.Dispose(); } catch { } }
+            // —— 保存即存自定义槽（V2.0.1 用户口径：预置是只读模板，改动一律落自定义）——
+            // 旧逻辑"停在 A/B/C/D 时不存槽"会让人以为改动丢了（套用自定义还是老值）。
+            // 存槽是保存动作的固定尾巴，单独抽成可测方法（SaveCurrentNode 结尾弹模态框，
+            // 用例里不能裸调 —— 等人的用例就是坏用例）。
+            ProcessPolicyForm slotForm = null;
+            try
+            {
+                var cfgSlot = new DeviceConfig();
+                PolicyPresets.ApplyToConfig(cfgSlot, "B");
+                slotForm = new ProcessPolicyForm(cfgSlot, null, true);
+                var tSlot = typeof(ProcessPolicyForm);
+                var slotMethod = tSlot.GetMethod("SaveCurrentConfigToCustomSlot",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Check("存自定义槽是独立可测动作（保存即存槽）", slotMethod != null);
+                bool slotOk = false;
+                if (slotMethod != null)
+                {
+                    slotMethod.Invoke(slotForm, null);
+                    var slot = ProjectPolicyStore.LoadCustom();
+                    // 槽内容必须等于当前配置（预置画面上改的也落这里）
+                    slotOk = slot != null && slot.Count > 0
+                        && slot.ContainsKey("PressureAlarmEnabled")
+                        && string.Equals(slot["PressureAlarmEnabled"],
+                            cfgSlot.PressureAlarmEnabled ? "true" : "false",
+                            StringComparison.OrdinalIgnoreCase);
+                }
+                Check("存自定义槽后槽内容=当前配置（在预置上改的也落自定义）", slotOk);
+            }
+            finally { try { if (slotForm != null) slotForm.Dispose(); } catch { } }
             // D 配置打开回显选中 D（第 4 项，索引 3；套用 D 后当前配置即回显 D，
             // 不再是"自定义"）
             ProcessPolicyForm fullD = null;

@@ -652,6 +652,28 @@ namespace AgingTestSystem.Views
             SaveCurrentNode();
         }
 
+        /// <summary>
+        /// 把当前内存配置**全量**存进自定义槽（项目级 CustomPolicy.json）。
+        /// 【为什么单独成方法】存槽是"保存"动作的固定尾巴，但回归要能单独验它 ——
+        /// SaveCurrentNode 结尾会弹模态提示框，用例里不能裸调（等人的用例就是坏用例）。
+        /// 【口径】全量存 PolicyKeys 名单内的项（与 ApplyOverlay/导入导出同口径，脏 key 丢弃）。
+        /// 【谁会触发】任何一次【保存节点】——包括在预置画面上改的（预置模板本身不可改，
+        /// 改的永远是"自定义方案"）。
+        /// </summary>
+        private void SaveCurrentConfigToCustomSlot()
+        {
+            try
+            {
+                ProjectPolicyStore.SaveCustom(ProjectPolicyStore.ToPolicyDict(_config));
+            }
+            catch (Exception ex)
+            {
+                // 槽同步失败不拦主保存（配置已经生效了），但要留痕：
+                // 否则用户以为"自定义方案存下来了"，下次套用却是老值，找不到原因。
+                UpdateStatus("自定义槽同步失败：" + ex.Message);
+            }
+        }
+
         /// <summary>复位布局按钮（Designer 命名处理器，原匿名 lambda 落袋）。</summary>
         private void BtnResetLayout_Click(object sender, EventArgs e)
         {
@@ -731,20 +753,13 @@ namespace AgingTestSystem.Views
 
             foreach (string k in presult.SavedKeys) SavedKeys.Add(k);
             _dirty = false;
-            // 存成自定义即同步槽：下拉停在"自定义"＝用户在改自定义，把现值全量存进
-            // 自定义槽（各存各的：A/B/C/D 是代码写死的不动）。
-            // 【为什么按下拉判而不是按探测判】探测口径改了（数值项不参与身份），
-            // 用户视角是"我停在自定义上改的"就存槽；探测判会在"改完恰好凑成某个预置"
-            // 时漏存，下次套用自定义还是老值。
-            try
-            {
-                if (string.Equals(SelectedPresetId(_cboPreset), PolicyPresets.CustomId,
-                    StringComparison.OrdinalIgnoreCase))
-                {
-                    ProjectPolicyStore.SaveCustom(ProjectPolicyStore.ToPolicyDict(_config));
-                }
-            }
-            catch { /* 槽同步失败不拦主保存，下次保存再试 */ }
+            // 存自定义槽：**一律**存（不再只在下拉停在"自定义"时才存）。
+            // 【为什么】预置 A/B/C/D 是代码写死的出厂模板，改不了也不该被改 ——
+            // 用户在预置画面上改的永远是"自己那套"，落点只能是自定义槽。
+            // 旧逻辑（停在 A 时不存槽）会让人以为改动丢了：改完真实配置已偏离该预置
+            // （探测口径：14 个行为开关全等才算预置），下拉自动跳"自定义"，
+            // 可点【套用自定义】套回的还是老值 —— 这正是要修的那个别扭。
+            SaveCurrentConfigToCustomSlot();
             // 真实配置变了：预置行按新真实重探测回显（下拉跟到新探测＋预览同步重造）。
             // 不刷这一行，下拉还停在旧选项，画布按旧选项整幅预览，看起来就像
             // "保存一个节点把所有节点都覆盖了"——这正是右栏不动、画布全跳变的根因。
