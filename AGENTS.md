@@ -665,3 +665,12 @@ else 分支已做叠加——改采集/状态显示时勿破坏此机制）。�
   禁版本流水账，见铁律 5），样式参考 `WorkstationGridView.cs` / `RecipeManagerForm.cs`；新文件/新方法尤其要写清头部说明。
 - 注释里的中文请保持 UTF-8，写完后自查编码：`[IO.File]::ReadAllText(path, UTF8).Contains("预期中文")` 能命中。
 - **提交前自检**：`git status` + `git diff` 确认改动范围与文档同步都完成后再交付；用户不要求 commit 时只留工作区改动即可。
+- **commit message 必须无 BOM（V2.0.1 血泪）**：PowerShell 5.1 的 `Out-File -Encoding utf8` / `Set-Content -Encoding utf8`
+  会**自动加 BOM**，写出来的提交信息开头多 3 个隐形字节（`EF BB BF`）—— `git log` 里显示成"标题前有个怪字符"，
+  页面/脚本取标题会带上垃圾前缀。**正确写法**：先 `[IO.File]::WriteAllText($path, $msg, (New-Object Text.UTF8Encoding($false)))`
+  写临时文件，再 `git commit -F $path`；禁 `Out-File -Encoding utf8`。
+  **自查**：`git cat-file commit <hash>` 取原始字节，看 `message` 段（`\n\n` 之后）首 3 字节是否 `EF BB BF`。
+  注意**不能用 PowerShell 管道判 BOM**（`git log | Out-String` 会把字节解码成字符、BOM 被吞或变形，结论不可信）——
+  必须走 `cmd /c "git cat-file commit <hash> > out.bin"` 的字节重定向，或 `git cat-file --batch` 一次性导出后二进制解析。
+  已发生的脏历史用 `git commit-tree` 重建受影响提交（tree/作者/时间戳原样保留，只换 message）再 force push：
+  **内容零变化**（重写前后 `tree` 相同、`git diff` 为空），改写范围只波及"被改的那条 + 其后代"。
