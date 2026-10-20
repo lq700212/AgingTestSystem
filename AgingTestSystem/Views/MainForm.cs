@@ -425,16 +425,25 @@ namespace AgingTestSystem.Views
             tip.SetToolTip(btnWinMax, "最大化/还原");
             tip.SetToolTip(btnWinClose, "关闭");
             // 校准入口藏在长按里（监视区没空间放按钮），必须给个提示否则没人知道
-            tip.SetToolTip(lblUpperTemp, "长按可校准送风机温湿度的小数点位置");
-            tip.SetToolTip(lblSetTemp, "长按可校准送风机温湿度的小数点位置");
-            // 长按校准：两个温度标签都挂上（绑定集中在这里，Designer 里不挂 ——
-            // 两处都挂会双触发，弹两次模态窗；集中一处也省得"改了一个漏了另一个"）
+            tip.SetToolTip(lblUpperTemp, "长按可校准送风机温度的小数点位置");
+            tip.SetToolTip(lblSetTemp, "长按可校准送风机温度的小数点位置");
+            tip.SetToolTip(lblUpperTempLabel, "长按可校准送风机温度的小数点位置");
+            tip.SetToolTip(lblSetTempLabel, "长按可校准送风机温度的小数点位置");
+            // 长按校准：温度值与它的标题文字四个控件都挂上
+            //（绑定集中在这里，Designer 里不挂 —— 两处都挂会双触发，弹两次模态窗；
+            //  集中一处也省得"改了一个漏了另一个"；标题文字也挂是方便客户按住整行）
             lblUpperTemp.MouseDown += FanTempLabel_MouseDown;
             lblUpperTemp.MouseUp += FanTempLabel_MouseUp;
             lblUpperTemp.MouseLeave += FanTempLabel_MouseLeave;
             lblSetTemp.MouseDown += FanTempLabel_MouseDown;
             lblSetTemp.MouseUp += FanTempLabel_MouseUp;
             lblSetTemp.MouseLeave += FanTempLabel_MouseLeave;
+            lblUpperTempLabel.MouseDown += FanTempLabel_MouseDown;
+            lblUpperTempLabel.MouseUp += FanTempLabel_MouseUp;
+            lblUpperTempLabel.MouseLeave += FanTempLabel_MouseLeave;
+            lblSetTempLabel.MouseDown += FanTempLabel_MouseDown;
+            lblSetTempLabel.MouseUp += FanTempLabel_MouseUp;
+            lblSetTempLabel.MouseLeave += FanTempLabel_MouseLeave;
             // 最大化↔还原切换时方框字形跟着换（画还原叠框），状态变即重画
             this.SizeChanged += (s, e) =>
             {
@@ -1036,11 +1045,14 @@ namespace AgingTestSystem.Views
                 config.FanTimeoutMs = fanTimeoutMs;
             }
 
-            // 送风机温湿度定点换算除数（寄存器原始值 ÷ 该值 = 实际值）：
-            // 10=0.1 精度定点（屏显 22.2 ↔ 寄存器 222）；100=0.01 精度定点（屏显 22.20 ↔ 寄存器 2220）。
-            // 手改配置文件写成 0/负数/非数字时钳回缺省 10，不带病启动（除零会让温度变成无穷大）。
-            config.FanScaleDivisor = DeviceConfig.ParseFanScaleDivisor(
-                System.Configuration.ConfigurationManager.AppSettings["FanScaleDivisor"]);
+            // 送风机定点换算斜率（寄存器原始值 × 该值 = 实际值）：
+            // 温度、湿度各一份（厂商手册里两路小数位可能不同：常见 温度×0.01、湿度×0.1）。
+            // 0.1=0.1 精度定点（屏显 22.2 ↔ 寄存器 222）；0.01=0.01 精度定点（屏显 22.20 ↔ 寄存器 2220）。
+            // 手改配置文件写成 0/负数/非档位值时钳回缺省 0.1，不带病启动（除零会让温度变成无穷大）。
+            config.FanTempScale = DeviceConfig.ParseFanScale(
+                System.Configuration.ConfigurationManager.AppSettings["FanTempScale"]);
+            config.FanHumidityScale = DeviceConfig.ParseFanScale(
+                System.Configuration.ConfigurationManager.AppSettings["FanHumidityScale"]);
 
             // 送风机 IP 自动识别（V1.12 新增）：
             // FanAutoDetectEnabled=true 时，连接送风机按顺序尝试 FanIpAddress + FanIpCandidates，
@@ -3075,7 +3087,8 @@ namespace AgingTestSystem.Views
                 return;
             }
 
-            using (var form = new SettingsForm(_config))
+            // 传 _deviceManager：设置表里的"校准湿度"按钮要读送风机当前湿度
+            using (var form = new SettingsForm(_config, _deviceManager))
             {
                 ThemeManager.ApplyTo(form);
                 if (form.ShowDialog(this) == DialogResult.OK &&
@@ -3258,14 +3271,18 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 打开送风机定点校准窗（长按温度标签的入口）。
+        /// 打开送风机**温度**定点校准窗（长按温度标签的入口）。
+        /// 【为什么主界面只有温度】主界面"监视"区只显示温度（湿度不占位置），
+        /// 所以长按这里只校温度；湿度校准在系统设置 → 冷却送风机 → "校准湿度"按钮
+        /// （温度、湿度各有各的斜率，互不影响）。
         /// 【权限】不限角色（与"开放给客户自行标定"一致）。
         /// 模态：设置类弹窗，与"参数设置/配方管理"同一口径；using 保证释放。
         /// </summary>
         private void ShowFanCalibration()
         {
             if (_mainClosing || this.IsDisposed || this.Disposing) return;
-            using (var form = new Dialogs.FanCalibrationForm(_deviceManager, _config))
+            using (var form = new Dialogs.FanCalibrationForm(_deviceManager, _config,
+                Services.FanCalibrationTarget.Temperature))
             {
                 ThemeManager.ApplyTo(form);
                 form.ShowDialog(this);

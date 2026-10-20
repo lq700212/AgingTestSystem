@@ -202,6 +202,9 @@
     <EmbeddedResource Include="Dialogs\CommunicationTestForm.resx">
       <DependentUpon>CommunicationTestForm.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Include="Dialogs\FanCalibrationForm.resx">
+      <DependentUpon>FanCalibrationForm.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Dialogs\FanTestForm.resx">
       <DependentUpon>FanTestForm.cs</DependentUpon>
     </EmbeddedResource>

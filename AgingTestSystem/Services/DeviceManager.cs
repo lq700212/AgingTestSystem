@@ -1808,7 +1808,7 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 读取送风机温度/湿度斜率（客户标定用；寄存器 0x0020 / 0x0021）
         /// </summary>
-        /// <param name="scaleDivisor">定点换算除数（现场可配，见 DeviceConfig.FanScaleDivisor）</param>
+        /// <param name="scaleDivisor">定点换算除数（现场可配，见 DeviceConfig.FanTempScale / FanHumidityScale）</param>
         /// <returns>斜率数据；未启用/未连接/读取失败返回 null</returns>
         public FanSlopeData GetFanSlope(float scaleDivisor)
         {
@@ -1874,10 +1874,10 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 强制重新轮询一次送风机状态（后台线程，不阻塞调用方）。
-        /// 【为什么需要】定点除数（FanScaleDivisor）校准后，主界面温度显示应该立刻按新比例刷新，
+        /// 【为什么需要】定点斜率（FanTempScale / FanHumidityScale）校准后，主界面显示应该立刻按新比例刷新，
         /// 不能等下一个 2 秒采集周期 —— 操作员点完【确定】就该看到正确的温度。
         /// 【为什么放后台】Modbus TCP 读最多阻塞几秒（超时配置），卡 UI 会被当成"程序卡死"。
-        /// 定时器正在轮询时跳过即可：那个周期本来就会用新除数。
+        /// 定时器正在轮询时跳过即可：那个周期本来就会用新斜率。
         /// </summary>
         public void RefreshFanData()
         {

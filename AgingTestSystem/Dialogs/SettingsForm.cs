@@ -76,6 +76,11 @@ namespace AgingTestSystem.Dialogs
         private readonly DeviceConfig _config;
 
         /// <summary>
+        /// 设备管理器（"校准湿度"按钮要读送风机当前湿度；可为 null → 按钮提示未连接）
+        /// </summary>
+        private readonly DeviceManager _deviceManager;
+
+        /// <summary>
         /// 唯一一张配置表格（合并了所有分类）。不再为每个分类单独建表：
         /// 8 个独立表格放在 AutoScroll 容器中滚动会逐帧整块重绘导致卡顿；
         /// 合并为单表格后由 DataGridView 自身滚动（虚拟化，只重绘可见行），滚动流畅。
@@ -297,7 +302,8 @@ namespace AgingTestSystem.Dialogs
             { "FanPort", "送风机通讯端口（50000）" },
             { "FanUnitId", "送风机从站地址（默认 1）" },
             { "FanTimeoutMs", "送风机通讯超时（毫秒）" },
-            { "FanScaleDivisor", "送风机温湿度定点除数（寄存器原始值 ÷ 此值 = 实际值）：10=0.1精度定点（屏显22.2↔寄存器222）；100=0.01精度定点（屏显22.20↔寄存器2220）。改错会让温湿度整体差10倍或100倍，改完请拿主界面与控制屏对一眼" },
+            { "FanTempScale", "送风机温度定点斜率（寄存器原始值 × 此值 = 实际温度 °C）：0.1=0.1精度（屏显22.2↔寄存器222）；0.01=0.01精度（屏显22.20↔寄存器2220）。档位只能是 1/0.1/0.01/0.001/0.0001。改错会让温度整体差10倍或100倍，改完请拿主界面与控制屏对一眼；也可以在主界面长按温度值用校准窗自动反推" },
+            { "FanHumidityScale", "送风机湿度定点斜率（寄存器原始值 × 此值 = 实际湿度 %RH）：档位同温度（1/0.1/0.01/0.001/0.0001）。厂商手册里温湿度小数位可能不同（常见 温度×0.01、湿度×0.1），所以温度和湿度各存各的、互不影响；改完请拿读数与控制屏对一眼，也可以点右边的【校准湿度】自动反推" },
 
             // ===== 老化测试业务 =====
             { "VacuumConfirmTimeoutMs", "真空建立确认超时（毫秒，默认15000；0=关闭：不限时等，不判建立超时，只靠老化失压报警+人工停止）" },
@@ -409,7 +415,8 @@ namespace AgingTestSystem.Dialogs
             ("冷却送风机", new string[]
             {
                 "FanEnabled", "FanIpAddress", "FanAutoDetectEnabled", "FanIpCandidates",
-                "FanPort", "FanUnitId", "FanTimeoutMs", "FanScaleDivisor"
+                "FanPort", "FanUnitId", "FanTimeoutMs",
+                "FanTempScale", "FanHumidityScale"
             }),
             ("老化测试业务", new string[]
             {
@@ -465,13 +472,23 @@ namespace AgingTestSystem.Dialogs
         };
 
         /// <summary>
+        /// 构造函数（无设备管理器 —— 设计器预览/不需要校准的调用方用）
+        /// </summary>
+        /// <param name="config">当前生效的设备配置（主窗体传入，用于取兜底值与类型校验）</param>
+        public SettingsForm(DeviceConfig config) : this(config, null)
+        {
+        }
+
+        /// <summary>
         /// 构造函数
         /// </summary>
         /// <param name="config">当前生效的设备配置（主窗体传入，用于取兜底值与类型校验）</param>
-        public SettingsForm(DeviceConfig config)
+        /// <param name="deviceManager">设备管理器（校准湿度按钮要读送风机当前湿度；可为 null）</param>
+        public SettingsForm(DeviceConfig config, DeviceManager deviceManager)
         {
             InitializeComponent();
             _config = config;
+            _deviceManager = deviceManager;
 
             // 按分类创建分隔标题和表格，再填充数据并排布版面
             SetupSections();
@@ -1644,13 +1661,18 @@ namespace AgingTestSystem.Dialogs
                 return CreateVacuumTimeoutComboCell(value);
             }
 
-            // 送风机定点换算除数：可手输的下拉（常用档位 + 自定义）。
-            // 不走 _numericKeys 的数字微调框：光秃秃一个 "10" 现场看不懂对应哪种定点格式，
+            // 送风机定点换算斜率：可手输的下拉（常用档位 + 自定义）。
+            // 不走 _numericKeys 的数字微调框：光秃秃一个 "0.1" 现场看不懂对应哪种定点格式，
             // 而选错就是温度差 10 倍/100 倍，下拉把含义写进选项文字里。
-            // 显示值恒以数字开头；手输自定义走 ValidateValue 同一口径（1~10000 的正整数）。
-            if (key == "FanScaleDivisor")
+            // 显示值恒以数字开头；手输自定义走 ValidateValue 同一口径（标准档位 1/0.1/0.01/0.001/0.0001）。
+            // 温度、湿度各一行各一份斜率（厂商手册里两路小数位可能不同），选项示例各给各的。
+            if (key == "FanTempScale")
             {
-                return CreateFanScaleComboCell(value);
+                return CreateFanScaleComboCell(value, "屏显 22.2 ↔ 寄存器 222");
+            }
+            if (key == "FanHumidityScale")
+            {
+                return CreateFanScaleComboCell(value, "屏显 55.0 ↔ 寄存器 550");
             }
 
             if (_numericKeys.TryGetValue(key, out var range))
@@ -1975,18 +1997,22 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 送风机定点换算除数下拉单元格（可手输）：常用档位把"除数＝哪种定点格式"写进选项文字，
-        /// 现场不用查文档就知道该选哪个；当前值不在档位里（如手改文件写了 50）补一项原值回显。
-        /// 显示值恒以数字开头（AGENTS.md 约定）；保存时走 ValidateValue 同一口径（1~10000 的正整数）。
+        /// 送风机定点换算斜率下拉单元格（可手输）：常用档位把"这个斜率＝哪种定点格式"写进选项文字，
+        /// 现场不用查文档就知道该选哪个；当前值不在档位里（如手改文件写了 0.15）补一项原值回显。
+        /// 显示值恒以数字开头（AGENTS.md 约定）；保存时走 ValidateValue 同一口径（标准定点档位）。
         /// </summary>
-        private static DataGridViewEditableComboBoxCell CreateFanScaleComboCell(string currentValue)
+        /// <param name="currentValue">当前配置值（斜率文本，如 "0.1"）</param>
+        /// <param name="sampleZeroOne">0.1 档的对照示例（温度/湿度各给各的）</param>
+        private static DataGridViewEditableComboBoxCell CreateFanScaleComboCell(string currentValue, string sampleZeroOne)
         {
             var cell = new DataGridViewEditableComboBoxCell();
             StyleComboCell(cell);
             var options = new[]
             {
-                new ComboOption("10（0.1 精度定点：屏显 22.2 ↔ 寄存器 222）", "10"),
-                new ComboOption("100（0.01 精度定点：屏显 22.20 ↔ 寄存器 2220）", "100"),
+                new ComboOption("0.1（0.1 精度定点：" + sampleZeroOne + "）", "0.1"),
+                new ComboOption("0.01（0.01 精度定点：屏显 22.20 ↔ 寄存器 2220）", "0.01"),
+                new ComboOption("0.001（0.001 精度定点：屏显 22.200 ↔ 寄存器 22200）", "0.001"),
+                new ComboOption("0.0001（0.0001 精度定点：屏显 22.2000 ↔ 寄存器 222000）", "0.0001"),
                 new ComboOption("1（整数：屏显 22 ↔ 寄存器 22）", "1"),
             };
             foreach (ComboOption option in options)
@@ -2286,14 +2312,19 @@ namespace AgingTestSystem.Dialogs
                     }
                     return true;
 
-                // 送风机定点换算除数：正整数 1~10000。
-                // 手改文件绕过界面写 0/负数时，这里拦不住（文件不走保存），
-                // 启动加载由 MainForm 钳回缺省 10，解析层另有兜底（不让温度变无穷大）。
-                case "FanScaleDivisor":
-                    int fanScale;
-                    if (!int.TryParse(value, out fanScale) || fanScale < 1 || fanScale > 10000)
+                // 送风机定点换算斜率（温度 / 湿度各一份）：只能是标准档位
+                // 1 / 0.1 / 0.01 / 0.001 / 0.0001（定点格式就这几种）。
+                // 手改文件绕过界面写别的值时，这里拦不住（文件不走保存），
+                // 启动加载由 MainForm 钳回缺省 0.1，解析层另有兜底（不让温度变无穷大）。
+                case "FanTempScale":
+                case "FanHumidityScale":
+                    double fanScale;
+                    if (!double.TryParse(value, System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out fanScale)
+                        || !DeviceConfig.IsValidFanScale(fanScale))
                     {
-                        error = "应为 1~10000 的整数（定点除数：10=0.1精度定点，100=0.01精度定点）";
+                        error = "应为标准定点档位之一：1 / 0.1 / 0.01 / 0.001 / 0.0001" +
+                                "（如 0.1=屏显22.2↔寄存器222，0.01=屏显22.20↔寄存器2220）";
                         return false;
                     }
                     return true;
@@ -2559,6 +2590,68 @@ namespace AgingTestSystem.Dialogs
                 if (StructuralKeys.Contains(k)) result.StructuralChanged.Add(k);
             }
             return true;
+        }
+
+        /// <summary>
+        /// "校准湿度"按钮点击事件
+        /// 【为什么湿度校准放在设置表】主界面"监视"区只显示温度（湿度不占位置），
+        /// 所以温度校准走主界面长按温度值，湿度校准放这里（对应"冷却送风机 → 送风机湿度定点斜率"）。
+        /// 【流程】弹校准窗（只校湿度一项）→ 校准窗自己落盘 + 热回写 + 立即重读送风机
+        /// → 回到这里只把"送风机湿度定点斜率"那一行的显示值刷新成新斜率。
+        /// 【为什么不整体重载表格】重载会把用户在这张表里改了但还没保存的其它项一起冲掉，
+        /// 所以只定向刷新这一个 key 的那一行。
+        /// </summary>
+        private void btnCalibHumidity_Click(object sender, EventArgs e)
+        {
+            if (_closed) return;
+
+            if (_deviceManager == null)
+            {
+                MessageBox.Show("当前窗口没有连接到设备管理器，无法校准。", "提示",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            if (_config != null && !_config.FanEnabled)
+            {
+                MessageBox.Show("冷却送风机未启用（设置表 → 冷却送风机 → 是否启用冷却送风机），无法校准。", "提示",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            using (var form = new FanCalibrationForm(_deviceManager, _config, FanCalibrationTarget.Humidity))
+            {
+                ThemeManager.ApplyTo(form);
+                form.ShowDialog(this);
+            }
+
+            // 校准窗已把新斜率写进 _config（热回写），这里只把那一行显示值刷新成新值
+            RefreshKeyCellValue("FanHumidityScale", FormatScaleValue(_config != null ? _config.FanHumidityScale : 0));
+        }
+
+        /// <summary>
+        /// 定向刷新表格里某个 key 那一行的"设置值"显示
+        /// 【为什么定向刷新】整体重载表格会把用户改了但未保存的其它项一起冲掉。
+        /// </summary>
+        /// <param name="key">配置 key</param>
+        /// <param name="value">新的显示值</param>
+        private void RefreshKeyCellValue(string key, string value)
+        {
+            if (_grid == null) return;
+            foreach (DataGridViewRow row in _grid.Rows)
+            {
+                if (row.IsNewRow) continue;
+                if ((row.Cells["colKey"].Value?.ToString() ?? "") != key) continue;
+                row.Cells["colValue"].Value = value;
+                return;
+            }
+        }
+
+        /// <summary>斜率格式化成配置文本（0.1 / 0.01 / 0.001 / 0.0001）</summary>
+        /// <param name="scale">斜率值</param>
+        /// <returns>文本</returns>
+        private static string FormatScaleValue(double scale)
+        {
+            return scale.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
         }
 
         /// <summary>

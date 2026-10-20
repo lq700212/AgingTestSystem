@@ -287,40 +287,135 @@ namespace AgingTestSystem.Models
         public int FanTimeoutMs { get; set; } = 3000;
 
         /// <summary>
-        /// 送风机温湿度定点换算除数的缺省值（寄存器原始值 ÷ 该值 = 实际值）
-        /// 【为什么是常量而不是各写一份】配置缺省（<see cref="FanScaleDivisor"/>）、
-        /// 运行时兜底（手改配置文件写成 0/负数时钳回缺省）都从这里取，
-        /// 免得两处手抄分叉。
+        /// 送风机定点换算**斜率**的缺省值（寄存器原始值 × 该值 = 实际值）
+        /// 【为什么是常量而不是各写一份】配置缺省（<see cref="FanTempScale"/> /
+        /// <see cref="FanHumidityScale"/>）、运行时兜底（手改配置文件写成 0/负数时钳回缺省）
+        /// 都从这里取，免得两处手抄分叉。
+        /// </summary>
+        public const double DefaultFanScale = 0.1;
+
+        /// <summary>
+        /// 送风机定点换算**除数**的缺省值（寄存器原始值 ÷ 该值 = 实际值）
+        /// 【它是什么】<see cref="DefaultFanScale"/> 的倒数口径（0.1 的倒数 = 10）。
+        /// 【为什么要两种口径】配置与界面按**斜率**走（与厂商手册"温度×0.01、湿度×0.1"一致，
+        /// 客户看得懂、手改不容易错），内部换算按**除数**走（整数除法，数值行为与旧实现逐位一致，
+        /// 不会因为 0.1 这种二进制不精确小数引入显示误差）。两者换算只在这里一处发生。
         /// </summary>
         public const int DefaultFanScaleDivisor = 10;
 
         /// <summary>
-        /// 送风机温湿度定点换算除数（寄存器原始值 ÷ 该值 = 实际值，单位 °C / %RH）
-        /// 【为什么做成配置项】控制屏的定点格式跟控制器型号/固件有关，现场不一定只有一种：
-        /// - 10 ＝ 0.1 精度定点：屏显 22.2°C 时寄存器读回 222；
-        /// - 100 ＝ 0.01 精度定点：屏显 22.20°C 时寄存器读回 2220（早期通讯 Demo 现场实测那套）。
-        /// 换型号不用重编译，改设置表"冷却送风机 → 定点除数"即可。
-        /// 【影响面】当前温度/当前湿度/温度设定值/湿度设定值四路同属一块屏的同一寄存器组，
-        /// 格式一致，共用这一个除数。
+        /// 送风机**温度**定点换算斜率（寄存器原始值 × 该值 = 实际温度，单位 °C）
+        /// 【为什么温度和湿度分成两个】厂商手册里温度与湿度的小数位**本来就可能不一样**
+        /// （常见：温度 ×0.01、湿度 ×0.1）。用一份共用值，碰上两路精度不同的屏就必然有一路错
+        /// （错的那路差 10 倍），而且没法单独修。现在温度、湿度各存各的斜率，互不影响。
+        /// 【合法档位】1 / 0.1 / 0.01 / 0.001 / 0.0001（定点格式只可能是这几种）
+        /// - 0.1 ＝ 0.1 精度：屏显 22.2°C 时寄存器读回 222；
+        /// - 0.01 ＝ 0.01 精度：屏显 22.20°C 时寄存器读回 2220（早期通讯 Demo 现场实测那套）。
         /// 【改错的代价】整体差 10 倍或 100 倍（上位机 22.2 被显示成 2.22 或 222.0），
         /// 现场只能靠"主界面 vs 控制屏"对一眼才能发现，所以改完必须现场复核一次。
+        /// 【怎么改】主界面长按温度值 → 校准窗自动反推；或系统设置 → 冷却送风机 → 送风机温度斜率 手输。
         /// </summary>
-        public int FanScaleDivisor { get; set; } = DefaultFanScaleDivisor;
+        public double FanTempScale { get; set; } = DefaultFanScale;
 
         /// <summary>
-        /// 解析配置文件里的定点换算除数（非法值一律回缺省，不带病启动）
-        /// 【为什么要有这个口】除数错一位就让温湿度整体差 10 倍/100 倍，
-        /// 而 App.config 记事本手改能绕过设置表校验，所以启动加载必须自己钳一道。
-        /// 合法范围 1~10000 的正整数（0/负数/小数/超范围/空/非数字 → 缺省 10）。
+        /// 送风机**湿度**定点换算斜率（寄存器原始值 × 该值 = 实际湿度，单位 %RH）
+        /// 【为什么单独一份】见 <see cref="FanTempScale"/> 的说明：厂商手册里温湿度精度可能不同，
+        /// 共用一份就有一路修不了。缺省与温度一致（0.1），保持现网行为不变。
+        /// 【怎么改】系统设置 → 冷却送风机 → "校准湿度"按钮（弹校准窗自动反推）或直接手输斜率。
         /// </summary>
-        /// <param name="raw">原始配置字符串，如 "10" / "100"</param>
-        /// <returns>合法除数；非法时返回 <see cref="DefaultFanScaleDivisor"/></returns>
-        public static int ParseFanScaleDivisor(string raw)
+        public double FanHumidityScale { get; set; } = DefaultFanScale;
+
+        /// <summary>
+        /// 送风机定点斜率归一的容差（相对偏差 5%）
+        /// 【为什么是唯一出处】归一容差既用于"手改配置值的合法性判断"（这里），
+        /// 也用于"校准窗推算出的档位是否可信"（<c>Services.FanCalibration</c>），
+        /// 两处必须同一个口径，所以常量放这里、由那边转发。
+        /// </summary>
+        public const double FanScaleMatchTolerance = 0.05;
+
+        /// <summary>
+        /// 送风机定点斜率的合法档位（倒序：精度从粗到细）
+        /// 【为什么是这五个】定点格式只可能是 1 / 0.1 / 0.01 / 0.001 / 0.0001 这几种，
+        /// 其余值都是手改配置或推算误差造成的，必须归一。
+        /// </summary>
+        public static readonly double[] FanScaleSteps = new double[] { 1.0, 0.1, 0.01, 0.001, 0.0001 };
+
+        /// <summary>
+        /// 把斜率换算成内部除数（寄存器原始值 ÷ 除数 = 实际值）
+        /// 【为什么要这一层】内部换算一律用整数除数，数值行为与旧实现逐位一致；
+        /// 斜率只用于配置存储与界面显示。
+        /// </summary>
+        /// <param name="scale">斜率（0.1 / 0.01 / 0.001 / 1）</param>
+        /// <returns>除数（10 / 100 / 1000 / 1）；非法值回 <see cref="DefaultFanScaleDivisor"/></returns>
+        public static int ScaleToDivisor(double scale)
         {
-            int value;
-            if (!int.TryParse((raw ?? "").Trim(), out value)) return DefaultFanScaleDivisor;
-            if (value < 1 || value > 10000) return DefaultFanScaleDivisor;
-            return value;
+            if (double.IsNaN(scale) || double.IsInfinity(scale) || scale <= 0) return DefaultFanScaleDivisor;
+            double divisor = Math.Round(1.0 / scale);
+            if (divisor < 1 || divisor > 10000) return DefaultFanScaleDivisor;
+            return (int)divisor;
+        }
+
+        /// <summary>
+        /// 把除数换算成斜率文本（用于界面显示与配置存储，如 100 → "0.01"）
+        /// </summary>
+        /// <param name="divisor">除数（1 / 10 / 100 / 1000 / 10000）</param>
+        /// <returns>斜率文本；非法除数回缺省斜率文本</returns>
+        public static string FormatFanScale(int divisor)
+        {
+            if (divisor < 1 || divisor > 10000) return FormatFanScale(DefaultFanScaleDivisor);
+            return (1.0 / divisor).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// 解析配置文件里的定点斜率（非法值一律回缺省，不带病启动）
+        /// 【为什么要有这个口】斜率错一位就让温湿度整体差 10 倍/100 倍，
+        /// 而 App.config 记事本手改能绕过设置表校验，所以启动加载必须自己钳一道。
+        /// 合法档位 1 / 0.1 / 0.01 / 0.001 / 0.0001（0/负数/非档位值/超范围/空/非数字 → 缺省 0.1）。
+        /// </summary>
+        /// <param name="raw">原始配置字符串，如 "0.1" / "0.01"</param>
+        /// <returns>合法斜率；非法时返回 <see cref="DefaultFanScale"/></returns>
+        public static double ParseFanScale(string raw)
+        {
+            double value;
+            if (!double.TryParse((raw ?? "").Trim(), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out value)) return DefaultFanScale;
+            return NormalizeFanScale(value);
+        }
+
+        /// <summary>
+        /// 判断一个斜率值是否落在标准定点档位上（1 / 0.1 / 0.01 / 0.001 / 0.0001）
+        /// 【为什么要有这个口】设置表保存校验、启动加载归一、校准结果合法性都用它，
+        /// 三处必须同一口径，所以只在这里判一次，别处不重复写"像不像档位"的判断。
+        /// </summary>
+        /// <param name="scale">待判断的斜率</param>
+        /// <returns>true=标准档位</returns>
+        public static bool IsValidFanScale(double scale)
+        {
+            if (double.IsNaN(scale) || double.IsInfinity(scale)) return false;
+            if (scale <= 0 || scale > 1.0) return false;
+
+            int power = (int)Math.Round(Math.Log10(scale));
+            if (power > 0) power = 0;                  // 斜率上限 1（整数精度）
+            if (power < -4) power = -4;                // 斜率下限 0.0001
+            double step = Math.Pow(10, power);
+            return Math.Abs(scale / step - 1.0) <= FanScaleMatchTolerance;
+        }
+
+        /// <summary>
+        /// 把任意斜率值归一到最近的标准档位（1 / 0.1 / 0.01 / 0.001 / 0.0001）
+        /// 【为什么必须归一】定点格式只可能是那几个档位，手改成 0.15 或推算出 99.5 都是错的，
+        /// 归一后才落回合法档位；不是标准档位（偏差超过 <see cref="FanScaleMatchTolerance"/> 5%）判非法。
+        /// </summary>
+        /// <param name="raw">原始斜率</param>
+        /// <returns>归一后的斜率；非法时返回 <see cref="DefaultFanScale"/></returns>
+        public static double NormalizeFanScale(double raw)
+        {
+            if (!IsValidFanScale(raw)) return DefaultFanScale;
+
+            int power = (int)Math.Round(Math.Log10(raw));
+            if (power > 0) power = 0;
+            if (power < -4) power = -4;
+            return Math.Pow(10, power);
         }
 
         /// <summary>
