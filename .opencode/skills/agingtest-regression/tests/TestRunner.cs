@@ -4958,8 +4958,8 @@ namespace AgingTestSystem.Tests
                 // 实测 AutoScaleDimensions 被固化成 7×17、客户区缩小，内容全溢出。
                 Check("校准窗AutoScale=None（Sunny canonical）",
                     calForm.AutoScaleMode == AutoScaleMode.None);
-                Check("校准窗客户区=设计值480×300",
-                    calForm.ClientSize.Width == 480 && calForm.ClientSize.Height == 300);
+                Check("校准窗客户区=设计值440×254",
+                    calForm.ClientSize.Width == 440 && calForm.ClientSize.Height == 254);
                 // 内容不得超出客户区（溢出 = 控件被裁/看不见）
                 int maxRight = 0, maxBottom = 0;
                 foreach (Control c in calForm.Controls)
@@ -5015,6 +5015,41 @@ namespace AgingTestSystem.Tests
                 try { using (var s2 = new Dialogs.FanCalibrationForm()) { } }
                 catch { calNoArgOk = false; }
                 Check("校准窗无参构造不抛（设计器可预览）", calNoArgOk);
+
+                // —— 视觉口径（V2.0.1 用户要求"干净整洁、提示言简意赅"）：
+                // 提示必须是一行短句（≤16 字、不含换行），结果行不许占大片空白。
+                var hintLbl = typeof(Dialogs.FanCalibrationForm).GetField("_lblHint", calFlags)?.GetValue(calForm) as Control;
+                string hintText = hintLbl == null ? "" : (hintLbl.Text ?? "");
+                Check("校准窗提示是一行短句（≤16字、无换行）",
+                    hintText.Length > 0 && hintText.Length <= 16 && hintText.IndexOf('\n') < 0 && hintText.IndexOf('\r') < 0);
+                var resultLbl = typeof(Dialogs.FanCalibrationForm).GetField("_lblResult", calFlags)?.GetValue(calForm) as Control;
+                Check("校准窗结果行不占大片（高≤30）",
+                    resultLbl != null && resultLbl.Height <= 30);
+                // 浅灰对照卡：输入框与"上位机当前"读数必须在同一张卡里（一眼能比大小）
+                var card = typeof(Dialogs.FanCalibrationForm).GetField("_pnlCard", calFlags)?.GetValue(calForm) as Control;
+                var curLbl = typeof(Dialogs.FanCalibrationForm).GetField("_lblCurrent", calFlags)?.GetValue(calForm) as Control;
+                Check("校准窗对照卡同框（输入框与当前值在一张卡里）",
+                    card != null && screenBox != null && curLbl != null
+                    && screenBox.Parent == card && curLbl.Parent == card);
+                // 卡片内子控件不许溢出卡片、彼此不许重叠（挤在一起=难读）
+                bool cardClean = true;
+                if (card != null)
+                {
+                    for (int i = 0; i < card.Controls.Count; i++)
+                    {
+                        Control ci = card.Controls[i];
+                        if (ci.Right > card.ClientSize.Width || ci.Bottom > card.ClientSize.Height) cardClean = false;
+                        for (int j = i + 1; j < card.Controls.Count; j++)
+                            if (ci.Bounds.IntersectsWith(card.Controls[j].Bounds)) cardClean = false;
+                    }
+                }
+                Check("校准窗卡片内控件不溢出、不重叠", cardClean);
+                // 窗体直接子控件两两不许重叠（叠在一起=看不见）
+                bool formClean = true;
+                for (int i = 0; i < calForm.Controls.Count; i++)
+                    for (int j = i + 1; j < calForm.Controls.Count; j++)
+                        if (calForm.Controls[i].Bounds.IntersectsWith(calForm.Controls[j].Bounds)) formClean = false;
+                Check("校准窗控件之间不重叠", formClean);
             }
             finally { try { calForm.Dispose(); } catch { } }
 

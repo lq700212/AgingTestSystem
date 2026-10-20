@@ -26,15 +26,16 @@ namespace AgingTestSystem.Dialogs
     /// 微软雅黑 9F 配 <c>AutoScaleDimensions(6,12)</c> 会把客户区缩掉导致内容溢出）：</para>
     /// <code>
     /// ┌────────────────────────────────────────────────┐
-    /// │ 送风机定点校准                        (蓝标题)  │  ← UIForm 自绘 35px
+    /// │ 送风机温度定点校准                   (蓝标题)  │  ← UIForm 自绘 35px
     /// ├────────────────────────────────────────────────┤
-    /// │ 把送风机控制屏上读到的数值，填入下面输入框后    │
-    /// │ 点【确定】。                                  │
-    /// │ 温度   [如 22.20]      当前  222.00 °C        │  ← 标题在左，当前读数在右
-    /// │ 当前温度斜率：0.1                             │
-    /// │ 校准结果：────────────────────────────────    │
-    /// │                                                │
-    /// │                        [ 确定 ]  [ 取消 ]      │
+    /// │ 填入送风机控制屏上的温度        当前斜率 0.1    │  ← 提示一行 + 右上角斜率
+    /// │  ┌──────────────────────────────────────────┐  │
+    /// │  │ 温度   [ 22.20        ] °C                │  │  ← 浅灰对照卡：左填右比
+    /// │  │                                          │  │
+    /// │  │ 上位机当前          222.00 °C             │  │
+    /// │  └──────────────────────────────────────────┘  │
+    /// │  (结果/错误一行，平时留白)                      │
+    /// │                             [ 确定 ]  [ 取消 ]  │
     /// └────────────────────────────────────────────────┘
     /// </code>
     /// </summary>
@@ -49,8 +50,14 @@ namespace AgingTestSystem.Dialogs
         /// <summary>本次校准的目标项（温度 / 湿度）</summary>
         private readonly FanCalibrationTarget _target;
 
-        /// <summary>顶部说明（教客户怎么读控制屏、填哪一项）</summary>
+        /// <summary>顶部提示（一行短句：教客户填哪个数，不堆说明）</summary>
         private UILabel _lblHint;
+
+        /// <summary>当前斜率回显（温度斜率 / 湿度斜率，右上角）</summary>
+        private UILabel _lblCurrentScale;
+
+        /// <summary>浅灰"对照卡"（把要填的数与上位机当前数并排放，一眼能比）</summary>
+        private UIPanel _pnlCard;
 
         /// <summary>项目标题（输入框左侧，如"温度"/"湿度"）</summary>
         private UILabel _lblItemTitle;
@@ -58,13 +65,16 @@ namespace AgingTestSystem.Dialogs
         /// <summary>输入框（填送风机控制屏上的真值）</summary>
         private UITextBox _txtScreen;
 
+        /// <summary>单位（°C / %RH，跟在输入框右边）</summary>
+        private UILabel _lblUnit;
+
+        /// <summary>当前读数的小标题（"上位机当前"）</summary>
+        private UILabel _lblCurrentTitle;
+
         /// <summary>上位机当前读数回显（供用户对照）</summary>
         private UILabel _lblCurrent;
 
-        /// <summary>当前斜率回显（温度斜率 / 湿度斜率）</summary>
-        private UILabel _lblCurrentScale;
-
-        /// <summary>结果/错误提示（多行）</summary>
+        /// <summary>结果/错误提示（平时整行留白，出错时才出现红/绿字）</summary>
         private UILabel _lblResult;
 
         /// <summary>确定按钮（执行校准）</summary>
@@ -100,14 +110,19 @@ namespace AgingTestSystem.Dialogs
 
             // 按目标项改窗体文案（一次只校一项，两项各有各的斜率）
             string itemName = FanCalibration.GetDisplayName(target);
+            string unit = FanCalibration.GetUnit(target);
             this.Text = "送风机" + itemName + "定点校准";
             _lblItemTitle.Text = itemName;
-            _lblCurrentScale.Text = "当前" + itemName + "斜率：" + FormatScale(FanCalibration.GetScale(config, target));
+            _lblUnit.Text = unit;
+            _lblCurrentTitle.Text = "上位机当前";
+            _lblCurrentScale.Text = "当前斜率 " + FormatScale(FanCalibration.GetScale(config, target));
             _txtScreen.Watermark = target == FanCalibrationTarget.Humidity ? "如 55.0" : "如 22.20";
-            _lblHint.Text = "把送风机控制屏上读到的" + itemName +
-                            "，填入下面输入框后点【确定】。\r\n" +
-                            "（只改" + itemName + "的换算比例，" +
-                            (target == FanCalibrationTarget.Humidity ? "湿度" : "温度") + "互不影响）";
+            // 提示只留一行短句：客户只要知道"填控制屏上的哪个数"就够了
+            _lblHint.Text = "填入送风机控制屏上的" + itemName;
+
+            // 回车=确定、Esc=取消（UIButton 实现 IButtonControl，AcceptButton/CancelButton 照用）
+            this.AcceptButton = _btnOk;
+            this.CancelButton = _btnCancel;
 
             LoadCurrentReading();
         }
@@ -119,6 +134,8 @@ namespace AgingTestSystem.Dialogs
         {
             base.OnShown(e);
             LoadCurrentReading();
+            // 焦点直接落在输入框：打开就能敲数（客户不用先点一下）
+            try { _txtScreen.Focus(); } catch { }
         }
 
         /// <summary>
@@ -132,19 +149,18 @@ namespace AgingTestSystem.Dialogs
             string itemName = FanCalibration.GetDisplayName(_target);
             string unit = FanCalibration.GetUnit(_target);
             double currentScale = FanCalibration.GetScale(_config, _target);
-            _lblCurrentScale.Text = "当前" + itemName + "斜率：" + FormatScale(currentScale);
+            _lblCurrentScale.Text = "当前斜率 " + FormatScale(currentScale);
 
             FanData data = _deviceManager != null ? _deviceManager.GetFanData() : null;
             if (data == null || !data.IsOnline)
             {
-                _lblCurrent.Text = "当前  --（送风机未连接）";
-                _lblResult.Text = "送风机未连接，读不到当前值，无法校准。\r\n请先确认通讯正常。";
-                _lblResult.ForeColor = Color.Red;
+                _lblCurrent.Text = "--";
+                ShowError("送风机未连接，无法校准");
                 return;
             }
 
             double reading = FanCalibration.GetReading(data, _target);
-            _lblCurrent.Text = "当前  " + reading.ToString("0.00") + " " + unit;
+            _lblCurrent.Text = reading.ToString("0.00") + " " + unit;
             _lblResult.Text = string.Empty;
             _lblResult.ForeColor = Color.FromArgb(48, 48, 48);
         }
@@ -161,14 +177,14 @@ namespace AgingTestSystem.Dialogs
             double? screenValue = ParseInput(_txtScreen);
             if (screenValue == null)
             {
-                ShowError("请填写送风机控制屏上读到的" + itemName + "。");
+                ShowError("请填写控制屏读数");
                 return;
             }
 
             FanData data = _deviceManager != null ? _deviceManager.GetFanData() : null;
             if (data == null || !data.IsOnline)
             {
-                ShowError("送风机未连接，读不到当前值，无法校准。");
+                ShowError("送风机未连接，无法校准");
                 return;
             }
 
@@ -185,7 +201,7 @@ namespace AgingTestSystem.Dialogs
 
             if (Math.Abs(newScale - currentScale) < 1e-9)
             {
-                ShowResult("当前" + itemName + "斜率 " + FormatScale(currentScale) + " 已经是对的，无需修改。", false);
+                ShowResult("当前斜率 " + FormatScale(currentScale) + " 已正确，无需修改", false);
                 return;
             }
 
@@ -205,8 +221,7 @@ namespace AgingTestSystem.Dialogs
             // 立刻重新读一次送风机：主界面温度显示马上按新斜率刷新，不用等 2 秒周期
             if (_deviceManager != null) _deviceManager.RefreshFanData();
 
-            ShowResult("校准完成：" + itemName + "斜率 " + FormatScale(currentScale) + " → " + FormatScale(newScale) +
-                       "，主界面显示已按新比例刷新。", true);
+            ShowResult(itemName + "斜率 " + FormatScale(currentScale) + " → " + FormatScale(newScale) + "，已生效", true);
 
             DialogResult = DialogResult.OK;
             Close();
@@ -246,12 +261,12 @@ namespace AgingTestSystem.Dialogs
             if (!double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out value) &&
                 !double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
             {
-                ShowError("输入的不是数字：" + text);
+                ShowError("读数不是数字");
                 return null;
             }
             if (value <= 0)
             {
-                ShowError("输入的值必须大于 0：" + text);
+                ShowError("读数必须大于 0");
                 return null;
             }
             return value;
