@@ -5016,6 +5016,20 @@ namespace AgingTestSystem.Tests
                 catch { calNoArgOk = false; }
                 Check("校准窗无参构造不抛（设计器可预览）", calNoArgOk);
 
+                // —— 未连接不开窗（V2.0.1 用户要求：未连接只弹提示，不弹窗）——
+                // ① 窗内不再写"送风机未连接"红字（红字只留给"开窗后掉线"）
+                var resLbl = typeof(Dialogs.FanCalibrationForm).GetField("_lblResult", calFlags)?.GetValue(calForm) as Control;
+                Check("校准窗未连接时窗内不写未连接提示（结果行为空）",
+                    resLbl != null && string.IsNullOrEmpty(resLbl.Text));
+                // ② 在线判定是纯函数（两处入口同源），回归不必弹模态框
+                Check("送风机在线判定为纯函数（无设备管理器=未连接）",
+                    !FanCalibration.IsDeviceOnline(null));
+                // ③ 统一入口存在且是公开静态（两处入口都走它，避免各写一份判定）
+                var tryShow = typeof(Dialogs.FanCalibrationForm).GetMethod("TryShow",
+                    BindingFlags.Public | BindingFlags.Static);
+                Check("校准窗统一入口 TryShow 存在（未连接只弹提示不开窗）",
+                    tryShow != null && tryShow.ReturnType == typeof(bool));
+
                 // —— 视觉口径（V2.0.1 用户要求"干净整洁、提示言简意赅"）：
                 // 提示必须是一行短句（≤16 字、不含换行），结果行不许占大片空白。
                 var hintLbl = typeof(Dialogs.FanCalibrationForm).GetField("_lblHint", calFlags)?.GetValue(calForm) as Control;

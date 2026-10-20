@@ -209,5 +209,20 @@ namespace AgingTestSystem.Services
             if (data == null) return 0;
             return target == FanCalibrationTarget.Humidity ? data.Humidity : data.Temperature;
         }
+
+        /// <summary>
+        /// 送风机是否已连接（**校准的前置条件**：没有"上位机当前读数"这个参照物，
+        /// 校准就无从谈起，所以未连接时不打开校准窗，只弹一句提示）。
+        /// <para><b>为什么是纯函数</b>：入口有两处（主界面长按温度 / 系统设置校准湿度），
+        /// 判定必须同源；抽成静态方法后回归能直接断言，不必在用例里弹模态框。</para>
+        /// </summary>
+        /// <param name="deviceManager">设备管理器（null 表示没有通讯门面，视为未连接）</param>
+        /// <returns>true=已连接</returns>
+        public static bool IsDeviceOnline(DeviceManager deviceManager)
+        {
+            if (deviceManager == null) return false;
+            Models.FanData data = deviceManager.GetFanData();
+            return data != null && data.IsOnline;
+        }
     }
 }
