@@ -287,6 +287,43 @@ namespace AgingTestSystem.Models
         public int FanTimeoutMs { get; set; } = 3000;
 
         /// <summary>
+        /// 送风机温湿度定点换算除数的缺省值（寄存器原始值 ÷ 该值 = 实际值）
+        /// 【为什么是常量而不是各写一份】配置缺省（<see cref="FanScaleDivisor"/>）、
+        /// 运行时兜底（手改配置文件写成 0/负数时钳回缺省）都从这里取，
+        /// 免得两处手抄分叉。
+        /// </summary>
+        public const int DefaultFanScaleDivisor = 10;
+
+        /// <summary>
+        /// 送风机温湿度定点换算除数（寄存器原始值 ÷ 该值 = 实际值，单位 °C / %RH）
+        /// 【为什么做成配置项】控制屏的定点格式跟控制器型号/固件有关，现场不一定只有一种：
+        /// - 10 ＝ 0.1 精度定点：屏显 22.2°C 时寄存器读回 222；
+        /// - 100 ＝ 0.01 精度定点：屏显 22.20°C 时寄存器读回 2220（早期通讯 Demo 现场实测那套）。
+        /// 换型号不用重编译，改设置表"冷却送风机 → 定点除数"即可。
+        /// 【影响面】当前温度/当前湿度/温度设定值/湿度设定值四路同属一块屏的同一寄存器组，
+        /// 格式一致，共用这一个除数。
+        /// 【改错的代价】整体差 10 倍或 100 倍（上位机 22.2 被显示成 2.22 或 222.0），
+        /// 现场只能靠"主界面 vs 控制屏"对一眼才能发现，所以改完必须现场复核一次。
+        /// </summary>
+        public int FanScaleDivisor { get; set; } = DefaultFanScaleDivisor;
+
+        /// <summary>
+        /// 解析配置文件里的定点换算除数（非法值一律回缺省，不带病启动）
+        /// 【为什么要有这个口】除数错一位就让温湿度整体差 10 倍/100 倍，
+        /// 而 App.config 记事本手改能绕过设置表校验，所以启动加载必须自己钳一道。
+        /// 合法范围 1~10000 的正整数（0/负数/小数/超范围/空/非数字 → 缺省 10）。
+        /// </summary>
+        /// <param name="raw">原始配置字符串，如 "10" / "100"</param>
+        /// <returns>合法除数；非法时返回 <see cref="DefaultFanScaleDivisor"/></returns>
+        public static int ParseFanScaleDivisor(string raw)
+        {
+            int value;
+            if (!int.TryParse((raw ?? "").Trim(), out value)) return DefaultFanScaleDivisor;
+            if (value < 1 || value > 10000) return DefaultFanScaleDivisor;
+            return value;
+        }
+
+        /// <summary>
         /// 送风机 IP 自动识别开关
         /// 【背景】现场冷却送风机控制器的 IP 可能是 192.168.1.220 / .221 / .222 中的任意一个
         ///（换工作台、换控制器都会变），如果 IP 写死，换现场就得改配置。
