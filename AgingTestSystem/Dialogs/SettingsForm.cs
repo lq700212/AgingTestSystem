@@ -297,6 +297,7 @@ namespace AgingTestSystem.Dialogs
             { "FanPort", "送风机通讯端口（50000）" },
             { "FanUnitId", "送风机从站地址（默认 1）" },
             { "FanTimeoutMs", "送风机通讯超时（毫秒）" },
+            { "FanScaleDivisor", "送风机温湿度定点除数（寄存器原始值 ÷ 此值 = 实际值）：10=0.1精度定点（屏显22.2↔寄存器222）；100=0.01精度定点（屏显22.20↔寄存器2220）。改错会让温湿度整体差10倍或100倍，改完请拿主界面与控制屏对一眼" },
 
             // ===== 老化测试业务 =====
             { "VacuumConfirmTimeoutMs", "真空建立确认超时（毫秒，默认15000；0=关闭：不限时等，不判建立超时，只靠老化失压报警+人工停止）" },
@@ -408,7 +409,7 @@ namespace AgingTestSystem.Dialogs
             ("冷却送风机", new string[]
             {
                 "FanEnabled", "FanIpAddress", "FanAutoDetectEnabled", "FanIpCandidates",
-                "FanPort", "FanUnitId", "FanTimeoutMs"
+                "FanPort", "FanUnitId", "FanTimeoutMs", "FanScaleDivisor"
             }),
             ("老化测试业务", new string[]
             {
@@ -1643,6 +1644,15 @@ namespace AgingTestSystem.Dialogs
                 return CreateVacuumTimeoutComboCell(value);
             }
 
+            // 送风机定点换算除数：可手输的下拉（常用档位 + 自定义）。
+            // 不走 _numericKeys 的数字微调框：光秃秃一个 "10" 现场看不懂对应哪种定点格式，
+            // 而选错就是温度差 10 倍/100 倍，下拉把含义写进选项文字里。
+            // 显示值恒以数字开头；手输自定义走 ValidateValue 同一口径（1~10000 的正整数）。
+            if (key == "FanScaleDivisor")
+            {
+                return CreateFanScaleComboCell(value);
+            }
+
             if (_numericKeys.TryGetValue(key, out var range))
             {
                 var cell = new DataGridViewNumericUpDownCell
@@ -1964,6 +1974,45 @@ namespace AgingTestSystem.Dialogs
             return cell;
         }
 
+        /// <summary>
+        /// 送风机定点换算除数下拉单元格（可手输）：常用档位把"除数＝哪种定点格式"写进选项文字，
+        /// 现场不用查文档就知道该选哪个；当前值不在档位里（如手改文件写了 50）补一项原值回显。
+        /// 显示值恒以数字开头（AGENTS.md 约定）；保存时走 ValidateValue 同一口径（1~10000 的正整数）。
+        /// </summary>
+        private static DataGridViewEditableComboBoxCell CreateFanScaleComboCell(string currentValue)
+        {
+            var cell = new DataGridViewEditableComboBoxCell();
+            StyleComboCell(cell);
+            var options = new[]
+            {
+                new ComboOption("10（0.1 精度定点：屏显 22.2 ↔ 寄存器 222）", "10"),
+                new ComboOption("100（0.01 精度定点：屏显 22.20 ↔ 寄存器 2220）", "100"),
+                new ComboOption("1（整数：屏显 22 ↔ 寄存器 22）", "1"),
+            };
+            foreach (ComboOption option in options)
+            {
+                cell.Items.Add(option);
+            }
+            cell.DisplayMember = "Display";
+            cell.ValueMember = "Value";
+
+            string cur = (currentValue ?? "").Trim();
+            if (!string.IsNullOrEmpty(cur))
+            {
+                bool found = false;
+                foreach (ComboOption option in cell.Items)
+                {
+                    if (option.Value == cur) { found = true; break; }
+                }
+                if (!found)
+                {
+                    cell.Items.Add(new ComboOption(cur, cur));
+                }
+                cell.Value = cur;
+            }
+            return cell;
+        }
+
         /// <summary>下拉单元格统一样式：扁平无灰底、白底深字，与页面风格一致</summary>
         private static void StyleComboCell(DataGridViewComboBoxCell cell)
         {
@@ -2233,6 +2282,18 @@ namespace AgingTestSystem.Dialogs
                     if (!int.TryParse(value, out vacTimeout) || vacTimeout < 0 || vacTimeout > 600000)
                     {
                         error = "应为 0~600000 的整数（毫秒，0=关闭：不限时等，不判建立超时）";
+                        return false;
+                    }
+                    return true;
+
+                // 送风机定点换算除数：正整数 1~10000。
+                // 手改文件绕过界面写 0/负数时，这里拦不住（文件不走保存），
+                // 启动加载由 MainForm 钳回缺省 10，解析层另有兜底（不让温度变无穷大）。
+                case "FanScaleDivisor":
+                    int fanScale;
+                    if (!int.TryParse(value, out fanScale) || fanScale < 1 || fanScale > 10000)
+                    {
+                        error = "应为 1~10000 的整数（定点除数：10=0.1精度定点，100=0.01精度定点）";
                         return false;
                     }
                     return true;

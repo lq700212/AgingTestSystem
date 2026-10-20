@@ -18,13 +18,15 @@ namespace AgingTestSystem.Services
     /// 【寄存器映射】（实测，见 Demo 文档）
     ///   0x0000 组合状态（未使用，忽略）
     ///   0x0001 控制/状态（写：0x0003=定值启动，0x0002=定值停止；读回同值）
-    ///   0x0002 当前温度（值/10 = °C）
-    ///   0x0003 当前湿度（值/10 = %RH）
-    ///   0x0004 温度设定值（值/10 = °C）
-    ///   0x0005 湿度设定值（值/10 = %RH）
-    /// 【定点比例实测】控制屏按 0.1 精度定点（值 = 实际 × 10）：现场屏显 22.2°C 时
-    /// 寄存器读回 222。之前按 ÷100 解析，小数点错一位（显示 2.22°C，比屏显小 10 倍）。
-    /// 温度/湿度/两个设定值同属一块屏的同一寄存器组，格式一致，统一 ÷10。
+    ///   0x0002 当前温度（值 ÷ 定点除数 = °C）
+    ///   0x0003 当前湿度（值 ÷ 定点除数 = %RH）
+    ///   0x0004 温度设定值（值 ÷ 定点除数 = °C）
+    ///   0x0005 湿度设定值（值 ÷ 定点除数 = %RH）
+    /// 【定点比例（现场可配）】除数见 DeviceConfig.FanScaleDivisor（设置表"冷却送风机"）：
+    ///   除数 10 ＝ 0.1 精度定点（屏显 22.2°C 时寄存器读回 222）；
+    ///   除数 100 ＝ 0.01 精度定点（屏显 22.20°C 时寄存器读回 2220）。
+    ///   早先代码写死 ÷100，与现场某型号控制屏对不上（上位机显示 2.22°C，比屏显小 10 倍）；
+    ///   换控制器型号时改配置即可，不用重编译。温度/湿度/两个设定值四路同格式共用这一个除数。
     /// 【物理层】
     /// - 传输：TCP/IP（以太网）
     /// - 端口：默认 50000（非标准 502，来自 Demo 实测）
@@ -50,13 +52,11 @@ namespace AgingTestSystem.Services
         private readonly object _syncRoot = new object();
 
         /// <summary>
-        /// 温湿度定点换算除数（协议常数，勿改）。
-        /// 【为什么是 10 不是 100】控制屏按 0.1 精度定点：现场屏显 22.2°C 时
-        /// 寄存器读回 222（222 ÷ 10 = 22.2）。早先按 ÷100 解析，小数点错一位，
-        /// 上位机显示 2.22°C（比屏显小 10 倍），现场据此判断"温度不对"。
-        /// 温度/湿度/两个设定值同属一块屏的同一寄存器组，格式一致，统一用这一个除数。
+        /// 温湿度定点换算除数的缺省值（寄存器原始值 ÷ 该值 = 实际值）。
+        /// 唯一出处见 <see cref="DeviceConfig.DefaultFanScaleDivisor"/>，此处只做转发，
+        /// 免得两处手抄分叉。
         /// </summary>
-        private const float FanScaleDivisor = 10.0f;
+        public const float DefaultFanScaleDivisor = DeviceConfig.DefaultFanScaleDivisor;
 
         /// <summary>
         /// 全局配置（来自 App.config / 通讯设置界面）
@@ -393,29 +393,48 @@ namespace AgingTestSystem.Services
         /// 6 个原始寄存器 → 送风机数据（纯函数，回归可直接断言）。
         /// 【寄存器映射】（实测定论，一次读 0x0000~0x0005）：
         /// values[0]=0x0000 组合状态（未使用，忽略）；[1]=0x0001 控制/状态；
-        /// [2]=0x0002 当前温度 /10=°C；[3]=0x0003 当前湿度 /10=%RH；
-        /// [4]=0x0004 温度设定值 /10；[5]=0x0005 湿度设定值 /10。
-        /// 【定点比例】÷10（控制屏 0.1 精度定点：屏显 22.2°C ↔ 寄存器 222）。
+        /// [2]=0x0002 当前温度；[3]=0x0003 当前湿度；
+        /// [4]=0x0004 温度设定值；[5]=0x0005 湿度设定值。
+        /// 【定点比例】四路同属一块屏的同一寄存器组，格式一致，共用一个除数
+        /// （现场可配，见 <see cref="DeviceConfig.FanScaleDivisor"/>）：
+        /// - 除数 10 ＝ 0.1 精度定点：屏显 22.2°C 时寄存器读回 222（222 ÷ 10 = 22.2）；
+        /// - 除数 100 ＝ 0.01 精度定点：屏显 22.20°C 时寄存器读回 2220（早期通讯 Demo 现场实测那套）。
         /// 数量不足 6 个（设备返回异常）返回 null，由调用方按离线处理。
         /// 注意：状态枚举值不做合法性校验（与旧行为一致，非法值透传，显示层兜底）。
+        /// </summary>
+        /// <param name="values">一次读回的 6 个寄存器值</param>
+        /// <param name="scaleDivisor">定点换算除数（寄存器原始值 ÷ 该值 = 实际值）；
+        /// 非正数时兜底用 <see cref="DeviceConfig.DefaultFanScaleDivisor"/>（防除零/翻符号）</param>
+        /// <returns>解析出的送风机数据；数量不足返回 null</returns>
+        public static FanData ParseFanRegisters(ushort[] values, float scaleDivisor)
+        {
+            // 防御性检查：寄存器数量不足说明设备返回异常
+            if (values == null || values.Length < 6) return null;
+
+            // 除数非法（手改配置文件写成 0/负数）时兜回缺省，不让温度变成无穷大或反号
+            float divisor = scaleDivisor > 0 ? scaleDivisor : DeviceConfig.DefaultFanScaleDivisor;
+
+            return new FanData
+            {
+                RunState = (FanRunState)values[1],
+                Temperature = values[2] / divisor,
+                Humidity = values[3] / divisor,
+                TempSetpoint = values[4] / divisor,
+                HumSetpoint = values[5] / divisor,
+                IsOnline = true,
+                CollectTime = DateTime.Now
+            };
+        }
+
+        /// <summary>
+        /// 按缺省除数解析（等价于带除数重载传入 <see cref="DeviceConfig.DefaultFanScaleDivisor"/>）：
+        /// 供不需要指定除数的调用方与回归用例使用；生产路径请用带除数的重载。
         /// </summary>
         /// <param name="values">一次读回的 6 个寄存器值</param>
         /// <returns>解析出的送风机数据；数量不足返回 null</returns>
         public static FanData ParseFanRegisters(ushort[] values)
         {
-            // 防御性检查：寄存器数量不足说明设备返回异常
-            if (values == null || values.Length < 6) return null;
-
-            return new FanData
-            {
-                RunState = (FanRunState)values[1],
-                Temperature = values[2] / FanScaleDivisor,
-                Humidity = values[3] / FanScaleDivisor,
-                TempSetpoint = values[4] / FanScaleDivisor,
-                HumSetpoint = values[5] / FanScaleDivisor,
-                IsOnline = true,
-                CollectTime = DateTime.Now
-            };
+            return ParseFanRegisters(values, DeviceConfig.DefaultFanScaleDivisor);
         }
 
         /// <summary>
@@ -444,9 +463,10 @@ namespace AgingTestSystem.Services
                     values = _master.ReadHoldingRegisters(_config.FanUnitId, 0x0000, 6);
                 }
 
-                // 解析收拢进 ParseFanRegisters 纯函数（行为逐字一致，
-                // 映射说明见该函数注释）。
-                return ParseFanRegisters(values);
+                // 解析收拢进 ParseFanRegisters 纯函数（映射说明见该函数注释）。
+                // 除数取自配置（现场按控制器型号切 10 / 100），每轮读取实时取，
+                // 设置表改完下一个轮询周期即生效，不用重启程序。
+                return ParseFanRegisters(values, _config.FanScaleDivisor);
             }
             catch (Exception ex)
             {

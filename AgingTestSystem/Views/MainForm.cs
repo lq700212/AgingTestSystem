@@ -1009,6 +1009,12 @@ namespace AgingTestSystem.Views
                 config.FanTimeoutMs = fanTimeoutMs;
             }
 
+            // 送风机温湿度定点换算除数（寄存器原始值 ÷ 该值 = 实际值）：
+            // 10=0.1 精度定点（屏显 22.2 ↔ 寄存器 222）；100=0.01 精度定点（屏显 22.20 ↔ 寄存器 2220）。
+            // 手改配置文件写成 0/负数/非数字时钳回缺省 10，不带病启动（除零会让温度变成无穷大）。
+            config.FanScaleDivisor = DeviceConfig.ParseFanScaleDivisor(
+                System.Configuration.ConfigurationManager.AppSettings["FanScaleDivisor"]);
+
             // 送风机 IP 自动识别（V1.12 新增）：
             // FanAutoDetectEnabled=true 时，连接送风机按顺序尝试 FanIpAddress + FanIpCandidates，
             // 第一个连上的就是设备真实地址，现场换控制器/IP 不用改配置。

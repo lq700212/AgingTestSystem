@@ -1918,6 +1918,7 @@ namespace AgingTestSystem.Tests
                 && cfg.FanUnitId == 1 && cfg.FanTimeoutMs == 3000);
             Check("默认风机自识别开+空候选", cfg.FanAutoDetectEnabled == true && cfg.FanIpCandidates != null
                 && cfg.FanIpCandidates.Count == 0);
+            Check("默认风机定点除数=10", cfg.FanScaleDivisor == 10);
             Check("默认15000/3/0", cfg.VacuumConfirmTimeoutMs == 15000 && cfg.CommunicationLossAlarmCount == 3
                 && cfg.MaxTestDurationSeconds == 0);
             Check("默认DI不并入/温度告警关", cfg.UseDiAlarmContact == false && cfg.FanTempAlarmLimitC == 0f);
@@ -4376,6 +4377,8 @@ namespace AgingTestSystem.Tests
                         catKeys.Contains("AlarmPressureThresholdKPa")
                         && catKeys.Contains("IoBackupChannelMappings")
                         && !catKeys.Contains("HomeLayout"));
+                    // 送风机定点除数必须在"冷却送风机"分类里（漏了就等于没做成配置项）
+                    Check("定点除数在分类里", catKeys.Contains("FanScaleDivisor"));
                     Check("分类键50+项", catKeys.Count >= 50);
                 }
                 finally { sf.Dispose(); }
@@ -4638,7 +4641,96 @@ namespace AgingTestSystem.Tests
             var fdbad = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 9, 0, 0, 0, 0 });
             Check("非法枚举值透传(显示层兜底)", (int)fdbad.RunState == 9);
 
-            // —— 未连接约定（全新实例，不碰网络） ——
+            // —— 定点除数可配（V2.0.1：现场不同控制器型号定点格式不同，比例改配置不改代码）——
+            // 同一块屏可能给 0.1 精度（222 ↔ 22.2）或 0.01 精度（2220 ↔ 22.20），
+            // 除数由设置表"冷却送风机 → 定点除数"决定，改错就是差 10 倍/100 倍。
+            var fdDiv10 = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 222, 555, 222, 555 }, 10);
+            Check("除数10→22.2°C（0.1精度）",
+                fdDiv10.Temperature == 22.2f && fdDiv10.Humidity == 55.5f);
+            var fdDiv100 = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 2220, 5550, 2220, 5550 }, 100);
+            Check("除数100→22.2°C（0.01精度）",
+                fdDiv100.Temperature == 22.2f && fdDiv100.Humidity == 55.5f);
+            var fdDiv1 = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 22, 55, 22, 55 }, 1);
+            Check("除数1→22°C（整数）", fdDiv1.Temperature == 22f && fdDiv1.Humidity == 55f);
+            // 同一批寄存器换除数 → 差 10 倍（这是现场报 bug 的形态，锁住换算确实按除数走）
+            var fdSame = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 2220, 0, 0, 0 }, 100);
+            Check("同寄存器换除数→结果随之变（2220/100=22.2）", fdSame.Temperature == 22.2f);
+            // 非法除数兜底：0 会除零（温度变无穷大）、负数会翻符号
+            var fdDiv0 = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 222, 0, 0, 0 }, 0);
+            Check("除数0兜底回缺省（不是无穷大）",
+                fdDiv0.Temperature == 22.2f && !float.IsInfinity(fdDiv0.Temperature));
+            var fdDivNeg = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 222, 0, 0, 0 }, -10);
+            Check("除数负数兜底回缺省（不翻符号）", fdDivNeg.Temperature == 22.2f);
+            Check("缺省除数常量=10", DeviceConfig.DefaultFanScaleDivisor == 10);
+            Check("默认重载与显式除数10等价",
+                FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 222, 0, 0, 0 }).Temperature
+                    == FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 222, 0, 0, 0 }, 10).Temperature);
+
+            // —— 配置项同步（六处口径，防"只加一边"配置漂移）——
+            // DeviceConfig 属性（缺省 10）
+            Check("DeviceConfig缺省除数=10", new DeviceConfig().FanScaleDivisor == 10);
+            // 解析口：手改配置文件的脏值不许进启动（0/负数/小数/超范围/非数字 → 缺省 10）
+            Check("解析口:合法10", DeviceConfig.ParseFanScaleDivisor("10") == 10);
+            Check("解析口:合法100", DeviceConfig.ParseFanScaleDivisor("100") == 100);
+            Check("解析口:空串回缺省", DeviceConfig.ParseFanScaleDivisor("") == 10);
+            Check("解析口:null回缺省", DeviceConfig.ParseFanScaleDivisor(null) == 10);
+            Check("解析口:0回缺省", DeviceConfig.ParseFanScaleDivisor("0") == 10);
+            Check("解析口:负数回缺省", DeviceConfig.ParseFanScaleDivisor("-10") == 10);
+            Check("解析口:小数回缺省", DeviceConfig.ParseFanScaleDivisor("10.5") == 10);
+            Check("解析口:非数字回缺省", DeviceConfig.ParseFanScaleDivisor("abc") == 10);
+            Check("解析口:超范围回缺省", DeviceConfig.ParseFanScaleDivisor("10001") == 10);
+            Check("解析口:首尾空格容忍", DeviceConfig.ParseFanScaleDivisor(" 100 ") == 100);
+            // 设置表校验分支（反射私有静态）
+            var vvFan = typeof(SettingsForm).GetMethod("ValidateValue",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Check("反射找到ValidateValue", vvFan != null);
+            if (vvFan != null)
+            {
+                Func<string, bool> ok = v =>
+                {
+                    object[] a = new object[] { "FanScaleDivisor", v, null };
+                    bool r = (bool)vvFan.Invoke(null, a);
+                    return r && a[2] == null;
+                };
+                Check("校验:10过", ok("10"));
+                Check("校验:100过", ok("100"));
+                Check("校验:1过", ok("1"));
+                Check("校验:0不过", !ok("0"));
+                Check("校验:负数不过", !ok("-10"));
+                Check("校验:小数不过", !ok("10.5"));
+                Check("校验:超范围不过", !ok("10001"));
+                Check("校验:空串不过", !ok(""));
+            }
+            // 设置表说明 + 分类（缺任一 → 界面找不到这一项）
+            var descFan = (Dictionary<string, string>)typeof(SettingsForm).GetField("_descriptions",
+                BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
+            Check("说明字典含定点除数", descFan.ContainsKey("FanScaleDivisor")
+                && descFan["FanScaleDivisor"].Contains("2220"));
+
+            // 配置文件里必须有这个 key（漏加 → 现场启动读不到，只能走缺省 10，
+            // 换型号时改不了）。校验对象是构建产物 exe.config（App.config 的运行时副本）。
+            string deployedCfg = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "烧屏测试控制中心.exe.config");
+            bool cfgHasKey = false;
+            if (File.Exists(deployedCfg))
+            {
+                string cfgText = File.ReadAllText(deployedCfg);
+                cfgHasKey = cfgText.Contains("FanScaleDivisor");
+            }
+            else
+            {
+                // 找不到 exe.config（harness 运行目录没带过来）时不让用例红：
+                // 断言的是"源 App.config 有 key"，构建时由 MSBuild 转成 exe.config，
+                // 源文件在仓库里，路径不可靠就不硬断（改用产品侧默认缺省兜底）。
+                string srcCfg = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..",
+                    "AgingTestSystem", "App.config");
+                if (File.Exists(srcCfg))
+                {
+                    cfgHasKey = File.ReadAllText(srcCfg).Contains("FanScaleDivisor");
+                }
+            }
+            Check("配置文件含定点除数key", cfgHasKey);
+
+            // 未连接约定（全新实例，不碰网络） ——
             var fan = new FanControllerClient();
             Check("初始未连接", fan.IsConnected == false);
             Check("配置空读状态=null", fan.ReadStatus() == null);
