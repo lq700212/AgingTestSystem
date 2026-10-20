@@ -1880,6 +1880,12 @@ namespace AgingTestSystem.Tests
                 && mfType.GetMethod("btnFanCalibration_Click", MFF) == null
                 && mfType.GetField("btnFanSlope", MFF) == null
                 && mfType.GetMethod("btnFanSlope_Click", MFF) == null);
+            // 长按入口要挂在 4 个控件上（两个温度值 + 它们的标题文字，用户明确要求整行都能按）
+            Check("长按入口的4个控件都在（值+标题文字）",
+                mfType.GetField("lblSetTemp", MFF) != null
+                && mfType.GetField("lblUpperTemp", MFF) != null
+                && mfType.GetField("lblSetTempLabel", MFF) != null
+                && mfType.GetField("lblUpperTempLabel", MFF) != null);
             // 权限区与项目区同构锁（V1.88.27：panelPermission 必须是 Panel＋Dock 全高＋MiddleLeft，
             // FlowLayoutPanel＋Padding.Top 硬垫行高一变就偏——只验字段类型，不构造 MainForm）。
             var permField = mfType.GetField("panelPermission", MFF);
@@ -1960,7 +1966,8 @@ namespace AgingTestSystem.Tests
                 && cfg.FanUnitId == 1 && cfg.FanTimeoutMs == 3000);
             Check("默认风机自识别开+空候选", cfg.FanAutoDetectEnabled == true && cfg.FanIpCandidates != null
                 && cfg.FanIpCandidates.Count == 0);
-            Check("默认风机定点除数=10", cfg.FanScaleDivisor == 10);
+            Check("默认风机温度/湿度斜率各=0.1（两路独立，现网行为不变）",
+                Math.Abs(cfg.FanTempScale - 0.1) < 1e-9 && Math.Abs(cfg.FanHumidityScale - 0.1) < 1e-9);
             Check("默认15000/3/0", cfg.VacuumConfirmTimeoutMs == 15000 && cfg.CommunicationLossAlarmCount == 3
                 && cfg.MaxTestDurationSeconds == 0);
             Check("默认DI不并入/温度告警关", cfg.UseDiAlarmContact == false && cfg.FanTempAlarmLimitC == 0f);
@@ -4419,8 +4426,9 @@ namespace AgingTestSystem.Tests
                         catKeys.Contains("AlarmPressureThresholdKPa")
                         && catKeys.Contains("IoBackupChannelMappings")
                         && !catKeys.Contains("HomeLayout"));
-                    // 送风机定点除数必须在"冷却送风机"分类里（漏了就等于没做成配置项）
-                    Check("定点除数在分类里", catKeys.Contains("FanScaleDivisor"));
+                    // 送风机温度/湿度斜率必须在"冷却送风机"分类里（漏了就等于没做成配置项）
+                    Check("温度/湿度斜率在分类里（两项各自独立）",
+                        catKeys.Contains("FanTempScale") && catKeys.Contains("FanHumidityScale"));
                     Check("分类键50+项", catKeys.Count >= 50);
                 }
                 finally { sf.Dispose(); }
@@ -4683,80 +4691,115 @@ namespace AgingTestSystem.Tests
             var fdbad = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 9, 0, 0, 0, 0 });
             Check("非法枚举值透传(显示层兜底)", (int)fdbad.RunState == 9);
 
-            // —— 定点除数可配（V2.0.1：现场不同控制器型号定点格式不同，比例改配置不改代码）——
-            // 同一块屏可能给 0.1 精度（222 ↔ 22.2）或 0.01 精度（2220 ↔ 22.20），
-            // 除数由设置表"冷却送风机 → 定点除数"决定，改错就是差 10 倍/100 倍。
-            var fdDiv10 = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 222, 555, 222, 555 }, 10);
+            // —— 定点斜率可配（V2.0.1：现场不同控制器型号定点格式不同，比例改配置不改代码）——
+            // 同一块屏可能给 0.1 精度（222 ↔ 22.2）或 0.01 精度（2220 ↔ 22.20）；
+            // 温度与湿度各有各的斜率（厂商手册里两路小数位可能不同），
+            // 由设置表"冷却送风机 → 送风机温度/湿度定点斜率"决定，改错就是差 10 倍/100 倍。
+            var fdDiv10 = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 222, 555, 222, 555 }, 10, 10);
             Check("除数10→22.2°C（0.1精度）",
                 fdDiv10.Temperature == 22.2f && fdDiv10.Humidity == 55.5f);
-            var fdDiv100 = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 2220, 5550, 2220, 5550 }, 100);
+            var fdDiv100 = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 2220, 5550, 2220, 5550 }, 100, 100);
             Check("除数100→22.2°C（0.01精度）",
                 fdDiv100.Temperature == 22.2f && fdDiv100.Humidity == 55.5f);
-            var fdDiv1 = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 22, 55, 22, 55 }, 1);
+            var fdDiv1 = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 22, 55, 22, 55 }, 1, 1);
             Check("除数1→22°C（整数）", fdDiv1.Temperature == 22f && fdDiv1.Humidity == 55f);
             // 同一批寄存器换除数 → 差 10 倍（这是现场报 bug 的形态，锁住换算确实按除数走）
-            var fdSame = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 2220, 0, 0, 0 }, 100);
+            var fdSame = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 2220, 0, 0, 0 }, 100, 100);
             Check("同寄存器换除数→结果随之变（2220/100=22.2）", fdSame.Temperature == 22.2f);
+            // 温度与湿度各用各的除数（V2.0.1 拆分后必须真的分开算）
+            var fdSplit = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 2220, 550, 2220, 550 }, 100, 10);
+            Check("温度湿度各用各的除数（100/10）",
+                fdSplit.Temperature == 22.2f && fdSplit.Humidity == 55f
+                && fdSplit.TempSetpoint == 22.2f && fdSplit.HumSetpoint == 55f);
             // 非法除数兜底：0 会除零（温度变无穷大）、负数会翻符号
-            var fdDiv0 = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 222, 0, 0, 0 }, 0);
+            var fdDiv0 = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 222, 0, 0, 0 }, 0, 0);
             Check("除数0兜底回缺省（不是无穷大）",
                 fdDiv0.Temperature == 22.2f && !float.IsInfinity(fdDiv0.Temperature));
-            var fdDivNeg = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 222, 0, 0, 0 }, -10);
+            var fdDivNeg = FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 222, 0, 0, 0 }, -10, -10);
             Check("除数负数兜底回缺省（不翻符号）", fdDivNeg.Temperature == 22.2f);
             Check("缺省除数常量=10", DeviceConfig.DefaultFanScaleDivisor == 10);
             Check("默认重载与显式除数10等价",
                 FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 222, 0, 0, 0 }).Temperature
-                    == FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 222, 0, 0, 0 }, 10).Temperature);
+                    == FanControllerClient.ParseFanRegisters(new ushort[] { 0, 3, 222, 0, 0, 0 }, 10, 10).Temperature);
 
             // —— 配置项同步（六处口径，防"只加一边"配置漂移）——
-            // DeviceConfig 属性（缺省 10）
-            Check("DeviceConfig缺省除数=10", new DeviceConfig().FanScaleDivisor == 10);
-            // 解析口：手改配置文件的脏值不许进启动（0/负数/小数/超范围/非数字 → 缺省 10）
-            Check("解析口:合法10", DeviceConfig.ParseFanScaleDivisor("10") == 10);
-            Check("解析口:合法100", DeviceConfig.ParseFanScaleDivisor("100") == 100);
-            Check("解析口:空串回缺省", DeviceConfig.ParseFanScaleDivisor("") == 10);
-            Check("解析口:null回缺省", DeviceConfig.ParseFanScaleDivisor(null) == 10);
-            Check("解析口:0回缺省", DeviceConfig.ParseFanScaleDivisor("0") == 10);
-            Check("解析口:负数回缺省", DeviceConfig.ParseFanScaleDivisor("-10") == 10);
-            Check("解析口:小数回缺省", DeviceConfig.ParseFanScaleDivisor("10.5") == 10);
-            Check("解析口:非数字回缺省", DeviceConfig.ParseFanScaleDivisor("abc") == 10);
-            Check("解析口:超范围回缺省", DeviceConfig.ParseFanScaleDivisor("10001") == 10);
-            Check("解析口:首尾空格容忍", DeviceConfig.ParseFanScaleDivisor(" 100 ") == 100);
+            // DeviceConfig 属性（缺省斜率 0.1 = 除数 10）
+            Check("DeviceConfig缺省斜率=0.1",
+                Math.Abs(new DeviceConfig().FanTempScale - 0.1) < 1e-9
+                && Math.Abs(new DeviceConfig().FanHumidityScale - 0.1) < 1e-9);
+            // 斜率 ↔ 除数 换算（配置存斜率，内部换算用整数除数）
+            Check("斜率0.1→除数10", DeviceConfig.ScaleToDivisor(0.1) == 10);
+            Check("斜率0.01→除数100", DeviceConfig.ScaleToDivisor(0.01) == 100);
+            Check("斜率0.001→除数1000", DeviceConfig.ScaleToDivisor(0.001) == 1000);
+            Check("斜率1→除数1", DeviceConfig.ScaleToDivisor(1.0) == 1);
+            Check("斜率非法→除数缺省10", DeviceConfig.ScaleToDivisor(0) == 10 && DeviceConfig.ScaleToDivisor(-1) == 10);
+            Check("除数→斜率文本（100→0.01）", DeviceConfig.FormatFanScale(100) == "0.01"
+                && DeviceConfig.FormatFanScale(10) == "0.1" && DeviceConfig.FormatFanScale(1) == "1");
+            // 档位合法性（唯一出处：设置表校验/启动加载归一/校准结果共用）
+            Check("标准档位判定（0.1/0.01/0.001/0.0001/1 合法）",
+                DeviceConfig.IsValidFanScale(0.1) && DeviceConfig.IsValidFanScale(0.01)
+                && DeviceConfig.IsValidFanScale(0.001) && DeviceConfig.IsValidFanScale(0.0001)
+                && DeviceConfig.IsValidFanScale(1.0));
+            Check("非档位值判定为非法（0.15/0/负数/2/空）",
+                !DeviceConfig.IsValidFanScale(0.15) && !DeviceConfig.IsValidFanScale(0)
+                && !DeviceConfig.IsValidFanScale(-0.1) && !DeviceConfig.IsValidFanScale(2.0)
+                && !DeviceConfig.IsValidFanScale(double.NaN));
+            Check("归一：0.099→0.1、0.0102→0.01、非法→缺省0.1",
+                Math.Abs(DeviceConfig.NormalizeFanScale(0.099) - 0.1) < 1e-9
+                && Math.Abs(DeviceConfig.NormalizeFanScale(0.0102) - 0.01) < 1e-9
+                && Math.Abs(DeviceConfig.NormalizeFanScale(0.15) - 0.1) < 1e-9);
+            // 解析口：手改配置文件的脏值不许进启动（0/负数/非档位/超范围/非数字 → 缺省 0.1）
+            Check("解析口:合法0.1", Math.Abs(DeviceConfig.ParseFanScale("0.1") - 0.1) < 1e-9);
+            Check("解析口:合法0.01", Math.Abs(DeviceConfig.ParseFanScale("0.01") - 0.01) < 1e-9);
+            Check("解析口:空串回缺省", Math.Abs(DeviceConfig.ParseFanScale("") - 0.1) < 1e-9);
+            Check("解析口:null回缺省", Math.Abs(DeviceConfig.ParseFanScale(null) - 0.1) < 1e-9);
+            Check("解析口:0回缺省", Math.Abs(DeviceConfig.ParseFanScale("0") - 0.1) < 1e-9);
+            Check("解析口:负数回缺省", Math.Abs(DeviceConfig.ParseFanScale("-0.1") - 0.1) < 1e-9);
+            Check("解析口:非档位小数回缺省", Math.Abs(DeviceConfig.ParseFanScale("0.15") - 0.1) < 1e-9);
+            Check("解析口:非数字回缺省", Math.Abs(DeviceConfig.ParseFanScale("abc") - 0.1) < 1e-9);
+            Check("解析口:超范围回缺省", Math.Abs(DeviceConfig.ParseFanScale("100") - 0.1) < 1e-9);
+            Check("解析口:首尾空格容忍", Math.Abs(DeviceConfig.ParseFanScale(" 0.01 ") - 0.01) < 1e-9);
             // 设置表校验分支（反射私有静态）
             var vvFan = typeof(SettingsForm).GetMethod("ValidateValue",
                 BindingFlags.NonPublic | BindingFlags.Static);
             Check("反射找到ValidateValue", vvFan != null);
             if (vvFan != null)
             {
-                Func<string, bool> ok = v =>
+                Func<string, string, bool> ok = (k, v) =>
                 {
-                    object[] a = new object[] { "FanScaleDivisor", v, null };
+                    object[] a = new object[] { k, v, null };
                     bool r = (bool)vvFan.Invoke(null, a);
                     return r && a[2] == null;
                 };
-                Check("校验:10过", ok("10"));
-                Check("校验:100过", ok("100"));
-                Check("校验:1过", ok("1"));
-                Check("校验:0不过", !ok("0"));
-                Check("校验:负数不过", !ok("-10"));
-                Check("校验:小数不过", !ok("10.5"));
-                Check("校验:超范围不过", !ok("10001"));
-                Check("校验:空串不过", !ok(""));
+                Check("校验:温度0.1过", ok("FanTempScale", "0.1"));
+                Check("校验:温度0.01过", ok("FanTempScale", "0.01"));
+                Check("校验:温度1过", ok("FanTempScale", "1"));
+                Check("校验:温度0不过", !ok("FanTempScale", "0"));
+                Check("校验:温度负数不过", !ok("FanTempScale", "-0.1"));
+                Check("校验:温度非档位小数不过", !ok("FanTempScale", "0.15"));
+                Check("校验:温度超范围不过", !ok("FanTempScale", "100"));
+                Check("校验:温度空串不过", !ok("FanTempScale", ""));
+                Check("校验:湿度0.01过", ok("FanHumidityScale", "0.01"));
+                Check("校验:湿度非档位不过", !ok("FanHumidityScale", "0.15"));
             }
             // 设置表说明 + 分类（缺任一 → 界面找不到这一项）
             var descFan = (Dictionary<string, string>)typeof(SettingsForm).GetField("_descriptions",
                 BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
-            Check("说明字典含定点除数", descFan.ContainsKey("FanScaleDivisor")
-                && descFan["FanScaleDivisor"].Contains("2220"));
+            Check("说明字典含温度/湿度斜率两项", descFan.ContainsKey("FanTempScale")
+                && descFan.ContainsKey("FanHumidityScale")
+                && descFan["FanTempScale"].Contains("2220")
+                && descFan["FanHumidityScale"].Contains("%RH"));
 
-            // 配置文件里必须有这个 key（漏加 → 现场启动读不到，只能走缺省 10，
+            // 配置文件里必须有这两个 key（漏加 → 现场启动读不到，只能走缺省 0.1，
             // 换型号时改不了）。校验对象是构建产物 exe.config（App.config 的运行时副本）。
             string deployedCfg = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "烧屏测试控制中心.exe.config");
             bool cfgHasKey = false;
+            bool cfgHasHumKey = false;
             if (File.Exists(deployedCfg))
             {
                 string cfgText = File.ReadAllText(deployedCfg);
-                cfgHasKey = cfgText.Contains("FanScaleDivisor");
+                cfgHasKey = cfgText.Contains("FanTempScale");
+                cfgHasHumKey = cfgText.Contains("FanHumidityScale");
             }
             else
             {
@@ -4767,10 +4810,13 @@ namespace AgingTestSystem.Tests
                     "AgingTestSystem", "App.config");
                 if (File.Exists(srcCfg))
                 {
-                    cfgHasKey = File.ReadAllText(srcCfg).Contains("FanScaleDivisor");
+                    string srcText = File.ReadAllText(srcCfg);
+                    cfgHasKey = srcText.Contains("FanTempScale");
+                    cfgHasHumKey = srcText.Contains("FanHumidityScale");
                 }
             }
-            Check("配置文件含定点除数key", cfgHasKey);
+            Check("配置文件含温度斜率key", cfgHasKey);
+            Check("配置文件含湿度斜率key", cfgHasHumKey);
 
             // —— 斜率（V2.0.1 客户现场标定用；协议见客户文档第 6 章）——
             // 背景：控制器的小数位是仪表侧参数，Modbus 寄存器表里不暴露"当前除数"，
@@ -4902,12 +4948,12 @@ namespace AgingTestSystem.Tests
             Check("归一：0判失败",
                 !FanCalibration.TryNormalizeToPowerOfTen(0, out calDiv, out calErr) && calErr != null);
 
-            // —— 校准窗（V2.0.1）：构造 + 布局不溢出 + 控件齐全 ——
+            // —— 校准窗（V2.0.1）：构造 + 布局不溢出 + 控件齐全 + 单行分项 ——
             // 只构造不 Show（Show 会连设备/起后台线程；AGENTS：回归用例禁裸调会弹模态框的方法）。
-            var calForm = new Dialogs.FanCalibrationForm(null, new DeviceConfig());
+            var calForm = new Dialogs.FanCalibrationForm(null, new DeviceConfig(), FanCalibrationTarget.Temperature);
             try
             {
-                // 缩放口径：AutoScaleMode.None + ZoomScaleRect（照抄 UnloadJudgeForm canonical）。
+                // 缩放口径：AutoScaleMode=None + ZoomScaleRect（照抄 UnloadJudgeForm canonical）。
                 // 早先按纯代码窗三要素设 AutoScaleDimensions(6,12) + Font 模式，
                 // 实测 AutoScaleDimensions 被固化成 7×17、客户区缩小，内容全溢出。
                 Check("校准窗AutoScale=None（Sunny canonical）",
@@ -4927,24 +4973,43 @@ namespace AgingTestSystem.Tests
                 int minTop = int.MaxValue;
                 foreach (Control c in calForm.Controls) if (c.Top < minTop) minTop = c.Top;
                 Check("校准窗内容避开标题禁区(Y≥47)", minTop >= 47);
-                // 关键控件齐全（少一个就是功能残缺）：标题标签 + 两个输入框 + 当前值回显 + 确认/取消
+                // 关键控件齐全（少一个就是功能残缺）：标题标签 + 输入框 + 当前值回显 + 当前斜率 + 确认/取消
                 var calFlags = BindingFlags.NonPublic | BindingFlags.Instance;
                 Check("校准窗关键控件齐全",
-                    typeof(Dialogs.FanCalibrationForm).GetField("_lblTempTitle", calFlags)?.GetValue(calForm) != null
-                    && typeof(Dialogs.FanCalibrationForm).GetField("_lblHumidityTitle", calFlags)?.GetValue(calForm) != null
-                    && typeof(Dialogs.FanCalibrationForm).GetField("_txtScreenTemp", calFlags)?.GetValue(calForm) != null
-                    && typeof(Dialogs.FanCalibrationForm).GetField("_txtScreenHumidity", calFlags)?.GetValue(calForm) != null
-                    && typeof(Dialogs.FanCalibrationForm).GetField("_lblCurrentTemp", calFlags)?.GetValue(calForm) != null
-                    && typeof(Dialogs.FanCalibrationForm).GetField("_lblCurrentHumidity", calFlags)?.GetValue(calForm) != null
-                    && typeof(Dialogs.FanCalibrationForm).GetField("_lblCurrentDivisor", calFlags)?.GetValue(calForm) != null
+                    typeof(Dialogs.FanCalibrationForm).GetField("_lblItemTitle", calFlags)?.GetValue(calForm) != null
+                    && typeof(Dialogs.FanCalibrationForm).GetField("_txtScreen", calFlags)?.GetValue(calForm) != null
+                    && typeof(Dialogs.FanCalibrationForm).GetField("_lblCurrent", calFlags)?.GetValue(calForm) != null
+                    && typeof(Dialogs.FanCalibrationForm).GetField("_lblCurrentScale", calFlags)?.GetValue(calForm) != null
                     && typeof(Dialogs.FanCalibrationForm).GetField("_lblResult", calFlags)?.GetValue(calForm) != null
                     && typeof(Dialogs.FanCalibrationForm).GetField("_btnOk", calFlags)?.GetValue(calForm) != null
                     && typeof(Dialogs.FanCalibrationForm).GetField("_btnCancel", calFlags)?.GetValue(calForm) != null);
                 // 标题标签在输入框左侧（用户明确要求：输入框左侧是 title）
-                var titleLbl = typeof(Dialogs.FanCalibrationForm).GetField("_lblTempTitle", calFlags)?.GetValue(calForm) as Control;
-                var tempBox = typeof(Dialogs.FanCalibrationForm).GetField("_txtScreenTemp", calFlags)?.GetValue(calForm) as Control;
+                var titleLbl = typeof(Dialogs.FanCalibrationForm).GetField("_lblItemTitle", calFlags)?.GetValue(calForm) as Control;
+                var screenBox = typeof(Dialogs.FanCalibrationForm).GetField("_txtScreen", calFlags)?.GetValue(calForm) as Control;
                 Check("校准窗标题在输入框左侧",
-                    titleLbl != null && tempBox != null && titleLbl.Right <= tempBox.Left);
+                    titleLbl != null && screenBox != null && titleLbl.Right <= screenBox.Left);
+                // 单行分项：窗里只有一行（温度/湿度各自一个窗，不再两行一起校）
+                Check("校准窗是单行分项（旧的温度/湿度两行控件已清除）",
+                    typeof(Dialogs.FanCalibrationForm).GetField("_lblTempTitle", calFlags) == null
+                    && typeof(Dialogs.FanCalibrationForm).GetField("_lblHumidityTitle", calFlags) == null
+                    && typeof(Dialogs.FanCalibrationForm).GetField("_txtScreenTemp", calFlags) == null
+                    && typeof(Dialogs.FanCalibrationForm).GetField("_txtScreenHumidity", calFlags) == null
+                    && typeof(Dialogs.FanCalibrationForm).GetField("_lblCurrentTemp", calFlags) == null
+                    && typeof(Dialogs.FanCalibrationForm).GetField("_lblCurrentHumidity", calFlags) == null
+                    && typeof(Dialogs.FanCalibrationForm).GetField("_lblCurrentDivisor", calFlags) == null);
+                // 温度窗/湿度窗文案各归各的（分项的关键表现）
+                Check("温度窗标题=送风机温度定点校准",
+                    calForm.Text == "送风机温度定点校准");
+                bool calHumOk = true;
+                try
+                {
+                    using (var humForm = new Dialogs.FanCalibrationForm(null, new DeviceConfig(), FanCalibrationTarget.Humidity))
+                    {
+                        calHumOk = humForm.Text == "送风机湿度定点校准";
+                    }
+                }
+                catch { calHumOk = false; }
+                Check("湿度窗标题=送风机湿度定点校准", calHumOk);
                 // 无参构造（设计器预览用，不能抛）
                 bool calNoArgOk = true;
                 try { using (var s2 = new Dialogs.FanCalibrationForm()) { } }
@@ -4952,6 +5017,37 @@ namespace AgingTestSystem.Tests
                 Check("校准窗无参构造不抛（设计器可预览）", calNoArgOk);
             }
             finally { try { calForm.Dispose(); } catch { } }
+
+            // —— 分项映射与斜率口径（V2.0.1 拆分）——
+            Check("分项key映射（温度→FanTempScale / 湿度→FanHumidityScale）",
+                FanCalibration.GetScaleKey(FanCalibrationTarget.Temperature) == "FanTempScale"
+                && FanCalibration.GetScaleKey(FanCalibrationTarget.Humidity) == "FanHumidityScale");
+            Check("分项显示名与单位（温度°C / 湿度%RH）",
+                FanCalibration.GetDisplayName(FanCalibrationTarget.Temperature) == "温度"
+                && FanCalibration.GetDisplayName(FanCalibrationTarget.Humidity) == "湿度"
+                && FanCalibration.GetUnit(FanCalibrationTarget.Temperature) == "°C"
+                && FanCalibration.GetUnit(FanCalibrationTarget.Humidity) == "%RH");
+            {
+                var cfgSplit = new DeviceConfig { FanTempScale = 0.1, FanHumidityScale = 0.01 };
+                Check("分项取斜率各取各的（互不影响）",
+                    Math.Abs(FanCalibration.GetScale(cfgSplit, FanCalibrationTarget.Temperature) - 0.1) < 1e-9
+                    && Math.Abs(FanCalibration.GetScale(cfgSplit, FanCalibrationTarget.Humidity) - 0.01) < 1e-9);
+                var dataSplit = new FanData { Temperature = 22.2f, Humidity = 55.5f };
+                Check("分项取读数各取各的",
+                    Math.Abs(FanCalibration.GetReading(dataSplit, FanCalibrationTarget.Temperature) - 22.2) < 1e-6
+                    && Math.Abs(FanCalibration.GetReading(dataSplit, FanCalibrationTarget.Humidity) - 55.5) < 1e-6);
+            }
+            // 斜率口径推算：读数 222.0（当前斜率0.1）+ 屏显 22.20 → 新斜率 0.01
+            double calScale;
+            string calScaleErr;
+            Check("斜率口径：读222.0+屏显22.20→新斜率0.01",
+                FanCalibration.TryComputeScale(222.0, 22.20, 0.1, out calScale, out calScaleErr)
+                && Math.Abs(calScale - 0.01) < 1e-9);
+            Check("斜率口径：读22.2+屏显22.20→仍是0.1（本来就对）",
+                FanCalibration.TryComputeScale(22.2, 22.20, 0.1, out calScale, out calScaleErr)
+                && Math.Abs(calScale - 0.1) < 1e-9);
+            Check("斜率口径：屏显填错判失败",
+                !FanCalibration.TryComputeScale(222.0, 1.5, 0.1, out calScale, out calScaleErr) && calScaleErr != null);
         }
 
         // =====================================================================

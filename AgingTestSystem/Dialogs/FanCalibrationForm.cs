@@ -9,12 +9,17 @@ using AgingTestSystem.Services;
 namespace AgingTestSystem.Dialogs
 {
     /// <summary>
-    /// 送风机定点校准窗（主界面右栏"监视"区**长按"当前温度/设置温度"**进入）。
+    /// 送风机定点校准窗（一次校准一项：温度 或 湿度）。
+    /// <para><b>入口</b>：温度 → 主界面右栏"监视"区**长按"当前温度/设置温度"**（含标题文字）；
+    /// 湿度 → 主界面不显示湿度，入口在系统设置 → 冷却送风机 → "校准湿度"按钮。</para>
     /// <para><b>解决什么</b>：送风机控制屏的小数位（0.1 还是 0.01）是仪表侧参数，
-    /// 协议里读不到"当前除数"字段，换型号时上位机温度会差 10 倍 / 100 倍。
+    /// 协议里读不到"当前除数"字段，换型号时上位机会差 10 倍 / 100 倍。
     /// 本窗让客户自己校准：把"上位机当前读到的值"和"控制屏上读到的真值"一比，
-    /// 自动算出该换多大的定点除数，写回配置并立即刷新主界面显示。</para>
-    /// <para><b>为什么用温度/湿度当前读数当探针</b>：这两路寄存器每 2 秒就在读，
+    /// 自动算出该换多大的定点比例，写回配置并立即刷新主界面显示。</para>
+    /// <para><b>为什么温度湿度分开校</b>：厂商手册里两路小数位可能不同（常见 温度×0.01、湿度×0.1），
+    /// 配置里也就分成 <see cref="DeviceConfig.FanTempScale"/> / <see cref="DeviceConfig.FanHumidityScale"/> 两份；
+    /// 校准窗一次只管一项，改一项不影响另一项。</para>
+    /// <para><b>为什么用当前读数当探针</b>：这两路寄存器每 2 秒就在读，
     /// 不用往设备写任何东西（写斜率会改设备实际升降温速率，是有副作用的操作）。</para>
     /// <para><b>布局</b>（UIForm 自绘蓝标题占 35px，绝对定位内容从 y=47 起排；
     /// 缩放口径照抄 <c>UnloadJudgeForm</c>：<c>AutoScaleMode=None</c> + <c>ZoomScaleRect</c>，
@@ -23,13 +28,10 @@ namespace AgingTestSystem.Dialogs
     /// ┌────────────────────────────────────────────────┐
     /// │ 送风机定点校准                        (蓝标题)  │  ← UIForm 自绘 35px
     /// ├────────────────────────────────────────────────┤
-    /// │ 请把送风机控制屏上读到的温度/湿度填入下面对应   │
-    /// │ 的输入框，再点【确定】。                      │
-    /// │                                                │
-    /// │ 温度   [__________]      当前  22.20 °C       │
-    /// │ 湿度   [__________]      当前  55.0 %RH       │
-    /// │                                                │
-    /// │ 当前定点除数：10                              │
+    /// │ 把送风机控制屏上读到的数值，填入下面输入框后    │
+    /// │ 点【确定】。                                  │
+    /// │ 温度   [如 22.20]      当前  222.00 °C        │  ← 标题在左，当前读数在右
+    /// │ 当前温度斜率：0.1                             │
     /// │ 校准结果：────────────────────────────────    │
     /// │                                                │
     /// │                        [ 确定 ]  [ 取消 ]      │
@@ -44,29 +46,23 @@ namespace AgingTestSystem.Dialogs
         /// <summary>内存中的设备配置（校准结果写回这里，配置持久化走设置表同一条路）</summary>
         private readonly DeviceConfig _config;
 
-        /// <summary>顶部说明（教客户怎么读控制屏、填几项）</summary>
+        /// <summary>本次校准的目标项（温度 / 湿度）</summary>
+        private readonly FanCalibrationTarget _target;
+
+        /// <summary>顶部说明（教客户怎么读控制屏、填哪一项）</summary>
         private UILabel _lblHint;
 
-        /// <summary>"温度"标题（输入框左侧）</summary>
-        private UILabel _lblTempTitle;
+        /// <summary>项目标题（输入框左侧，如"温度"/"湿度"）</summary>
+        private UILabel _lblItemTitle;
 
-        /// <summary>"湿度"标题（输入框左侧）</summary>
-        private UILabel _lblHumidityTitle;
+        /// <summary>输入框（填送风机控制屏上的真值）</summary>
+        private UITextBox _txtScreen;
 
-        /// <summary>温度输入框（填送风机控制屏上的温度真值）</summary>
-        private UITextBox _txtScreenTemp;
+        /// <summary>上位机当前读数回显（供用户对照）</summary>
+        private UILabel _lblCurrent;
 
-        /// <summary>湿度输入框（填送风机控制屏上的湿度真值，可留空）</summary>
-        private UITextBox _txtScreenHumidity;
-
-        /// <summary>"当前温度"读数回显（上位机当前读到的值，供用户对照）</summary>
-        private UILabel _lblCurrentTemp;
-
-        /// <summary>"当前湿度"读数回显</summary>
-        private UILabel _lblCurrentHumidity;
-
-        /// <summary>"当前定点除数"回显</summary>
-        private UILabel _lblCurrentDivisor;
+        /// <summary>当前斜率回显（温度斜率 / 湿度斜率）</summary>
+        private UILabel _lblCurrentScale;
 
         /// <summary>结果/错误提示（多行）</summary>
         private UILabel _lblResult;
@@ -84,7 +80,7 @@ namespace AgingTestSystem.Dialogs
         /// 设计器预览用无参构造（空快照占位；设备管理器为 null → 显示"未连接"）。
         /// 缺了它 VS 预览报"没有无参数构造函数"，窗体在设计器里打不开。
         /// </summary>
-        public FanCalibrationForm() : this(null, new DeviceConfig())
+        public FanCalibrationForm() : this(null, new DeviceConfig(), FanCalibrationTarget.Temperature)
         {
         }
 
@@ -93,12 +89,26 @@ namespace AgingTestSystem.Dialogs
         /// </summary>
         /// <param name="deviceManager">送风机通讯门面（读当前温湿度）</param>
         /// <param name="config">内存中的设备配置（校准结果写回这里）</param>
-        public FanCalibrationForm(DeviceManager deviceManager, DeviceConfig config)
+        /// <param name="target">本次校准的目标项（温度 / 湿度）</param>
+        public FanCalibrationForm(DeviceManager deviceManager, DeviceConfig config, FanCalibrationTarget target)
         {
             _deviceManager = deviceManager;
             _config = config;
+            _target = target;
 
             InitializeComponent();
+
+            // 按目标项改窗体文案（一次只校一项，两项各有各的斜率）
+            string itemName = FanCalibration.GetDisplayName(target);
+            this.Text = "送风机" + itemName + "定点校准";
+            _lblItemTitle.Text = itemName;
+            _lblCurrentScale.Text = "当前" + itemName + "斜率：" + FormatScale(FanCalibration.GetScale(config, target));
+            _txtScreen.Watermark = target == FanCalibrationTarget.Humidity ? "如 55.0" : "如 22.20";
+            _lblHint.Text = "把送风机控制屏上读到的" + itemName +
+                            "，填入下面输入框后点【确定】。\r\n" +
+                            "（只改" + itemName + "的换算比例，" +
+                            (target == FanCalibrationTarget.Humidity ? "湿度" : "温度") + "互不影响）";
+
             LoadCurrentReading();
         }
 
@@ -112,46 +122,46 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 读当前温湿度与当前除数并回显。
+        /// 读当前读数与当前斜率并回显。
         /// 设备未连接时提示"未连接"，此时无法校准（没有可信的对照值）。
         /// </summary>
         private void LoadCurrentReading()
         {
             if (_closed || IsDisposed) return;
 
-            int divisor = DeviceConfig.ParseFanScaleDivisor(
-                (_config != null ? _config.FanScaleDivisor : 0).ToString(CultureInfo.InvariantCulture));
-            _lblCurrentDivisor.Text = "当前定点除数：" + divisor;
+            string itemName = FanCalibration.GetDisplayName(_target);
+            string unit = FanCalibration.GetUnit(_target);
+            double currentScale = FanCalibration.GetScale(_config, _target);
+            _lblCurrentScale.Text = "当前" + itemName + "斜率：" + FormatScale(currentScale);
 
             FanData data = _deviceManager != null ? _deviceManager.GetFanData() : null;
             if (data == null || !data.IsOnline)
             {
-                _lblCurrentTemp.Text = "当前  --（送风机未连接）";
-                _lblCurrentHumidity.Text = "当前  --";
+                _lblCurrent.Text = "当前  --（送风机未连接）";
                 _lblResult.Text = "送风机未连接，读不到当前值，无法校准。\r\n请先确认通讯正常。";
                 _lblResult.ForeColor = Color.Red;
                 return;
             }
 
-            _lblCurrentTemp.Text = "当前  " + data.Temperature.ToString("0.00") + " °C";
-            _lblCurrentHumidity.Text = "当前  " + data.Humidity.ToString("0.0") + " %RH";
+            double reading = FanCalibration.GetReading(data, _target);
+            _lblCurrent.Text = "当前  " + reading.ToString("0.00") + " " + unit;
             _lblResult.Text = string.Empty;
             _lblResult.ForeColor = Color.FromArgb(48, 48, 48);
         }
 
         /// <summary>
-        /// 【确定】点击 → 采集两路输入 → 推算新除数 → 落盘 + 热回写 → 刷新主界面。
+        /// 【确定】点击 → 取输入值 → 推算新斜率 → 落盘 + 热回写 → 刷新主界面。
+        /// 【一次只改一项】温度与湿度各有各的斜率，本次只写目标项那一个 key。
         /// </summary>
         private void btnOk_Click(object sender, EventArgs e)
         {
             if (_closed || IsDisposed) return;
 
-            double? screenTemp = ParseInput(_txtScreenTemp);
-            double? screenHumidity = ParseInput(_txtScreenHumidity);
-
-            if (screenTemp == null && screenHumidity == null)
+            string itemName = FanCalibration.GetDisplayName(_target);
+            double? screenValue = ParseInput(_txtScreen);
+            if (screenValue == null)
             {
-                ShowError("请至少填写一项：送风机控制屏上读到的温度或湿度。");
+                ShowError("请填写送风机控制屏上读到的" + itemName + "。");
                 return;
             }
 
@@ -162,58 +172,27 @@ namespace AgingTestSystem.Dialogs
                 return;
             }
 
-            int currentDivisor = DeviceConfig.ParseFanScaleDivisor(
-                (_config != null ? _config.FanScaleDivisor : 0).ToString(CultureInfo.InvariantCulture));
+            double currentScale = FanCalibration.GetScale(_config, _target);
+            double reading = FanCalibration.GetReading(data, _target);
 
-            // 温度、湿度各算一次：两路若推出不同除数，说明填错了（或该机温湿度精度本就不同），
-            // 本机共用一个除数，不能瞎猜 → 报错让用户复核。
-            int divisorFromTemp = 0;
-            int divisorFromHumidity = 0;
+            double newScale;
             string error;
-
-            if (screenTemp != null &&
-                !FanCalibration.TryComputeDivisor(data.Temperature, screenTemp.Value,
-                    currentDivisor, out divisorFromTemp, out error))
+            if (!FanCalibration.TryComputeScale(reading, screenValue.Value, currentScale, out newScale, out error))
             {
-                ShowError("温度校准失败：" + error);
+                ShowError(itemName + "校准失败：" + error);
                 return;
             }
 
-            if (screenHumidity != null &&
-                !FanCalibration.TryComputeDivisor(data.Humidity, screenHumidity.Value,
-                    currentDivisor, out divisorFromHumidity, out error))
+            if (Math.Abs(newScale - currentScale) < 1e-9)
             {
-                ShowError("湿度校准失败：" + error);
-                return;
-            }
-
-            int newDivisor;
-            if (screenTemp != null && screenHumidity != null)
-            {
-                if (divisorFromTemp != divisorFromHumidity)
-                {
-                    ShowError("温度推出除数 " + divisorFromTemp + "、湿度推出除数 " + divisorFromHumidity +
-                              "，两者不一致。\r\n本机温湿度共用一个定点除数，请复核填入的数值" +
-                              "（只填温度或只填湿度也可以）。");
-                    return;
-                }
-                newDivisor = divisorFromTemp;
-            }
-            else
-            {
-                newDivisor = screenTemp != null ? divisorFromTemp : divisorFromHumidity;
-            }
-
-            if (newDivisor == currentDivisor)
-            {
-                ShowResult("当前除数 " + currentDivisor + " 已经是对的，无需修改。", false);
+                ShowResult("当前" + itemName + "斜率 " + FormatScale(currentScale) + " 已经是对的，无需修改。", false);
                 return;
             }
 
             // 落盘 + 内存热回写（走设置表同一条路，配置语义只有一份）
             var changes = new System.Collections.Generic.Dictionary<string, string>
             {
-                { "FanScaleDivisor", newDivisor.ToString(CultureInfo.InvariantCulture) }
+                { FanCalibration.GetScaleKey(_target), FormatScale(newScale) }
             };
             Dialogs.SettingsForm.PersistResult persistResult;
             string persistError;
@@ -223,11 +202,11 @@ namespace AgingTestSystem.Dialogs
                 return;
             }
 
-            // 立刻重新读一次送风机：主界面温度显示马上按新除数刷新，不用等 2 秒周期
+            // 立刻重新读一次送风机：主界面温度显示马上按新斜率刷新，不用等 2 秒周期
             if (_deviceManager != null) _deviceManager.RefreshFanData();
 
-            ShowResult("校准完成：定点除数 " + currentDivisor + " → " + newDivisor +
-                       "，主界面温度显示已按新比例刷新。", true);
+            ShowResult("校准完成：" + itemName + "斜率 " + FormatScale(currentScale) + " → " + FormatScale(newScale) +
+                       "，主界面显示已按新比例刷新。", true);
 
             DialogResult = DialogResult.OK;
             Close();
@@ -243,7 +222,17 @@ namespace AgingTestSystem.Dialogs
         }
 
         /// <summary>
-        /// 解析输入框数值（空 = 不参与校准；非数字/非正数 = 报错并返回 null）。
+        /// 斜率格式化成界面/配置文本（0.1 / 0.01 / 0.001 / 0.0001）
+        /// </summary>
+        /// <param name="scale">斜率值</param>
+        /// <returns>文本</returns>
+        private static string FormatScale(double scale)
+        {
+            return scale.ToString("0.####", CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// 解析输入框数值（空/非数字/非正数 = 报错并返回 null）。
         /// </summary>
         /// <param name="box">输入框</param>
         /// <returns>解析到的数值；空或非法时返回 null</returns>

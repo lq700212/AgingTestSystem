@@ -81,7 +81,7 @@ namespace AgingTestSystem.Interfaces
         /// 【用途】读出设备当前的升降温速率参数（协议层能力，界面暂未用；
         /// 客户现场校准定点小数位走的是"温湿度当前读数 + 控制屏真值"对照，见 FanCalibrationForm）。
         /// </summary>
-        /// <param name="scaleDivisor">定点换算除数（现场可配，见 DeviceConfig.FanScaleDivisor）</param>
+        /// <param name="scaleDivisor">定点换算除数（现场可配，见 DeviceConfig.FanTempScale / FanHumidityScale）</param>
         /// <returns>斜率数据；读取失败返回 null（上层显示"读不到"）</returns>
         FanSlopeData ReadSlope(float scaleDivisor);
 

@@ -59,6 +59,7 @@ namespace AgingTestSystem.Dialogs
             this.pnlBottom = new Sunny.UI.UIPanel();
             this.btnSave = new Sunny.UI.UIButton();
             this.btnClose = new Sunny.UI.UIButton();
+            this.btnCalibHumidity = new Sunny.UI.UIButton();
             this.pnlHint.SuspendLayout();
             this.pnlBottom.SuspendLayout();
             this.SuspendLayout();
@@ -105,6 +106,7 @@ namespace AgingTestSystem.Dialogs
             //
             this.pnlBottom.Controls.Add(this.btnClose);
             this.pnlBottom.Controls.Add(this.btnSave);
+            this.pnlBottom.Controls.Add(this.btnCalibHumidity);
             this.pnlBottom.Dock = System.Windows.Forms.DockStyle.Bottom;
             this.pnlBottom.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)248))), ((int)(((byte)250))), ((int)(((byte)252))));
             this.pnlBottom.Name = "pnlBottom";
@@ -123,6 +125,18 @@ namespace AgingTestSystem.Dialogs
             this.btnSave.TabIndex = 0;
             this.btnSave.Text = "保存设置";
             this.btnSave.Click += new System.EventHandler(this.btnSave_Click);
+            //
+            // btnCalibHumidity
+            //
+            this.btnCalibHumidity.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
+            this.btnCalibHumidity.AutoSize = false;
+            this.btnCalibHumidity.Location = new System.Drawing.Point(640, 9);
+            this.btnCalibHumidity.Name = "btnCalibHumidity";
+            this.btnCalibHumidity.Size = new System.Drawing.Size(104, 32);
+            this.btnCalibHumidity.Style = Sunny.UI.UIStyle.Blue;
+            this.btnCalibHumidity.TabIndex = 2;
+            this.btnCalibHumidity.Text = "校准湿度";
+            this.btnCalibHumidity.Click += new System.EventHandler(this.btnCalibHumidity_Click);
             //
             // btnClose
             //
@@ -165,5 +179,6 @@ namespace AgingTestSystem.Dialogs
         private Sunny.UI.UIPanel pnlBottom;
         private Sunny.UI.UIButton btnSave;
         private Sunny.UI.UIButton btnClose;
+        private Sunny.UI.UIButton btnCalibHumidity;
     }
 }
