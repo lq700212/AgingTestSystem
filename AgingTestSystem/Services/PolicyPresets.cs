@@ -51,15 +51,22 @@ namespace AgingTestSystem.Services
     /// 探测口径：只认 14 个行为开关，数值项不参与身份（见 DetectPreset）。
     /// 【唯一生效策略＝自定义（用户口径：软件只认自定义）】
     ///    A/B/C/D 是**只读模板**（代码写死，改不了也不该被改），自定义是唯一能改、
-    ///    唯一真正生效的那一套。策略窗下拉因此**永远回显“自定义”**，
-    ///    下拉里选中 A/B/C/D 只表示“看这套模板长什么样”（画布/右栏预览该模板的值），
-    ///    点【套用预置】= 把该模板的各节点配置**复制到自定义**并即时生效
-    ///    （落槽的是套用后的完整生效配置，见 ProcessPolicyForm.ApplyPresetValues）。
+    ///    唯一真正生效的那一套。策略窗的模型因此只有一句话能说清：
+    ///    **下拉＝“我现在看的是哪套”，套用＝“把模板复制到自定义”**。
+    ///    - 下拉选“自定义”：画面＝当前生效的那套，节点**可改**，改完点【保存本节点】生效；
+    ///    - 下拉选 A/B/C/D：画面＝该模板，节点**纯只读**（编辑器禁用、保存按钮禁用），
+    ///      什么都不落盘（只看）；要改这套先点【套用到自定义】——把模板的各节点配置
+    ///      **复制到自定义**并即时生效（落槽的是套用后的完整生效配置，
+    ///      见 ProcessPolicyForm.ApplyPresetValues），随后视图自动切回“自定义”继续改。
     ///    预置定义本身不受影响，谁也覆盖不了（老口径“切预置=换整套行为”已作废）。
-    /// 【自定义槽】下拉末项“自定义”是独立槽（跟项目走，见 ProjectPolicyStore.CustomFilePath）：
-    /// 初始内容＝A 的快照，之后改自定义只写槽文件，A/B/C/D 是代码写死的谁也覆盖不了。
+    ///    【为什么没有“套用自定义”】自定义＝生效配置本体，而槽在每次保存时就全量落盘
+    ///    （见 ProcessPolicyForm.SaveCurrentConfigToCustomSlot），两者永远一致，
+    ///    “把槽写回配置”是个永远无差异的死功能——按钮语义必须唯一。
+    /// 【自定义槽】“自定义”是独立槽（跟项目走，见 ProjectPolicyStore.CustomFilePath）：
+    ///    初始内容＝A 的快照，之后每次保存/套用/导入都全量落盘，
+    ///    A/B/C/D 是代码写死的谁也覆盖不了。
     /// 【导入导出】文件装“全部跟项目策略 key”（含 MES 映射/规则/报表等自由文本，
-    /// 见 BuildExportValues）：导出可选 A/B/C/D/自定义任一源，导入一律进自定义槽并即时生效。
+    ///    见 BuildExportValues）：导出可选 A/B/C/D/自定义任一源，导入一律进自定义槽并即时生效。
     /// </summary>
     public static class PolicyPresets
     {
@@ -69,66 +76,50 @@ namespace AgingTestSystem.Services
         /// <summary>自定义下拉显示名（单源：下拉选项/回显/导入导出源选择全读它，不各写一份）。</summary>
         public const string CustomTitle = "自定义";
 
-        /// <summary>自定义悬停全文·已改动（与说明行同源，同样不带括号描述）。</summary>
-        public const string CustomTip = "自定义\r\n\r\n"
-            + "当前唯一生效的策略，可自由修改。\r\n"
-            + "预置A/B/C/D是只读模板，套用即把该模板的各节点配置复制到自定义。";
-
-        /// <summary>自定义悬停全文·未改动（与默认说明行同源）。</summary>
-        public const string CustomTipDefault = "自定义\r\n\r\n"
-            + "当前唯一生效的策略，可自由修改。\r\n"
-            + "自定义槽内容仍是初始快照，与预置A一致。\r\n"
-            + "预置A/B/C/D是只读模板，套用即把该模板的各节点配置复制到自定义。";
-
-        /// <summary>套用自定义的确认框说明（自定义＝当前唯一生效的策略，槽里是上次存的那套）。</summary>
-        public const string CustomApplyScenario =
-            "自定义＝当前唯一生效的策略；槽里存的是上次保存的那套。";
+        /// <summary>
+        /// 自定义视图的说明行文案（当前生效的那套，可直接改节点）。
+        /// 【为什么这么写】说明行是给现场看的一句话，不讲内部概念
+        /// （旧口径写“当前生效策略：自定义。内容与预置A/B/C/D都不完全一致。”——
+        /// 那是给程序看的对账结果，现场只会懵；像不像哪套预置放悬停提示里就行）。
+        /// </summary>
+        public const string CustomDesc = "当前生效的策略，可直接改节点。";
 
         /// <summary>
-        /// 自定义说明行文案（纯函数：按"当前生效配置"匹配的预置出文案）。
-        /// 【为什么按生效配置出】自定义＝当前唯一生效的策略（软件只认自定义），
-        /// 说明行必须跟画布显示的那一套对得上（画布＝生效配置）——
-        /// 旧口径拿"自定义槽"出文案，槽是初始A快照时会说"与预置A一致"，
-        /// 而画布正显示着预置B的现场值，两边打架（现场只会懵）。
-        /// matched 不是 A/B/C/D（或未知）＝"与预置都不完全一致"＝现场自己那套。
+        /// 预置视图的说明行文案前缀（只读模板 + 生效的仍是自定义 + 下一步怎么走）。
+        /// 【为什么要写"生效的仍是自定义"】下拉停在预置时画面显示的是模板值，
+        /// 不点【套用到自定义】它什么都不会变——不说清这点，用户会以为"选中就生效了"。
         /// </summary>
-        public static string BuildCustomScenario(string matchedPresetId)
+        public const string PresetDesc =
+            "只读模板，改不了。生效的仍是自定义，要用这套点【套用到自定义】。";
+
+        /// <summary>
+        /// 预置视图的悬停全文（场景 + 换挡指引 + 前置条件；与确认框同源，不另写一份）。
+        /// </summary>
+        public static string BuildPresetTip(string presetId)
         {
-            PolicyPresetDef def = Find(matchedPresetId);
-            if (def == null)
-            {
-                return "当前生效策略：自定义。内容与预置A/B/C/D都不完全一致。";
-            }
-            return "当前生效策略：自定义。内容与预置" + def.Id + "一致。";
+            PolicyPresetDef def = Find(presetId);
+            if (def == null) return CustomTitle;
+            return def.Title + "\r\n\r\n" + def.Scenario + "\r\n\r\n" + def.HowToSwitch
+                + (string.IsNullOrWhiteSpace(def.Requires) ? "" : "\r\n\r\n前置条件：" + def.Requires)
+                + "\r\n\r\n只读模板：不能直接改。要用这套点【套用到自定义】，复制到自定义后再改。";
         }
 
         /// <summary>
-        /// 自定义槽是否还是初始快照（纯函数：只比 A 管辖的开关＋数值，
-        /// MES/规则等自由文本不算身份——初始槽的自由文本取种子现状，本来就和 A 无关）。
-        /// 槽空/null 即非初始（无槽可比，说明行按"已改动"口径回显差异文案）。
+        /// 自定义视图的悬停全文（纯函数：按当前生效配置匹配的预置出文案）。
+        /// 【为什么悬停才讲"像哪套预置"】说明行只留一句人话（当前生效的策略，可直接改节点），
+        /// 生效内容与哪套预置一致是"想知道再查"的信息，挤进说明行会把一行撑成两行废话。
+        /// matched 不是 A/B/C/D（或未知）＝现场自己那套。
         /// </summary>
-        public static bool IsCustomPristine(Dictionary<string, string> customSnapshot)
+        public static string BuildCustomTip(string matchedPresetId)
         {
-            try
-            {
-                Dictionary<string, string> presetA = GetAllValues("A");
-                Dictionary<string, string> snap =
-                    ProjectPolicyStore.FilterToPolicyKeys(customSnapshot);
-                if (presetA == null || snap.Count == 0) return false;
-                foreach (var kv in presetA)
-                {
-                    string got;
-                    if (!snap.TryGetValue(kv.Key, out got)) return false;
-                    if (!string.Equals(got != null ? got.Trim() : "",
-                        kv.Value != null ? kv.Value.Trim() : "",
-                        StringComparison.OrdinalIgnoreCase))
-                    {
-                        return false;
-                    }
-                }
-                return true;
-            }
-            catch { return false; }
+            PolicyPresetDef def = Find(matchedPresetId);
+            string same = def != null
+                ? "当前内容与预置" + def.Id + "一致。"
+                : "当前内容与预置A/B/C/D都不完全一致（是您自己那套）。";
+            return CustomTitle + "\r\n\r\n"
+                + "当前唯一生效的策略，可自由修改节点。\r\n"
+                + same + "\r\n"
+                + "预置A/B/C/D是只读模板，套用即把该模板的各节点配置复制到自定义。";
         }
 
         /// <summary>

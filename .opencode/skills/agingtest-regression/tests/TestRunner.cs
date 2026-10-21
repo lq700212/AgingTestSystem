@@ -7880,13 +7880,19 @@ namespace AgingTestSystem.Tests
                     ? fCbo.GetType().GetProperty("Items").GetValue(fCbo, null)
                         as System.Collections.IList
                     : null;
-                Check("预置下拉5项（A/B/C/D/自定义）",
+                Check("方案下拉5项（自定义+A/B/C/D）",
                     items != null && items.Count == 5);
                 int selIdx = fCbo != null
                     ? (int)fCbo.GetType().GetProperty("SelectedIndex").GetValue(fCbo, null)
                     : -1;
+                // 2.0.1 大改：下拉顺序＝自定义第一（唯一可改、唯一生效的那套），
+                // 后面 A/B/C/D（下拉＝"我现在看的是哪套"，默认就该落在自定义）。
+                Check("下拉第一项是自定义（可改的那套排第一、默认选中）",
+                    selIdx == 0
+                    && items != null && items.Count == 5
+                    && items[0].ToString() == PolicyPresets.CustomTitle);
                 Check("无参构造回显自定义且整行禁用（只读安全）",
-                    selIdx == 4
+                    selIdx == 0
                     && !((Control)fCbo).Enabled && !((Control)fBtn).Enabled
                     && !string.IsNullOrWhiteSpace(desc.Text));
             }
@@ -7905,16 +7911,19 @@ namespace AgingTestSystem.Tests
                 var desc = t.GetField("_lblPresetDesc",
                     BindingFlags.NonPublic | BindingFlags.Instance).GetValue(full) as Control;
                 int selIdx = (int)fCbo.GetType().GetProperty("SelectedIndex").GetValue(fCbo, null);
-                // 【2.0.1 用户口径：软件只认自定义】A/B/C/D 是代码写死的只读模板，
-                // 套用也只是把模板复制进自定义 —— 生效的永远只有"自定义"那一份，
-                // 所以下拉恒定回显自定义（旧口径按探测显示 B，会让人以为"当前策略是B"）。
-                Check("B配置打开也回显自定义（软件只认自定义）", selIdx == 4);
-                Check("管理员模式预置行可用",
-                    ((Control)fCbo).Enabled && ((Control)fBtn).Enabled);
-                Check("说明行显示自定义口径（当前生效策略=自定义）",
-                    desc != null && desc.Text.Contains("自定义"));
-                Check("说明行跟生效配置走（B配置就说与预置B一致）",
-                    desc != null && desc.Text == PolicyPresets.BuildCustomScenario("B"));
+                // 【2.0.1 大改】下拉＝"我现在看的是哪套"：开窗落在"自定义"（唯一生效、
+                // 唯一可改的那套）；选 A/B/C/D 是"看这套只读模板"，由只读态承接。
+                Check("B配置打开也回显自定义（生效的只有自定义）", selIdx == 0);
+                Check("管理员模式方案区可用（下拉可切方案）",
+                    ((Control)fCbo).Enabled);
+                Check("自定义视图下套用按钮禁用（无事可做，悬停有解释）",
+                    !((Control)fBtn).Enabled);
+                Check("说明行是当前生效可改（直白话，不讲内部概念）",
+                    desc != null && desc.Text == PolicyPresets.CustomDesc
+                    && desc.Text.Contains("可直接改节点"));
+                Check("说明行不出现对账腔（不写与哪套预置一致）",
+                    desc != null && !desc.Text.Contains("一致")
+                    && !desc.Text.Contains("不完全"));
                 Check("下拉列表拉宽防截断（看全选项）",
                     (int)fCbo.GetType().GetProperty("DropDownWidth").GetValue(fCbo, null) >= 300);
                 object fTip = t.GetField("_presetTip",
@@ -7928,6 +7937,8 @@ namespace AgingTestSystem.Tests
                 Check("悬停提示说明预置只读模板（闭合框看全文）",
                     !string.IsNullOrWhiteSpace(tipText) && tipText.Contains("自定义")
                     && tipText.Contains("只读模板"));
+                Check("悬停提示说清当前内容与哪套预置一致（B配置）",
+                    tipText.Contains("与预置B一致"));
                 // 释放配对（R2：无容器托管的提示必须手写释放，字段归 null 即证据；
                 // 未 Show 的窗 Close 语义各版本不一，抛了就走 Dispose，两种路都进重写）
                 try { ((Form)full).Close(); }
@@ -8000,8 +8011,8 @@ namespace AgingTestSystem.Tests
                             StringComparison.Ordinal);
                 }
                 Check("套用预置后全量落自定义槽（套用自定义与屏幕一致）", appliedOk);
-                // 套用后下拉仍回显"自定义"：预置是只读模板，复制进自定义后
-                // 生效的策略还是自定义那一份（不回显成"预置B"）。
+                // 套用后下拉落到"自定义"：套用＝把模板复制到自定义，
+                // 生效的是自定义那一份，视图也回到可改的那套（2.0.1 大改）。
                 object cboApply = tApply.GetField("_cboPreset",
                     BindingFlags.NonPublic | BindingFlags.Instance).GetValue(applyForm);
                 bool selCustomAfterApply = false;
@@ -8009,12 +8020,12 @@ namespace AgingTestSystem.Tests
                 {
                     var propSelApply = cboApply.GetType().GetProperty("SelectedIndex");
                     int idxApply = (int)propSelApply.GetValue(cboApply, null);
-                    selCustomAfterApply = (idxApply == 4);
+                    selCustomAfterApply = (idxApply == 0);
                 }
-                Check("套用预置后下拉仍回显自定义（策略只有自定义）", selCustomAfterApply);
+                Check("套用预置后下拉回到自定义（生效的只有自定义）", selCustomAfterApply);
             }
             finally { try { if (applyForm != null) applyForm.Dispose(); } catch { } }
-            // D 配置打开同样回显"自定义"（2.0.1 口径：预置是只读模板，软件只认自定义）
+            // D 配置打开同样回显"自定义"（2.0.1 大改：生效的只有自定义）
             ProcessPolicyForm fullD = null;
             try
             {
@@ -8027,12 +8038,20 @@ namespace AgingTestSystem.Tests
                 var descD = tD.GetField("_lblPresetDesc",
                     BindingFlags.NonPublic | BindingFlags.Instance).GetValue(fullD) as Control;
                 int selD = (int)fCboD.GetType().GetProperty("SelectedIndex").GetValue(fCboD, null);
-                Check("D配置打开也回显自定义（软件只认自定义）", selD == 4);
+                Check("D配置打开也回显自定义（生效的只有自定义）", selD == 0);
                 Check("说明行显示自定义口径（不是D场景）",
-                    descD != null && descD.Text.Contains("自定义")
+                    descD != null && descD.Text == PolicyPresets.CustomDesc
                     && !descD.Text.Contains("放行"));
-                Check("D配置说明行跟生效配置走（与预置D一致）",
-                    descD != null && descD.Text == PolicyPresets.BuildCustomScenario("D"));
+                object tipD = tD.GetField("_presetTip",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(fullD);
+                string tipTextD = "";
+                if (tipD != null)
+                {
+                    tipTextD = (string)tipD.GetType().GetMethod("GetToolTip",
+                        new Type[] { typeof(Control) }).Invoke(tipD, new object[] { (Control)fCboD });
+                }
+                Check("D配置悬停说清与预置D一致（想知道再查）",
+                    tipTextD.Contains("与预置D一致"));
             }
             finally { try { if (fullD != null) fullD.Dispose(); } catch { } }
             // —— A 常用（V1.106：Title 含"常用"，场景保留"常开"工艺语义） ——
@@ -8040,7 +8059,7 @@ namespace AgingTestSystem.Tests
                 PolicyPresets.Find("A") != null && PolicyPresets.Find("A").Title.Contains("常用"));
             Check("A场景保留常开语义（不断工艺含义）",
                 PolicyPresets.Find("A") != null && PolicyPresets.Find("A").Scenario.Contains("常开"));
-            // A 配置打开同样回显"自定义"（2.0.1 口径：预置是只读模板，软件只认自定义）
+            // A 配置打开同样回显"自定义"（2.0.1 大改：生效的只有自定义）
             ProcessPolicyForm fullA = null;
             try
             {
@@ -8053,16 +8072,23 @@ namespace AgingTestSystem.Tests
                 var descA = tA.GetField("_lblPresetDesc",
                     BindingFlags.NonPublic | BindingFlags.Instance).GetValue(fullA) as Control;
                 int selA = (int)fCboA.GetType().GetProperty("SelectedIndex").GetValue(fCboA, null);
-                Check("A配置打开也回显自定义（软件只认自定义）", selA == 4);
+                Check("A配置打开也回显自定义（生效的只有自定义）", selA == 0);
                 Check("说明行显示自定义口径（不是A场景）",
-                    descA != null && descA.Text.Contains("自定义")
+                    descA != null && descA.Text == PolicyPresets.CustomDesc
                     && !descA.Text.Contains("常开"));
-                Check("A配置说明行跟生效配置走（与预置A一致）",
-                    descA != null && descA.Text == PolicyPresets.BuildCustomScenario("A"));
+                object tipA = tA.GetField("_presetTip",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(fullA);
+                string tipTextA = "";
+                if (tipA != null)
+                {
+                    tipTextA = (string)tipA.GetType().GetMethod("GetToolTip",
+                        new Type[] { typeof(Control) }).Invoke(tipA, new object[] { (Control)fCboA });
+                }
+                Check("A配置悬停说清与预置A一致（想知道再查）",
+                    tipTextA.Contains("与预置A一致"));
             }
             finally { try { if (fullA != null) fullA.Dispose(); } catch { } }
-            // —— 预置行标题 A/B/C/D（V1.106：下拉四项，标题同步；
-            // 2.0.1 标题改成"当前策略：自定义（预置A/B/C/D只读）"口径） ——
+            // —— 方案区标题（2.0.1 大改：一句话把规则说清） ——
             ProcessPolicyForm titleForm = null;
             try
             {
@@ -8070,11 +8096,15 @@ namespace AgingTestSystem.Tests
                 var tT = typeof(ProcessPolicyForm);
                 var lblT = tT.GetField("_lblPresetTitle",
                     BindingFlags.NonPublic | BindingFlags.Instance).GetValue(titleForm) as Control;
-                Check("预置行标题一键套用A/B/C/D",
-                    lblT != null && lblT.Text.Contains("A/B/C/D"));
-                Check("预置行标题说明当前策略=自定义且预置只读",
-                    lblT != null && lblT.Text.Contains("自定义")
+                var btnT = tT.GetField("_btnApplyPreset",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(titleForm) as Control;
+                Check("方案区标题点名A/B/C/D并说明只读",
+                    lblT != null && lblT.Text.Contains("A/B/C/D")
                     && lblT.Text.Contains("只读"));
+                Check("标题不塞对账腔（不讲当前策略是哪套预置）",
+                    lblT != null && !lblT.Text.Contains("当前策略"));
+                Check("按钮文案=套用到自定义（语义唯一）",
+                    btnT != null && btnT.Text == "套用到自定义");
             }
             finally { try { if (titleForm != null) titleForm.Dispose(); } catch { } }
             // —— 下拉即预览（V1.106：切下拉画布即换该预置画面，只看不存不标脏） ——
@@ -8109,8 +8139,8 @@ namespace AgingTestSystem.Tests
                 Check("预览反射口径有效（防探针本身失效假绿）",
                     cboPv != null && canvasPv != null && fPreview != null
                     && fDirty != null && propIdx != null);
-                // 切到 C：预览=宽松（失压只记不停），真实仍是 B（停机），不标脏
-                propIdx.SetValue(cboPv, 2, null);
+                // 切到 C（索引 3）：预览=宽松（失压只记不停），真实仍是 B（停机），不标脏
+                propIdx.SetValue(cboPv, 3, null);
                 var pvC = fPreview.GetValue(canvasPv) as DeviceConfig;
                 Check("切C画布预览=C（失压只记不停）",
                     pvC != null && pvC.AgingPressureLossPolicy == AgingPressureLossPolicy.KeepRunning);
@@ -8118,8 +8148,8 @@ namespace AgingTestSystem.Tests
                     cfgPv.AgingPressureLossPolicy == AgingPressureLossPolicy.StopOnLoss);
                 Check("预览不标脏（切下拉不产生待保存项）",
                     ((bool)fDirty.GetValue(pvForm)) == false);
-                // 切到 A：预览超时 0＋待判定，真实超时 15000＋自动PASS 不动
-                propIdx.SetValue(cboPv, 0, null);
+                // 切到 A（索引 1）：预览超时 0＋待判定，真实超时 15000＋自动PASS 不动
+                propIdx.SetValue(cboPv, 1, null);
                 var pvA = fPreview.GetValue(canvasPv) as DeviceConfig;
                 Check("切A预览超时0（数值项跟进）",
                     pvA != null && pvA.VacuumConfirmTimeoutMs == 0);
@@ -8128,11 +8158,11 @@ namespace AgingTestSystem.Tests
                 Check("A预览真实不动（超时15000＋自动PASS）",
                     cfgPv.VacuumConfirmTimeoutMs == 15000
                     && cfgPv.CompletionJudgePolicy == CompletionJudgePolicy.AutoPass);
-                // 切回自定义：预览=看回真实。
-                // 【为什么改了口径】自定义槽是"上次存的自定义方案"，只服务【套用自定义】；
-                // 拿旧槽盖住当前配置，策略窗会显示与真实生效值不一致的过期值
-                // （现场实锤：改完保存、关窗重开仍是老配置，只能重启软件才更新）。
-                propIdx.SetValue(cboPv, 4, null);
+                // 切回自定义（索引 0）：预览=看回真实。
+                // 【为什么改了口径】自定义＝当前生效的那套（不是"上次存的快照"），
+                // 显示一律以真实为准：拿旧槽盖住当前配置，策略窗会显示与真实生效值
+                // 不一致的过期值（现场实锤：改完保存、关窗重开仍是老配置）。
+                propIdx.SetValue(cboPv, 0, null);
                 var pvCustom = fPreview.GetValue(canvasPv) as DeviceConfig;
                 Check("切自定义预览=看真实（null，不再被旧槽盖住）", pvCustom == null);
                 Check("自定义预览真实不动（仍是B）",
@@ -8144,9 +8174,9 @@ namespace AgingTestSystem.Tests
                 Check("RebuildPreviewFromReal反射口径有效", mRebuild != null);
                 if (mRebuild != null)
                 {
-                    propIdx.SetValue(cboPv, 0, null);   // 切 A：预览=套A（超时0）
+                    propIdx.SetValue(cboPv, 1, null);   // 切 A：预览=套A（超时0）
                     var pvBefore = fPreview.GetValue(canvasPv) as DeviceConfig;
-                    Check("切A预览非null（套预置生效）", pvBefore != null);
+                    Check("切A预览非null（模板值在画面上）", pvBefore != null);
                     mRebuild.Invoke(pvForm, null);
                     Check("按新真实重造后预览=看真实（null）",
                         (fPreview.GetValue(canvasPv) as DeviceConfig) == null);
@@ -8167,52 +8197,37 @@ namespace AgingTestSystem.Tests
                     && cfgPv.AgingPressureLossPolicy == AgingPressureLossPolicy.StopOnLoss);
                 Check("BuildPreviewConfig自定义回null（看真实）",
                     mBuild != null && mBuild.Invoke(null, new object[] { cfgPv, "Custom" }) == null);
-                // 关窗提示判定（纯函数 IsPreviewPending＋文案，不弹真框；两参口同理挑）
-                System.Reflection.MethodInfo mPend = null;
+                // 2.0.1 大改：预置＝纯只读预览，没有"看了没套用"这回事，
+                // 关窗也不再问"要不要套用"（只读没改任何东西，不存在会丢的意图）。
+                // 反向锁：旧口径的方法必须不在了（防"多套并存"复活）。
+                bool hasPendMethod = false;
+                bool hasClosePrompt = false;
+                bool hasApplyCustom = false;
                 foreach (var m in tP.GetMethods(BindingFlags.NonPublic | BindingFlags.Static))
                 {
-                    if (m.Name == "IsPreviewPending" && m.GetParameters().Length == 2)
-                    { mPend = m; break; }
+                    if (m.Name == "IsPreviewPending") { hasPendMethod = true; }
+                    if (m.Name == "BuildPreviewClosePrompt") { hasClosePrompt = true; }
                 }
-                var mPrompt = tP.GetMethod("BuildPreviewClosePrompt",
-                    BindingFlags.NonPublic | BindingFlags.Static);
-                Check("关窗判定反射口径有效",
-                    mPend != null && mPrompt != null);
-                if (mPend != null && mPrompt != null)
+                foreach (var m in tP.GetMethods(BindingFlags.NonPublic | BindingFlags.Instance))
                 {
-                    Check("预览他项即待定（B现状看C要问）",
-                        (bool)mPend.Invoke(null, new object[] { cfgPv, "C" }) == true);
-                    Check("预览即现状不问（B现状看B）",
-                        (bool)mPend.Invoke(null, new object[] { cfgPv, "B" }) == false);
-                    Check("两参自定义不问（自定义＝看真实，没预览可套）",
-                        (bool)mPend.Invoke(null, new object[] { cfgPv, "Custom" }) == false);
-                    Check("空配置不问不抛",
-                        (bool)mPend.Invoke(null, new object[] { null, "A" }) == false);
-                    string promptA = (string)mPrompt.Invoke(null, new object[] { "A" });
-                    Check("关窗文案含预置名＋确定取消两路",
-                        !string.IsNullOrWhiteSpace(promptA) && promptA.Contains("常用")
-                        && promptA.Contains("确定") && promptA.Contains("取消"));
-                    Check("关窗文案说清是复制到自定义",
-                        promptA.Contains("复制到自定义"));
-                    string promptCustom = (string)mPrompt.Invoke(null, new object[] { "Custom" });
-                    Check("关窗文案自定义无括号",
-                        !string.IsNullOrWhiteSpace(promptCustom)
-                        && promptCustom.Contains("自定义")
-                        && !promptCustom.Contains("（"));
+                    if (m.Name == "ApplyCustomDirect" || m.Name == "ApplyCustomWithConfirm")
+                    { hasApplyCustom = true; }
                 }
-                // 反向验证：预览/判定都收敛为两参口（自定义＝看真实，
+                Check("旧口径三件已删（待定判定/关窗套用文案/套用自定义）",
+                    !hasPendMethod && !hasClosePrompt && !hasApplyCustom);
+                // 关窗只问"有未保存的修改没有"（纯函数：脏才拦）
+                var mClose = tP.GetMethod("ConfirmCloseAllowed",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Check("关窗确认入口在（只问未保存的修改）", mClose != null);
+                // 反向验证：预览构造只有两参口（自定义＝看真实，
                 // 没有"拿槽当预览/拿槽判待定"的旧口径，防其复活）
                 bool hasBuild3 = false;
-                bool hasPend3 = false;
                 foreach (var m in tP.GetMethods(BindingFlags.NonPublic | BindingFlags.Static))
                 {
                     if (m.Name == "BuildPreviewConfig" && m.GetParameters().Length == 3)
                     { hasBuild3 = true; }
-                    if (m.Name == "IsPreviewPending" && m.GetParameters().Length == 3)
-                    { hasPend3 = true; }
                 }
-                Check("预览/判定都只有两参口（自定义＝看真实，防旧口径复活）",
-                    !hasBuild3 && !hasPend3);
+                Check("预览构造只有两参口（自定义＝看真实，防旧口径复活）", !hasBuild3);
             }
             finally
             {
@@ -8253,7 +8268,9 @@ namespace AgingTestSystem.Tests
                     BindingFlags.NonPublic | BindingFlags.Instance);
                 var fDirtyFl = tF.GetField("_dirty",
                     BindingFlags.NonPublic | BindingFlags.Instance);
-                var fPendFl = tF.GetField("_previewPending",
+                var fPendFl = tF.GetField("_presetReadOnly",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                var fSaveNodeFl = tF.GetField("_btnSaveNode",
                     BindingFlags.NonPublic | BindingFlags.Instance);
                 var propIdxFl = cboFl != null
                     ? cboFl.GetType().GetProperty("SelectedIndex")
@@ -8278,12 +8295,28 @@ namespace AgingTestSystem.Tests
                         }
                         catch { return null; }
                     };
+                    // 编辑器控件取样器（每次切视图会重建右栏，旧控件被释放，
+                    // 所以必须每次重新取，不能缓存上一次的对象——缓存到的是已释放控件）
+                    Func<string, Control> edCtl = key =>
+                    {
+                        try
+                        {
+                            var dict = fEditors.GetValue(flForm) as System.Collections.IDictionary;
+                            return dict != null ? dict[key] as Control : null;
+                        }
+                        catch { return null; }
+                    };
                     // 选中抽真空：真实 B（超时 15000），右栏即 15000
                     SelectNodeNoHang(flForm, "vacuum");
                     Check("选中抽真空右栏=真实15000",
                         edText("VacuumConfirmTimeoutMs") == "15000");
-                    // 切 A 预览：画布超时 0，右栏同步 0，真实不动，不标脏，状态条明示预览
-                    propIdxFl.SetValue(cboFl, 0, null);
+                    var saveNodeCtl = fSaveNodeFl != null
+                    ? fSaveNodeFl.GetValue(flForm) as Control : null;
+                    Check("自定义视图下保存本节点可用（可改的那套）",
+                        saveNodeCtl != null && saveNodeCtl.Enabled);
+                    // 切 A 预览（索引 1）：画布超时 0，右栏同步 0，真实不动，不标脏，
+                    // 状态条明示只读预览；**右栏编辑器禁用**（预置是只读模板）
+                    propIdxFl.SetValue(cboFl, 1, null);
                     var pvFlA = fPrevCanvas.GetValue(canvasFl) as DeviceConfig;
                     Check("切A画布预览超时0",
                         pvFlA != null && pvFlA.VacuumConfirmTimeoutMs == 0);
@@ -8293,17 +8326,40 @@ namespace AgingTestSystem.Tests
                         cfgFl.VacuumConfirmTimeoutMs == 15000);
                     Check("跟随不标脏",
                         ((bool)fDirtyFl.GetValue(flForm)) == false);
-                    Check("预览态有标识",
+                    Check("预览态有标识（只读预览）",
                         ((bool)fPendFl.GetValue(flForm)) == true);
+                    // 2.0.1 大改核心：预置＝只读模板，右栏编辑器禁用、不能保存
+                    Check("切A右栏编辑器禁用（预置只读，改不了）",
+                        edCtl("VacuumConfirmTimeoutMs") != null
+                        && !edCtl("VacuumConfirmTimeoutMs").Enabled);
+                    Check("切A保存本节点禁用（只读模板存不了）",
+                        saveNodeCtl != null && !saveNodeCtl.Enabled);
                     var stA = fStatusFl.GetValue(flForm) as Control;
-                    Check("状态条明示预览值保存即写入",
-                        stA != null && stA.Text.Contains("预览"));
-                    // 切回 B：右栏回 15000，标识清除
-                    propIdxFl.SetValue(cboFl, 1, null);
-                    Check("切回B右栏回真实15000",
+                    Check("状态条明示只读预览并给出下一步",
+                        stA != null && stA.Text.Contains("只读")
+                        && stA.Text.Contains("套用到自定义"));
+                    // 切回自定义（索引 0）：右栏回 15000，只读标识清除，编辑器恢复可改
+                    // 【为什么不是切回 B】B 也是预置＝只读模板（2.0.1 大改：预置一律只读），
+                    // 要恢复可改只能切回"自定义"（唯一生效、唯一可改的那套）。
+                    propIdxFl.SetValue(cboFl, 0, null);
+                    Check("切回自定义右栏回真实15000",
                         edText("VacuumConfirmTimeoutMs") == "15000");
-                    Check("回B预览态清除",
+                    Check("回自定义只读态清除",
                         ((bool)fPendFl.GetValue(flForm)) == false);
+                    Check("回自定义右栏编辑器恢复可改",
+                        edCtl("VacuumConfirmTimeoutMs") != null
+                        && edCtl("VacuumConfirmTimeoutMs").Enabled);
+                    Check("回自定义保存本节点恢复可用",
+                        saveNodeCtl != null && saveNodeCtl.Enabled);
+                    // 套用按钮的可用性跟"看的是不是预置"绑定
+                    var btnApplyFl = tF.GetField("_btnApplyPreset",
+                        BindingFlags.NonPublic | BindingFlags.Instance);
+                    Check("自定义视图下套用按钮禁用（无事可做）",
+                        btnApplyFl != null && !((Control)btnApplyFl.GetValue(flForm)).Enabled);
+                    propIdxFl.SetValue(cboFl, 1, null);
+                    Check("选预置后套用按钮可用（能复制到自定义）",
+                        btnApplyFl != null && ((Control)btnApplyFl.GetValue(flForm)).Enabled);
+                    propIdxFl.SetValue(cboFl, 0, null);
                 }
             }
             finally
@@ -8323,13 +8379,14 @@ namespace AgingTestSystem.Tests
                 && !PolicyPresets.CustomTitle.Contains("（")
                 && !PolicyPresets.CustomTitle.Contains("("));
             Check("自定义说明与悬停无括号描述",
-                !PolicyPresets.BuildCustomScenario(PolicyPresets.CustomId).Contains("（")
-                && !PolicyPresets.BuildCustomScenario(PolicyPresets.CustomId).Contains("(")
-                && !PolicyPresets.BuildCustomScenario("B").Contains("（")
-                && !PolicyPresets.BuildCustomScenario("B").Contains("(")
-                && !PolicyPresets.CustomTip.Contains("（")
-                && !PolicyPresets.CustomTip.Contains("(")
-                && PolicyPresets.CustomTip.Contains("自定义"));
+                !PolicyPresets.CustomDesc.Contains("（")
+                && !PolicyPresets.CustomDesc.Contains("(")
+                && !PolicyPresets.BuildCustomTip("B").Contains("（")
+                && !PolicyPresets.BuildCustomTip("B").Contains("(")
+                && PolicyPresets.BuildCustomTip("B").Contains("自定义"));
+            Check("自定义说明直白（当前生效+可改节点）",
+                PolicyPresets.CustomDesc.Contains("当前生效")
+                && PolicyPresets.CustomDesc.Contains("可直接改节点"));
             Check("自定义槽是跟项目文件（CustomPolicy.json）",
                 ProjectProfile.CustomPolicyFileName == "CustomPolicy.json"
                 && Array.IndexOf(ProjectProfile.ProjectScopedFiles, "CustomPolicy.json") >= 0
@@ -8368,17 +8425,15 @@ namespace AgingTestSystem.Tests
                     second.Count == initSlot.Count
                     && second["ZeroDurationPolicy"] == initSlot["ZeroDurationPolicy"]);
                 Check("默认说明与悬停无括号",
-                    !PolicyPresets.BuildCustomScenario(PolicyPresets.CustomId).Contains("（")
-                    && !PolicyPresets.BuildCustomScenario(PolicyPresets.CustomId).Contains("(")
-                    && !PolicyPresets.CustomTipDefault.Contains("（")
-                    && !PolicyPresets.CustomTipDefault.Contains("(")
-                    && PolicyPresets.CustomTipDefault.Contains("自定义"));
-                Check("槽初始即未改动（自由文本不算身份）",
-                    PolicyPresets.IsCustomPristine(initSlot));
-                Check("空槽非未改动",
-                    !PolicyPresets.IsCustomPristine(new Dictionary<string, string>()));
-                Check("null槽非未改动",
-                    !PolicyPresets.IsCustomPristine(null));
+                    !PolicyPresets.CustomDesc.Contains("（")
+                    && !PolicyPresets.CustomDesc.Contains("(")
+                    && !PolicyPresets.BuildCustomTip("A").Contains("（")
+                    && !PolicyPresets.BuildCustomTip("A").Contains("(")
+                    && PolicyPresets.BuildCustomTip("A").Contains("自定义"));
+                Check("悬停按生效配置说像哪套预置（与预置A一致）",
+                    PolicyPresets.BuildCustomTip("A").Contains("与预置A一致")
+                    && PolicyPresets.BuildCustomTip("B").Contains("与预置B一致")
+                    && PolicyPresets.BuildCustomTip("Z").Contains("都不完全一致"));
                 // 改后独立存：改槽一项，A 预置纹丝不动
                 var mod = new Dictionary<string, string>(initSlot, StringComparer.Ordinal);
                 mod["ZeroDurationPolicy"] =
@@ -8389,8 +8444,6 @@ namespace AgingTestSystem.Tests
                 Check("槽读回即改后值",
                     ProjectPolicyStore.LoadCustom()["ZeroDurationPolicy"]
                     == mod["ZeroDurationPolicy"]);
-                Check("改后槽非未改动",
-                    !PolicyPresets.IsCustomPristine(ProjectPolicyStore.LoadCustom()));
                 // 脏 key 过滤（与 ApplyOverlay 同口径：手改写错也不炸）
                 ProjectPolicyStore.SaveCustom(new Dictionary<string, string>
                     { { "ZeroDurationPolicy", "Block" }, { "NoSuchKey", "x" } });
@@ -8415,7 +8468,7 @@ namespace AgingTestSystem.Tests
                 Check("回填落盘（下次打开即全量）",
                     ProjectPolicyStore.LoadCustom().ContainsKey("PressureAlarmEnabled"));
                 Check("回填后槽与A一致（缺省真正等于A）",
-                    PolicyPresets.IsCustomPristine(healed));
+                    SlotEqualsPresetA(healed));
                 Dictionary<string, string> staleMod =
                     new Dictionary<string, string>(PolicyPresets.GetAllValues("A"), StringComparer.Ordinal);
                 staleMod.Remove("PressureAlarmEnabled");
@@ -8428,7 +8481,7 @@ namespace AgingTestSystem.Tests
                     healedMod["ZeroDurationPolicy"] == staleMod["ZeroDurationPolicy"]
                     && healedMod["PressureAlarmEnabled"] == "false");
                 Check("改过其它项的旧槽回填后仍是自定义（不吞用户改动）",
-                    !PolicyPresets.IsCustomPristine(healedMod));
+                    !SlotEqualsPresetA(healedMod));
                 // —— 生效缺省对齐A（2.0.0：策略层最高优先级；文件缺key按A，存过优先，自由文本不管）——
                 string polPath = ProjectPolicyStore.PolicyFilePath;
                 bool polHad = File.Exists(polPath);
@@ -8567,51 +8620,68 @@ namespace AgingTestSystem.Tests
                     ? cboX.GetType().GetProperty("Items").GetValue(cboX, null)
                         as System.Collections.IList
                     : null;
-                string lastText = "";
+                string firstText = "";
                 if (itemsX != null && itemsX.Count > 0)
                 {
-                    object last = itemsX[itemsX.Count - 1];
-                    lastText = last != null ? last.ToString() : "";
+                    object first = itemsX[0];
+                    firstText = first != null ? first.ToString() : "";
                 }
-                Check("下拉末项就叫自定义（无括号）", lastText == "自定义");
+                Check("下拉首项就叫自定义（无括号）", firstText == "自定义");
+                // 悬停提示取样器（每次 RefreshPresetRow 后重读：文案随生效配置变）
+                Func<string> tipX = () =>
+                {
+                    try
+                    {
+                        object tipObj = tX.GetField("_presetTip",
+                            BindingFlags.NonPublic | BindingFlags.Instance).GetValue(xferForm);
+                        if (tipObj == null || cboX == null) return "";
+                        return (string)tipObj.GetType().GetMethod("GetToolTip",
+                            new Type[] { typeof(Control) })
+                            .Invoke(tipObj, new object[] { (Control)cboX });
+                    }
+                    catch { return ""; }
+                };
                 int selX = cboX != null
                     ? (int)cboX.GetType().GetProperty("SelectedIndex").GetValue(cboX, null)
                     : -1;
-                Check("缺省配置回显自定义末项",
-                    itemsX != null && selX == itemsX.Count - 1);
-                // 说明行跟着**生效配置**走（画布显示什么就说什么，两边不打架）：
-                // 缺省配置凑不上任何预置 → "与预置A/B/C/D都不完全一致"。
-                Check("说明行按生效配置出文案（缺省=与预置都不一致）",
-                    descX != null
-                    && descX.Text == PolicyPresets.BuildCustomScenario(PolicyPresets.CustomId));
+                Check("缺省配置回显自定义首项（唯一可改的那套在第一）",
+                    itemsX != null && selX == 0);
+                // 说明行只讲"当前状态+怎么办"（2.0.1 大改：不再做对账腔文案），
+                // "像哪套预置"挪进悬停提示（想知道再查）。
+                Check("说明行是当前生效可改（直白话）",
+                    descX != null && descX.Text == PolicyPresets.CustomDesc);
                 Check("默认文案无括号",
                     descX != null && !descX.Text.Contains("（")
                     && !descX.Text.Contains("("));
-                // 生效配置改成预置B → 说明行改口"内容与预置B一致"
+                // 生效配置改成预置B → 悬停提示改口"内容与预置B一致"（说明行不变）
                 PolicyPresets.ApplyToConfig(cfgXfer, "B");
                 tX.GetMethod("RefreshPresetRow",
-                    BindingFlags.NonPublic | BindingFlags.Instance).Invoke(xferForm, null);
-                Check("生效配置=预置B时说明行说与预置B一致",
-                    descX != null && descX.Text == PolicyPresets.BuildCustomScenario("B"));
-                // 改自定义槽一项：说明行讲的是生效配置，不跟着槽走（槽的事在悬停提示里）
+                    BindingFlags.NonPublic | BindingFlags.Instance)
+                    .Invoke(xferForm, new object[] { true });
+                Check("生效配置=预置B时悬停说与预置B一致",
+                    tipX().Contains("与预置B一致"));
+                Check("生效配置变了说明行仍是直白话（不变对账腔）",
+                    descX != null && descX.Text == PolicyPresets.CustomDesc);
+                // 改自定义槽一项：生效配置不动 → 悬停提示也不动（说明的是生效配置）
                 var slotMod = ProjectPolicyStore.LoadCustom();
                 string zdOld;
                 slotMod.TryGetValue("ZeroDurationPolicy", out zdOld);
                 slotMod["ZeroDurationPolicy"] = (zdOld == "Warn") ? "Block" : "Warn";
                 ProjectPolicyStore.SaveCustom(slotMod);
                 tX.GetMethod("RefreshPresetRow",
-                    BindingFlags.NonPublic | BindingFlags.Instance).Invoke(xferForm, null);
-                Check("改槽不改说明行（说明行讲生效配置）",
-                    descX != null && descX.Text == PolicyPresets.BuildCustomScenario("B"));
-                // 生效配置不再是任何预置 → 说明行改回"都不完全一致"
+                    BindingFlags.NonPublic | BindingFlags.Instance)
+                    .Invoke(xferForm, new object[] { true });
+                Check("改槽不改悬停（悬停讲的是生效配置）",
+                    tipX().Contains("与预置B一致"));
+                // 生效配置不再是任何预置 → 悬停改口"都不完全一致"
                 cfgXfer.ZeroDurationPolicy =
                     cfgXfer.ZeroDurationPolicy == ZeroDurationPolicy.Block
                         ? ZeroDurationPolicy.Warn : ZeroDurationPolicy.Block;
                 tX.GetMethod("RefreshPresetRow",
-                    BindingFlags.NonPublic | BindingFlags.Instance).Invoke(xferForm, null);
-                Check("生效配置脱离预置后说明行改口（与预置都不一致）",
-                    descX != null
-                    && descX.Text == PolicyPresets.BuildCustomScenario(PolicyPresets.CustomId));
+                    BindingFlags.NonPublic | BindingFlags.Instance)
+                    .Invoke(xferForm, new object[] { true });
+                Check("生效配置脱离预置后悬停改口（与预置都不一致）",
+                    tipX().Contains("都不完全一致"));
                 Check("管理员可导可入",
                     btnExp != null && btnImp != null && btnExp.Enabled && btnImp.Enabled);
                 // 只读模式：可导不可入（同窗内换旗验证，不重建槽文件）
@@ -8622,7 +8692,8 @@ namespace AgingTestSystem.Tests
                 {
                     fEdit.SetValue(xferForm, false);
                     tX.GetMethod("RefreshPresetRow",
-                        BindingFlags.NonPublic | BindingFlags.Instance).Invoke(xferForm, null);
+                        BindingFlags.NonPublic | BindingFlags.Instance)
+                        .Invoke(xferForm, new object[] { true });
                     Check("只读可导不可入", btnExp.Enabled && !btnImp.Enabled);
                 }
                 finally { try { fEdit.SetValue(xferForm, oldEdit); } catch { } }
@@ -8638,6 +8709,78 @@ namespace AgingTestSystem.Tests
                 }
                 catch { }
             }
+
+            // —— 滚轮分流（2.0.1 用户要求：红区缩放画布，蓝区滚右栏滑块）——
+            // 判定抽成纯函数 ResolveWheelAction（光标位置 → 动作），
+            // 回归直接断言，不用真的挪鼠标（挪鼠标会打扰现场、无人值守会话也不可靠）。
+            var rightRect = new Rectangle(1000, 100, 320, 900);
+            var canvasRect = new Rectangle(0, 100, 840, 900);
+            Check("滚轮纯函数反射口径有效",
+                typeof(ProcessPolicyForm).GetMethod("ResolveWheelAction",
+                    BindingFlags.Public | BindingFlags.Static) != null);
+            Check("光标在右栏→滚右栏（不缩放画布）",
+                ProcessPolicyForm.ResolveWheelAction(new Point(1100, 400),
+                    rightRect, canvasRect)
+                == ProcessPolicyForm.WheelAction.ScrollRightPanel);
+            Check("光标在画布→缩放画布",
+                ProcessPolicyForm.ResolveWheelAction(new Point(400, 400),
+                    rightRect, canvasRect)
+                == ProcessPolicyForm.WheelAction.ZoomCanvas);
+            Check("光标在两区之外→不处理（状态条等）",
+                ProcessPolicyForm.ResolveWheelAction(new Point(500, 1500),
+                    rightRect, canvasRect)
+                == ProcessPolicyForm.WheelAction.None);
+            Check("右栏优先（两区叠上时按右栏，不缩画布）",
+                ProcessPolicyForm.ResolveWheelAction(new Point(1100, 400),
+                    new Rectangle(0, 100, 1400, 900), canvasRect)
+                == ProcessPolicyForm.WheelAction.ScrollRightPanel);
+            // 画布必须"最后布局"：Fill 处在 z 序最前，否则它一把梭占满客户区、
+            // 屏幕矩形把右栏整块包进去 → "光标在右栏"被判成"在画布上"（V1.82 血泪）。
+            ProcessPolicyForm wheelForm = null;
+            try
+            {
+                wheelForm = new ProcessPolicyForm(new DeviceConfig(), null, true);
+                var tW = typeof(ProcessPolicyForm);
+                var canvasCtl = tW.GetField("_canvas",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(wheelForm) as Control;
+                var rightCtl = tW.GetField("_pnlRight",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(wheelForm) as Control;
+                Check("滚轮布局探针有效（防探针失效假绿）",
+                    canvasCtl != null && rightCtl != null);
+                Check("画布在z序最前（Fill最后布局，不压住右栏）",
+                    canvasCtl != null
+                    && wheelForm.Controls.GetChildIndex(canvasCtl) == 0
+                    && wheelForm.Controls.GetChildIndex(rightCtl) > 0);
+            }
+            finally { try { if (wheelForm != null) wheelForm.Dispose(); } catch { } }
+
+            // —— 右栏滚动"丝滑"（2.0.1：范围算法/方向/微移三处真 bug 的回归锁）——
+            // ① 范围不随滚动变小：AutoScroll 滚动时子控件跟着上移（实测底边 658→608），
+            //    拿"子控件底边"当内容高度 → 滚完第一格就判"没得滚" → 后面全哑。
+            Check("可滚范围用内容总高（不随滚动缩水）",
+                ProcessPolicyForm.ComputeScrollRange(658, 260, 0, 658) == 398
+                && ProcessPolicyForm.ComputeScrollRange(658, 260, 57, 601) == 398);
+            Check("内容没超出＝无滚动范围",
+                ProcessPolicyForm.ComputeScrollRange(100, 260, 0, 100) == 0
+                && ProcessPolicyForm.ComputeScrollRange(200, 200, 0, 200) == 0);
+            // ② 方向：delta>0 = 往前滚 = 看更上面的内容（偏移变小）
+            double rem;
+            int tgtDown = ProcessPolicyForm.ComputeScrollTarget(0, 0, -120, 57, 398, out rem);
+            int tgtUp = ProcessPolicyForm.ComputeScrollTarget(57, 0, 120, 57, 398, out rem);
+            Check("滚轮往下看＝偏移变大", tgtDown == 57);
+            Check("滚轮往上看＝偏移变小", tgtUp == 0);
+            Check("滚到顶不再往上（钳零）",
+                ProcessPolicyForm.ComputeScrollTarget(10, 0, 120, 57, 398, out rem) == 0);
+            Check("滚到底不再往下（钳上限）",
+                ProcessPolicyForm.ComputeScrollTarget(390, 0, -120, 57, 398, out rem) == 398);
+            // ③ 微移：触摸板式小增量应只走几 px，且余量累积（不是一格一跳 57px）
+            double rem2;
+            int micro1 = ProcessPolicyForm.ComputeScrollTarget(0, 0, -8, 57, 398, out rem2);
+            int micro2 = ProcessPolicyForm.ComputeScrollTarget(micro1, rem2, -8, 57, 398, out rem2);
+            Check("小增量只微移几px（触摸板跟手）",
+                micro1 == 3 && micro2 == 7);
+            Check("余量累积（两次小增量大于一次）",
+                rem2 < 0 && rem2 > -1);   // 往下滚余量为负，绝对值 <1px（留给下一格）
         }
 
         // 12i. PolicyNodeComboV1851 —— 节点选项框按预置下拉口径统一（V1.85.1 新增）
@@ -8667,6 +8810,31 @@ namespace AgingTestSystem.Tests
             var mSelect = t.GetMethod("SelectNode",
                 BindingFlags.NonPublic | BindingFlags.Instance);
             if (mSelect != null) mSelect.Invoke(form, new object[] { id, false });
+        }
+
+        /// <summary>
+        /// 自定义槽内容是否等于预置A（逐项比 A 管辖的开关＋数值；自由文本不算身份）。
+        /// 【为什么不用产品函数】产品侧已删"槽是否初始快照"的判定（自定义＝生效配置本体，
+        /// 那个概念随"套用自定义"一起作废），用例改用"槽 vs A"的直接比对，
+        /// 口径写在用例里，不再依赖产品内部函数。
+        /// </summary>
+        private static bool SlotEqualsPresetA(Dictionary<string, string> slot)
+        {
+            if (slot == null || slot.Count == 0) return false;
+            Dictionary<string, string> presetA = PolicyPresets.GetAllValues("A");
+            if (presetA == null) return false;
+            foreach (var kv in presetA)
+            {
+                string got;
+                if (!slot.TryGetValue(kv.Key, out got)) return false;
+                if (!string.Equals(got != null ? got.Trim() : "",
+                    kv.Value != null ? kv.Value.Trim() : "",
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
         static void PolicyNodeComboTests()

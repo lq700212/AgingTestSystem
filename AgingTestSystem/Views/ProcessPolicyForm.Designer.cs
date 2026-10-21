@@ -16,7 +16,7 @@ namespace AgingTestSystem.Views
     /// 画布 Dock=Fill 最后加（代码里加）——顺序错画布会盖住右栏。
     /// 【尺寸】1160×980：画布内容 730×885（8 节点，MES 在最下）默认整窗可见；
     /// MinimumSize 只锁到 950×700（小屏走双滚动条，画布/编辑器都带 AutoScroll）。
-    /// 右栏顶部加预置行（标题46/下拉68/说明100/导入导出146，共占约134px）：
+    /// 右栏顶部加方案区（标题46/下拉68/说明100/导入导出146，共占约134px）：
     /// 编辑器下移到180、高608，底部按钮不动（保存794/复位关闭830）。
     /// 静态布局（坐标/文本/事件挂接）全在这里，VS 可预览；
     /// 下拉选项填充在 ProcessPolicyForm.cs 里代码做（数据源 PolicyPresets.All，
@@ -31,17 +31,17 @@ namespace AgingTestSystem.Views
         /// <summary>右栏标题（选中节点名 / 未选中节点 / 连线（只读））</summary>
         private Sunny.UI.UILabel _lblNodeTitle;
 
-        /// <summary>预置行标题（"当前策略：自定义（预置A/B/C/D只读）"静态文本）</summary>
+        /// <summary>方案区标题（静态："策略方案（预置A/B/C/D只读）"——一句话说清规则）</summary>
         private Sunny.UI.UILabel _lblPresetTitle;
 
-        /// <summary>预置下拉（A/B/C/D/自定义；选项代码填，下拉列表宽340防截断；
-        /// 当前项恒为"自定义"——软件只认自定义，预置是只读模板，套用即复制到自定义）</summary>
+        /// <summary>方案下拉＝"我现在看的是哪套"（自定义/预置A/B/C/D；自定义排第一、默认选中；
+        /// 选项代码填，下拉列表宽340防截断）</summary>
         private Sunny.UI.UIComboBox _cboPreset;
 
-        /// <summary>套用预置按钮（Sunny 默认蓝，主操作）</summary>
+        /// <summary>套用到自定义按钮（Sunny 默认蓝，主操作；只在选中预置时可用）</summary>
         private Sunny.UI.UIButton _btnApplyPreset;
 
-        /// <summary>预置说明（选中项一句话场景，灰字；全文另有悬停提示）</summary>
+        /// <summary>方案说明（随下拉变：自定义=可改；预置=只读模板+下一步怎么走；灰字）</summary>
         private Sunny.UI.UILabel _lblPresetDesc;
 
         /// <summary>导出策略按钮（选 A/B/C/D/自定义任一源装包；只读也可导）</summary>
@@ -119,7 +119,7 @@ namespace AgingTestSystem.Views
             this._lblNodeTitle.Font = new Font(this.Font.FontFamily, 11F, FontStyle.Bold);
             this._lblPresetTitle.Location = new Point(12, 46);
             this._lblPresetTitle.Size = new Size(296, 20);
-            this._lblPresetTitle.Text = "当前策略：自定义（预置A/B/C/D只读）";
+            this._lblPresetTitle.Text = "策略方案（预置A/B/C/D只读）";
             this._cboPreset.DropDownStyle = Sunny.UI.UIDropDownStyle.DropDownList;
             this._cboPreset.Location = new Point(12, 68);
             this._cboPreset.Size = new Size(182, 28);
@@ -127,7 +127,7 @@ namespace AgingTestSystem.Views
             this._cboPreset.SelectedIndexChanged += new System.EventHandler(this.PresetComboChanged);
             this._btnApplyPreset.Location = new Point(200, 68);
             this._btnApplyPreset.Size = new Size(108, 28);
-            this._btnApplyPreset.Text = "套用预置";
+            this._btnApplyPreset.Text = "套用到自定义";
             this._btnApplyPreset.Click += new System.EventHandler(this.BtnApplyPreset_Click);
             this._lblPresetDesc.Location = new Point(12, 100);
             this._lblPresetDesc.Size = new Size(296, 42);
