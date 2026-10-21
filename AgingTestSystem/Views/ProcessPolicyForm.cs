@@ -1137,6 +1137,7 @@ namespace AgingTestSystem.Views
                 + string.Join("\r\n", diffLines.ToArray())
                 + "\r\n\r\n配方延时/时长/阈值/画面等配方项、MES/规则/报表/画面字典/点位等不动"
                 + "（配方延时填0即阀电同开，无配方默认即0，有配方按配方来）。\r\n"
+                + "\r\n本次套用会把当前这套存入自定义槽（自定义槽现有内容将被覆盖）。\r\n"
                 + def.HowToSwitch;
             if (MessageBox.Show(this, confirm, "套用预置",
                 MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK)
@@ -1302,6 +1303,13 @@ namespace AgingTestSystem.Views
             }
             foreach (string k in presult.SavedKeys) SavedKeys.Add(k);
             _dirty = false;
+            // 套用预置 = 把这套模板变成"我的当前方案"：**全量落自定义槽**。
+            // 【为什么】旧口径套用预置不碰槽 → 套完点【套用自定义】拿回的是老值，
+            // 跟屏幕上显示的完全两套，用户只会懵（"我明明套了 A 怎么套自定义是另一套"）。
+            // 落槽后语义统一：自定义槽永远是"当前这套"，预置是一键把出厂模板变成当前方案。
+            // 落的是**套用后的完整生效配置**（预置管辖的全量已换新，自由文本保留现状
+            // —— 预置本来就没定义自由文本的值，覆盖不了）。
+            SaveCurrentConfigToCustomSlot();
             // 预置回显先行：下拉落到套用后的预置＋预览同步到新真实，
             // 再重建右栏回显新值（右栏看有效配置，顺序反了会按旧预览建）。
             RefreshPresetRow();
