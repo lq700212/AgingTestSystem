@@ -49,6 +49,13 @@ namespace AgingTestSystem.Services
     /// A 与 C 除压力报警开关外全同（A 以 C 为基准，V1.106 起；2.0.0 起 A 关/C 开），
     /// A 另带数值项"真空超时 0"（跟项目写，套用时一并写入）。
     /// 探测口径：只认 14 个行为开关，数值项不参与身份（见 DetectPreset）。
+    /// 【唯一生效策略＝自定义（用户口径：软件只认自定义）】
+    ///    A/B/C/D 是**只读模板**（代码写死，改不了也不该被改），自定义是唯一能改、
+    ///    唯一真正生效的那一套。策略窗下拉因此**永远回显“自定义”**，
+    ///    下拉里选中 A/B/C/D 只表示“看这套模板长什么样”（画布/右栏预览该模板的值），
+    ///    点【套用预置】= 把该模板的各节点配置**复制到自定义**并即时生效
+    ///    （落槽的是套用后的完整生效配置，见 ProcessPolicyForm.ApplyPresetValues）。
+    ///    预置定义本身不受影响，谁也覆盖不了（老口径“切预置=换整套行为”已作废）。
     /// 【自定义槽】下拉末项“自定义”是独立槽（跟项目走，见 ProjectPolicyStore.CustomFilePath）：
     /// 初始内容＝A 的快照，之后改自定义只写槽文件，A/B/C/D 是代码写死的谁也覆盖不了。
     /// 【导入导出】文件装“全部跟项目策略 key”（含 MES 映射/规则/报表等自由文本，
@@ -62,21 +69,38 @@ namespace AgingTestSystem.Services
         /// <summary>自定义下拉显示名（单源：下拉选项/回显/导入导出源选择全读它，不各写一份）。</summary>
         public const string CustomTitle = "自定义";
 
-        /// <summary>自定义说明行·已改动（槽内容与 A 不一致时回显它，不带括号描述）。</summary>
-        public const string CustomScenario = "当前配置与A/B/C/D都不完全一致，可重选一套覆盖。";
-
-        /// <summary>自定义说明行·未改动（槽内容与 A 一致时回显它：槽还是初始快照）。</summary>
-        public const string CustomScenarioDefault = "当前自定义为默认配置，与预置A一致。";
-
         /// <summary>自定义悬停全文·已改动（与说明行同源，同样不带括号描述）。</summary>
         public const string CustomTip = "自定义\r\n\r\n"
-            + "当前 14 个行为开关与A/B/C/D都不完全一致，"
-            + "下拉重选一套并点“套用预置”可整体覆盖。";
+            + "当前唯一生效的策略，可自由修改。\r\n"
+            + "预置A/B/C/D是只读模板，套用即把该模板的各节点配置复制到自定义。";
 
         /// <summary>自定义悬停全文·未改动（与默认说明行同源）。</summary>
         public const string CustomTipDefault = "自定义\r\n\r\n"
-            + "尚未改动过，内容与预置A一致；"
-            + "改动后自动存入自定义槽，预置A不受影响。";
+            + "当前唯一生效的策略，可自由修改。\r\n"
+            + "自定义槽内容仍是初始快照，与预置A一致。\r\n"
+            + "预置A/B/C/D是只读模板，套用即把该模板的各节点配置复制到自定义。";
+
+        /// <summary>套用自定义的确认框说明（自定义＝当前唯一生效的策略，槽里是上次存的那套）。</summary>
+        public const string CustomApplyScenario =
+            "自定义＝当前唯一生效的策略；槽里存的是上次保存的那套。";
+
+        /// <summary>
+        /// 自定义说明行文案（纯函数：按"当前生效配置"匹配的预置出文案）。
+        /// 【为什么按生效配置出】自定义＝当前唯一生效的策略（软件只认自定义），
+        /// 说明行必须跟画布显示的那一套对得上（画布＝生效配置）——
+        /// 旧口径拿"自定义槽"出文案，槽是初始A快照时会说"与预置A一致"，
+        /// 而画布正显示着预置B的现场值，两边打架（现场只会懵）。
+        /// matched 不是 A/B/C/D（或未知）＝"与预置都不完全一致"＝现场自己那套。
+        /// </summary>
+        public static string BuildCustomScenario(string matchedPresetId)
+        {
+            PolicyPresetDef def = Find(matchedPresetId);
+            if (def == null)
+            {
+                return "当前生效策略：自定义。内容与预置A/B/C/D都不完全一致。";
+            }
+            return "当前生效策略：自定义。内容与预置" + def.Id + "一致。";
+        }
 
         /// <summary>
         /// 自定义槽是否还是初始快照（纯函数：只比 A 管辖的开关＋数值，

@@ -7905,11 +7905,16 @@ namespace AgingTestSystem.Tests
                 var desc = t.GetField("_lblPresetDesc",
                     BindingFlags.NonPublic | BindingFlags.Instance).GetValue(full) as Control;
                 int selIdx = (int)fCbo.GetType().GetProperty("SelectedIndex").GetValue(fCbo, null);
-                Check("B配置打开回显选中B", selIdx == 1);
+                // 【2.0.1 用户口径：软件只认自定义】A/B/C/D 是代码写死的只读模板，
+                // 套用也只是把模板复制进自定义 —— 生效的永远只有"自定义"那一份，
+                // 所以下拉恒定回显自定义（旧口径按探测显示 B，会让人以为"当前策略是B"）。
+                Check("B配置打开也回显自定义（软件只认自定义）", selIdx == 4);
                 Check("管理员模式预置行可用",
                     ((Control)fCbo).Enabled && ((Control)fBtn).Enabled);
-                Check("说明行显示B场景",
-                    desc != null && desc.Text.Contains("量产"));
+                Check("说明行显示自定义口径（当前生效策略=自定义）",
+                    desc != null && desc.Text.Contains("自定义"));
+                Check("说明行跟生效配置走（B配置就说与预置B一致）",
+                    desc != null && desc.Text == PolicyPresets.BuildCustomScenario("B"));
                 Check("下拉列表拉宽防截断（看全选项）",
                     (int)fCbo.GetType().GetProperty("DropDownWidth").GetValue(fCbo, null) >= 300);
                 object fTip = t.GetField("_presetTip",
@@ -7920,8 +7925,9 @@ namespace AgingTestSystem.Tests
                     tipText = (string)fTip.GetType().GetMethod("GetToolTip",
                         new Type[] { typeof(Control) }).Invoke(fTip, new object[] { (Control)fCbo });
                 }
-                Check("悬停提示存在且含B全标题（闭合框看全文）",
-                    !string.IsNullOrWhiteSpace(tipText) && tipText.Contains("标准烧屏"));
+                Check("悬停提示说明预置只读模板（闭合框看全文）",
+                    !string.IsNullOrWhiteSpace(tipText) && tipText.Contains("自定义")
+                    && tipText.Contains("只读模板"));
                 // 释放配对（R2：无容器托管的提示必须手写释放，字段归 null 即证据；
                 // 未 Show 的窗 Close 语义各版本不一，抛了就走 Dispose，两种路都进重写）
                 try { ((Form)full).Close(); }
@@ -7968,6 +7974,7 @@ namespace AgingTestSystem.Tests
             finally { try { if (slotForm != null) slotForm.Dispose(); } catch { } }
             // —— 套用预置 = 全部覆盖替换（2.0.1 用户口径：套用非自定义预置，
             // 相当于把整套配置同步到自定义）——落槽后"套用自定义"与屏幕一致。
+            // 2.0.1 追加口径：生效的策略只有"自定义"，套用后下拉仍回显自定义。
             // ApplyPresetValues 成功路径不弹模态框（只有失败路径弹），可反射直调。
             ProcessPolicyForm applyForm = null;
             try
@@ -7993,10 +8000,21 @@ namespace AgingTestSystem.Tests
                             StringComparison.Ordinal);
                 }
                 Check("套用预置后全量落自定义槽（套用自定义与屏幕一致）", appliedOk);
+                // 套用后下拉仍回显"自定义"：预置是只读模板，复制进自定义后
+                // 生效的策略还是自定义那一份（不回显成"预置B"）。
+                object cboApply = tApply.GetField("_cboPreset",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(applyForm);
+                bool selCustomAfterApply = false;
+                if (cboApply != null)
+                {
+                    var propSelApply = cboApply.GetType().GetProperty("SelectedIndex");
+                    int idxApply = (int)propSelApply.GetValue(cboApply, null);
+                    selCustomAfterApply = (idxApply == 4);
+                }
+                Check("套用预置后下拉仍回显自定义（策略只有自定义）", selCustomAfterApply);
             }
             finally { try { if (applyForm != null) applyForm.Dispose(); } catch { } }
-            // D 配置打开回显选中 D（第 4 项，索引 3；套用 D 后当前配置即回显 D，
-            // 不再是"自定义"）
+            // D 配置打开同样回显"自定义"（2.0.1 口径：预置是只读模板，软件只认自定义）
             ProcessPolicyForm fullD = null;
             try
             {
@@ -8009,9 +8027,12 @@ namespace AgingTestSystem.Tests
                 var descD = tD.GetField("_lblPresetDesc",
                     BindingFlags.NonPublic | BindingFlags.Instance).GetValue(fullD) as Control;
                 int selD = (int)fCboD.GetType().GetProperty("SelectedIndex").GetValue(fCboD, null);
-                Check("D配置打开回显选中D", selD == 3);
-                Check("说明行显示D场景",
-                    descD != null && descD.Text.Contains("放行"));
+                Check("D配置打开也回显自定义（软件只认自定义）", selD == 4);
+                Check("说明行显示自定义口径（不是D场景）",
+                    descD != null && descD.Text.Contains("自定义")
+                    && !descD.Text.Contains("放行"));
+                Check("D配置说明行跟生效配置走（与预置D一致）",
+                    descD != null && descD.Text == PolicyPresets.BuildCustomScenario("D"));
             }
             finally { try { if (fullD != null) fullD.Dispose(); } catch { } }
             // —— A 常用（V1.106：Title 含"常用"，场景保留"常开"工艺语义） ——
@@ -8019,7 +8040,7 @@ namespace AgingTestSystem.Tests
                 PolicyPresets.Find("A") != null && PolicyPresets.Find("A").Title.Contains("常用"));
             Check("A场景保留常开语义（不断工艺含义）",
                 PolicyPresets.Find("A") != null && PolicyPresets.Find("A").Scenario.Contains("常开"));
-            // A 配置打开回显选中 A（第 1 项，索引 0；C 开关＋超时 0 即 A，数值算身份）
+            // A 配置打开同样回显"自定义"（2.0.1 口径：预置是只读模板，软件只认自定义）
             ProcessPolicyForm fullA = null;
             try
             {
@@ -8032,12 +8053,16 @@ namespace AgingTestSystem.Tests
                 var descA = tA.GetField("_lblPresetDesc",
                     BindingFlags.NonPublic | BindingFlags.Instance).GetValue(fullA) as Control;
                 int selA = (int)fCboA.GetType().GetProperty("SelectedIndex").GetValue(fCboA, null);
-                Check("A配置打开回显选中A", selA == 0);
-                Check("说明行显示A场景",
-                    descA != null && descA.Text.Contains("常开"));
+                Check("A配置打开也回显自定义（软件只认自定义）", selA == 4);
+                Check("说明行显示自定义口径（不是A场景）",
+                    descA != null && descA.Text.Contains("自定义")
+                    && !descA.Text.Contains("常开"));
+                Check("A配置说明行跟生效配置走（与预置A一致）",
+                    descA != null && descA.Text == PolicyPresets.BuildCustomScenario("A"));
             }
             finally { try { if (fullA != null) fullA.Dispose(); } catch { } }
-            // —— 预置行标题 A/B/C/D（V1.106：下拉四项，标题同步） ——
+            // —— 预置行标题 A/B/C/D（V1.106：下拉四项，标题同步；
+            // 2.0.1 标题改成"当前策略：自定义（预置A/B/C/D只读）"口径） ——
             ProcessPolicyForm titleForm = null;
             try
             {
@@ -8047,6 +8072,9 @@ namespace AgingTestSystem.Tests
                     BindingFlags.NonPublic | BindingFlags.Instance).GetValue(titleForm) as Control;
                 Check("预置行标题一键套用A/B/C/D",
                     lblT != null && lblT.Text.Contains("A/B/C/D"));
+                Check("预置行标题说明当前策略=自定义且预置只读",
+                    lblT != null && lblT.Text.Contains("自定义")
+                    && lblT.Text.Contains("只读"));
             }
             finally { try { if (titleForm != null) titleForm.Dispose(); } catch { } }
             // —— 下拉即预览（V1.106：切下拉画布即换该预置画面，只看不存不标脏） ——
@@ -8124,8 +8152,7 @@ namespace AgingTestSystem.Tests
                         (fPreview.GetValue(canvasPv) as DeviceConfig) == null);
                     Check("重造不动真实配置", cfgPv.VacuumConfirmTimeoutMs == 15000);
                 }
-                // 纯函数口径：BuildPreviewConfig（克隆隔离；两参口自定义回 null 走兼容）
-                // （三参重载已加，GetMethod 单名取法会歧义，这里按参数个数挑两参口）
+                // 纯函数口径：BuildPreviewConfig（克隆隔离；自定义＝看真实→null）
                 System.Reflection.MethodInfo mBuild = null;
                 foreach (var m in tP.GetMethods(BindingFlags.NonPublic | BindingFlags.Static))
                 {
@@ -8138,7 +8165,7 @@ namespace AgingTestSystem.Tests
                 Check("BuildPreviewConfig内容=C且真实不动",
                     pvPure != null && pvPure.AgingPressureLossPolicy == AgingPressureLossPolicy.KeepRunning
                     && cfgPv.AgingPressureLossPolicy == AgingPressureLossPolicy.StopOnLoss);
-                Check("BuildPreviewConfig两参自定义回null（兼容）",
+                Check("BuildPreviewConfig自定义回null（看真实）",
                     mBuild != null && mBuild.Invoke(null, new object[] { cfgPv, "Custom" }) == null);
                 // 关窗提示判定（纯函数 IsPreviewPending＋文案，不弹真框；两参口同理挑）
                 System.Reflection.MethodInfo mPend = null;
@@ -8157,7 +8184,7 @@ namespace AgingTestSystem.Tests
                         (bool)mPend.Invoke(null, new object[] { cfgPv, "C" }) == true);
                     Check("预览即现状不问（B现状看B）",
                         (bool)mPend.Invoke(null, new object[] { cfgPv, "B" }) == false);
-                    Check("两参自定义不问（兼容：无槽不问）",
+                    Check("两参自定义不问（自定义＝看真实，没预览可套）",
                         (bool)mPend.Invoke(null, new object[] { cfgPv, "Custom" }) == false);
                     Check("空配置不问不抛",
                         (bool)mPend.Invoke(null, new object[] { null, "A" }) == false);
@@ -8165,44 +8192,27 @@ namespace AgingTestSystem.Tests
                     Check("关窗文案含预置名＋确定取消两路",
                         !string.IsNullOrWhiteSpace(promptA) && promptA.Contains("常用")
                         && promptA.Contains("确定") && promptA.Contains("取消"));
+                    Check("关窗文案说清是复制到自定义",
+                        promptA.Contains("复制到自定义"));
                     string promptCustom = (string)mPrompt.Invoke(null, new object[] { "Custom" });
                     Check("关窗文案自定义无括号",
                         !string.IsNullOrWhiteSpace(promptCustom)
                         && promptCustom.Contains("自定义")
                         && !promptCustom.Contains("（"));
                 }
-                // 三参口（自定义槽参与预览/判定）
-                System.Reflection.MethodInfo mBuild3 = null;
-                System.Reflection.MethodInfo mPend3 = null;
+                // 反向验证：预览/判定都收敛为两参口（自定义＝看真实，
+                // 没有"拿槽当预览/拿槽判待定"的旧口径，防其复活）
+                bool hasBuild3 = false;
+                bool hasPend3 = false;
                 foreach (var m in tP.GetMethods(BindingFlags.NonPublic | BindingFlags.Static))
                 {
                     if (m.Name == "BuildPreviewConfig" && m.GetParameters().Length == 3)
-                    { mBuild3 = m; }
+                    { hasBuild3 = true; }
                     if (m.Name == "IsPreviewPending" && m.GetParameters().Length == 3)
-                    { mPend3 = m; }
+                    { hasPend3 = true; }
                 }
-                Check("三参预览/判定反射口径有效", mBuild3 != null && mPend3 != null);
-                if (mBuild3 != null && mPend3 != null)
-                {
-                    var slotA = ProjectPolicyStore.LoadCustom();
-                    var pvSlot = mBuild3.Invoke(null,
-                        new object[] { cfgPv, "Custom", slotA }) as DeviceConfig;
-                    Check("三参自定义预览=看真实（null，槽只供套用不参与显示）",
-                        pvSlot == null && cfgPv.VacuumConfirmTimeoutMs == 15000);
-                    Check("三参槽空自定义回null（看回真实）",
-                        mBuild3.Invoke(null, new object[] { cfgPv, "Custom",
-                            new Dictionary<string, string>() }) == null);
-                    Check("三参槽异即待定（B现状槽A要问）",
-                        (bool)mPend3.Invoke(null,
-                            new object[] { cfgPv, "Custom", slotA }) == true);
-                    var slotSameB = ProjectPolicyStore.ToPolicyDict(cfgPv);
-                    Check("三参槽同即不问",
-                        (bool)mPend3.Invoke(null,
-                            new object[] { cfgPv, "Custom", slotSameB }) == false);
-                    Check("三参槽空不问",
-                        (bool)mPend3.Invoke(null, new object[] { cfgPv, "Custom",
-                            new Dictionary<string, string>() }) == false);
-                }
+                Check("预览/判定都只有两参口（自定义＝看真实，防旧口径复活）",
+                    !hasBuild3 && !hasPend3);
             }
             finally
             {
@@ -8313,8 +8323,10 @@ namespace AgingTestSystem.Tests
                 && !PolicyPresets.CustomTitle.Contains("（")
                 && !PolicyPresets.CustomTitle.Contains("("));
             Check("自定义说明与悬停无括号描述",
-                !PolicyPresets.CustomScenario.Contains("（")
-                && !PolicyPresets.CustomScenario.Contains("(")
+                !PolicyPresets.BuildCustomScenario(PolicyPresets.CustomId).Contains("（")
+                && !PolicyPresets.BuildCustomScenario(PolicyPresets.CustomId).Contains("(")
+                && !PolicyPresets.BuildCustomScenario("B").Contains("（")
+                && !PolicyPresets.BuildCustomScenario("B").Contains("(")
                 && !PolicyPresets.CustomTip.Contains("（")
                 && !PolicyPresets.CustomTip.Contains("(")
                 && PolicyPresets.CustomTip.Contains("自定义"));
@@ -8356,8 +8368,8 @@ namespace AgingTestSystem.Tests
                     second.Count == initSlot.Count
                     && second["ZeroDurationPolicy"] == initSlot["ZeroDurationPolicy"]);
                 Check("默认说明与悬停无括号",
-                    !PolicyPresets.CustomScenarioDefault.Contains("（")
-                    && !PolicyPresets.CustomScenarioDefault.Contains("(")
+                    !PolicyPresets.BuildCustomScenario(PolicyPresets.CustomId).Contains("（")
+                    && !PolicyPresets.BuildCustomScenario(PolicyPresets.CustomId).Contains("(")
                     && !PolicyPresets.CustomTipDefault.Contains("（")
                     && !PolicyPresets.CustomTipDefault.Contains("(")
                     && PolicyPresets.CustomTipDefault.Contains("自定义"));
@@ -8540,7 +8552,7 @@ namespace AgingTestSystem.Tests
             {
                 try { if (File.Exists(xferCsPath)) File.Delete(xferCsPath); }
                 catch { }
-                xferForm = new ProcessPolicyForm(new DeviceConfig(), null, true);
+                var cfgXfer = new DeviceConfig(); xferForm = new ProcessPolicyForm(cfgXfer, null, true);
                 var tX = typeof(ProcessPolicyForm);
                 object cboX = tX.GetField("_cboPreset",
                     BindingFlags.NonPublic | BindingFlags.Instance).GetValue(xferForm);
@@ -8567,12 +8579,21 @@ namespace AgingTestSystem.Tests
                     : -1;
                 Check("缺省配置回显自定义末项",
                     itemsX != null && selX == itemsX.Count - 1);
-                Check("未改动回显默认文案",
-                    descX != null && descX.Text == PolicyPresets.CustomScenarioDefault);
+                // 说明行跟着**生效配置**走（画布显示什么就说什么，两边不打架）：
+                // 缺省配置凑不上任何预置 → "与预置A/B/C/D都不完全一致"。
+                Check("说明行按生效配置出文案（缺省=与预置都不一致）",
+                    descX != null
+                    && descX.Text == PolicyPresets.BuildCustomScenario(PolicyPresets.CustomId));
                 Check("默认文案无括号",
                     descX != null && !descX.Text.Contains("（")
                     && !descX.Text.Contains("("));
-                // 改槽一项再回显：说明切到差异文案
+                // 生效配置改成预置B → 说明行改口"内容与预置B一致"
+                PolicyPresets.ApplyToConfig(cfgXfer, "B");
+                tX.GetMethod("RefreshPresetRow",
+                    BindingFlags.NonPublic | BindingFlags.Instance).Invoke(xferForm, null);
+                Check("生效配置=预置B时说明行说与预置B一致",
+                    descX != null && descX.Text == PolicyPresets.BuildCustomScenario("B"));
+                // 改自定义槽一项：说明行讲的是生效配置，不跟着槽走（槽的事在悬停提示里）
                 var slotMod = ProjectPolicyStore.LoadCustom();
                 string zdOld;
                 slotMod.TryGetValue("ZeroDurationPolicy", out zdOld);
@@ -8580,8 +8601,17 @@ namespace AgingTestSystem.Tests
                 ProjectPolicyStore.SaveCustom(slotMod);
                 tX.GetMethod("RefreshPresetRow",
                     BindingFlags.NonPublic | BindingFlags.Instance).Invoke(xferForm, null);
-                Check("自定义改后说明切差异文案",
-                    descX != null && descX.Text == PolicyPresets.CustomScenario);
+                Check("改槽不改说明行（说明行讲生效配置）",
+                    descX != null && descX.Text == PolicyPresets.BuildCustomScenario("B"));
+                // 生效配置不再是任何预置 → 说明行改回"都不完全一致"
+                cfgXfer.ZeroDurationPolicy =
+                    cfgXfer.ZeroDurationPolicy == ZeroDurationPolicy.Block
+                        ? ZeroDurationPolicy.Warn : ZeroDurationPolicy.Block;
+                tX.GetMethod("RefreshPresetRow",
+                    BindingFlags.NonPublic | BindingFlags.Instance).Invoke(xferForm, null);
+                Check("生效配置脱离预置后说明行改口（与预置都不一致）",
+                    descX != null
+                    && descX.Text == PolicyPresets.BuildCustomScenario(PolicyPresets.CustomId));
                 Check("管理员可导可入",
                     btnExp != null && btnImp != null && btnExp.Enabled && btnImp.Enabled);
                 // 只读模式：可导不可入（同窗内换旗验证，不重建槽文件）

@@ -39,12 +39,15 @@ namespace AgingTestSystem.Views
     /// ├──────────────────────────────────────────────┴───────────────┤
     /// │ 状态条：项目名 | 选中节点 | 保存提示                           │
     /// └──────────────────────────────────────────────────────────────┘
-    /// 右栏顶部（标题46/下拉+按钮68/说明100/导入导出146）：下拉选 A/B/C/D
-    /// （或"自定义"回显：自定义是独立槽，初始内容=A 快照，改后各存各的），
-    /// 下拉改选左侧画布即时预览该选项（A/B/C/D＝克隆+套值的副本，自定义＝看回真实，
-    /// 只看不存不标脏）；"套用预置"一键整套生效（确认框列差异项 + 前置条件，
-    /// 走 PersistChanges 同一条保存路，选自定义即套用槽内容）。关窗时预览还没套用，
-    /// 弹 SunnyUI 确认框问要不要套用（确定=套用后关，取消=直接关；X 与关闭按钮同路）。
+    /// 右栏顶部（标题46/下拉+按钮68/说明100/导入导出146）：**当前策略恒为"自定义"**
+    /// （软件只认自定义——A/B/C/D 是代码写死的只读模板，改不了也不该被改，
+    ///  套用也只是把模板复制进自定义，所以下拉永远回显"自定义"）。
+    /// 下拉里选 A/B/C/D＝"看这套只读模板长什么样"：左侧画布与右栏即时预览该模板的值
+    /// （克隆+套值的副本，只看不存不标脏）；点"套用预置"才把该模板的各节点配置
+    /// **复制到自定义**并即时生效（确认框列差异项 + 前置条件 + 覆盖自定义槽提示，
+    /// 走 PersistChanges 同一条保存路；下拉停在自定义即套用槽内容）。
+    /// 关窗时预览还没套用，弹 SunnyUI 确认框问要不要套用（确定=套用后关，取消=直接关；
+    /// X 与关闭按钮同路）。
     /// 套用只动 12 个行为开关＋真空超时（见 PolicyPresets），MES/规则/报表/点位/时长阈值不动；
     /// "导出策略"可选 A/B/C/D/自定义任一源装包（全量策略 key，含自由文本），
     /// "导入策略"一律进自定义槽并即时生效（A/B/C/D 覆盖不了）。只读模式套用/导入禁用，导出可用。
@@ -468,7 +471,7 @@ namespace AgingTestSystem.Views
                 _pnlEditors.Controls.Add(foot);
             }
             UpdateStatus($"已选中【{def.Title}】，改完点“保存本节点”。" +
-                (_previewPending ? $"（当前为【{_previewTitle}】预览值，保存即写入）" : ""));
+                (_previewPending ? $"（当前为【{_previewTitle}】只读模板预览值，保存即写入自定义）" : ""));
         }
 
         /// <summary>连线只读信息（条件在哪改指明，不让用户对着线发呆）。</summary>
@@ -870,7 +873,14 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 按内存配置回显预置行：凑上 A/B/C/D 就选中它，否则落"自定义"；
+        /// 回显预置行：**永远落"自定义"**（软件只认自定义）。
+        /// 【为什么不再按 DetectPreset 显示 A/B/C/D】用户口径："软件只认自定义，
+        /// 其他的ABCD预置策略都是只读"。旧口径按"当前配置凑上哪套预置"回显，
+        /// 看着像"当前策略是预置A"，可真正生效的永远是自定义那一份 ——
+        /// 预置改不了（代码写死的只读模板），套用也只是把它复制进自定义。
+        /// 显示成 A/B/C/D 会让人以为"我这套是 A，改了会改坏 A"，实际改的是自定义。
+        /// 所以这里恒定显示自定义；下拉里选中 A/B/C/D ＝"看这套只读模板长什么样"，
+        /// 点【套用预置】才把它的各节点配置复制到自定义。
         /// 只读模式（非管理员）整行禁用（与节点编辑器同级，不开后门）。
         /// </summary>
         private void RefreshPresetRow()
@@ -879,7 +889,7 @@ namespace AgingTestSystem.Views
             _presetRefreshing = true;
             try
             {
-                SelectPresetOpt(_cboPreset, PolicyPresets.DetectPreset(_config));
+                SelectPresetOpt(_cboPreset, PolicyPresets.CustomId);
             }
             finally { _presetRefreshing = false; }
             // 程序回显不走事件，手动同步上次选项（脏确认弹回认它）
@@ -916,6 +926,20 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
+        /// 说明行取场景首句（纯函数：截到第一个句号为止）。
+        /// 【为什么截】说明行只有 296×42（放得下两行），预置场景文案有三四句
+        /// （实测要 80px 高），整段贴进去会被裁掉半截——现场只看到半句话更看不懂。
+        /// 全文在悬停提示里（标题+场景+前置条件+换挡指引），确认框里也是全文。
+        /// </summary>
+        private static string ShortDesc(string scenario)
+        {
+            if (string.IsNullOrWhiteSpace(scenario)) return "";
+            int i = scenario.IndexOf('。');
+            if (i >= 0 && i + 1 < scenario.Length) return scenario.Substring(0, i + 1);
+            return scenario;
+        }
+
+        /// <summary>
         /// 下拉当前项的一句话说明 + 悬停全文（下拉框窄看不全：
         /// 下拉列表本身已拉宽到 340，闭合框的悬停提示在这里补全文——标题 +
         /// 场景 + 前置条件，与确认框同源，不另写一份文案）。
@@ -925,8 +949,11 @@ namespace AgingTestSystem.Views
             if (_lblPresetDesc == null || _lblPresetDesc.IsDisposed) return;
             string id = SelectedPresetId(_cboPreset);
             PolicyPresets.PolicyPresetDef def = PolicyPresets.Find(id);
-            // 自定义说明按槽状态动态切：槽没改过（还是 A 快照）即"与A一致"，
-            // 改过才显示差异文案（描述的是槽内容，不是当前配置，见 IsCustomPristine）。
+            // 自定义＝当前唯一生效的策略（软件只认自定义）：说明行讲这条策略现在
+            // 像哪套预置 —— 按**生效配置**出文案（画布显示什么，这里就说什么，
+            // 两边不能打架；旧口径拿自定义槽出文案，槽是初始A快照时会说"与预置A
+            // 一致"，而画布正显示着预置B的现场值）。
+            // 悬停提示里的"槽还是初始快照"才按槽状态切（那是存储层的事）。
             Dictionary<string, string> customSlot = null;
             if (def == null)
             {
@@ -935,8 +962,8 @@ namespace AgingTestSystem.Views
             }
             bool customPristine = def == null && PolicyPresets.IsCustomPristine(customSlot);
             _lblPresetDesc.Text = def != null
-                ? def.Scenario
-                : (customPristine ? PolicyPresets.CustomScenarioDefault : PolicyPresets.CustomScenario);
+                ? ShortDesc(def.Scenario)
+                : PolicyPresets.BuildCustomScenario(PolicyPresets.DetectPreset(_config));
             // 悬停提示同步（_cboPreset 闭合显示被截断时，悬停看全文；
             // 自定义文案与说明行同源，只叫“自定义”不带括号，见 PolicyPresets.CustomTip）
             try
@@ -1002,41 +1029,30 @@ namespace AgingTestSystem.Views
                 return;
             }
             string id = SelectedPresetId(_cboPreset);
-            Dictionary<string, string> custom = null;
-            if (string.Equals(id, PolicyPresets.CustomId, StringComparison.OrdinalIgnoreCase))
-            {
-                try { custom = ProjectPolicyStore.LoadCustom(); }
-                catch { custom = null; }
-            }
-            _previewConfig = BuildPreviewConfig(_config, id, custom);
+            _previewConfig = BuildPreviewConfig(_config, id);
             _canvas.SetPreviewConfig(_previewConfig);
-            _previewPending = IsPreviewPending(_config, id, custom);
+            _previewPending = IsPreviewPending(_config, id);
             PolicyPresets.PolicyPresetDef pvDef = PolicyPresets.Find(id);
             _previewTitle = pvDef != null ? pvDef.Title
                 : (string.Equals(id, PolicyPresets.CustomId, StringComparison.OrdinalIgnoreCase)
                     ? PolicyPresets.CustomTitle : (id ?? ""));
         }
 
-        /// <summary>按预置 id 造预览配置（旧两参口：自定义回 null＝看真实；新逻辑走三参口）。</summary>
+        /// <summary>
+        /// 按预置 id 造预览配置（纯函数：A/B/C/D＝克隆现配置＋套预置值；
+        /// **自定义＝看真实（返回 null）**——自定义就是当前生效的那一套，
+        /// 预览没有"另一套"可看；自定义槽只服务【套用预置】按钮（把上次存的自定义
+        /// 写回现配置），拿旧槽盖住当前配置会让策略窗显示过期值（现场实锤：
+        /// 改完保存、关窗重开仍是老配置——预览被旧槽盖住，真值反而看不见）。
+        /// </summary>
         private static DeviceConfig BuildPreviewConfig(DeviceConfig current, string presetId)
-        {
-            return BuildPreviewConfig(current, presetId, null);
-        }
-
-        /// <summary>按预置 id 造预览配置（纯函数：A/B/C/D＝克隆现配置＋套预置值；
-        /// 自定义＝看真实（返回 null）——"自定义"不是一套固定值，
-        /// 它只是"上次存的自定义方案"（供【套用自定义】一键套用），
-        /// 拿旧槽盖住当前配置会让策略窗显示过期值（现场实锤：改完保存、
-        /// 关窗重开仍是老配置——预览被旧槽盖住，真值反而看不见）。</summary>
-        private static DeviceConfig BuildPreviewConfig(
-            DeviceConfig current, string presetId, Dictionary<string, string> customSnapshot)
         {
             try
             {
                 if (current == null) return null;
                 if (string.Equals(presetId, PolicyPresets.CustomId, StringComparison.OrdinalIgnoreCase))
                 {
-                    // 看真实：自定义槽只服务于"套用自定义"，不参与显示预览。
+                    // 看真实：自定义槽不参与显示预览。
                     return null;
                 }
                 if (PolicyPresets.Find(presetId) == null) return null;
@@ -1056,6 +1072,9 @@ namespace AgingTestSystem.Views
         /// <summary>
         /// 套用预置（傻瓜入口：脏先问存 → 列差异确认 → 逐项校验 →
         /// PersistChanges 同一条保存路 → 刷新右栏编辑器 + 画布 + 预置回显）。
+        /// 【套用＝把只读模板复制到自定义】下拉停在 A/B/C/D 时，套用 = 把该模板的
+        /// 各节点配置写进真实配置并**全量落自定义槽**（生效的始终是自定义那一份）；
+        /// 下拉停在自定义时，套用 = 把自定义槽的内容写回真实配置（槽空即无差）。
         /// 【只动 12 个行为开关＋数值项】MES/规则/报表/画面字典/破空点位/时长阈值等
         /// 自由文本与配方/机器参数一律不动——切预置不丢现场已填的东西。
         /// 数值项（A 的真空超时 0）是跟项目走的策略 key，同样进本项目 Policy.json。
@@ -1137,7 +1156,8 @@ namespace AgingTestSystem.Views
                 + string.Join("\r\n", diffLines.ToArray())
                 + "\r\n\r\n配方延时/时长/阈值/画面等配方项、MES/规则/报表/画面字典/点位等不动"
                 + "（配方延时填0即阀电同开，无配方默认即0，有配方按配方来）。\r\n"
-                + "\r\n本次套用会把当前这套存入自定义槽（自定义槽现有内容将被覆盖）。\r\n"
+                + "\r\n本次套用会把【" + def.Title + "】的各节点配置复制到自定义"
+                + "（自定义槽现有内容将被覆盖）。\r\n"
                 + def.HowToSwitch;
             if (MessageBox.Show(this, confirm, "套用预置",
                 MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK)
@@ -1205,10 +1225,10 @@ namespace AgingTestSystem.Views
                     "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            string confirm = "套用【自定义】？\r\n\r\n" + PolicyPresets.CustomScenario + "\r\n"
+            string confirm = "套用【自定义】？\r\n\r\n" + PolicyPresets.CustomApplyScenario + "\r\n"
                 + "\r\n将修改 " + diffLines.Count + " 项：\r\n"
                 + string.Join("\r\n", diffLines.ToArray())
-                + "\r\n\r\n只写自定义槽的内容，A/B/C/D 预置不动。";
+                + "\r\n\r\n只写自定义槽的内容，A/B/C/D 是只读模板，不会变。";
             if (MessageBox.Show(this, confirm, "套用自定义",
                 MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK)
             {
@@ -1550,9 +1570,11 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 预览未套用即关：下拉停在"与现状不一致的选项"上（A/B/C/D 任一预置或自定义槽），
+        /// 预览未套用即关：下拉停在"与现状不一致的预置"上（A/B/C/D 任一只读模板），
         /// 说明用户看中了它却没点套用，直接关会丢意图——弹 SunnyUI 确认框问一嘴
         /// （确定=套用后关闭，取消=不套用直接关闭）。
+        /// 【自定义不会走到这里】自定义＝看真实配置，没有"看了没套用"这回事
+        /// （判定见 IsPreviewPending）；套用自定义槽只能走【套用预置】按钮（有差异确认框）。
         /// </summary>
         /// <returns>true=继续关闭，false=留在窗内（用户取消了脏保存 / 套用被拦）</returns>
         private bool ConfirmPreviewOnClose()
@@ -1561,13 +1583,7 @@ namespace AgingTestSystem.Views
             {
                 if (_config == null || !_shownOnce || IsDisposed || Disposing) return true;
                 string selected = SelectedPresetId(_cboPreset);
-                Dictionary<string, string> custom = null;
-                if (string.Equals(selected, PolicyPresets.CustomId, StringComparison.OrdinalIgnoreCase))
-                {
-                    try { custom = ProjectPolicyStore.LoadCustom(); }
-                    catch { custom = null; }
-                }
-                if (!IsPreviewPending(_config, selected, custom)) return true;
+                if (!IsPreviewPending(_config, selected)) return true;
                 bool ok;
                 try
                 {
@@ -1588,28 +1604,24 @@ namespace AgingTestSystem.Views
                     _dirty = false;
                 }
                 // 关闭前的确认即授权，直接执行套用（不再弹差异框）；被拦则留在窗内看原因
-                if (string.Equals(selected, PolicyPresets.CustomId, StringComparison.OrdinalIgnoreCase))
-                {
-                    if (custom == null) return true;   // 槽空=与现状无差，直接关
-                    return ApplyCustomDirect(custom);
-                }
+                // （走到这里必是预置模板：自定义不走待定分支，见 IsPreviewPending）
                 return ApplyPresetValues(selected);
             }
             catch { return true; }  // 关闭路径绝不抛异常拦人
         }
 
-        /// <summary>有没有"看了没套用"的预览（旧两参口：只认 A/B/C/D；自定义走三参口）。</summary>
-        private static bool IsPreviewPending(DeviceConfig config, string selectedId)
-        {
-            return IsPreviewPending(config, selectedId, null);
-        }
-
         /// <summary>
         /// 有没有"看了没套用"的预览（纯函数：A/B/C/D＝选中与现状探测不一致；
-        /// 自定义＝槽快照与现状有差异，槽空即无预览；未知选中一律无预览）。
+        /// **自定义＝一律没有**——自定义就是当前生效的那一套，预览看的就是真实
+        /// 配置（2.0.1 起不再叠加槽快照），没有"看了没套用"这回事；
+        /// 未知选中一律无预览）。
+        /// 【为什么要去掉"槽≠现状即待定"】旧口径拿槽快照判待定，可预览显示的是
+        /// 真实配置：关窗时弹"把自定义槽的内容写入后关闭"，用户一点就把槽里的
+        /// 旧值盖到现配置上（槽初始是 A 快照、现配置是 B 时尤其容易踩），
+        /// 而关窗确认框不列差异、不给二次确认 —— 套用槽只能走【套用预置】按钮
+        /// （那里有逐项差异确认框）。
         /// </summary>
-        private static bool IsPreviewPending(
-            DeviceConfig config, string selectedId, Dictionary<string, string> customSnapshot)
+        private static bool IsPreviewPending(DeviceConfig config, string selectedId)
         {
             try
             {
@@ -1619,39 +1631,27 @@ namespace AgingTestSystem.Views
                     return !string.Equals(PolicyPresets.DetectPreset(config),
                         selectedId, StringComparison.OrdinalIgnoreCase);
                 }
-                if (string.Equals(selectedId, PolicyPresets.CustomId, StringComparison.OrdinalIgnoreCase))
-                {
-                    Dictionary<string, string> snap =
-                        ProjectPolicyStore.FilterToPolicyKeys(customSnapshot);
-                    if (snap.Count == 0) return false;
-                    Dictionary<string, string> cur = ProjectPolicyStore.ToPolicyDict(config);
-                    foreach (var kv in snap)
-                    {
-                        string now;
-                        if (!cur.TryGetValue(kv.Key, out now)) now = "";
-                        if (!string.Equals(now != null ? now.Trim() : "",
-                            kv.Value != null ? kv.Value.Trim() : "",
-                            StringComparison.OrdinalIgnoreCase))
-                        {
-                            return true;
-                        }
-                    }
-                    return false;
-                }
-                return false;   // 未知选中：没有"预览"
+                return false;   // 自定义（看真实）与未知选中：都没有"预览"
             }
             catch { return false; }
         }
 
-        /// <summary>关闭确认框文案（纯函数：标题＋确定/取消两路含义，与 UIMessageBox.OKCancel 对齐）。</summary>
+        /// <summary>
+        /// 关闭确认框文案（纯函数：标题＋确定/取消两路含义，与 UIMessageBox.OKCancel 对齐）。
+        /// 【确定＝把该模板的各节点配置复制到自定义后关闭】与【套用预置】同一件事，
+        /// 只是这里省掉差异确认框（关闭前已问过"要不要套用"）。
+        /// </summary>
         private static string BuildPreviewClosePrompt(string selectedId)
         {
             PolicyPresets.PolicyPresetDef def = PolicyPresets.Find(selectedId);
             string title = def != null ? def.Title
                 : (string.Equals(selectedId, PolicyPresets.CustomId, StringComparison.OrdinalIgnoreCase)
                     ? PolicyPresets.CustomTitle : (selectedId ?? ""));
+            string act = def != null
+                ? "把该模板的各节点配置复制到自定义后关闭"
+                : "把自定义槽的内容写入后关闭";
             return "当前正在预览【" + title + "】，尚未套用。\r\n\r\n"
-                + "【确定】套用该配置后关闭\r\n【取消】不套用，直接关闭";
+                + "【确定】" + act + "\r\n【取消】不套用，直接关闭";
         }
 
         /// <summary>
