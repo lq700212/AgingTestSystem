@@ -1070,21 +1070,39 @@ namespace AgingTestSystem.Tests
             EnterCleanDir();
 
             // 当日 CSV 行数统计（报警边沿单次/下料判定/失压标记不断言用）
+            // 【为什么不用 File.ReadAllLines】别的测试线程正在往同一个 CSV 追加写，
+            // ReadAllLines 默认独占共享 → 撞上就抛 IOException，被 catch 吞成 0，
+            // 用例假红（现场踩过：[策略P5] CSV记破空泄压 偶发红、重跑又绿）。
+            // 正解：FileShare.ReadWrite 共享读 + 读失败重试几次。
             Func<string, int> countLines = marker =>
             {
-                try
+                for (int attempt = 0; attempt < 5; attempt++)
                 {
-                    string file = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs",
-                        "TestLog_" + DateTime.Now.ToString("yyyyMMdd") + ".csv");
-                    if (!File.Exists(file)) return 0;
-                    int n = 0;
-                    foreach (string line in File.ReadAllLines(file))
+                    try
                     {
-                        if (line.Contains(marker)) n++;
+                        string file = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Logs",
+                            "TestLog_" + DateTime.Now.ToString("yyyyMMdd") + ".csv");
+                        if (!File.Exists(file))
+                        {
+                            System.Threading.Thread.Sleep(80);
+                            continue;
+                        }
+                        int n = 0;
+                        using (var fs = new FileStream(file, FileMode.Open, FileAccess.Read,
+                                   FileShare.ReadWrite | FileShare.Delete))
+                        using (var sr = new StreamReader(fs, System.Text.Encoding.UTF8))
+                        {
+                            string line;
+                            while ((line = sr.ReadLine()) != null)
+                            {
+                                if (line.Contains(marker)) n++;
+                            }
+                        }
+                        return n;
                     }
-                    return n;
+                    catch { System.Threading.Thread.Sleep(80); }
                 }
-                catch { return 0; }
+                return 0;
             };
 
             // ---------- P1 真空失败记治具（Q19=FixtureAlarm） ----------
