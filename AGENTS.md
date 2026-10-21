@@ -402,6 +402,15 @@
   （**保持当前选择**，保存只发生在自定义视图；顺带避免"带改动切到预置"被保存动作弹回自定义），
   套用/导入成功后 `RefreshPresetRow()`（回显自定义）再 `RebuildPreviewFromReal`（按新真实重造预览）
   再 `RebuildEditors`（顺序反了右栏按旧预览建）。
+  - **对比"当前 vs 目标"一律取真实生效值，禁拿预览比（2.0.2 血泪）**：
+  套用差异预览曾用 `GetConfigString`（读 `EffectiveConfig`＝预览??真实）当"当前值"，
+  而预置视图下 `_previewConfig` **已经套上了该预置的值**（下拉即预览）→
+  差异恒为 0 → 误判"当前已是该预置，无需套用"并 `return`，
+  **套用从没执行过**（现场：点【套用到自定义】永远弹"无需套用"，自定义里节点一点没变）。
+  铁律：**预览是"套用后会变成什么样"的假设，不是现状**；凡回答"现在是什么"
+  一律读真实配置（`GetRealConfigString`），差异计算抽纯函数
+  `BuildApplyDiffLines`（可回归，不必弹框）；差异为 0 的文案要说清是
+  "【自定义】的内容已与【预置X】完全一致"（旧文案"当前已是【预置X】"会被读成"已经切过去了"，更误导）。
 - **配方加字段三窗同步（V1.66）**：`RecipeConfig` 加字段 → 三个录入窗
   （`RecipeManagerForm`/`BatchRecipeForm`/`StationSettingsForm`：输入框 + 保存 + 回填 +
   头部 ASCII 图）→ `SetStationRecipe` 下发 → `StationInfo`（+`Clone`）→
