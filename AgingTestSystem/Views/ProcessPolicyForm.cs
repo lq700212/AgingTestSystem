@@ -928,11 +928,35 @@ namespace AgingTestSystem.Views
         /// <summary>读有效配置字符串（右栏与画布同源：有预览看预览，平时即真实）。</summary>
         private string GetConfigString(string key)
         {
+            return ReadConfigString(EffectiveConfig(), key);
+        }
+
+        /// <summary>
+        /// 读**真实生效配置**的字符串值（不看预览）。
+        /// 【为什么单独一口】GetConfigString 读 EffectiveConfig（有预览看预览），
+        /// 那口径是给"画面显示"用的：预置视图下预览已经套上了预置值。
+        /// 拿它当"当前值"去比 → 差异恒为 0 → 误判"当前已是该预置，无需套用"，
+        /// 套用根本不会执行（现场实锤：点【套用到自定义】永远弹"无需套用"，
+        /// 切到自定义里看节点什么都没变，用户根本不知道到底成没成）。
+        /// 套用＝把预置覆盖到【自定义】上，比较基准必须是当前真正生效的那一套。
+        /// </summary>
+        private string GetRealConfigString(string key)
+        {
+            return ReadConfigString(_config, key);
+        }
+
+        /// <summary>
+        /// 按指定配置对象读 key 的存储口径字符串（反射只写这一处：真实/预览两个口径共用）。
+        /// 布尔存小写 true/false、枚举存英文名，与落盘口径一致。
+        /// </summary>
+        private static string ReadConfigString(DeviceConfig cfg, string key)
+        {
             try
             {
+                if (cfg == null) return "";
                 var prop = typeof(DeviceConfig).GetProperty(key);
                 if (prop == null) return "";
-                object v = prop.GetValue(EffectiveConfig(), null);
+                object v = prop.GetValue(cfg, null);
                 if (v == null) return "";
                 if (v is bool) return ((bool)v) ? "true" : "false";
                 return v.ToString();
@@ -1603,6 +1627,60 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
+        /// 算"套用到自定义"会改哪几项（**纯函数**，可单测；不碰窗体/文件/弹框）。
+        /// 【比较基准＝真实生效值】套用是把预置覆盖到【自定义】上，
+        /// 基准必须是当前真正生效的那一套；拿预览值比会恒为 0
+        /// （预置视图下预览已经套上预置值）→ 误判"当前已是该预置，无需套用"，
+        /// 套用根本不会执行（现场实锤：点按钮永远提示无需套用，自定义里什么都没变）。
+        /// 【比较集合】预置管辖的 14 个开关 ＋ 预置数值项 ＋ 用户在预置视图下的临时修改。
+        /// 临时改的非管辖项也要列出来（否则"我改的那两项"在确认框里看不见，
+        /// 用户不敢点确定）；同一 key 只列一次（临时值覆盖预置值）。
+        /// </summary>
+        /// <param name="readRealValue">按 key 读真实生效值（真实口径，不看预览）</param>
+        /// <param name="presetValues">预置定义值（14 个行为开关）</param>
+        /// <param name="numericValues">预置数值项（如真空超时；没有则传 null）</param>
+        /// <param name="tempEdits">用户临时修改（key→值；没有则传 null）</param>
+        /// <returns>差异行（"【中文名】 现值 → 新值"）；无差异返回空表</returns>
+        public static List<string> BuildApplyDiffLines(
+            Func<string, string> readRealValue,
+            Dictionary<string, string> presetValues,
+            Dictionary<string, string> numericValues,
+            Dictionary<string, string> tempEdits)
+        {
+            var lines = new List<string>();
+            if (readRealValue == null) return lines;
+            // 目标值 = 预置定义值 ← 数值项 ← 临时修改（后者覆盖前者）
+            var want = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (presetValues != null)
+            {
+                foreach (var kv in presetValues) want[kv.Key] = kv.Value;
+            }
+            if (numericValues != null)
+            {
+                foreach (var kv in numericValues) want[kv.Key] = kv.Value;
+            }
+            if (tempEdits != null)
+            {
+                foreach (var kv in tempEdits) want[kv.Key] = kv.Value;
+            }
+            foreach (var kv in want)
+            {
+                string cur = readRealValue(kv.Key) ?? "";
+                if (string.Equals(cur.Trim(), (kv.Value ?? "").Trim(),
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                string label;
+                if (!PolicyPresets.KeyLabels.TryGetValue(kv.Key, out label)) label = kv.Key;
+                bool mine = tempEdits != null && tempEdits.ContainsKey(kv.Key);
+                lines.Add("【" + label + "】 " + cur + " → " + kv.Value
+                    + (mine ? "（您的修改）" : ""));
+            }
+            return lines;
+        }
+
+        /// <summary>
         /// 【套用到自定义】（2.0.1：按钮语义唯一 = 把当前这套预置复制到自定义）。
         /// 流程：①有未保存的节点修改 → 先问"是否一起同步过去"（用户口径）
         /// → ②列差异确认 → ③逐项校验 → PersistChanges 同一条保存路
@@ -1648,58 +1726,20 @@ namespace AgingTestSystem.Views
                 _dirty = false;
             }
             // 套用内容 = 预置定义值 ＋ 临时修改（暂存的 ＋ 刚确认一起同步的）
-            var values = new Dictionary<string, string>(StringComparer.Ordinal);
-            Dictionary<string, string> presetValues = PolicyPresets.GetAllValues(id);
+            Dictionary<string, string> presetValues = PolicyPresets.GetPresetValues(id);
             if (presetValues == null) return;
-            foreach (var kv in presetValues) values[kv.Key] = kv.Value;
-            foreach (var kv in _presetTempEdits) values[kv.Key] = kv.Value;
-            // 差异预览：只列"真的会变"的项（中文名 + 现值→预置值；
-            // 数值项（超时 0）同样列出，一次看全）
-            var diffLines = new List<string>();
-            foreach (string key in PolicyPresets.GovernedKeys)
-            {
-                string want;
-                if (!values.TryGetValue(key, out want)) continue;
-                string cur = GetConfigString(key);
-                if (string.Equals(cur != null ? cur.Trim() : "",
-                    want != null ? want.Trim() : "", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-                string label;
-                if (!PolicyPresets.KeyLabels.TryGetValue(key, out label)) label = key;
-                diffLines.Add("【" + label + "】 " + cur + " → " + want);
-            }
             Dictionary<string, string> numerics = PolicyPresets.GetNumericValues(id);
-            if (numerics != null)
-            {
-                foreach (var kv in numerics)
-                {
-                    string cur = GetConfigString(kv.Key);
-                    if (string.Equals(cur != null ? cur.Trim() : "",
-                        kv.Value != null ? kv.Value.Trim() : "", StringComparison.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-                    string label;
-                    if (!PolicyPresets.KeyLabels.TryGetValue(kv.Key, out label)) label = kv.Key;
-                    diffLines.Add("【" + label + "】 " + cur + " → " + kv.Value);
-                }
-            }
-            // 用户在预置视图下改的那几项（非预置管辖的 key 也要列出来，
-            // 否则"我改的那两项"在确认框里看不见，用户不敢点确定）
-            foreach (var kv in _presetTempEdits)
-            {
-                if (PolicyPresets.GovernedKeys.Contains(kv.Key)) continue;
-                if (values.ContainsKey(kv.Key) && string.Equals(
-                    GetConfigString(kv.Key), kv.Value, StringComparison.OrdinalIgnoreCase)) continue;
-                string label;
-                if (!PolicyPresets.KeyLabels.TryGetValue(kv.Key, out label)) label = kv.Key;
-                diffLines.Add("【" + label + "】 " + GetConfigString(kv.Key) + " → " + kv.Value + "（您的修改）");
-            }
+            // 差异预览：**基准是真实生效值**（不是预览）。
+            // 【为什么】预览在预置视图下已经套上了预置值，拿它当"当前值"比 →
+            // 差异恒为 0 → 误判"当前已是该预置，无需套用" → 直接 return，
+            // 套用**从来没执行过**（现场实锤：点【套用到自定义】永远弹"无需套用"，
+            //  切到自定义里看节点一点没变，用户根本不知道到底成没成）。
+            var diffLines = BuildApplyDiffLines(GetRealConfigString,
+                presetValues, numerics, _presetTempEdits);
             if (diffLines.Count == 0)
             {
-                MessageBox.Show(this, "当前已是【" + def.Title + "】，无需套用。",
+                MessageBox.Show(this,
+                    "当前【自定义】的内容已与【" + def.Title + "】完全一致，无需套用。",
                     "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }

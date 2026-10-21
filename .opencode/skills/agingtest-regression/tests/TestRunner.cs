@@ -8909,6 +8909,102 @@ namespace AgingTestSystem.Tests
             Check("套用问句说清未保存节点是否一起同步",
                 applyPrompt.Contains("未保存") && applyPrompt.Contains("是否一起同步到自定义")
                 && applyPrompt.Contains("【否】只套用已保存的"));
+            // —— 套用到自定义：差异基准必须是"真实生效值"（2.0.2 修的现场 bug）——
+            // 【现场实锤】在预置视图点【套用到自定义】永远弹"当前已是【预置B…】，无需套用"，
+            //  切到自定义里看节点一点没变 —— 套用**从来没执行过**（用户根本不知道成没成）。
+            // 【根因】差异预览拿"预览值"当当前值比，而预置视图下预览已经套上预置值
+            //  → 差异恒为 0 → 直接 return。修复：比较基准改读真实生效配置。
+            Dictionary<string, string> diffPresetB = PolicyPresets.GetPresetValues("B");
+            Dictionary<string, string> diffNumericsB = PolicyPresets.GetNumericValues("B");
+            Dictionary<string, string> diffAllB = PolicyPresets.GetAllValues("B");
+            // ① 真实口径：某项与预置不同 → 必须列得出差异（老口径恒空）
+            var diffReal = ProcessPolicyForm.BuildApplyDiffLines(
+                key => string.Equals(key, "ZeroDurationPolicy", StringComparison.Ordinal)
+                    ? "Warn" : (diffAllB.ContainsKey(key) ? diffAllB[key] : ""),
+                diffPresetB, diffNumericsB, null);
+            Check("套用差异按真实值算（真实值≠预置值时列得出差异）",
+                diffReal != null && diffReal.Count > 0
+                && diffReal.Exists(l => l.Contains("0时长策略")));
+            // ② 老口径复现：拿预览值（已套预置）比 → 差异恒 0（证明这个 bug 的机制）
+            var diffPreview = ProcessPolicyForm.BuildApplyDiffLines(
+                key => diffAllB.ContainsKey(key) ? diffAllB[key] : "",
+                diffPresetB, diffNumericsB, null);
+            Check("老口径复现：拿预览值比差异恒为0（证明修复必要）",
+                diffPreview != null && diffPreview.Count == 0);
+            // ③ 真实值已等于预置值 → 无差异（不误报"要改"）
+            var diffSame = ProcessPolicyForm.BuildApplyDiffLines(
+                key => diffAllB.ContainsKey(key) ? diffAllB[key] : "",
+                diffPresetB, diffNumericsB, null);
+            Check("真实值已等于预置值时无差异（不误报要改）",
+                diffSame != null && diffSame.Count == 0);
+            // ④ 临时修改项要出现在差异里并标出是用户的修改（现场改了才看得见）
+            var diffTempEdits = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                { "ZeroDurationPolicy", "Warn" }
+            };
+            var diffTemp = ProcessPolicyForm.BuildApplyDiffLines(
+                key => "Block", diffPresetB, diffNumericsB, diffTempEdits);
+            Check("临时修改项列进差异并标出是您的修改",
+                diffTemp != null && diffTemp.Count > 0
+                && diffTemp.Exists(l => l.Contains("0时长策略") && l.Contains("您的修改")));
+            // ⑤ 窗体级：预置视图下"真实口径"必须读真实配置（不是预览），
+            //    且按真实口径算出的差异非空（老口径在这条路径上恒 0 → 套用被静默跳过）
+            ProcessPolicyForm realViewForm = null;
+            string rvCustomPath = ProjectPolicyStore.CustomFilePath;
+            bool rvHadCustom = File.Exists(rvCustomPath);
+            string rvCustomBackup = rvHadCustom ? File.ReadAllText(rvCustomPath) : null;
+            try
+            {
+                try { if (File.Exists(rvCustomPath)) File.Delete(rvCustomPath); }
+                catch { }
+                var cfgRealView = new DeviceConfig();
+                PolicyPresets.ApplyToConfig(cfgRealView, "B");   // 真实＝B（0时长=Block）
+                realViewForm = new ProcessPolicyForm(cfgRealView, null, true);
+                var tRV = typeof(ProcessPolicyForm);
+                object cboRV = tRV.GetField("_cboPreset",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(realViewForm);
+                var propIdxRV = cboRV.GetType().GetProperty("SelectedIndex");
+                propIdxRV.SetValue(cboRV, 3, null);   // 切 C：预览＝宽松（0时长=Warn）
+                var mReal = tRV.GetMethod("GetRealConfigString",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                var mEff = tRV.GetMethod("GetConfigString",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Check("真实口径/预览口径反射探针有效（防探针失效假绿）",
+                    mReal != null && mEff != null && propIdxRV != null);
+                if (mReal != null && mEff != null)
+                {
+                    string realStr = (string)mReal.Invoke(realViewForm,
+                        new object[] { "ZeroDurationPolicy" });
+                    string effStr = (string)mEff.Invoke(realViewForm,
+                        new object[] { "ZeroDurationPolicy" });
+                    Check("预置视图下真实口径≠预览口径（比较基准不再被预览污染）",
+                        realStr == "Block" && effStr == "Warn");
+                    // 按真实口径算差异：真实=B、预置=C → 必须有差异（老口径这里恒 0）
+                    Func<string, string> readReal = (Func<string, string>)
+                        Delegate.CreateDelegate(typeof(Func<string, string>), realViewForm, mReal);
+                    var diffInForm = ProcessPolicyForm.BuildApplyDiffLines(readReal,
+                        PolicyPresets.GetPresetValues("C"),
+                        PolicyPresets.GetNumericValues("C"), null);
+                    Check("预置视图下按真实口径差异非空（老口径恒0→套用被静默跳过）",
+                        diffInForm != null && diffInForm.Count > 0);
+                }
+            }
+            finally
+            {
+                try { if (realViewForm != null) realViewForm.Dispose(); } catch { }
+                try
+                {
+                    if (rvHadCustom && rvCustomBackup != null)
+                    {
+                        File.WriteAllText(rvCustomPath, rvCustomBackup);
+                    }
+                    else if (!rvHadCustom && File.Exists(rvCustomPath))
+                    {
+                        File.Delete(rvCustomPath);
+                    }
+                }
+                catch { }
+            }
         }
 
         // 12i. PolicyNodeComboV1851 —— 节点选项框按预置下拉口径统一（V1.85.1 新增）
