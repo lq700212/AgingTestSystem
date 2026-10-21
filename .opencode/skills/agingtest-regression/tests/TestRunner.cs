@@ -7993,8 +7993,10 @@ namespace AgingTestSystem.Tests
                 var cfgApply = new DeviceConfig();
                 applyForm = new ProcessPolicyForm(cfgApply, null, true);
                 var tApply = typeof(ProcessPolicyForm);
+                // 有两个重载（带/不带"额外改动"），按参数个数挑，避免 AmbiguousMatch
                 var applyMethod = tApply.GetMethod("ApplyPresetValues",
-                    BindingFlags.NonPublic | BindingFlags.Instance);
+                    BindingFlags.NonPublic | BindingFlags.Instance, null,
+                    new Type[] { typeof(string) }, null);
                 Check("套用预置方法可直调（不弹框，可回归）", applyMethod != null);
                 bool appliedOk = false;
                 if (applyMethod != null)
@@ -8186,19 +8188,27 @@ namespace AgingTestSystem.Tests
                 System.Reflection.MethodInfo mBuild = null;
                 foreach (var m in tP.GetMethods(BindingFlags.NonPublic | BindingFlags.Static))
                 {
-                    if (m.Name == "BuildPreviewConfig" && m.GetParameters().Length == 2)
+                    // 2.0.1 改口径：预览构造带"临时修改"参数（三参口）
+                    if (m.Name == "BuildPreviewConfig" && m.GetParameters().Length == 3)
                     { mBuild = m; break; }
                 }
                 var pvPure = mBuild != null
-                    ? mBuild.Invoke(null, new object[] { cfgPv, "C" }) as DeviceConfig
+                    ? mBuild.Invoke(null, new object[] { cfgPv, "C", null }) as DeviceConfig
                     : null;
                 Check("BuildPreviewConfig内容=C且真实不动",
                     pvPure != null && pvPure.AgingPressureLossPolicy == AgingPressureLossPolicy.KeepRunning
                     && cfgPv.AgingPressureLossPolicy == AgingPressureLossPolicy.StopOnLoss);
                 Check("BuildPreviewConfig自定义回null（看真实）",
-                    mBuild != null && mBuild.Invoke(null, new object[] { cfgPv, "Custom" }) == null);
-                // 2.0.1 大改：预置＝纯只读预览，没有"看了没套用"这回事，
-                // 关窗也不再问"要不要套用"（只读没改任何东西，不存在会丢的意图）。
+                    mBuild != null && mBuild.Invoke(null, new object[] { cfgPv, "Custom", null }) == null);
+                // 临时修改叠加到预览（所见即所得：改了要看得见）
+                var pvTemp = mBuild != null
+                    ? mBuild.Invoke(null, new object[] { cfgPv, "C",
+                        new Dictionary<string, string> { { "VacuumConfirmTimeoutMs", "999" } } }) as DeviceConfig
+                    : null;
+                Check("预览叠加临时修改（改了看得见）",
+                    pvTemp != null && pvTemp.VacuumConfirmTimeoutMs == 999
+                    && cfgPv.VacuumConfirmTimeoutMs == 15000);
+                // 2.0.1 改口径：预置可临时改 → 改完要问"是否同步到自定义"（切方案/关窗两处）
                 // 反向锁：旧口径的方法必须不在了（防"多套并存"复活）。
                 bool hasPendMethod = false;
                 bool hasClosePrompt = false;
@@ -8215,19 +8225,28 @@ namespace AgingTestSystem.Tests
                 }
                 Check("旧口径三件已删（待定判定/关窗套用文案/套用自定义）",
                     !hasPendMethod && !hasClosePrompt && !hasApplyCustom);
-                // 关窗只问"有未保存的修改没有"（纯函数：脏才拦）
+                // 关窗只问"有未落地的预置修改没有"（纯函数：脏才拦）
                 var mClose = tP.GetMethod("ConfirmCloseAllowed",
                     BindingFlags.NonPublic | BindingFlags.Instance);
-                Check("关窗确认入口在（只问未保存的修改）", mClose != null);
-                // 反向验证：预览构造只有两参口（自定义＝看真实，
-                // 没有"拿槽当预览/拿槽判待定"的旧口径，防其复活）
-                bool hasBuild3 = false;
+                Check("关窗确认入口在（问未落地的预置修改）", mClose != null);
+                // 同步问句与判定入口在（切方案/关窗两处共用）
+                var mSync = tP.GetMethod("ConfirmPresetEditsSync",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                var mPending = tP.GetMethod("HasPendingPresetEdits",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                var mCollect = tP.GetMethod("CollectPendingPresetEdits",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Check("预置修改同步三件套在（判定/收集/问句）",
+                    mSync != null && mPending != null && mCollect != null);
+                // 反向验证：预览构造只有三参口（带临时修改），
+                // 两参口（旧口径"不带临时修改"）不许复活
+                bool hasBuild2 = false;
                 foreach (var m in tP.GetMethods(BindingFlags.NonPublic | BindingFlags.Static))
                 {
-                    if (m.Name == "BuildPreviewConfig" && m.GetParameters().Length == 3)
-                    { hasBuild3 = true; }
+                    if (m.Name == "BuildPreviewConfig" && m.GetParameters().Length == 2)
+                    { hasBuild2 = true; }
                 }
-                Check("预览构造只有两参口（自定义＝看真实，防旧口径复活）", !hasBuild3);
+                Check("预览构造只有三参口（带临时修改，防旧口径复活）", !hasBuild2);
             }
             finally
             {
@@ -8314,8 +8333,8 @@ namespace AgingTestSystem.Tests
                     ? fSaveNodeFl.GetValue(flForm) as Control : null;
                     Check("自定义视图下保存本节点可用（可改的那套）",
                         saveNodeCtl != null && saveNodeCtl.Enabled);
-                    // 切 A 预览（索引 1）：画布超时 0，右栏同步 0，真实不动，不标脏，
-                    // 状态条明示只读预览；**右栏编辑器禁用**（预置是只读模板）
+                    // 切 A（索引 1）：画布超时 0，右栏同步 0，真实不动，不标脏。
+                    // 2.0.1 改口径：预置**可临时改**（编辑器不禁用），保存只暂存。
                     propIdxFl.SetValue(cboFl, 1, null);
                     var pvFlA = fPrevCanvas.GetValue(canvasFl) as DeviceConfig;
                     Check("切A画布预览超时0",
@@ -8326,30 +8345,27 @@ namespace AgingTestSystem.Tests
                         cfgFl.VacuumConfirmTimeoutMs == 15000);
                     Check("跟随不标脏",
                         ((bool)fDirtyFl.GetValue(flForm)) == false);
-                    Check("预览态有标识（只读预览）",
+                    Check("预置视图有标识（临时改这套）",
                         ((bool)fPendFl.GetValue(flForm)) == true);
-                    // 2.0.1 大改核心：预置＝只读模板，右栏编辑器禁用、不能保存
-                    Check("切A右栏编辑器禁用（预置只读，改不了）",
+                    // 2.0.1 改口径核心：预置可临时改 → 编辑器可用、保存按钮可用
+                    Check("切A右栏编辑器可用（预置可临时改）",
                         edCtl("VacuumConfirmTimeoutMs") != null
-                        && !edCtl("VacuumConfirmTimeoutMs").Enabled);
-                    Check("切A保存本节点禁用（只读模板存不了）",
-                        saveNodeCtl != null && !saveNodeCtl.Enabled);
+                        && edCtl("VacuumConfirmTimeoutMs").Enabled);
+                    Check("切A保存本节点可用（保存=暂存）",
+                        saveNodeCtl != null && saveNodeCtl.Enabled);
                     var stA = fStatusFl.GetValue(flForm) as Control;
-                    Check("状态条明示只读预览并给出下一步",
-                        stA != null && stA.Text.Contains("只读")
-                        && stA.Text.Contains("套用到自定义"));
-                    // 切回自定义（索引 0）：右栏回 15000，只读标识清除，编辑器恢复可改
-                    // 【为什么不是切回 B】B 也是预置＝只读模板（2.0.1 大改：预置一律只读），
-                    // 要恢复可改只能切回"自定义"（唯一生效、唯一可改的那套）。
+                    Check("状态条说明保存只是暂存",
+                        stA != null && stA.Text.Contains("暂存"));
+                    // 切回自定义（索引 0）：右栏回 15000，临时改标识清除
                     propIdxFl.SetValue(cboFl, 0, null);
                     Check("切回自定义右栏回真实15000",
                         edText("VacuumConfirmTimeoutMs") == "15000");
-                    Check("回自定义只读态清除",
+                    Check("回自定义预置标识清除",
                         ((bool)fPendFl.GetValue(flForm)) == false);
-                    Check("回自定义右栏编辑器恢复可改",
+                    Check("回自定义右栏编辑器可改",
                         edCtl("VacuumConfirmTimeoutMs") != null
                         && edCtl("VacuumConfirmTimeoutMs").Enabled);
-                    Check("回自定义保存本节点恢复可用",
+                    Check("回自定义保存本节点可用",
                         saveNodeCtl != null && saveNodeCtl.Enabled);
                     // 套用按钮的可用性跟"看的是不是预置"绑定
                     var btnApplyFl = tF.GetField("_btnApplyPreset",
@@ -8781,6 +8797,118 @@ namespace AgingTestSystem.Tests
                 micro1 == 3 && micro2 == 7);
             Check("余量累积（两次小增量大于一次）",
                 rem2 < 0 && rem2 > -1);   // 往下滚余量为负，绝对值 <1px（留给下一格）
+
+            // —— 画布右键菜单"适合图像"（2.0.1：空白处右键弹出，选中＝还原默认大小并居中）——
+            ProcessPolicyForm menuForm = null;
+            try
+            {
+                menuForm = new ProcessPolicyForm(new DeviceConfig(), null, true);
+                var tM = typeof(ProcessPolicyForm);
+                var canvasM = tM.GetField("_canvas",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(menuForm) as Control;
+                Check("画布探针有效（防探针失效假绿）", canvasM != null);
+                if (canvasM != null)
+                {
+                    var ctM = canvasM.GetType();
+                    var fMenu = ctM.GetField("_viewMenu",
+                        BindingFlags.NonPublic | BindingFlags.Instance);
+                    var fItem = ctM.GetField("_miFitView",
+                        BindingFlags.NonPublic | BindingFlags.Instance);
+                    Check("右键菜单探针有效", fMenu != null && fItem != null);
+                    var menuM = fMenu != null ? fMenu.GetValue(canvasM) as ContextMenuStrip : null;
+                    var itemM = fItem != null ? fItem.GetValue(canvasM) as ToolStripMenuItem : null;
+                    Check("右键菜单只有一项且叫适合图像",
+                        menuM != null && itemM != null && menuM.Items.Count == 1
+                        && itemM.Text == "适合图像");
+                    // 适合图像：缩放回默认(1) + 平移归零（视图还原，不碰节点位置）
+                    var fZoom = ctM.GetField("_zoom",
+                        BindingFlags.NonPublic | BindingFlags.Instance);
+                    var mFit = ctM.GetMethod("FitToView",
+                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                    Check("适合图像方法与缩放字段在位", mFit != null && fZoom != null);
+                    if (mFit != null && fZoom != null)
+                    {
+                        fZoom.SetValue(canvasM, 2.5f);
+                        mFit.Invoke(canvasM, null);
+                        Check("适合图像后缩放回默认大小(1)",
+                            Math.Abs((float)fZoom.GetValue(canvasM) - 1f) < 0.001f);
+                        var scrollProp = canvasM.GetType().GetProperty("AutoScrollPosition");
+                        var sp = (Point)scrollProp.GetValue(canvasM, null);
+                        Check("适合图像后平移归零",
+                            sp.X == 0 && sp.Y == 0);
+                    }
+                }
+            }
+            finally { try { if (menuForm != null) menuForm.Dispose(); } catch { } }
+            // 居中偏移（纯函数）：内容盒子在视口里居中所需的视图偏移
+            var off = ProcessPolicyForm.ComputeCenterOffset(
+                new Rectangle(0, 0, 100, 100), new Size(300, 300));
+            Check("居中偏移：内容在左上角时向右下偏",
+                off.X == 100 && off.Y == 100);
+            var off2 = ProcessPolicyForm.ComputeCenterOffset(
+                new Rectangle(50, 50, 100, 100), new Size(300, 300));
+            Check("居中偏移：内容已带偏移时按视口中心算",
+                off2.X == 50 && off2.Y == 50);
+            var off3 = ProcessPolicyForm.ComputeCenterOffset(
+                new Rectangle(0, 0, 500, 500), new Size(300, 300));
+            Check("居中偏移：内容比视口大时为负（出界靠滚动条找回来）",
+                off3.X == -100 && off3.Y == -100);
+
+            // —— 预置可临时改 → 暂存 → 同步到自定义（2.0.1 用户口径第二轮）——
+            // ① 暂存：只落内存，**不动生效配置**（生效的永远是自定义那一份）
+            ProcessPolicyForm tempForm = null;
+            try
+            {
+                var cfgTemp = new DeviceConfig();
+                PolicyPresets.ApplyToConfig(cfgTemp, "B");
+                tempForm = new ProcessPolicyForm(cfgTemp, null, true);
+                var tT = typeof(ProcessPolicyForm);
+                var fCboT = tT.GetField("_cboPreset",
+                    BindingFlags.NonPublic | BindingFlags.Instance).GetValue(tempForm);
+                var propIdxT = fCboT.GetType().GetProperty("SelectedIndex");
+                propIdxT.SetValue(fCboT, 1, null);   // 切到预置A
+                var mTemp = tT.GetMethod("ApplyPresetTempEdits",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                var mPendT = tT.GetMethod("HasPendingPresetEdits",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                var mCollT = tT.GetMethod("CollectPendingPresetEdits",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Check("暂存三件套在（暂存/判定/收集）",
+                    mTemp != null && mPendT != null && mCollT != null);
+                if (mTemp != null)
+                {
+                    bool r = (bool)mTemp.Invoke(tempForm, new object[] {
+                        new Dictionary<string, string> { { "VacuumConfirmTimeoutMs", "12345" } } });
+                    Check("暂存成功", r);
+                    Check("暂存不改生效配置（生效的永远是自定义那一份）",
+                        cfgTemp.VacuumConfirmTimeoutMs == 15000);
+                    Check("暂存后有未落地修改（要问同步）",
+                        (bool)mPendT.Invoke(tempForm, null));
+                    var coll = mCollT.Invoke(tempForm, null) as Dictionary<string, string>;
+                    Check("待同步内容含刚才暂存的那项",
+                        coll != null && coll.ContainsKey("VacuumConfirmTimeoutMs")
+                        && coll["VacuumConfirmTimeoutMs"] == "12345");
+                    // 预览要带上暂存值（所见即所得）
+                    var fPrevT = tT.GetField("_previewConfig",
+                        BindingFlags.NonPublic | BindingFlags.Instance);
+                    var prevT = fPrevT.GetValue(tempForm) as DeviceConfig;
+                    Check("预览带上暂存值（改了看得见）",
+                        prevT != null && prevT.VacuumConfirmTimeoutMs == 12345
+                        && cfgTemp.VacuumConfirmTimeoutMs == 15000);
+                }
+            }
+            finally { try { if (tempForm != null) tempForm.Dispose(); } catch { } }
+            // ② 问句文案：言简意赅 + 两个选择各是什么（回归直接断言纯函数）
+            string syncPrompt = ProcessPolicyForm.BuildPresetSyncPrompt("预置A·常用", 3);
+            Check("同步问句说清是否套用并同步到自定义",
+                syncPrompt.Contains("是否套用该预置") && syncPrompt.Contains("同步到自定义")
+                && syncPrompt.Contains("3 项"));
+            Check("同步问句两路选择明确",
+                syncPrompt.Contains("【是】套用并同步保存") && syncPrompt.Contains("【否】不套用、不保存"));
+            string applyPrompt = ProcessPolicyForm.BuildApplySyncPrompt("预置A·常用");
+            Check("套用问句说清未保存节点是否一起同步",
+                applyPrompt.Contains("未保存") && applyPrompt.Contains("是否一起同步到自定义")
+                && applyPrompt.Contains("【否】只套用已保存的"));
         }
 
         // 12i. PolicyNodeComboV1851 —— 节点选项框按预置下拉口径统一（V1.85.1 新增）
