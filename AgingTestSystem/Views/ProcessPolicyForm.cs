@@ -27,30 +27,41 @@ namespace AgingTestSystem.Views
     /// 【界面布局】（左列主链 + 右列分支 + 右下 MES 纯配置节点）
     /// ┌──────────────────────────────────────────────┬───────────────┐
     /// │ 画布（自绘，可缩放/平移/拖节点）               │ 右栏 320px    │
-    /// │  [启动开阀]              [断电恢复]            │ 预置策略行    │
-    /// │      │开阀                   ┊整台重测/续跑    │ [A/B/C/D下拉]   │
-    /// │  [抽真空]────────超时/失压/失联/规则───────┐   │ [套用预置]    │
-    /// │      │压力到位 且 延时时间到                          │ 选中节点标题  │
-    /// │  [上电老化]────失压/失联/规则/超温───────┐   │ [编辑器组]    │
+    /// │  [启动开阀]              [断电恢复]            │ 方案区        │
+    /// │      │开阀                   ┊整台重测/续跑    │ [查看下拉]   │
+    /// │  [抽真空]────────超时/失压/失联/规则───────┐   │ [套用到自定义]│
+    /// │      │压力到位 且 延时时间到                          │ 说明一行     │
+    /// │  [上电老化]────失压/失联/规则/超温───────┐   │ 选中节点标题  │
     /// │      │时长到 或 表达式                      [报警联动]        │
-    /// │  [完成下电]──────────待取料/待判定──────→    │ [保存本节点]  │
+    /// │  [完成下电]──────────待取料/待判定──────→    │ [编辑器组]    │
     /// │                        └────────→                             │
     /// │                                     [MES上报]（无连线，纯配置）│
     /// ├──────────────────────────────────────────────┴───────────────┤
     /// │ 状态条：项目名 | 选中节点 | 保存提示                           │
     /// └──────────────────────────────────────────────────────────────┘
-    /// 右栏顶部（标题46/下拉+按钮68/说明100/导入导出146）：**当前策略恒为"自定义"**
-    /// （软件只认自定义——A/B/C/D 是代码写死的只读模板，改不了也不该被改，
-    ///  套用也只是把模板复制进自定义，所以下拉永远回显"自定义"）。
-    /// 下拉里选 A/B/C/D＝"看这套只读模板长什么样"：左侧画布与右栏即时预览该模板的值
-    /// （克隆+套值的副本，只看不存不标脏）；点"套用预置"才把该模板的各节点配置
-    /// **复制到自定义**并即时生效（确认框列差异项 + 前置条件 + 覆盖自定义槽提示，
-    /// 走 PersistChanges 同一条保存路；下拉停在自定义即套用槽内容）。
-    /// 关窗时预览还没套用，弹 SunnyUI 确认框问要不要套用（确定=套用后关，取消=直接关；
-    /// X 与关闭按钮同路）。
-    /// 套用只动 12 个行为开关＋真空超时（见 PolicyPresets），MES/规则/报表/点位/时长阈值不动；
+    /// 【方案区模型（2.0.1 大改：下拉=看哪套，套用=复制到自定义）】
+    /// 右栏顶部只留两个控件，语义各一个，现场不用猜：
+    /// - **下拉＝"我现在看的是哪套"**：自定义 / 预置A / 预置B / 预置C / 预置D
+    ///   （自定义排第一、默认选中；开窗/保存/套用/导入后都回到"自定义"）。
+    /// - **按钮＝"把当前这套模板复制到自定义"**：【套用到自定义】，只在选中预置时可用。
+    /// 两种视图的行为：
+    /// - 选中**自定义**：画面＝当前生效的那套，节点**可改**，改完点【保存本节点】生效。
+    /// - 选中**预置A/B/C/D**：画面＝该模板，节点**纯只读**（右栏编辑器全禁用、
+    ///   【保存本节点】禁用、标题标"（只读预览）"），什么都不落盘（只看）。
+    ///   要改这套先点【套用到自定义】→ 模板的各节点配置复制到自定义并即时生效
+    ///   （落槽＝套用后的完整生效配置）→ 视图自动切回"自定义"，接着改节点即可。
+    /// 【为什么这么设计（2.0.1 大改的由来）】
+    /// 旧版三处互相打架：①说是"只读模板"却能改能存（状态条还写"只读模板预览值，
+    /// 保存即写入自定义"，自相矛盾）；②同一个【套用预置】按钮有两种语义（停在预置是
+    /// "复制预置"、停在自定义是"回滚槽"）；③套用完画面还停在预置的只读画面，
+    /// 用户不知道生效的已经是自定义、也不知道该去哪改。
+    /// 现在：**一个下拉只回答"看哪套"，一个按钮只做"复制到自定义"**，预置一律只读。
+    /// 【没有"套用自定义"】自定义＝生效配置本体，槽在每次保存时就全量落盘，
+    /// 两者永远一致，"把槽写回配置"是永远无差异的死功能——按钮语义必须唯一。
+    /// 套用只动 14 个行为开关＋真空超时（见 PolicyPresets），MES/规则/报表/点位/时长阈值不动；
     /// "导出策略"可选 A/B/C/D/自定义任一源装包（全量策略 key，含自由文本），
     /// "导入策略"一律进自定义槽并即时生效（A/B/C/D 覆盖不了）。只读模式套用/导入禁用，导出可用。
+    /// 关窗：只读预览没改任何东西，直接关；有未保存的节点修改才问一句存不存。
     /// 全部节点 Bool/Enum 下拉按预置下拉口径统一：
     /// 下拉列表按最长选项实测拉宽（SizeNodeCombo，最长 22 字项原来被截断）+
     /// 悬停看选中项全文（共享 _editorTip，切节点清表防钉住泄漏，随窗体释放）。
@@ -58,7 +69,13 @@ namespace AgingTestSystem.Views
     /// - 左键拖节点体 = 移动节点（位置存 PolicyLayout.json，下次打开接着用）；
     /// - 左键点节点/连线 = 选中（右栏切出该节点的编辑器；连线只读，显示条件来源）；
     /// - 左键点空白 = 取消选中；Esc 同样取消；
-    /// - 滚轮 = 缩放（25%~400%，以鼠标为中心，不用先点画布抢焦点）；
+    /// - **滚轮按光标位置分工**：在**画布**上 = 以鼠标为中心缩放策略可视化图；
+    ///   在**右栏**上 = 上下滚动右栏的编辑器区（滑块跟着走，**不是**缩放画布）。
+    ///   【为什么右栏要手动驱动】滚轮消息只发给"有焦点的控件"——点过画布节点后焦点
+    ///   就在画布上，鼠标停在右栏滚滚轮，右栏根本收不到消息（观感：右栏滚轮没反应）。
+    ///   判定抽成纯函数 `ResolveWheelAction`（回归直接断言，不挪鼠标）；
+    ///   滚动是**跟手 + 缓动**：滚轮只改目标位置，16ms 定时器每帧走 30% 滑过去
+    ///   （高精度滚轮/触摸板的小增量按 1/120 单位累积成整像素，微移也跟手）。
     /// - 按住中键拖 = 平移画布；Del 键无动作（拓扑固定，不许删除）。
     /// 【坐标】节点 X/Y 存 96DPI 逻辑像素；绘制/命中走 Scale()=DPI×zoom 一处；
     /// 缩放是纯视图态（不进存盘）；字体用 pt（自动随 DPI 放大）×zoom 缓存两档；
@@ -108,9 +125,21 @@ namespace AgingTestSystem.Views
         // 下拉弹回此选项，画布/说明同步恢复，右栏没动过不用重建）。
         private string _lastPresetId;
         // 预览态标识（UpdatePresetDesc 里算好存下：右栏状态条直接读，不重复读槽文件。
-        // _previewPending＝下拉选项与真实探测不一致（看了没套用）；_previewTitle＝选项中文名）。
-        private bool _previewPending;
+        // _presetReadOnly＝当前查看的是预置模板（只读预览，改不了也存不了）；
+        // _previewTitle＝选项中文名）。
+        private bool _presetReadOnly;
         private string _previewTitle;
+
+        // —— 右栏滚轮缓动（丝滑滚动）——
+        // 滚轮事件只改"目标位置"，16ms 定时器每帧走 30% 滑过去（到位即停）。
+        // _wheelRemainderPx：滚轮增量的像素余量（高精度滚轮/触摸板一格只给几个单位，
+        //   靠它累积出整像素才动 → 微移平滑，不是一格一格跳）。
+        // _scrollTarget：目标滚动距离（px，从顶部算）；_lastAppliedOffset：上次真正
+        //   写进去的值（发现被外人改过＝用户自己拖了滑块 → 放弃动画跟随现状）。
+        private Timer _scrollAnim;
+        private double _wheelRemainderPx;
+        private int _scrollTarget;
+        private int _lastAppliedOffset;
 
         /// <summary>本次会话保存过的 key（主窗体按需热生效，SettingsForm.SavedKeys 同款语义）</summary>
         public HashSet<string> SavedKeys { get; private set; }
@@ -150,6 +179,17 @@ namespace AgingTestSystem.Views
             _canvas.NodeSelected += (id) => SelectNode(id, true);
             _canvas.EdgeSelected += (edgeId) => SelectEdge(edgeId);
             this.Controls.Add(_canvas);
+            // 【Dock Fill 必须最后布局（V1.82 家规）】WinForms 按 **z 序从后往前** 布局 Dock，
+            // 后面的先占边（Right/Bottom），`Fill` 必须处在 z 序**最前**才轮到最后布局、
+            // 只吃"剩下的"客户区。而 `Controls.Add` 是**追加沉底**（后加的层级更靠后，
+            // V1.86 血泪订正过"后 Add 压前面"的错觉）——所以光"最后 Add 画布"是不够的：
+            // 画布会先布局、一把梭占满整个客户区（harness 实测 1156×940），右栏那 320px
+            // 底下压着一层画布（绘制上是浮盖，但**画布的屏幕矩形把右栏整块包进去**）。
+            // 后果不是好看不好看，是**命中**：滚轮"光标在画布上才缩放"的判定用的是画布矩形，
+            // 鼠标停在右栏也命中 → 右栏滚滚轮，画布在缩放（现场报"右栏滚轮没反应、图还在缩"）。
+            // 修法：加完统一 `BringToFront()` 一次（Fill 提到 z 序最前 → 最后布局 →
+            // 只占右栏左侧那块 836×888），z 序反了画布会盖住右栏（Designer 头注已写明）。
+            _canvas.BringToFront();
 
             SelectNode(null, false);
             // 自定义槽就地初始化（首次打开按 A 快照建槽，自由文本取当前种子；
@@ -160,7 +200,7 @@ namespace AgingTestSystem.Views
                 catch { /* 开窗不因建槽失败而拦人 */ }
             }
             RefreshPresetRow();
-            // 开窗按真实重造预览：下拉显示的是"当前配置属于哪套预置"，
+            // 开窗看真实：下拉回显"自定义"（唯一生效、唯一可改的那套），
             // 画面必须显示真实生效值（否则预置的数值项会把真实盖掉，
             // 现场看着像"配置没生效"）。用户主动切下拉时才按预置预览。
             RebuildPreviewFromReal();
@@ -196,6 +236,8 @@ namespace AgingTestSystem.Views
             {
                 // 【大扫荡】Dispose 后置 null：字段再指已释放对象，复用/探针都干净。
                 if (_timer != null) { _timer.Stop(); _timer.Dispose(); _timer = null; }
+                // 缓动定时器同上（无容器托管，必须手停手放，R6 配对锁）
+                if (_scrollAnim != null) { _scrollAnim.Stop(); _scrollAnim.Dispose(); _scrollAnim = null; }
             }
             catch { }
             Application.RemoveMessageFilter(this);
@@ -217,6 +259,9 @@ namespace AgingTestSystem.Views
                 {
                     if (_presetTip != null) { _presetTip.Dispose(); _presetTip = null; }
                     if (_editorTip != null) { _editorTip.Dispose(); _editorTip = null; }
+                    // 缓动定时器（无容器托管，OnFormClosed 已停过，这里再兜一次，
+                    // 防止窗体没走 FormClosed 就被 Dispose 的路径留下野定时器）
+                    if (_scrollAnim != null) { _scrollAnim.Stop(); _scrollAnim.Dispose(); _scrollAnim = null; }
                 }
                 catch { }
             }
@@ -224,7 +269,45 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 滚轮消息预过滤：光标在画布上时直接缩放并吞掉消息（右栏文本框的滚轮不受影响）。
+        /// 滚轮动作判定（纯函数：光标位置 → 该干什么）。**回归直接断言这个函数**，
+        /// 不用真的挪鼠标（挪鼠标会打扰现场，也会在无人值守会话里不可靠）。
+        /// 【右栏优先】两个区域万一又叠上（布局回退），按"光标在右栏"处理，
+        /// 宁可右栏滚也不要画布缩放——用户 complaining 的是"鼠标在右栏，图却缩了"。
+        /// </summary>
+        public enum WheelAction
+        {
+            /// <summary>不处理（状态条等其它区域，交给系统默认）。</summary>
+            None = 0,
+            /// <summary>缩放策略可视化图（光标在画布上）。</summary>
+            ZoomCanvas = 1,
+            /// <summary>滚动右栏编辑器区（光标在右栏上）。</summary>
+            ScrollRightPanel = 2
+        }
+
+        /// <summary>
+        /// 滚轮分流判定（纯函数）。
+        /// </summary>
+        /// <param name="cursor">光标的屏幕坐标</param>
+        /// <param name="rightPanelScreen">右栏的屏幕矩形</param>
+        /// <param name="canvasScreen">画布的屏幕矩形</param>
+        public static WheelAction ResolveWheelAction(
+            Point cursor, Rectangle rightPanelScreen, Rectangle canvasScreen)
+        {
+            if (rightPanelScreen.Contains(cursor)) return WheelAction.ScrollRightPanel;
+            if (canvasScreen.Contains(cursor)) return WheelAction.ZoomCanvas;
+            return WheelAction.None;
+        }
+
+        /// <summary>
+        /// 滚轮消息预过滤：**按光标位置分工**（2.0.1 用户要求）。
+        /// - 光标在**画布**上 → 缩放策略可视化图（沿用原逻辑，吞掉消息）；
+        /// - 光标在**右栏**上 → 上下滚动右栏的编辑器区（滑块跟着走），**不是**缩放画布。
+        /// 【为什么右栏要手动驱动滚动】滚轮消息只发给"有焦点的控件"——点过画布节点后
+        /// 焦点就在画布上，鼠标停在右栏滚滚轮，右栏**根本收不到消息**，
+        /// 现场观感就是"右栏滚轮没反应、画布也不动"。所以这里按光标位置主动分流：
+        /// 右栏的 `AutoScroll` 由本方法驱动（滚动条与内容同步动）。
+        /// 【消费原则】右栏区域一律吞掉滚轮消息（哪怕右栏已到头没得滚）——
+        /// 放行的话消息会落到焦点控件（画布）上，出现"鼠标在右栏、画布却缩放了"的怪象。
         /// </summary>
         public bool PreFilterMessage(ref Message m)
         {
@@ -233,15 +316,176 @@ namespace AgingTestSystem.Views
             if (_canvas == null || _canvas.IsDisposed) return false;
             try
             {
-                if (!_canvas.RectangleToScreen(_canvas.ClientRectangle).Contains(Cursor.Position))
-                {
-                    return false;
-                }
                 int delta = (short)((m.WParam.ToInt32() >> 16) & 0xFFFF);
-                _canvas.ZoomAtCursor(delta > 0 ? 1 : -1);
-                return true;
+                if (delta == 0) return false;
+                Point cur = Cursor.Position;
+                Rectangle rightScreen = Rectangle.Empty;
+                try
+                {
+                    if (_pnlRight != null && !_pnlRight.IsDisposed)
+                    {
+                        rightScreen = _pnlRight.RectangleToScreen(_pnlRight.ClientRectangle);
+                    }
+                }
+                catch { rightScreen = Rectangle.Empty; }
+                Rectangle canvasScreen = _canvas.RectangleToScreen(_canvas.ClientRectangle);
+                switch (ResolveWheelAction(cur, rightScreen, canvasScreen))
+                {
+                    case WheelAction.ScrollRightPanel:
+                        ScrollRightPanelByWheel(delta);
+                        return true;
+                    case WheelAction.ZoomCanvas:
+                        _canvas.ZoomAtCursor(delta > 0 ? 1 : -1);
+                        return true;
+                    default:
+                        return false;
+                }
             }
             catch { return false; }
+        }
+
+        /// <summary>
+        /// 右栏滚轮：**跟手 + 缓动**（2.0.1 用户"我要的是丝滑"）。
+        /// 【三个真 bug（harness 实测抓到的，不是手感问题）】
+        /// ① **范围算法错**（"时好时不好"的真凶）：AutoScroll 滚动时**子控件会跟着上移**
+        ///    （实测 firstChildTop 0→-50、子控件底边 658→608），拿"子控件最大底边"当
+        ///    内容高度 → 滚完第一格高度就缩到等于客户区高 → 判定"内容没超出、不用滚"
+        ///    → **后面每一格都不动**。可滚范围必须用 `DisplayRectangle.Height`（内容总高，
+        ///    不随滚动变），子控件底边只作兜底（且要加回当前偏移）。
+        /// ② **方向反了**：WM_MOUSEWHEEL 的 delta&gt;0 = 轮子**往前**滚 = 看**更上面**的内容
+        ///    （Windows 原生行为，harness 对照 SendMessage 证实），早前实现按"正数往下"
+        ///    写反了，滚轮往上推列表却往下跑。
+        /// ③ **一格跳太多**：可滚范围常常只有几十 px，一格跳 57px → 要么跳到底、
+        ///    要么没得动。改成"滚轮增量按 1/120 单位换算成像素、余量累积到整像素才动"，
+        ///    高精度滚轮/触摸板的小增量也能平滑出 1~2px 的微移。
+        /// 【丝滑从哪来】滚轮事件只改**目标位置**，由 16ms 定时器**缓动**过去
+        /// （每帧走 30%），到位即停 → 观感是"滑过去"而不是"啪地跳一格"；
+        /// 用户自己拖了滑块（位置被外人改过）就放弃动画、跟随现状。
+        /// </summary>
+        private void ScrollRightPanelByWheel(int delta)
+        {
+            if (_pnlEditors == null || _pnlEditors.IsDisposed) return;
+            if (!_pnlEditors.AutoScroll) return;
+            int range = ComputeScrollRange(
+                _pnlEditors.DisplayRectangle.Height,
+                _pnlEditors.ClientSize.Height,
+                Math.Abs(_pnlEditors.AutoScrollPosition.Y),
+                GetEditorsContentBottom());
+            if (range <= 0) return;   // 内容没超出，没有可滚范围
+            int step = Math.Max(1, _pnlEditors.Font.Height * 3);   // 一格 = 3 行（系统手感）
+            double remainder;
+            int cur = Math.Abs(_pnlEditors.AutoScrollPosition.Y);
+            int target = ComputeScrollTarget(cur, _wheelRemainderPx, delta, step, range,
+                out remainder);
+            _wheelRemainderPx = remainder;
+            if (target == _scrollTarget && _scrollAnim != null && _scrollAnim.Enabled) return;
+            _scrollTarget = target;
+            EnsureScrollAnim();
+        }
+
+        /// <summary>右栏可滚距离（纯函数：内容高/客户区高/当前偏移/子控件底边 → 可滚 px）。
+        /// 【为什么要"子控件底边 + 当前偏移"兜底】AutoScroll 滚动时子控件跟着上移，
+        /// 单看底边会越滚越小（bug ①）；加回偏移才是真实内容高度。</summary>
+        public static int ComputeScrollRange(
+            int contentHeight, int clientHeight, int currentOffset, int childrenBottom)
+        {
+            int h = contentHeight;
+            int byChildren = childrenBottom + currentOffset;
+            if (byChildren > h) h = byChildren;
+            int range = h - clientHeight;
+            return range > 0 ? range : 0;
+        }
+
+        /// <summary>滚轮目标位置（纯函数：当前偏移/余量/滚轮增量/步长/可滚范围 → 目标偏移）。
+        /// 【方向】delta&gt;0 = 往前滚 = 看更上面的内容 → 目标偏移**变小**。
+        /// 【余量累积】增量按 1/120 单位换算成像素，截断取整、余下的小数留到下一次
+        /// （高精度滚轮/触摸板一格只给几个单位，靠这个才能平滑微移）。</summary>
+        public static int ComputeScrollTarget(
+            int currentOffset, double remainderPx, int delta, int step, int range,
+            out double newRemainder)
+        {
+            remainderPx += delta / 120.0 * step;
+            int whole = (int)remainderPx;          // 截断（向零取整），小数留到下次
+            newRemainder = remainderPx - whole;
+            int target = currentOffset - whole;     // 正增量 → 往上看（偏移变小）
+            if (target < 0) target = 0;
+            if (target > range) target = range;
+            return target;
+        }
+
+        /// <summary>右栏内容高度（子控件最大底边；随滚动会变小，只作兜底用）。</summary>
+        private int GetEditorsContentBottom()
+        {
+            int bottom = 0;
+            try
+            {
+                foreach (Control c in _pnlEditors.Controls)
+                {
+                    if (c.Bottom > bottom) bottom = c.Bottom;
+                }
+            }
+            catch { }
+            return bottom;
+        }
+
+        /// <summary>起滚轮缓动定时器（16ms；只在需要时起，到位即停）。</summary>
+        private void EnsureScrollAnim()
+        {
+            if (_scrollAnim == null)
+            {
+                _scrollAnim = new Timer { Interval = 16 };
+                _scrollAnim.Tick += ScrollAnimTick;
+            }
+            if (!_scrollAnim.Enabled) _scrollAnim.Start();
+        }
+
+        /// <summary>停缓动（到位/关窗/重建右栏时调）。</summary>
+        private void StopScrollAnim()
+        {
+            try { if (_scrollAnim != null) _scrollAnim.Stop(); } catch { }
+        }
+
+        /// <summary>放弃缓动、跟随当前位置（用户自己拖了滑块，或右栏被重建）。</summary>
+        private void CancelScrollAnim()
+        {
+            StopScrollAnim();
+            _wheelRemainderPx = 0;
+            try
+            {
+                _scrollTarget = _pnlEditors != null && !_pnlEditors.IsDisposed
+                    ? Math.Abs(_pnlEditors.AutoScrollPosition.Y) : 0;
+                _lastAppliedOffset = _scrollTarget;
+            }
+            catch { _scrollTarget = 0; _lastAppliedOffset = 0; }
+        }
+
+        /// <summary>缓动一帧：当前位置向目标走 30%（到位即停；被外人改过位置就跟随现状）。</summary>
+        private void ScrollAnimTick(object sender, EventArgs e)
+        {
+            try
+            {
+                if (IsDisposed || Disposing) return;
+                if (_pnlEditors == null || _pnlEditors.IsDisposed) { StopScrollAnim(); return; }
+                int cur = Math.Abs(_pnlEditors.AutoScrollPosition.Y);
+                // 位置不是我们写的 → 用户自己拖了滑块：放弃动画目标，跟随现状
+                if (cur != _lastAppliedOffset) _scrollTarget = cur;
+                if (cur == _scrollTarget) { StopScrollAnim(); return; }
+                int next = cur + (int)((_scrollTarget - cur) * 0.3);
+                if ((_scrollTarget > cur && next <= cur) || (_scrollTarget < cur && next >= cur))
+                {
+                    next = _scrollTarget;
+                }
+                ApplyRightPanelScroll(next);
+            }
+            catch { StopScrollAnim(); }
+        }
+
+        /// <summary>写入滚动位置（setter 只收正值；写完回读，钳制后的值才是真值）。</summary>
+        private void ApplyRightPanelScroll(int offset)
+        {
+            if (offset < 0) offset = 0;
+            _pnlEditors.AutoScrollPosition = new Point(0, offset);
+            _lastAppliedOffset = Math.Abs(_pnlEditors.AutoScrollPosition.Y);
         }
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -330,6 +574,11 @@ namespace AgingTestSystem.Views
         {
             DisposeEditorControls();
             _dirty = false;
+            // 换节点＝换一份编辑器清单，滚动位置归零（列表从头看），缓动也一并取消
+            // （旧的缓动目标已经无意义，否则它会把新清单拉回旧位置）。
+            CancelScrollAnim();
+            try { if (_pnlEditors != null && !_pnlEditors.IsDisposed) _pnlEditors.AutoScrollPosition = new Point(0, 0); }
+            catch { }
 
             if (string.IsNullOrEmpty(_selectedId))
             {
@@ -354,8 +603,12 @@ namespace AgingTestSystem.Views
                 _btnSaveNode.Enabled = false;
                 return;
             }
-            _lblNodeTitle.Text = def.Title;
-            _btnSaveNode.Enabled = _canEdit;
+            // 【只读两态】①非管理员（原本就只读）②正在看预置模板（只读模板，改不了）。
+            // ②是 2.0.1 大改补的：旧口径"说是只读模板却能改能存"，现场真敢改，
+            // 改的还不是预置而是自定义——标题/状态条必须把"只读"说死。
+            bool viewingPreset = IsViewingPreset();
+            _lblNodeTitle.Text = viewingPreset ? def.Title + "（只读预览）" : def.Title;
+            _btnSaveNode.Enabled = _canEdit && !viewingPreset;
 
             int y = 0;
             if (!_canEdit)
@@ -369,6 +622,22 @@ namespace AgingTestSystem.Views
                 };
                 _pnlEditors.Controls.Add(ro);
                 y += 34;
+            }
+            else if (viewingPreset)
+            {
+                // 预置模板不可改：把"为什么灰着 + 怎么办"说在编辑器顶上（不是只说在说明行）。
+                // 【每行都要装得下】编辑器区宽 270、宋体 12pt 实测约 16.7px/字 ⇒ 每行最多 16 字。
+                // 第 2 行只写 15 字（"要用这套：点【套用到自定义】。"）：按钮文字原样点名，
+                // 不加"上方"（多 2 字就换行被裁——实测 17 字那版第 2 行被裁掉半句）。
+                var ro = new Sunny.UI.UILabel
+                {
+                    Location = new Point(0, y),
+                    Size = new Size(270, 44),
+                    Text = "预置模板只读，不能改。\r\n要用这套：点【套用到自定义】。",
+                    ForeColor = Color.Gray
+                };
+                _pnlEditors.Controls.Add(ro);
+                y += 48;
             }
 
             foreach (PolicyGraph.NodeKey key in def.Keys)
@@ -415,7 +684,8 @@ namespace AgingTestSystem.Views
                 var nodeCmb = editor as Sunny.UI.UIComboBox;
                 if (nodeCmb != null) SizeNodeCombo(nodeCmb);
                 // 只读模式：控件禁用（与系统设置"仅管理员可改"同级，不开后门）
-                editor.Enabled = _canEdit;
+                // 预置模板预览同样禁用（2.0.1 大改：预置是只读模板，不能在它上面改）
+                editor.Enabled = _canEdit && !viewingPreset;
                 if (key.Kind == PolicyGraph.EditorKind.Multiline)
                 {
                     editor.Height = 96;
@@ -470,8 +740,9 @@ namespace AgingTestSystem.Views
                 };
                 _pnlEditors.Controls.Add(foot);
             }
-            UpdateStatus($"已选中【{def.Title}】，改完点“保存本节点”。" +
-                (_previewPending ? $"（当前为【{_previewTitle}】只读模板预览值，保存即写入自定义）" : ""));
+            UpdateStatus(viewingPreset
+                ? $"已选中【{def.Title}】（只读预览）：预置模板不能改，要用这套请点【套用到自定义】。"
+                : $"已选中【{def.Title}】，改完点“保存本节点”。");
         }
 
         /// <summary>连线只读信息（条件在哪改指明，不让用户对着线发呆）。</summary>
@@ -684,10 +955,10 @@ namespace AgingTestSystem.Views
             UpdateStatus("布局已复位。");
         }
 
-        /// <summary>关闭按钮：预览未套用先问（SunnyUI 确认框），用户取消/套用被拦则留在窗内。</summary>
+        /// <summary>关闭按钮：有未保存的修改先问（保存/丢弃/取消），再关。</summary>
         private void BtnClose_Click(object sender, EventArgs e)
         {
-            if (!ConfirmPreviewOnClose()) return;
+            if (!ConfirmCloseAllowed()) return;
             _closingConfirmed = true;
             this.DialogResult = SavedKeys.Count > 0
                 ? DialogResult.OK : DialogResult.Cancel;
@@ -695,14 +966,14 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 右上 X 同样先问预览（关闭按钮已问过的不重复；取消即 e.Cancel 留在窗内，
+        /// 右上 X 同样先问未保存的修改（关闭按钮已问过的不重复；取消即 e.Cancel 留在窗内，
         /// DialogResult 同步清 None，防下次关闭沿用旧值）。
         /// </summary>
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
             if (!e.Cancel && !_closingConfirmed && _shownOnce)
             {
-                if (!ConfirmPreviewOnClose())
+                if (!ConfirmCloseAllowed())
                 {
                     e.Cancel = true;
                     this.DialogResult = DialogResult.None;
@@ -763,12 +1034,11 @@ namespace AgingTestSystem.Views
             // （探测口径：14 个行为开关全等才算预置），下拉自动跳"自定义"，
             // 可点【套用自定义】套回的还是老值 —— 这正是要修的那个别扭。
             SaveCurrentConfigToCustomSlot();
-            // 真实配置变了：预置行按新真实重探测回显（下拉跟到新探测＋预览同步重造）。
-            // 不刷这一行，下拉还停在旧选项，画布按旧选项整幅预览，看起来就像
-            // "保存一个节点把所有节点都覆盖了"——这正是右栏不动、画布全跳变的根因。
-            RefreshPresetRow();
-            // 保存后按新真实重造预览（画面/右栏都显示刚存下去的值）
-            RebuildPreviewFromReal();
+            // 真实配置变了：方案行按新真实重算。**保持当前选择**（保存只发生在自定义视图；
+            // 若是"带改动切到预置A"，保存动作不能把用户的选择弹回自定义——
+            // 那正是"点了预置A却还在看自定义"的怪味来源，见 RefreshPresetRow）。
+            // 预览随说明行一起按当前选择重算（自定义＝看真实，预置＝重算该模板预览）。
+            RefreshPresetRow(false);
             if (_canvas != null) _canvas.RefreshCounts();
             // 右栏按新真实重建：保存后右栏必须显示刚存下去的值（不是旧控件残留），
             // 且破空阀总闸翻转时点位行的显隐当场跟着变（显隐按有效配置判定，
@@ -806,117 +1076,174 @@ namespace AgingTestSystem.Views
             }
         }
 
-        /// <summary>
-        /// 预置行运行时初始化（布局在 Designer，这里只做 Designer 干不了的两样：
-        /// ①下拉选项填充（数据源 PolicyPresets.All，循环写 InitializeComponent 会被
-        /// VS 重写吞掉）；②悬停提示（全文显示，见 UpdatePresetDesc）。
-        /// 无参构造也调——_config 为 null 时回显"自定义"、整行禁用，不抛，VS 可预览）。
-        /// </summary>
-        private void InitPresetBar()
+    /// <summary>
+    /// 方案区运行时初始化（布局在 Designer，这里只做 Designer 干不了的两样：
+    /// ①下拉选项填充（数据源 PolicyPresets.All，循环写 InitializeComponent 会被
+    /// VS 重写吞掉）；②悬停提示（全文显示，见 UpdatePresetDesc）。
+    /// 无参构造也调——_config 为 null 时回显"自定义"、整行禁用，不抛，VS 可预览）。
+    /// 【选项顺序：自定义排第一】下拉＝"我现在看的是哪套"，自定义是唯一能改、唯一生效的，
+    /// 必须一眼看到、默认就选中（不必靠"强制回显"去纠正用户的选择）。
+    /// </summary>
+    private void InitPresetBar()
+    {
+        if (_cboPreset != null && !_cboPreset.IsDisposed && _cboPreset.Items.Count == 0)
         {
-            if (_cboPreset != null && !_cboPreset.IsDisposed && _cboPreset.Items.Count == 0)
+            // 自定义第一项（默认选中＝可编辑的那套），后面 A/B/C/D（试用顺序不变）。
+            _cboPreset.Items.Add(new FlowOpt(PolicyPresets.CustomTitle, PolicyPresets.CustomId));
+            foreach (PolicyPresets.PolicyPresetDef p in PolicyPresets.All)
             {
-                foreach (PolicyPresets.PolicyPresetDef p in PolicyPresets.All)
-                {
-                    _cboPreset.Items.Add(new FlowOpt(p.Title, p.Id));
-                }
-                _cboPreset.Items.Add(new FlowOpt(PolicyPresets.CustomTitle, PolicyPresets.CustomId));
+                _cboPreset.Items.Add(new FlowOpt(p.Title, p.Id));
             }
-            if (_presetTip == null)
+        }
+        if (_presetTip == null)
+        {
+            _presetTip = new ToolTip();
+        }
+        RefreshPresetRow();
+    }
+
+    /// <summary>
+    /// 下拉改选：换说明文字＋左侧画布即时预览该预置（只看不存，真干活只认"套用到自定义"按钮）
+    /// ＋右侧选中节点的编辑器按新预览值重建（左右两边看同一份数据）。
+    /// 切到预置＝进入**只读预览**（右栏编辑器禁用、保存按钮禁用，见 RebuildEditors）。
+    /// 右栏有未保存修改时先问（与切节点同规矩）：取消＝下拉弹回旧选项，
+    /// 画布/说明同步恢复，右栏没动过不用重建。
+    /// </summary>
+    private void PresetComboChanged(object sender, EventArgs e)
+    {
+        if (_presetRefreshing) return;
+        string newId = SelectedPresetId(_cboPreset);
+        if (_dirty && !string.IsNullOrEmpty(_selectedId) && _editorControls.Count > 0)
+        {
+            DialogResult r = MessageBox.Show(this,
+                "当前节点有未保存的修改，切换预览前保存吗？\n\n【是】保存后切换\n【否】丢弃后切换\n【取消】留在当前预览",
+                "提示", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+            if (r == DialogResult.Cancel)
             {
-                _presetTip = new ToolTip();
+                RevertPresetCombo();
+                return;
             }
-            RefreshPresetRow();
-        }
-
-        /// <summary>
-        /// 下拉改选：换说明文字＋左侧画布即时预览该预置（只看不存，真干活只认"套用预置"按钮）
-        /// ＋右侧选中节点的编辑器按新预览值重建（左右两边看同一份数据）。
-        /// 右栏有未保存修改时先问（与切节点同规矩）：取消＝下拉弹回旧选项，
-        /// 画布/说明同步恢复，右栏没动过不用重建。
-        /// </summary>
-        private void PresetComboChanged(object sender, EventArgs e)
-        {
-            if (_presetRefreshing) return;
-            string newId = SelectedPresetId(_cboPreset);
-            if (_dirty && !string.IsNullOrEmpty(_selectedId) && _editorControls.Count > 0)
+            if (r == DialogResult.Yes && !SaveCurrentNode())
             {
-                DialogResult r = MessageBox.Show(this,
-                    "当前节点有未保存的修改，切换预览前保存吗？\n\n【是】保存后切换\n【否】丢弃后切换\n【取消】留在当前预览",
-                    "提示", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-                if (r == DialogResult.Cancel)
-                {
-                    RevertPresetCombo();
-                    return;
-                }
-                if (r == DialogResult.Yes && !SaveCurrentNode())
-                {
-                    // 保存被拦（校验不合法）：留在旧预览，右栏不动
-                    RevertPresetCombo();
-                    return;
-                }
-                _dirty = false;
+                // 保存被拦（校验不合法）：留在旧预览，右栏不动
+                RevertPresetCombo();
+                return;
             }
-            _lastPresetId = newId;
-            UpdatePresetDesc();
-            // 右栏跟随预览：选中节点时按新有效配置重建（无选中/连线只读态不用动）
-            if (!string.IsNullOrEmpty(_selectedId)) RebuildEditors();
+            _dirty = false;
         }
+        _lastPresetId = newId;
+        UpdatePresetDesc();
+        // 右栏跟随预览：选中节点时按新有效配置重建（无选中/连线只读态不用动）
+        if (!string.IsNullOrEmpty(_selectedId)) RebuildEditors();
+    }
 
-        /// <summary>下拉弹回上次选项（脏确认取消/保存被拦时：画布/说明同步恢复）。</summary>
-        private void RevertPresetCombo()
-        {
-            _presetRefreshing = true;
-            try { SelectPresetOpt(_cboPreset, _lastPresetId); }
-            finally { _presetRefreshing = false; }
-            UpdatePresetDesc();
-        }
+    /// <summary>下拉弹回上次选项（脏确认取消/保存被拦时：画布/说明同步恢复）。</summary>
+    private void RevertPresetCombo()
+    {
+        _presetRefreshing = true;
+        try { SelectPresetOpt(_cboPreset, _lastPresetId); }
+        finally { _presetRefreshing = false; }
+        UpdatePresetDesc();
+    }
 
-        /// <summary>
-        /// 回显预置行：**永远落"自定义"**（软件只认自定义）。
-        /// 【为什么不再按 DetectPreset 显示 A/B/C/D】用户口径："软件只认自定义，
-        /// 其他的ABCD预置策略都是只读"。旧口径按"当前配置凑上哪套预置"回显，
-        /// 看着像"当前策略是预置A"，可真正生效的永远是自定义那一份 ——
-        /// 预置改不了（代码写死的只读模板），套用也只是把它复制进自定义。
-        /// 显示成 A/B/C/D 会让人以为"我这套是 A，改了会改坏 A"，实际改的是自定义。
-        /// 所以这里恒定显示自定义；下拉里选中 A/B/C/D ＝"看这套只读模板长什么样"，
-        /// 点【套用预置】才把它的各节点配置复制到自定义。
-        /// 只读模式（非管理员）整行禁用（与节点编辑器同级，不开后门）。
-        /// </summary>
-        private void RefreshPresetRow()
+    /// <summary>
+    /// 回显方案行：**回显"自定义"**（软件只认自定义——A/B/C/D 是只读模板，
+    /// 套用也只是把模板复制进自定义，真正生效的永远是自定义那一份）。
+    /// 【什么时候调】开窗 / 套用后 / 导入后——这四个时点生效的都是自定义，
+    /// 于是视图统一回到"自定义"（可改的那套）。
+    /// 【用户自己切下拉时不调】用户切到 A/B/C/D 是"我要看看这套模板"，
+    /// 不该被弹回来；那份"看"由 RebuildEditors 的只读态承接。
+    /// 只读模式（非管理员）整行禁用（与节点编辑器同级，不开后门）。
+    /// </summary>
+    /// <param name="resetToCustom">true=回显"自定义"（开窗/套用/导入后）；
+    /// false=保持当前选择（保存节点后用——保存只发生在自定义视图，
+    /// 保持即可；顺带避免"带改动切到预置"被保存动作弹回自定义）。</param>
+    private void RefreshPresetRow(bool resetToCustom = true)
+    {
+        if (_cboPreset == null || _cboPreset.IsDisposed) return;
+        if (resetToCustom)
         {
-            if (_cboPreset == null || _cboPreset.IsDisposed) return;
             _presetRefreshing = true;
             try
             {
                 SelectPresetOpt(_cboPreset, PolicyPresets.CustomId);
             }
             finally { _presetRefreshing = false; }
-            // 程序回显不走事件，手动同步上次选项（脏确认弹回认它）
-            _lastPresetId = SelectedPresetId(_cboPreset);
-            UpdatePresetDesc();
-            bool editable = _canEdit && _config != null;
-            _cboPreset.Enabled = editable;
-            _btnApplyPreset.Enabled = editable;
-            // 导出是只读操作（看得见就能带走），有配置即可；导入会写文件，只认管理员
-            if (_btnExport != null && !_btnExport.IsDisposed) _btnExport.Enabled = _config != null;
-            if (_btnImport != null && !_btnImport.IsDisposed) _btnImport.Enabled = editable;
         }
+        // 程序回显不走事件，手动同步上次选项（脏确认弹回认它）
+        _lastPresetId = SelectedPresetId(_cboPreset);
+        UpdatePresetDesc();
+        bool editable = _canEdit && _config != null;
+        _cboPreset.Enabled = editable;
+        UpdateApplyButtonState();
+        // 导出是只读操作（看得见就能带走），有配置即可；导入会写文件，只认管理员
+        if (_btnExport != null && !_btnExport.IsDisposed) _btnExport.Enabled = _config != null;
+        if (_btnImport != null && !_btnImport.IsDisposed) _btnImport.Enabled = editable;
+    }
 
-        private static void SelectPresetOpt(Sunny.UI.UIComboBox cmb, string id)
+    /// <summary>
+    /// 【套用到自定义】按钮的可用性：只在"当前查看的是预置"时可用
+    /// （把模板复制进自定义）；停在自定义时无事可做 → 禁用，并给悬停说明
+    /// （禁用按钮不给提示，现场只会以为程序坏了）。
+    /// </summary>
+    private void UpdateApplyButtonState()
+    {
+        if (_btnApplyPreset == null || _btnApplyPreset.IsDisposed) return;
+        bool editable = _canEdit && _config != null;
+        bool viewingPreset = IsViewingPreset();
+        _btnApplyPreset.Enabled = editable && viewingPreset;
+        try
         {
-            for (int i = 0; i < cmb.Items.Count; i++)
+            if (_presetTip != null)
             {
-                var o = cmb.Items[i] as FlowOpt;
-                if (o != null && string.Equals(o.Value, id, StringComparison.OrdinalIgnoreCase))
-                {
-                    cmb.SelectedIndex = i;
-                    return;
-                }
+                _presetTip.SetToolTip(_btnApplyPreset, viewingPreset
+                    ? "把这套模板的各节点配置复制到自定义并生效（自定义现有内容将被覆盖）"
+                    : "当前已是自定义，无需套用");
             }
-            // 对不上任何预置（或 null 配置）→落"自定义"末项，绝不空选
-            cmb.SelectedIndex = cmb.Items.Count - 1;
         }
+        catch { /* 提示写失败不影响主流程（纯展示） */ }
+    }
+
+    /// <summary>当前查看的是否是预置模板（选中项不是"自定义"且能查到预置定义）。</summary>
+    private bool IsViewingPreset()
+    {
+        return PolicyPresets.Find(SelectedPresetId(_cboPreset)) != null;
+    }
+
+    /// <summary>
+    /// 右栏是否只读（两种只读：①非管理员（原本就只读）②正在看预置模板（不可改的只读模板））。
+    /// ②是新加的：旧口径"说是只读模板却能改能存"，状态条还写"只读模板预览值，
+    /// 保存即写入自定义"——自相矛盾，现场真敢改，改的还不是预置而是自定义。
+    /// </summary>
+    private bool IsReadOnlyView()
+    {
+        return !_canEdit || IsViewingPreset();
+    }
+
+    private static void SelectPresetOpt(Sunny.UI.UIComboBox cmb, string id)
+    {
+        for (int i = 0; i < cmb.Items.Count; i++)
+        {
+            var o = cmb.Items[i] as FlowOpt;
+            if (o != null && string.Equals(o.Value, id, StringComparison.OrdinalIgnoreCase))
+            {
+                cmb.SelectedIndex = i;
+                return;
+            }
+        }
+        // 对不上任何项（或 null 配置）→落"自定义"（下拉第一项＝唯一可改可生效的那套），
+        // 绝不空选
+        for (int i = 0; i < cmb.Items.Count; i++)
+        {
+            var o = cmb.Items[i] as FlowOpt;
+            if (o != null && string.Equals(o.Value, PolicyPresets.CustomId, StringComparison.OrdinalIgnoreCase))
+            {
+                cmb.SelectedIndex = i;
+                return;
+            }
+        }
+        if (cmb.Items.Count > 0) cmb.SelectedIndex = 0;
+    }
 
         private static string SelectedPresetId(Sunny.UI.UIComboBox cmb)
         {
@@ -925,63 +1252,43 @@ namespace AgingTestSystem.Views
             return o != null ? o.Value : PolicyPresets.CustomId;
         }
 
-        /// <summary>
-        /// 说明行取场景首句（纯函数：截到第一个句号为止）。
-        /// 【为什么截】说明行只有 296×42（放得下两行），预置场景文案有三四句
-        /// （实测要 80px 高），整段贴进去会被裁掉半截——现场只看到半句话更看不懂。
-        /// 全文在悬停提示里（标题+场景+前置条件+换挡指引），确认框里也是全文。
-        /// </summary>
-        private static string ShortDesc(string scenario)
+    /// <summary>
+    /// 下拉当前项的一句话说明 + 悬停全文（下拉框窄看不全：
+    /// 下拉列表本身已拉宽到 340，闭合框的悬停提示在这里补全文——标题 +
+    /// 场景 + 前置条件，与确认框同源，不另写一份文案）。
+    /// 【说明行只讲"现在是什么状态、接下来怎么走"】
+    /// 选预置：只读模板 + 生效的仍是自定义 + 要用得先套用（三句，够现场决策）；
+    /// 选自定义：当前生效的策略，可直接改节点。
+    /// 【场景描述去哪了】进悬停提示 + 下拉项文字（"预置A·常用（阀电同开保持常开）"），
+    /// 说明行只有两行高，塞不下也不该塞——那是"想知道再查"的信息。
+    /// </summary>
+    private void UpdatePresetDesc()
+    {
+        // 按钮可用性跟"当前查看的是不是预置"绑定（切换下拉就得跟着变），
+        // 所以放在说明行刷新里统一做（不写两处）。
+        UpdateApplyButtonState();
+        if (_lblPresetDesc == null || _lblPresetDesc.IsDisposed) return;
+        string id = SelectedPresetId(_cboPreset);
+        PolicyPresets.PolicyPresetDef def = PolicyPresets.Find(id);
+        _lblPresetDesc.Text = def != null
+            ? PolicyPresets.PresetDesc
+            : PolicyPresets.CustomDesc;
+        // 悬停提示同步（_cboPreset 闭合显示被截断时，悬停看全文；
+        // 自定义文案与说明行同源，只叫"自定义"不带括号，见 PolicyPresets.CustomTitle）
+        try
         {
-            if (string.IsNullOrWhiteSpace(scenario)) return "";
-            int i = scenario.IndexOf('。');
-            if (i >= 0 && i + 1 < scenario.Length) return scenario.Substring(0, i + 1);
-            return scenario;
-        }
-
-        /// <summary>
-        /// 下拉当前项的一句话说明 + 悬停全文（下拉框窄看不全：
-        /// 下拉列表本身已拉宽到 340，闭合框的悬停提示在这里补全文——标题 +
-        /// 场景 + 前置条件，与确认框同源，不另写一份文案）。
-        /// </summary>
-        private void UpdatePresetDesc()
-        {
-            if (_lblPresetDesc == null || _lblPresetDesc.IsDisposed) return;
-            string id = SelectedPresetId(_cboPreset);
-            PolicyPresets.PolicyPresetDef def = PolicyPresets.Find(id);
-            // 自定义＝当前唯一生效的策略（软件只认自定义）：说明行讲这条策略现在
-            // 像哪套预置 —— 按**生效配置**出文案（画布显示什么，这里就说什么，
-            // 两边不能打架；旧口径拿自定义槽出文案，槽是初始A快照时会说"与预置A
-            // 一致"，而画布正显示着预置B的现场值）。
-            // 悬停提示里的"槽还是初始快照"才按槽状态切（那是存储层的事）。
-            Dictionary<string, string> customSlot = null;
-            if (def == null)
+            if (_presetTip != null && _cboPreset != null && !_cboPreset.IsDisposed)
             {
-                try { customSlot = ProjectPolicyStore.LoadCustom(); }
-                catch { customSlot = null; }
+                string tip = def != null
+                    ? PolicyPresets.BuildPresetTip(id)
+                    : PolicyPresets.BuildCustomTip(PolicyPresets.DetectPreset(_config));
+                _presetTip.SetToolTip(_cboPreset, tip);
             }
-            bool customPristine = def == null && PolicyPresets.IsCustomPristine(customSlot);
-            _lblPresetDesc.Text = def != null
-                ? ShortDesc(def.Scenario)
-                : PolicyPresets.BuildCustomScenario(PolicyPresets.DetectPreset(_config));
-            // 悬停提示同步（_cboPreset 闭合显示被截断时，悬停看全文；
-            // 自定义文案与说明行同源，只叫“自定义”不带括号，见 PolicyPresets.CustomTip）
-            try
-            {
-                if (_presetTip != null && _cboPreset != null && !_cboPreset.IsDisposed)
-                {
-                    string tip = def != null
-                        ? def.Title + "\r\n\r\n" + def.Scenario + "\r\n\r\n" + def.HowToSwitch
-                            + (string.IsNullOrWhiteSpace(def.Requires)
-                                ? "" : "\r\n\r\n前置条件：" + def.Requires)
-                        : (customPristine ? PolicyPresets.CustomTipDefault : PolicyPresets.CustomTip);
-                    _presetTip.SetToolTip(_cboPreset, tip);
-                }
-            }
-            catch { /* 提示写失败不影响主流程（纯展示） */ }
-            // 下拉即预览：说明换完，左侧画布同步换成该预置的画面（只看不存）
-            UpdateCanvasPreview();
         }
+        catch { /* 提示写失败不影响主流程（纯展示） */ }
+        // 下拉即预览：说明换完，左侧画布同步换成该预置的画面（只看不存）
+        UpdateCanvasPreview();
+    }
 
         /// <summary>
         /// 按新真实重造预览（清预览＝画面与右栏都看回真实配置）。
@@ -996,7 +1303,7 @@ namespace AgingTestSystem.Views
         private void RebuildPreviewFromReal()
         {
             _previewConfig = null;
-            _previewPending = false;
+            _presetReadOnly = false;
             if (_canvas != null && !_canvas.IsDisposed) _canvas.SetPreviewConfig(null);
         }
 
@@ -1023,7 +1330,7 @@ namespace AgingTestSystem.Views
             if (_config == null)
             {
                 _previewConfig = null;
-                _previewPending = false;
+                _presetReadOnly = false;
                 _previewTitle = "";
                 _canvas.SetPreviewConfig(null);
                 return;
@@ -1031,7 +1338,9 @@ namespace AgingTestSystem.Views
             string id = SelectedPresetId(_cboPreset);
             _previewConfig = BuildPreviewConfig(_config, id);
             _canvas.SetPreviewConfig(_previewConfig);
-            _previewPending = IsPreviewPending(_config, id);
+            // 预览态标识顺手算好（右栏状态条直接读，不重复读槽文件）：
+            // 选中预置＝只读预览（右栏禁用编辑器与保存按钮）。
+            _presetReadOnly = PolicyPresets.Find(id) != null;
             PolicyPresets.PolicyPresetDef pvDef = PolicyPresets.Find(id);
             _previewTitle = pvDef != null ? pvDef.Title
                 : (string.Equals(id, PolicyPresets.CustomId, StringComparison.OrdinalIgnoreCase)
@@ -1070,12 +1379,16 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 套用预置（傻瓜入口：脏先问存 → 列差异确认 → 逐项校验 →
-        /// PersistChanges 同一条保存路 → 刷新右栏编辑器 + 画布 + 预置回显）。
-        /// 【套用＝把只读模板复制到自定义】下拉停在 A/B/C/D 时，套用 = 把该模板的
-        /// 各节点配置写进真实配置并**全量落自定义槽**（生效的始终是自定义那一份）；
-        /// 下拉停在自定义时，套用 = 把自定义槽的内容写回真实配置（槽空即无差）。
-        /// 【只动 12 个行为开关＋数值项】MES/规则/报表/画面字典/破空点位/时长阈值等
+        /// 【套用到自定义】（2.0.1 大改：按钮语义唯一 = 把当前这套模板复制到自定义）。
+        /// 流程：脏先问存 → 列差异确认 → 逐项校验 → PersistChanges 同一条保存路
+        /// → 全量落自定义槽 → 视图切回"自定义"（可改的那套）。
+        /// 【为什么只做"复制到自定义"一件事】旧版同一个按钮有两种语义：
+        /// 停在预置＝"复制预置"、停在"自定义"＝"把槽写回配置"，文案与行为对不上，
+        /// 现场根本猜不到按下去会发生什么。现在按钮只认一种动作：
+        /// 停在自定义时按钮直接禁用（无事可做，见 UpdateApplyButtonState）。
+        /// 【为什么没有"把槽写回配置"】自定义＝生效配置本体，槽在每次保存时就全量落盘，
+        /// 两者永远一致，那个动作是永远无差异的死功能。
+        /// 【只动 14 个行为开关＋数值项】MES/规则/报表/画面字典/破空点位/时长阈值等
         /// 自由文本与配方/机器参数一律不动——切预置不丢现场已填的东西。
         /// 数值项（A 的真空超时 0）是跟项目走的策略 key，同样进本项目 Policy.json。
         /// 【失败语义】校验拦/D 组合拦（超温上限为 0）都是"按住不动 + 中文告诉人
@@ -1085,16 +1398,12 @@ namespace AgingTestSystem.Views
         {
             if (!_canEdit || _config == null) return;
             string id = SelectedPresetId(_cboPreset);
-            // 下拉停在自定义＝套用自定义槽（槽里是上次存的自定义，各存各的，A/B/C/D 不动）
-            if (string.Equals(id, PolicyPresets.CustomId, StringComparison.OrdinalIgnoreCase))
-            {
-                ApplyCustomWithConfirm();
-                return;
-            }
             PolicyPresets.PolicyPresetDef def = PolicyPresets.Find(id);
             if (def == null)
             {
-                MessageBox.Show(this, "请先在下拉里选预置A、B、C、D 或自定义，再点套用。",
+                // 停在"自定义"：按钮本来就禁用（这里只是兜底，防反射直调）。
+                MessageBox.Show(this, "当前已是【自定义】，无需套用。\r\n\r\n"
+                    + "要看预置模板请在下拉里选 A/B/C/D，选中后可点【套用到自定义】。",
                     "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
@@ -1149,147 +1458,34 @@ namespace AgingTestSystem.Views
                     "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            string confirm = "套用【" + def.Title + "】？\r\n\r\n" + def.Scenario + "\r\n"
+            string confirm = "把【" + def.Title + "】套用到自定义？\r\n\r\n" + def.Scenario + "\r\n"
                 + (string.IsNullOrWhiteSpace(def.Requires)
                     ? "" : "\r\n前置条件：" + def.Requires + "\r\n")
                 + "\r\n将修改 " + diffLines.Count + " 项：\r\n"
                 + string.Join("\r\n", diffLines.ToArray())
                 + "\r\n\r\n配方延时/时长/阈值/画面等配方项、MES/规则/报表/画面字典/点位等不动"
                 + "（配方延时填0即阀电同开，无配方默认即0，有配方按配方来）。\r\n"
-                + "\r\n本次套用会把【" + def.Title + "】的各节点配置复制到自定义"
-                + "（自定义槽现有内容将被覆盖）。\r\n"
+                + "\r\n套用后这套配置成为您的自定义策略并立即生效"
+                + "（自定义现有内容将被覆盖），之后就在自定义里改节点。\r\n"
                 + def.HowToSwitch;
-            if (MessageBox.Show(this, confirm, "套用预置",
+            if (MessageBox.Show(this, confirm, "套用到自定义",
                 MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK)
             {
                 return;
             }
             if (!ApplyPresetValues(id)) return;
             PolicyPresets.PolicyPresetDef applied = PolicyPresets.Find(id);
-            string msg = "已套用【" + (applied != null ? applied.Title : id) + "】并即时生效。";
+            string msg = "已把【" + (applied != null ? applied.Title : id)
+                + "】套用到自定义并生效，可直接在这里改节点。";
             UpdateStatus(msg);
             MessageBox.Show(this, msg + "\r\n\r\n" + (applied != null ? applied.HowToSwitch : ""),
                 "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         /// <summary>
-        /// 套用自定义槽（下拉停在"自定义"时点套用：脏先问存 → 列差异确认 →
-        /// PersistChanges 同一条保存路 → 刷新右栏编辑器 + 画布 + 预置回显）。
-        /// 【与套用 A/B/C/D 的区别】差异范围是槽快照的全部策略 key（含 MES/规则/报表
-        /// 自由文本）；A/B/C/D 是代码写死的谁也改不了，自定义槽是上次存的自定义。
-        /// </summary>
-        private void ApplyCustomWithConfirm()
-        {
-            if (!_canEdit || _config == null) return;
-            // 脏先问存（与套用预置同规矩：是=先存本节点，否=丢弃，取消=不套用）
-            if (_dirty)
-            {
-                DialogResult r = MessageBox.Show(this,
-                    "当前节点有未保存的修改，套用自定义前保存吗？\n\n【是】保存后套用\n【否】丢弃后套用\n【取消】不套用",
-                    "提示", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-                if (r == DialogResult.Cancel) return;
-                if (r == DialogResult.Yes && !SaveCurrentNode()) return;
-                _dirty = false;
-            }
-            Dictionary<string, string> custom;
-            try { custom = ProjectPolicyStore.LoadCustom(); }
-            catch (Exception ex)
-            {
-                MessageBox.Show(this, "读取自定义槽失败：" + ex.Message,
-                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-            if (custom == null || custom.Count == 0)
-            {
-                MessageBox.Show(this, "自定义槽为空（尚未存过自定义），无需套用。",
-                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-            // 差异预览：只列"真的会变"的项（中文名＋现值→槽值，一次看全）
-            var diffLines = new List<string>();
-            foreach (var kv in custom)
-            {
-                string cur = GetConfigString(kv.Key);
-                if (string.Equals(cur != null ? cur.Trim() : "",
-                    kv.Value != null ? kv.Value.Trim() : "", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-                string label;
-                if (!PolicyPresets.KeyLabels.TryGetValue(kv.Key, out label)) label = kv.Key;
-                diffLines.Add("【" + label + "】 " + cur + " → " + kv.Value);
-            }
-            if (diffLines.Count == 0)
-            {
-                MessageBox.Show(this, "当前已是【自定义】槽的内容，无需套用。",
-                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-            string confirm = "套用【自定义】？\r\n\r\n" + PolicyPresets.CustomApplyScenario + "\r\n"
-                + "\r\n将修改 " + diffLines.Count + " 项：\r\n"
-                + string.Join("\r\n", diffLines.ToArray())
-                + "\r\n\r\n只写自定义槽的内容，A/B/C/D 是只读模板，不会变。";
-            if (MessageBox.Show(this, confirm, "套用自定义",
-                MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK)
-            {
-                return;
-            }
-            if (!ApplyCustomDirect(custom)) return;
-            string msg = "已套用【自定义】并即时生效。";
-            UpdateStatus(msg);
-            MessageBox.Show(this, msg, "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-
-        /// <summary>
-        /// 执行自定义套用：逐项校验 → 同一条保存路（组合校验 + 分流写文件 + 热回写）→
-        /// 刷新（右栏重建＋画布＋预置回显）。
-        /// 调用前必须已确认（套用按钮的差异框 / 关窗前的预览确认二选一），这里不再二次确认。
-        /// </summary>
-        /// <returns>true=套用成功，false=被拦（原因已中文明示，留在窗内）</returns>
-        private bool ApplyCustomDirect(Dictionary<string, string> customValues)
-        {
-            if (customValues == null || customValues.Count == 0) return true;
-            // 逐项校验（槽内容理论上全合法；真被拦多半是手改槽文件写坏了，报出来修文件）
-            var invalid = new List<string>();
-            foreach (var kv in customValues)
-            {
-                string error;
-                if (!Dialogs.SettingsForm.ValidateValue(kv.Key, kv.Value, out error))
-                {
-                    invalid.Add("【" + kv.Key + "】 " + kv.Value + "  →  " + error);
-                }
-            }
-            if (invalid.Count > 0)
-            {
-                MessageBox.Show(this, "自定义槽里有不合法的值，套用已停止：\r\n\r\n" +
-                    string.Join("\r\n", invalid.ToArray()),
-                    "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return false;
-            }
-            Dialogs.SettingsForm.PersistResult presult;
-            string perror;
-            if (!Dialogs.SettingsForm.PersistChanges(_config,
-                new Dictionary<string, string>(customValues, StringComparer.Ordinal),
-                out presult, out perror))
-            {
-                MessageBox.Show(this, perror, "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return false;
-            }
-            foreach (string k in presult.SavedKeys) SavedKeys.Add(k);
-            _dirty = false;
-            // 先预置行（下拉重探测＋预览同步到新真实），再重建右栏：
-            // 右栏看有效配置，顺序反了会按旧预览建，显示过期值。
-            RefreshPresetRow();
-            RebuildPreviewFromReal();
-            RebuildEditors();
-            if (_canvas != null) _canvas.RefreshCounts();
-            return true;
-        }
-
-        /// <summary>
         /// 执行套用：逐项校验 → 同一条保存路（组合校验 + 分流写文件 + 热回写）→
-        /// 刷新（右栏重建＋画布＋预置回显）。
-        /// 调用前必须已确认（套用按钮的差异框 / 关闭时的预览确认二选一），这里不再二次确认。
+        /// 刷新（右栏重建＋画布＋方案行回显）。
+        /// 调用前必须已确认（【套用到自定义】的差异确认框），这里不再二次确认。
         /// </summary>
         /// <returns>true=套用成功，false=被拦（原因已中文明示，留在窗内）</returns>
         private bool ApplyPresetValues(string id)
@@ -1330,7 +1526,8 @@ namespace AgingTestSystem.Views
             // 落的是**套用后的完整生效配置**（预置管辖的全量已换新，自由文本保留现状
             // —— 预置本来就没定义自由文本的值，覆盖不了）。
             SaveCurrentConfigToCustomSlot();
-            // 预置回显先行：下拉落到套用后的预置＋预览同步到新真实，
+            // 方案行先行：下拉回显"自定义"（套用后生效的就是自定义那一份，
+            // 视图必须回到可改的那套）＋预览同步到新真实，
             // 再重建右栏回显新值（右栏看有效配置，顺序反了会按旧预览建）。
             RefreshPresetRow();
             RebuildPreviewFromReal();
@@ -1570,88 +1767,29 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 预览未套用即关：下拉停在"与现状不一致的预置"上（A/B/C/D 任一只读模板），
-        /// 说明用户看中了它却没点套用，直接关会丢意图——弹 SunnyUI 确认框问一嘴
-        /// （确定=套用后关闭，取消=不套用直接关闭）。
-        /// 【自定义不会走到这里】自定义＝看真实配置，没有"看了没套用"这回事
-        /// （判定见 IsPreviewPending）；套用自定义槽只能走【套用预置】按钮（有差异确认框）。
+        /// 关窗前确认（2.0.1 大改：只问"有未保存的修改没有"）。
+        /// 【为什么不再问"要不要套用"】旧口径：下拉停在预置就弹框问"看了没套用，要不要套用"。
+        /// 新模型下预置是**纯只读预览**（没改任何东西、不落盘），看了就走了，
+        /// 没有任何"意图"会丢；真要用这套，用户自己会点【套用到自定义】——
+        /// 关窗时替他做决定反而是替人做主（旧口径还会把槽里的旧值盖到现配置上）。
+        /// 【现在只问一种情况】当前节点有未保存的修改（改了没点保存就关＝白改）。
         /// </summary>
-        /// <returns>true=继续关闭，false=留在窗内（用户取消了脏保存 / 套用被拦）</returns>
-        private bool ConfirmPreviewOnClose()
+        /// <returns>true=继续关闭，false=留在窗内（用户取消保存）</returns>
+        private bool ConfirmCloseAllowed()
         {
             try
             {
                 if (_config == null || !_shownOnce || IsDisposed || Disposing) return true;
-                string selected = SelectedPresetId(_cboPreset);
-                if (!IsPreviewPending(_config, selected)) return true;
-                bool ok;
-                try
-                {
-                    ok = Sunny.UI.UIMessageBox.Show(BuildPreviewClosePrompt(selected),
-                        "套用预览的配置？", Sunny.UI.UIStyle.Blue,
-                        Sunny.UI.UIMessageBoxButtons.OKCancel, false, 0);
-                }
-                catch { ok = false; }  // Sunny 弹框万一失败，按"不套用"处理，绝不拦关闭
-                if (!ok) return true;
-                // 确定：脏先问存（与套用按钮同规矩：是=先存，否=丢弃，取消=不套用、不关闭）
-                if (_dirty)
-                {
-                    DialogResult r = MessageBox.Show(this,
-                        "当前节点有未保存的修改，套用预置前保存吗？\n\n【是】保存后套用\n【否】丢弃后套用\n【取消】不套用、不关闭",
-                        "提示", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-                    if (r == DialogResult.Cancel) return false;
-                    if (r == DialogResult.Yes && !SaveCurrentNode()) return false;
-                    _dirty = false;
-                }
-                // 关闭前的确认即授权，直接执行套用（不再弹差异框）；被拦则留在窗内看原因
-                // （走到这里必是预置模板：自定义不走待定分支，见 IsPreviewPending）
-                return ApplyPresetValues(selected);
+                if (!_dirty) return true;
+                DialogResult r = MessageBox.Show(this,
+                    "当前节点有未保存的修改，关闭前保存吗？\n\n【是】保存后关闭\n【否】丢弃后关闭\n【取消】不关闭",
+                    "提示", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                if (r == DialogResult.Cancel) return false;
+                if (r == DialogResult.Yes && !SaveCurrentNode()) return false;
+                _dirty = false;
+                return true;
             }
             catch { return true; }  // 关闭路径绝不抛异常拦人
-        }
-
-        /// <summary>
-        /// 有没有"看了没套用"的预览（纯函数：A/B/C/D＝选中与现状探测不一致；
-        /// **自定义＝一律没有**——自定义就是当前生效的那一套，预览看的就是真实
-        /// 配置（2.0.1 起不再叠加槽快照），没有"看了没套用"这回事；
-        /// 未知选中一律无预览）。
-        /// 【为什么要去掉"槽≠现状即待定"】旧口径拿槽快照判待定，可预览显示的是
-        /// 真实配置：关窗时弹"把自定义槽的内容写入后关闭"，用户一点就把槽里的
-        /// 旧值盖到现配置上（槽初始是 A 快照、现配置是 B 时尤其容易踩），
-        /// 而关窗确认框不列差异、不给二次确认 —— 套用槽只能走【套用预置】按钮
-        /// （那里有逐项差异确认框）。
-        /// </summary>
-        private static bool IsPreviewPending(DeviceConfig config, string selectedId)
-        {
-            try
-            {
-                if (config == null) return false;
-                if (PolicyPresets.Find(selectedId) != null)
-                {
-                    return !string.Equals(PolicyPresets.DetectPreset(config),
-                        selectedId, StringComparison.OrdinalIgnoreCase);
-                }
-                return false;   // 自定义（看真实）与未知选中：都没有"预览"
-            }
-            catch { return false; }
-        }
-
-        /// <summary>
-        /// 关闭确认框文案（纯函数：标题＋确定/取消两路含义，与 UIMessageBox.OKCancel 对齐）。
-        /// 【确定＝把该模板的各节点配置复制到自定义后关闭】与【套用预置】同一件事，
-        /// 只是这里省掉差异确认框（关闭前已问过"要不要套用"）。
-        /// </summary>
-        private static string BuildPreviewClosePrompt(string selectedId)
-        {
-            PolicyPresets.PolicyPresetDef def = PolicyPresets.Find(selectedId);
-            string title = def != null ? def.Title
-                : (string.Equals(selectedId, PolicyPresets.CustomId, StringComparison.OrdinalIgnoreCase)
-                    ? PolicyPresets.CustomTitle : (selectedId ?? ""));
-            string act = def != null
-                ? "把该模板的各节点配置复制到自定义后关闭"
-                : "把自定义槽的内容写入后关闭";
-            return "当前正在预览【" + title + "】，尚未套用。\r\n\r\n"
-                + "【确定】" + act + "\r\n【取消】不套用，直接关闭";
         }
 
         /// <summary>
