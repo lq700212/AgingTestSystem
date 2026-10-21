@@ -7966,6 +7966,35 @@ namespace AgingTestSystem.Tests
                 Check("存自定义槽后槽内容=当前配置（在预置上改的也落自定义）", slotOk);
             }
             finally { try { if (slotForm != null) slotForm.Dispose(); } catch { } }
+            // —— 套用预置 = 全部覆盖替换（2.0.1 用户口径：套用非自定义预置，
+            // 相当于把整套配置同步到自定义）——落槽后"套用自定义"与屏幕一致。
+            // ApplyPresetValues 成功路径不弹模态框（只有失败路径弹），可反射直调。
+            ProcessPolicyForm applyForm = null;
+            try
+            {
+                var cfgApply = new DeviceConfig();
+                applyForm = new ProcessPolicyForm(cfgApply, null, true);
+                var tApply = typeof(ProcessPolicyForm);
+                var applyMethod = tApply.GetMethod("ApplyPresetValues",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Check("套用预置方法可直调（不弹框，可回归）", applyMethod != null);
+                bool appliedOk = false;
+                if (applyMethod != null)
+                {
+                    bool r = (bool)applyMethod.Invoke(applyForm, new object[] { "B" });
+                    var slot = ProjectPolicyStore.LoadCustom();
+                    // 套用 B 后：真实配置 = B 的开关值，槽也必须等于这套（全部覆盖替换）
+                    appliedOk = r && slot != null && slot.Count > 0
+                        && slot.ContainsKey("PressureAlarmEnabled")
+                        && string.Equals(slot["PressureAlarmEnabled"],
+                            cfgApply.PressureAlarmEnabled ? "true" : "false",
+                            StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(PolicyPresets.DetectPreset(cfgApply), "B",
+                            StringComparison.Ordinal);
+                }
+                Check("套用预置后全量落自定义槽（套用自定义与屏幕一致）", appliedOk);
+            }
+            finally { try { if (applyForm != null) applyForm.Dispose(); } catch { } }
             // D 配置打开回显选中 D（第 4 项，索引 3；套用 D 后当前配置即回显 D，
             // 不再是"自定义"）
             ProcessPolicyForm fullD = null;
