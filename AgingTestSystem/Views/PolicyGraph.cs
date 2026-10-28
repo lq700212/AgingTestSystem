@@ -280,15 +280,58 @@ namespace AgingTestSystem.Views
         private static readonly DeviceConfig DefaultConfig = new DeviceConfig();
 
         /// <summary>
+        /// 项目初始策略值（预置 A 管辖项的快照，键忽略大小写）。
+        /// 【为什么需要它】项目一建立，自定义策略就按 A 初始化（EnsureCustomInitialized），
+        /// 生效配置也按 A 回填缺省（ApplyOverlay）。A 有意覆盖了 6 项代码出厂值
+        /// （真空责任/完成判定/断电恢复/老化失压/压力报警/真空超时），
+        /// 拿 new DeviceConfig() 当基准会让"刚装好的项目"一打开就有一片【已改】——
+        /// 现场会以为有人动过配置。徽标要回答的是"相对本项目初始工艺改没改"，
+        /// 所以 A 管辖项取 A，其余才取出厂值。
+        /// </summary>
+        private static readonly Dictionary<string, string> BaselineValues = BuildBaselineValues();
+
+        private static Dictionary<string, string> BuildBaselineValues()
+        {
+            var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                Dictionary<string, string> presetA = PolicyPresets.GetAllValues("A");
+                if (presetA != null)
+                {
+                    foreach (var kv in presetA)
+                    {
+                        if (!string.IsNullOrEmpty(kv.Key) && !string.IsNullOrEmpty(kv.Value))
+                            dict[kv.Key] = kv.Value;
+                    }
+                }
+            }
+            catch { /* 预置取不到时退回出厂值（纯展示，不影响开窗） */ }
+            return dict;
+        }
+
+        /// <summary>
         /// 取某 key 的出厂默认值（存储口径字符串：布尔小写/枚举英文名/数字原文）。
-        /// 【用途】右栏每项标"默认/已改"——现场一眼看出哪些是出厂值、哪些被本项目调过，
-        /// 不用逐项猜"这个数要不要动"。
+        /// 【用途】仅作"基准值"的兜底（A 未管辖的项，如阈值/时长/接线事实）。
         /// 【为什么不手写默认值表】32 项各抄一份，DeviceConfig 改缺省值就分叉；
         /// 直接读 new DeviceConfig() 的属性，新增 key 自动生效。
         /// </summary>
         public static string GetDefaultString(string key)
         {
             return ReadConfigString(DefaultConfig, key);
+        }
+
+        /// <summary>
+        /// 取某 key 的"默认"基准值：预置 A 管辖项取 A 的值，其余取出厂值。
+        /// 【用途】右栏"默认/已改"徽标唯一比较基准（与图例"项目初始值"同义）。
+        /// 【别改回 new DeviceConfig()】那样刚建好的项目会显示 6 项【已改】
+        /// （A 与代码出厂值本就不同），现场误以为配置被人动过。
+        /// </summary>
+        public static string GetBaselineString(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return "";
+            string v;
+            if (BaselineValues.TryGetValue(key, out v)) return v;
+            return GetDefaultString(key);
         }
 
         /// <summary>

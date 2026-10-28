@@ -67,7 +67,8 @@ namespace AgingTestSystem.Views
     /// ①只放"现场按工艺要动的决策项"：MES 映射/报表列/破空阀点位迁回系统设置
     ///   （PolicyGraph.MovedKeyTargets；节点保留只读状态 + "去哪改"的指引）；
     /// ②每节点分常用/高级，高级默认折叠成一行（控件一次建齐，只切可见性——切来切去不丢输入）；
-    /// ③每项右侧标"默认/已改"（默认值读 new DeviceConfig()，不手抄一份会分叉的表）；
+    /// ③每项右侧标"默认/已改"（基准=项目初始策略：预置A管辖项取A，其余取出厂值；
+    ///   不能拿 new DeviceConfig() 当基准——项目初始就是A，那样刚装好会一片【已改】）；
     /// ④高风险项（报警全关/跳过抽真空/超温联停）标签标红，不改交互（保存时已有组合校验）。
     /// 全部节点 Bool/Enum 下拉按预置下拉口径统一：
     /// 下拉列表按最长选项实测拉宽（SizeNodeCombo，最长 22 字项原来被截断）+
@@ -731,10 +732,19 @@ namespace AgingTestSystem.Views
                 {
                     Location = new Point(0, y),
                     Size = new Size(270, 40),
-                    Text = "【默认】=出厂值，一般不用动\r\n【已改】=本项目调过",
+                    Text = "【默认】=初始值，一般不用动\r\n【已改】=本项目调过",
                     ForeColor = Color.Gray
                 };
                 _pnlEditors.Controls.Add(legend);
+                // "初始值"是哪个值必须能查：预置 A 管辖项取 A，其余取出厂值。
+                // 不写清楚的话，现场会拿系统设置里的出厂说明来对，对不上就以为程序乱标。
+                try
+                {
+                    if (_editorTip == null) _editorTip = new ToolTip();
+                    _editorTip.SetToolTip(legend,
+                        "初始值＝预置A（常用）管辖项取A的值，其余取出厂值。\r\n改过并保存后显示【已改】。");
+                }
+                catch { /* 提示失败不影响主流程 */ }
                 y += 44;
             }
             _headerOffset = y;
@@ -779,12 +789,14 @@ namespace AgingTestSystem.Views
                 }
                 catch { /* 提示写失败不影响主流程（纯展示） */ }
 
-                // 默认/已改徽标：预置视图不显示（预置值 vs 出厂值没有"本项目改没改"的语义）。
+                // 默认/已改徽标：预置视图不显示（预置值 vs 项目初始值没有"本项目改没改"的语义）。
+                // 基准取"项目初始值"（A 管辖项取 A，其余出厂值）——不能用 new DeviceConfig()：
+                // 项目初始就是 A，A 与代码出厂值本就不同，那样刚装好就一片【已改】。
                 if (!viewingPreset)
                 {
                     string cur = GetConfigString(key.Key);
-                    string defv = PolicyGraph.GetDefaultString(key.Key);
-                    bool changed = !string.Equals(cur, defv, StringComparison.OrdinalIgnoreCase);
+                    string baseline = PolicyGraph.GetBaselineString(key.Key);
+                    bool changed = !string.Equals(cur, baseline, StringComparison.OrdinalIgnoreCase);
                     var badge = new Sunny.UI.UILabel
                     {
                         Location = new Point(224, 0),

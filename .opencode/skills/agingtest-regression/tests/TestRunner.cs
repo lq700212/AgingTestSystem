@@ -3553,13 +3553,45 @@ namespace AgingTestSystem.Tests
             Check("报警节点4常用+8高级",
                 CountNodeKeys("alarm", Views.PolicyGraph.KeyTier.Common) == 4
                 && CountNodeKeys("alarm", Views.PolicyGraph.KeyTier.Advanced) == 8);
-            Check("默认值读取（数值/枚举/布尔，徽标口径）",
+            Check("出厂值读取（A 未管辖项的基准兜底）",
                 Views.PolicyGraph.GetDefaultString("VacuumConfirmTimeoutMs") == "15000"
                 && Views.PolicyGraph.GetDefaultString("ZeroDurationPolicy") == "Warn"
                 && Views.PolicyGraph.GetDefaultString("PressureAlarmEnabled") == "true"
                 && Views.PolicyGraph.GetDefaultString("MuteAllAlarms") == "false"
                 && Views.PolicyGraph.GetDefaultString(null) == ""
                 && Views.PolicyGraph.GetDefaultString("BogusKey_Xyz") == "");
+            // 徽标基准＝项目初始策略：A 管辖项取 A（A 有意覆盖 6 项代码出厂值）。
+            // 用 new DeviceConfig() 当基准，刚建好的项目会显示 6 项【已改】，现场误以为有人动过。
+            Check("徽标基准=A 管辖项取A（不再误标已改）",
+                Views.PolicyGraph.GetBaselineString("VacuumConfirmTimeoutMs") == "0"
+                && Views.PolicyGraph.GetBaselineString("PressureAlarmEnabled") == "false"
+                && Views.PolicyGraph.GetBaselineString("VacuumFailKind") == "FixtureAlarm"
+                && Views.PolicyGraph.GetBaselineString("CompletionJudgePolicy") == "PendingReview"
+                && Views.PolicyGraph.GetBaselineString("PowerLossPolicy") == "ResumeRemaining"
+                && Views.PolicyGraph.GetBaselineString("AgingPressureLossPolicy") == "KeepRunning");
+            Check("徽标基准=A 未管辖项取出厂值",
+                Views.PolicyGraph.GetBaselineString("AlarmPressureThresholdKPa") == "-5"
+                && Views.PolicyGraph.GetBaselineString("MaxTestDurationSeconds") == "0"
+                && Views.PolicyGraph.GetBaselineString("UseDiAlarmContact") == "false"
+                && Views.PolicyGraph.GetBaselineString(null) == ""
+                && Views.PolicyGraph.GetBaselineString("BogusKey_Xyz") == "");
+            // 全量锁：A 管辖的每一项，基准都必须等于 A 的值（新增预置管辖项不会漏）。
+            bool baselineMatchesA = true;
+            var presetAValues = AgingTestSystem.Services.PolicyPresets.GetAllValues("A");
+            if (presetAValues == null || presetAValues.Count == 0) baselineMatchesA = false;
+            else
+            {
+                foreach (var kv in presetAValues)
+                {
+                    if (!string.Equals(Views.PolicyGraph.GetBaselineString(kv.Key), kv.Value,
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        baselineMatchesA = false;
+                        break;
+                    }
+                }
+            }
+            Check("A 管辖项全部以A为基准（刚建项目全显示默认）", baselineMatchesA);
             Check("高风险3项都在节点里（标红提示）",
                 Views.PolicyGraph.HighRiskKeys.Count == 3
                 && NodeHasKey("alarm", "MuteAllAlarms")
