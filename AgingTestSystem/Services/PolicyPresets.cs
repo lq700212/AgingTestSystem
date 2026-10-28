@@ -93,7 +93,7 @@ namespace AgingTestSystem.Services
         /// （生效的永远只有自定义那一份），所以说明行必须讲清"暂存"这件事。
         /// </summary>
         public const string PresetDesc =
-            "可临时修改，保存只是暂存；点【套用到自定义】才生效。";
+            "可临时改；套用到自定义后生效。";
 
         /// <summary>
         /// 预置视图的悬停全文（场景 + 换挡指引 + 前置条件；与确认框同源，不另写一份）。

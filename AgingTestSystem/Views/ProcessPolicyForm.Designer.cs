@@ -18,6 +18,9 @@ namespace AgingTestSystem.Views
     /// MinimumSize 只锁到 950×700（小屏走双滚动条，画布/编辑器都带 AutoScroll）。
     /// 右栏顶部加方案区（标题46/下拉68/说明100/导入导出146，共占约134px）：
     /// 编辑器下移到180、高608，底部按钮不动（保存794/复位关闭830）。
+    /// 【V2.0.5 配置分层】编辑器区按"常用→高级折叠"两段排（控件一次建齐，
+    /// 折叠只切可见性，见 ProcessPolicyForm.LayoutEditorRows），报警节点组内再分组；
+    /// 每项右侧标"默认/已改"，现场先看懂哪些要动，再决定展开高级。
     /// 静态布局（坐标/文本/事件挂接）全在这里，VS 可预览；
     /// 下拉选项填充在 ProcessPolicyForm.cs 里代码做（数据源 PolicyPresets.All，
     /// Designer 里写循环/自定义项会被 VS 重写吞掉，手写保命线）。
@@ -31,7 +34,7 @@ namespace AgingTestSystem.Views
         /// <summary>右栏标题（选中节点名 / 未选中节点 / 连线（只读））</summary>
         private Sunny.UI.UILabel _lblNodeTitle;
 
-        /// <summary>方案区标题（静态："策略方案（预置A/B/C/D只读）"——一句话说清规则）</summary>
+        /// <summary>方案区标题（静态："策略方案（预置可套用）"——一句话说清"模板能套"）</summary>
         private Sunny.UI.UILabel _lblPresetTitle;
 
         /// <summary>方案下拉＝"我现在看的是哪套"（自定义/预置A/B/C/D；自定义排第一、默认选中；
@@ -119,7 +122,7 @@ namespace AgingTestSystem.Views
             this._lblNodeTitle.Font = new Font(this.Font.FontFamily, 11F, FontStyle.Bold);
             this._lblPresetTitle.Location = new Point(12, 46);
             this._lblPresetTitle.Size = new Size(296, 20);
-            this._lblPresetTitle.Text = "策略方案（预置A/B/C/D只读）";
+            this._lblPresetTitle.Text = "策略方案（预置可套用）";
             this._cboPreset.DropDownStyle = Sunny.UI.UIDropDownStyle.DropDownList;
             this._cboPreset.Location = new Point(12, 68);
             this._cboPreset.Size = new Size(182, 28);

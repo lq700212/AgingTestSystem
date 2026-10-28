@@ -358,8 +358,30 @@
   落盘语义只有一份）；节点位置纯视图存 `PolicyLayout.json`（跟机器，缩放/平移不存）；
   缩放以鼠标为中心（IMessageFilter 预过滤滚轮），中键平移注意 AutoScrollPosition
   存取符号坑（setter 取正值）；双锁分开取防死锁（`GetPhaseCounts` 先状态后缓存）。
-  MES上报是无连线纯配置节点（上报正交于流程，画连线误导）；无阀本机藏破空点位行
-  （`VentValveEnabled=false` 时，开关本身照常显示）。
+  MES上报是无连线纯配置节点（上报正交于流程，画连线误导）；破空阀开关/点位
+  已迁系统设置（见下"配置分层与入口分工"），策略窗不再有该行。
+  **配置分层与入口分工（V2.0.5 客户需求"配置项太多太复杂"）**：右栏按 `NodeKey.Tier`
+  分常用/高级两层，常用默认展开、高级折叠成一行"高级设置（N 项）>>"；
+  编辑器控件**一次建齐**（折叠只切 Visible + 重排 Location，见 `LayoutEditorRows`），
+  不许折叠时销毁重建（会丢没保存的输入）。
+  布局唯一流程＝`HideAllEditorRows`（先全隐）→ `UpdateGroupTitleVisibility`（按当前可见层
+  定组标题）→ `LayoutTier`（只打开本层行）。**三处都不许省**：省掉统一隐藏会让
+  "纯高级组"折叠时整组漏排、行停在 (0,0) 叠在常用项上（overlaps=236 实测）；
+  在 `LayoutTier` 里改标题可见性会被后一层覆盖（展开后常用组标题消失）；
+  给"本层无行"的组标题定位会把标题搬到展开开关下面。组标题定位必须带
+  `anyThisTier` 条件，组间留 8px。
+  每项"默认/已改"徽标读 `PolicyGraph.GetDefaultString`（`new DeviceConfig()` 出厂值，
+  禁手写默认值表）；预置视图不显示徽标。高风险项（`PolicyGraph.HighRiskKeys`）标签标红，
+  不加二次确认（保存时组合校验已有，双弹扰民）。
+  **非工艺项一律迁系统设置，不进策略窗**：MES 触发器/字段映射/静态字段（→ MES 对接）、
+  事件身份口径/报表列（→ 报表导出）、破空阀开关/点位（→ 老化测试业务）。
+  迁出项仍留 `PolicyKeys`（仍跟项目进 Policy.json），入口映射登记在
+  `PolicyGraph.MovedKeyTargets`，`LocateKey` 照旧返回"【系统设置·分类】事项"，
+  设置表保存弹窗才能点名去处；回归锁"迁出项不在任何节点 Keys + 定位仍在"。
+  新增策略 key 必须显式选 `Tier` 与 `Group`（日常要改的放 Common，报警类按
+  压力保护/温度保护/报警行为/失压与责任/通讯与规则归组）。
+  右栏内容变矮时滚动范围不自动收敛：`ClampEditorScrollToContent` 同步钳位置与缓动目标，
+  `ApplyRightPanelScroll` 遇到 setter 钳制立即停（否则定时器 16ms 空转）。
   预置下拉即预览（V1.106；**2.0.1 语义改为"可临时改的模板"**）：切下拉画布即换该预置画面
   ——克隆真实配置＋套预置值＋**该预置的临时修改**的副本给画布
   （`SetPreviewConfig`，`EffectiveConfig` 统一读口），

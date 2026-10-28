@@ -55,3 +55,6 @@ MainSetting.ini
 # ===== 发版产物（V1.88.10 起：obfuscated_release.ps1 产物，含混淆 exe/pdb/Mapping，绝不入库） =====
 # release/<版本>-obf/ 下"包"发客户、"归档"内部留底；二进制 + 客户现场信息，入库又大又泄密。
 release/
+
+# ===== CodeGraph 本地索引（代码图谱工具生成，跟机器/机器目录走，不入库） =====
+.codegraph/

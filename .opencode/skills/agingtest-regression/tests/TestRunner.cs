@@ -3408,6 +3408,19 @@ namespace AgingTestSystem.Tests
             return false;
         }
 
+        /// <summary>某节点某分层（常用/高级）的 key 数量（V2.0.5 配置分层锁用）。</summary>
+        private static int CountNodeKeys(string nodeId, Views.PolicyGraph.KeyTier tier)
+        {
+            var n = Views.PolicyGraph.FindNode(nodeId);
+            if (n == null || n.Keys == null) return 0;
+            int count = 0;
+            foreach (var k in n.Keys)
+            {
+                if (k.Tier == tier) count++;
+            }
+            return count;
+        }
+
         private static void ProcessPolicyTests()
         {
             // ── 拓扑完整性锁：8 节点 8 边，id 全可查 ──
@@ -3430,16 +3443,18 @@ namespace AgingTestSystem.Tests
                     || Views.PolicyGraph.FindNode(e.To) == null) edgesOk = false;
             }
             Check("边端点全是已知节点", edgesOk);
-            // 每个节点至少挂1个 key（点谁都有东西可改）；unload 有 key 也有说明
-            //（下料节点收进事件口径/报表列，指引文案改页脚保留）。
+            // 每个可编辑节点至少挂1个 key（点谁都有东西可改）；
+            // V2.0.5 起 unload 变只读状态节点（事件口径/报表列迁系统设置），
+            // 允许 0 key，但必须带 Info 指路（不能点开一片空白）。
             bool keysOk = true;
             foreach (var n in Views.PolicyGraph.Nodes)
             {
+                if (n.Id == "unload") continue;
                 if (n.Keys.Count == 0) keysOk = false;
             }
             var unload = Views.PolicyGraph.FindNode("unload");
-            Check("8节点全挂key（V1.83起unload也有口径/报表）",
-                keysOk && unload != null && unload.Keys.Count > 0
+            Check("可编辑节点全挂key（unload只读状态节点+指引）",
+                keysOk && unload != null && unload.Keys.Count == 0
                 && !string.IsNullOrEmpty(unload.Info));
             // 节点 key 必须全是 DeviceConfig 真属性（防挂错名存不上）
             bool propsOk = true;
@@ -3501,7 +3516,8 @@ namespace AgingTestSystem.Tests
             {
                 if (Views.PolicyGraph.LocateKey(k) == null) { locateOk = false; break; }
             }
-            Check("策略key人人有节点（保存弹窗可点名）", locateOk);
+            // V2.0.5：迁出项由 MovedKeyTargets 指向系统设置，仍能点名（不再要求"挂在节点上"）。
+            Check("策略key人人可定位（节点或系统设置，保存弹窗可点名）", locateOk);
             Check("报警开关定位报警联动",
                 Views.PolicyGraph.LocateKey("PressureAlarmEnabled") == "【报警联动】压力报警开关");
             Check("全关定位报警联动",
@@ -3511,10 +3527,51 @@ namespace AgingTestSystem.Tests
             Check("无节点key定位null",
                 Views.PolicyGraph.LocateKey("BaudRate") == null
                 && Views.PolicyGraph.LocateKey((string)null) == null);
-            Check("破空总闸挂完成节点", NodeHasKey("done", "VentValveEnabled"));
+            Check("破空阀两项迁出完成节点并定位系统设置",
+                !NodeHasKey("done", "VentValveEnabled") && !hasKey("VentValveDoPoint")
+                && Views.PolicyGraph.LocateKey("VentValveEnabled") == "【系统设置·老化测试业务】本机装破空阀");
             Check("MES总闸挂上报节点", NodeHasKey("mes", "MesEnabled"));
             Check("画面维度挂上电节点", NodeHasKey("power", "DisplayModeEnabled") && hasKey("DisplayModes"));
-            Check("口径报表挂下料节点", NodeHasKey("unload", "EventIdentityMode") && hasKey("ReportColumns"));
+            Check("口径/报表迁出下料节点并定位系统设置",
+                !NodeHasKey("unload", "EventIdentityMode") && !hasKey("ReportColumns")
+                && Views.PolicyGraph.LocateKey("ReportColumns") == "【系统设置·报表导出】报表列");
+
+            // ── V2.0.5 配置分层锁（客户痛点"不知道哪些该动"） ──
+            // 常用 13 项 = 首屏一屏看完；高级 12 项默认折叠。新增 key 必须显式选
+            // Tier（构造无缺省），这条锁防止以后又平铺回一屏 30 项。
+            int commonCount = 0, advancedCount = 0;
+            foreach (var n in Views.PolicyGraph.Nodes)
+            {
+                foreach (var k in n.Keys)
+                {
+                    if (k.Tier == Views.PolicyGraph.KeyTier.Common) commonCount++;
+                    else advancedCount++;
+                }
+            }
+            Check("常用13项（首屏一屏看完）", commonCount == 13);
+            Check("高级12项（默认折叠）", advancedCount == 12);
+            Check("报警节点4常用+8高级",
+                CountNodeKeys("alarm", Views.PolicyGraph.KeyTier.Common) == 4
+                && CountNodeKeys("alarm", Views.PolicyGraph.KeyTier.Advanced) == 8);
+            Check("默认值读取（数值/枚举/布尔，徽标口径）",
+                Views.PolicyGraph.GetDefaultString("VacuumConfirmTimeoutMs") == "15000"
+                && Views.PolicyGraph.GetDefaultString("ZeroDurationPolicy") == "Warn"
+                && Views.PolicyGraph.GetDefaultString("PressureAlarmEnabled") == "true"
+                && Views.PolicyGraph.GetDefaultString("MuteAllAlarms") == "false"
+                && Views.PolicyGraph.GetDefaultString(null) == ""
+                && Views.PolicyGraph.GetDefaultString("BogusKey_Xyz") == "");
+            Check("高风险3项都在节点里（标红提示）",
+                Views.PolicyGraph.HighRiskKeys.Count == 3
+                && NodeHasKey("alarm", "MuteAllAlarms")
+                && NodeHasKey("vacuum", "SkipVacuum")
+                && NodeHasKey("alarm", "FanTempShutdownEnabled"));
+            Check("迁出7项不在任何节点Keys（防又加回策略窗）",
+                Views.PolicyGraph.MovedKeyTargets.Count == 7
+                && !NodeHasKey("mes", "MesTriggers")
+                && !NodeHasKey("mes", "MesFieldMap")
+                && !NodeHasKey("mes", "MesStaticFields")
+                && !NodeHasKey("done", "VentValveDoPoint")
+                && Views.PolicyGraph.LocateKey("MesTriggers") == "【系统设置·MES 对接】上报触发器");
             // 缺省副标题把新 key 显示出来（改了当场看得见，不用去设置表核对）
             Check("报警缺省含阈值-5kPa", linesOf("alarm").Contains("-5"));
             Check("完成缺省破空阀无", linesOf("done").Contains("无"));
@@ -8232,9 +8289,10 @@ namespace AgingTestSystem.Tests
                     BindingFlags.NonPublic | BindingFlags.Instance).GetValue(titleForm) as Control;
                 var btnT = tT.GetField("_btnApplyPreset",
                     BindingFlags.NonPublic | BindingFlags.Instance).GetValue(titleForm) as Control;
-                Check("方案区标题点名A/B/C/D并说明只读",
-                    lblT != null && lblT.Text.Contains("A/B/C/D")
-                    && lblT.Text.Contains("只读"));
+                // 2.0.1 第二轮口径：预置可临时改，标题改说"可套用"（旧"只读"已不成立）。
+                Check("方案区标题点名预置并说明可套用",
+                    lblT != null && lblT.Text.Contains("预置")
+                    && lblT.Text.Contains("套用"));
                 Check("标题不塞对账腔（不讲当前策略是哪套预置）",
                     lblT != null && !lblT.Text.Contains("当前策略"));
                 Check("按钮文案=套用到自定义（语义唯一）",
@@ -9322,10 +9380,12 @@ namespace AgingTestSystem.Tests
                 }
                 catch { cleared = false; }
                 Check("切节点后旧下拉提示已清（不清表即泄漏）", cleared);
-                // 改选同步：旧节点重选后换一项，悬停跟着变（提示不是一次性快照）
-                SelectNodeNoHang(form, "unload");
+                // 改选同步：旧节点重选后换一项，悬停跟着变（提示不是一次性快照）。
+                // V2.0.5：EventIdentityMode 已迁系统设置，改用启动节点的 0时长策略
+                //（同为枚举下拉、两项，验证的是 SelectedIndexChanged 同步机制）。
+                SelectNodeNoHang(form, "start");
                 var ed2 = fEditors.GetValue(form) as System.Collections.IDictionary;
-                var cmb2 = ed2["EventIdentityMode"] as Control;
+                var cmb2 = ed2["ZeroDurationPolicy"] as Control;
                 bool syncOk = false;
                 try
                 {
@@ -9419,27 +9479,34 @@ namespace AgingTestSystem.Tests
                 }
                 catch { emptyOk = false; }
                 Check("说明缺key回空不抛", emptyOk);
-                // UI 层：切到报警节点（key 最多），每个 20px 高的标题行都有悬停且每行≤40字；
+                // UI 层：切到报警节点（key 最多），每个配置项标题行都有悬停且每行≤40字；
                 // 文本框也同挂（下拉框是选中项全文，不管它）。
+                // 只认 _editorRows 里的行 Label：组标题/默认徽标也是 20px 高 UILabel，
+                // 按"高度 20"粗筛会把它们算进来（组标题本就不该有 tooltip），
+                // 走行结构才是精确口径（V2.0.5 配置分层加了组/徽标后改）。
                 bool uiTipsOk = false;
                 try
                 {
                     // 切节点一律走 helper（先清脏，绝不弹模态框；现场复现过卡在"说明缺key回空不抛"之后等人点）。
                     SelectNodeNoHang(form, "alarm");
-                    var pnlF = t.GetField("_pnlEditors",
-                        BindingFlags.NonPublic | BindingFlags.Instance);
-                    var pnl = pnlF != null ? pnlF.GetValue(form) as Control : null;
                     var getTip = tipObj.GetType().GetMethod("GetToolTip",
                         new Type[] { typeof(Control) });
+                    var fRows = t.GetField("_editorRows",
+                        BindingFlags.NonPublic | BindingFlags.Instance);
+                    var rows = fRows != null
+                        ? fRows.GetValue(form) as System.Collections.IEnumerable : null;
                     int titleCount = 0, titleOk = 0;
-                    if (pnl != null)
+                    if (rows != null)
                     {
-                        foreach (Control c in pnl.Controls)
+                        foreach (object row in rows)
                         {
-                            if (c == null || c.GetType().Name != "UILabel") continue;
-                            if (c.Height != 20) continue;
+                            if (row == null) continue;
+                            var lbl = row.GetType().GetField("Label",
+                                BindingFlags.Public | BindingFlags.Instance)
+                                .GetValue(row) as Control;
+                            if (lbl == null) continue;
                             titleCount++;
-                            string tt = (string)getTip.Invoke(tipObj, new object[] { c });
+                            string tt = (string)getTip.Invoke(tipObj, new object[] { lbl });
                             if (string.IsNullOrEmpty(tt)) continue;
                             bool wrapOk = true;
                             foreach (string line in tt.Split(new[] { "\r\n" }, StringSplitOptions.None))
@@ -9449,7 +9516,10 @@ namespace AgingTestSystem.Tests
                             if (wrapOk) titleOk++;
                         }
                     }
-                    uiTipsOk = titleCount > 0 && titleOk == titleCount;
+                    // 行数必须等于报警节点 key 总数（防探针取不到行还判绿）。
+                    int expectRows = CountNodeKeys("alarm", Views.PolicyGraph.KeyTier.Common)
+                        + CountNodeKeys("alarm", Views.PolicyGraph.KeyTier.Advanced);
+                    uiTipsOk = titleCount > 0 && titleCount == expectRows && titleOk == titleCount;
                 }
                 catch { uiTipsOk = false; }
                 Check("报警节点每项标题都有换行tooltip", uiTipsOk);

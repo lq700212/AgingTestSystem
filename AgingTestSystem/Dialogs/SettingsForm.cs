@@ -424,23 +424,26 @@ namespace AgingTestSystem.Dialogs
             {
                 "VacuumConfirmTimeoutMs", "CommunicationLossAlarmCount",
                 "MaxTestDurationSeconds", "UseDiAlarmContact", "FanTempAlarmLimitC",
-                "FanTempShutdownEnabled", "FanBuzzerDoPoint", "FanBuzzerMode"
+                "FanTempShutdownEnabled", "FanBuzzerDoPoint", "FanBuzzerMode",
+                // 破空阀两项是本机接线事实（装没装、接哪个 DO 点），不是工艺参数：
+                // V2.0.5 从策略窗迁回本分类，与蜂鸣器点位同一口径。
+                "VentValveEnabled", "VentValveDoPoint"
             }),
             // 载台电流独立分类（Q2 骨架总开关，跟机器；显示在业务区后面，找得着）
             ("载台电流", new string[]
             {
                 "UsePowerMeter"
             }),
-            // 工艺策略独立分类（7 个行为开关 + 完成动作 + 破空阀两项 + 身份口径 + 显示模式两项，共 13 项；
-            // FanTempShutdownEnabled 同时是策略，显示在老化测试业务里，这里不再重复列，
-            // 但它进 Policy.json——名单以 ProjectPolicyStore.PolicyKeys 为准，不以分类为准）
+            // 工艺策略独立分类（行为开关 + 完成动作 + 显示模式，共 10 项；
+            // VentValve 两项 V2.0.5 迁"老化测试业务"、EventIdentityMode 迁"报表导出"，
+            // 这里不再列。名单以 ProjectPolicyStore.PolicyKeys 为准，不以分类为准）
             ("工艺策略", new string[]
             {
                 "ZeroDurationPolicy", "EmptySnPolicy",
                 "FanDisconnectPolicy", "VacuumFailKind",
                 "CompletionJudgePolicy", "PowerLossPolicy",
-                "AgingPressureLossPolicy", "CompletionAction", "VentValveDoPoint", "VentValveEnabled",
-                "EventIdentityMode", "DisplayModeEnabled", "DisplayModes"
+                "AgingPressureLossPolicy", "CompletionAction",
+                "DisplayModeEnabled", "DisplayModes"
             }),
             // 规则流程（表达式 + 阶段流，全部跟项目；同表编辑，保存按 PolicyKeys 分流）
             ("规则流程", new string[]
@@ -458,9 +461,10 @@ namespace AgingTestSystem.Dialogs
                 "MesCustomHeaders", "MesEndpointMap"
             }),
             // 报表导出独立分类（Q8 列可配，跟项目；与 MES 对接并列，找得着）
+            // 事件身份口径（CSV/报表/MES 三处统一）同属追溯口径，V2.0.5 从策略窗迁到这里。
             ("报表导出", new string[]
             {
-                "ReportColumns"
+                "EventIdentityMode", "ReportColumns"
             }),
             // 显示模式字典进工艺策略分类（Q20 记录层可配，跟项目；改画面选项来这里）
             // 注：工艺策略分类名单 ≠ PolicyKeys 名单（后者以 ProjectPolicyStore 为准），

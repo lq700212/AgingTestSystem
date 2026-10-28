@@ -13,8 +13,10 @@ namespace AgingTestSystem.Views
     /// 工艺策略（三期可视化：
     /// 老化业务流固定拓扑 + 点节点改配置）。
     /// 【为什么叫工艺策略不叫流程驾驶舱】现场操作员看到"驾驶舱"不知道是干什么的；
-    /// 这里改的正是"参数设置→工艺策略/规则流程/MES上报"同一批 key（存 Policy.json），
+    /// 这里改的正是与系统设置同源的策略 key（存 Policy.json），
     /// 名字与设置分类同词，所见即所得：改工艺来这里。
+    /// （V2.0.5 起只放"现场按工艺要动的决策项"；MES 映射/报表列/破空阀点位迁回
+    ///   系统设置，见 PolicyGraph.MovedKeyTargets 与各节点 Info。）
     /// 【为什么是固定拓扑而不是通用连线编辑器】
     /// 参考过 HJVision 的 mFormFlowEdit（串行站点流水线 ST1→ST2→…，每次部署拓扑都不同，
     /// 所以要拖节点+连线+生成代码）。我们的老化是并行时间状态机：72 台同时在
@@ -61,6 +63,12 @@ namespace AgingTestSystem.Views
     /// 【套用只动 14 个行为开关＋真空超时＋您改的那几项】MES/规则/报表/画面字典/点位/时长阈值不动；
     /// "导出策略"可选 A/B/C/D/自定义任一源装包（全量策略 key，含自由文本），
     /// "导入策略"一律进自定义槽并即时生效（A/B/C/D 覆盖不了）。只读模式套用/导入禁用，导出可用。
+    /// 【V2.0.5 配置简化（客户反馈"配置项太多太复杂"）】
+    /// ①只放"现场按工艺要动的决策项"：MES 映射/报表列/破空阀点位迁回系统设置
+    ///   （PolicyGraph.MovedKeyTargets；节点保留只读状态 + "去哪改"的指引）；
+    /// ②每节点分常用/高级，高级默认折叠成一行（控件一次建齐，只切可见性——切来切去不丢输入）；
+    /// ③每项右侧标"默认/已改"（默认值读 new DeviceConfig()，不手抄一份会分叉的表）；
+    /// ④高风险项（报警全关/跳过抽真空/超温联停）标签标红，不改交互（保存时已有组合校验）。
     /// 全部节点 Bool/Enum 下拉按预置下拉口径统一：
     /// 下拉列表按最长选项实测拉宽（SizeNodeCombo，最长 22 字项原来被截断）+
     /// 悬停看选中项全文（共享 _editorTip，切节点清表防钉住泄漏，随窗体释放）。
@@ -98,6 +106,33 @@ namespace AgingTestSystem.Views
         private bool _dirty;
         private readonly bool _canEdit;
         private Timer _timer;
+
+        // —— 右栏行/组结构（V2.0.5 配置分层）——
+        // 控件**一次建齐**（常用+高级都建），折叠只切 Visible + 重排 Location，
+        // 不销毁重建：点"高级设置"不会丢没保存的输入（重建会丢，这是硬约束）。
+        private readonly List<EditorRow> _editorRows = new List<EditorRow>();
+        private readonly List<EditorGroup> _editorGroups = new List<EditorGroup>();
+        private Sunny.UI.UILabel _advancedToggle;
+        private int _headerOffset;
+        private bool _advancedExpanded;
+        private string _advancedExpandedNodeId;
+
+        /// <summary>右栏一行：标签 + 默认/已改徽标 + 编辑器（控件常驻，折叠只切可见性）。</summary>
+        private sealed class EditorRow
+        {
+            public PolicyGraph.NodeKey Key;
+            public Sunny.UI.UILabel Label;
+            public Sunny.UI.UILabel Badge;
+            public Control Editor;
+        }
+
+        /// <summary>右栏一组（报警节点按"压力保护/温度保护/…"分组；其它节点一个无名组）。</summary>
+        private sealed class EditorGroup
+        {
+            public string Name;
+            public readonly List<EditorRow> Rows = new List<EditorRow>();
+            public Sunny.UI.UILabel Title;
+        }
 
         // 静态布局（坐标/文本/事件挂接）在 Designer，VS 可预览；
         // 这里只留运行时态：选项填充（数据源 PolicyPresets.All）+ 悬停提示 +
@@ -511,7 +546,15 @@ namespace AgingTestSystem.Views
         {
             if (offset < 0) offset = 0;
             _pnlEditors.AutoScrollPosition = new Point(0, offset);
-            _lastAppliedOffset = Math.Abs(_pnlEditors.AutoScrollPosition.Y);
+            int actual = Math.Abs(_pnlEditors.AutoScrollPosition.Y);
+            _lastAppliedOffset = actual;
+            // 请求值被钳掉（内容变短/已到底）：目标不可达，立即收手。
+            // 不这么做的话定时器会每帧再请求同一个值、被钳回，16ms 空转不停。
+            if (actual != offset)
+            {
+                _scrollTarget = actual;
+                StopScrollAnim();
+            }
         }
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -593,9 +636,19 @@ namespace AgingTestSystem.Views
             catch { }
             ControlDisposeHelper.DisposeAllAndClear(_pnlEditors.Controls);
             _editorControls.Clear();
+            _editorRows.Clear();
+            _editorGroups.Clear();
+            _advancedToggle = null;
+            _headerOffset = 0;
         }
 
-        /// <summary>按选中节点重建右栏编辑器。</summary>
+        /// <summary>
+        /// 按选中节点重建右栏编辑器。
+        /// 【V2.0.5 配置分层】每个节点分"常用/高级"：常用默认展开，高级默认折叠成
+        /// 一行"高级设置（N 项）>>"。控件**一次建齐**，折叠只切 Visible + 重排 Location
+        /// （见 LayoutEditorRows）——不销毁重建，所以点折叠不会丢没保存的输入。
+        /// 报警节点另按 Group 分组显示（压力保护/温度保护/报警行为/失压与责任/通讯与规则）。
+        /// </summary>
         private void RebuildEditors()
         {
             DisposeEditorControls();
@@ -629,14 +682,19 @@ namespace AgingTestSystem.Views
                 _btnSaveNode.Enabled = false;
                 return;
             }
-            // 【只读两态】①非管理员（原本就只读）②正在看预置模板（只读模板，改不了）。
-            // ②是 2.0.1 大改补的：旧口径"说是只读模板却能改能存"，现场真敢改，
-            // 改的还不是预置而是自定义——标题/状态条必须把"只读"说死。
+            // 【只读两态】①非管理员（原本就只读）②正在看预置模板（模板本身不可改，
+            // 保存只是暂存，最终要套用到自定义才生效）。
             bool viewingPreset = IsViewingPreset();
-            // 预置视图可改（2.0.1 用户改口径：预置可以临时改，最终同步到自定义），
-            // 标题标明"预置编辑中"，提醒这里的保存只是临时态。
             _lblNodeTitle.Text = viewingPreset ? def.Title + "（预置编辑中）" : def.Title;
-            _btnSaveNode.Enabled = _canEdit;
+            _btnSaveNode.Enabled = _canEdit && def.Keys.Count > 0;
+
+            // 切到另一个节点时高级区默认收起；同一节点重建（保存后）保持上次展开状态，
+            // 免得"展开高级→保存→又被折叠"。
+            if (!string.Equals(_advancedExpandedNodeId, _selectedId, StringComparison.Ordinal))
+            {
+                _advancedExpanded = false;
+                _advancedExpandedNodeId = _selectedId;
+            }
 
             int y = 0;
             if (!_canEdit)
@@ -666,32 +724,52 @@ namespace AgingTestSystem.Views
                 _pnlEditors.Controls.Add(ro);
                 y += 66;
             }
-
-            foreach (PolicyGraph.NodeKey key in def.Keys)
+            else
             {
-                // 无阀本机藏破空点位行：VentValveDoPoint 是"有阀才填"的通道号，
-                // 无阀时露出来只会诱导人填，填了也写不出去（保存校验+执行双拦）。
-                // 开关本身（VentValveEnabled）照常显示——开阀门的总闸不能藏。
-                // 显隐按有效配置判定（与本编辑器显示的值同源，预览态也对得上）。
-                DeviceConfig effForVent = EffectiveConfig();
-                if (string.Equals(key.Key, "VentValveDoPoint", StringComparison.Ordinal)
-                    && (effForVent == null || !effForVent.VentValveEnabled))
-                {
-                    continue;
-                }
-                var lbl = new Sunny.UI.UILabel
+                // 图例：现场先看懂"默认/已改"，再决定动不动（客户原话"不知道哪些该动"）。
+                var legend = new Sunny.UI.UILabel
                 {
                     Location = new Point(0, y),
-                    Size = new Size(270, 20),
+                    Size = new Size(270, 40),
+                    Text = "【默认】=出厂值，一般不用动\r\n【已改】=本项目调过",
+                    ForeColor = Color.Gray
+                };
+                _pnlEditors.Controls.Add(legend);
+                y += 44;
+            }
+            _headerOffset = y;
+
+            // 一次建齐所有行（含高级），折叠只切可见性。组按 def.Keys 顺序切分。
+            EditorGroup currentGroup = null;
+            foreach (PolicyGraph.NodeKey key in def.Keys)
+            {
+                if (key.Group == null)
+                {
+                    if (currentGroup == null || currentGroup.Name != null)
+                    {
+                        currentGroup = new EditorGroup { Name = null };
+                        _editorGroups.Add(currentGroup);
+                    }
+                }
+                else if (currentGroup == null || !string.Equals(currentGroup.Name, key.Group, StringComparison.Ordinal))
+                {
+                    currentGroup = new EditorGroup { Name = key.Group };
+                    _editorGroups.Add(currentGroup);
+                }
+
+                var row = new EditorRow { Key = key };
+                var lbl = new Sunny.UI.UILabel
+                {
+                    Location = new Point(0, 0),
+                    Size = new Size(220, 20),
                     Text = key.Label
                 };
+                // 高风险项标红（不弹二次确认：保存时已有组合校验，避免双弹）。
+                if (PolicyGraph.HighRiskKeys.Contains(key.Key)) lbl.ForeColor = Color.Firebrick;
                 _pnlEditors.Controls.Add(lbl);
-                // 【标题 tooltip】每个配置项标题悬停看中文说明（与系统设置表同源，
-                // 超 40 字走 SettingsForm.WrapTooltip 换行，全仓唯一换行口，不手写截断）。
-                // 说明取不到时回退显示标题本身，保证"每项都有提示"（正常全能取到，
-                // 回退只防以后加 key 忘加说明）。挂在 _editorTip 上（与节点下拉共享实例，
-                // 切节点时 DisposeEditorControls.RemoveAll() 统一清表，不钉住已释放控件；
-                // 窗体 Dispose 统一释放，不新增 ToolTip 字段，终结器安全）。
+                row.Label = lbl;
+
+                // 标题 tooltip（与系统设置表同源；超 40 字走 WrapTooltip 换行）。
                 try
                 {
                     if (_editorTip == null) _editorTip = new ToolTip();
@@ -700,10 +778,27 @@ namespace AgingTestSystem.Views
                     _editorTip.SetToolTip(lbl, Dialogs.SettingsForm.WrapTooltip(desc));
                 }
                 catch { /* 提示写失败不影响主流程（纯展示） */ }
-                y += 22;
+
+                // 默认/已改徽标：预置视图不显示（预置值 vs 出厂值没有"本项目改没改"的语义）。
+                if (!viewingPreset)
+                {
+                    string cur = GetConfigString(key.Key);
+                    string defv = PolicyGraph.GetDefaultString(key.Key);
+                    bool changed = !string.Equals(cur, defv, StringComparison.OrdinalIgnoreCase);
+                    var badge = new Sunny.UI.UILabel
+                    {
+                        Location = new Point(224, 0),
+                        Size = new Size(46, 20),
+                        Text = changed ? "已改" : "默认",
+                        ForeColor = changed ? Color.DodgerBlue : Color.Gray,
+                        TextAlign = ContentAlignment.MiddleRight
+                    };
+                    _pnlEditors.Controls.Add(badge);
+                    row.Badge = badge;
+                }
 
                 Control editor = CreateEditor(key.Key, key.Kind);
-                editor.Location = new Point(0, y);
+                editor.Location = new Point(0, 0);
                 editor.Width = 270;
                 // 选项框按预置下拉口径统一：下拉列表按最长选项实测拉宽 +
                 // 悬停看选中项全文（见 SizeNodeCombo）。宽 270 定死后才能量（量的是
@@ -711,18 +806,8 @@ namespace AgingTestSystem.Views
                 var nodeCmb = editor as Sunny.UI.UIComboBox;
                 if (nodeCmb != null) SizeNodeCombo(nodeCmb);
                 // 只读模式：控件禁用（与系统设置"仅管理员可改"同级，不开后门）
-                // 预置视图**不**禁用（2.0.1 改口径：预置可以临时改，最终同步到自定义）
+                // 预置视图**不**禁用（预置可以临时改，最终同步到自定义）
                 editor.Enabled = _canEdit;
-                if (key.Kind == PolicyGraph.EditorKind.Multiline)
-                {
-                    editor.Height = 96;
-                    y += 102;
-                }
-                else
-                {
-                    editor.Height = 26;
-                    y += 32;
-                }
                 _pnlEditors.Controls.Add(editor);
                 // 【输入框 tooltip】文本/多行框本身也挂同一份说明（悬停框体即见，
                 // 不用先瞄准 20px 高的标题行）。下拉框不动：它的悬停是"当前选中项全文"
@@ -738,38 +823,244 @@ namespace AgingTestSystem.Views
                     }
                     catch { /* 提示写失败不影响主流程（纯展示） */ }
                 }
+                row.Editor = editor;
+                currentGroup.Rows.Add(row);
+                _editorRows.Add(row);
                 _editorControls[key.Key] = editor;
+
+                // 组标题：每个组建一个，Layout 时按"该组本层是否有可见行"决定显隐。
+                if (currentGroup.Title == null && !string.IsNullOrEmpty(currentGroup.Name))
+                {
+                    var gt = new Sunny.UI.UILabel
+                    {
+                        Location = new Point(0, 0),
+                        Size = new Size(270, 20),
+                        Text = currentGroup.Name,
+                        ForeColor = Color.Gray
+                    };
+                    _pnlEditors.Controls.Add(gt);
+                    currentGroup.Title = gt;
+                }
             }
+
+            // 高级折叠开关（只有存在高级项才建）：放在常用项之后、高级项之前。
+            int advancedCount = 0;
+            foreach (var row in _editorRows)
+            {
+                if (row.Key.Tier == PolicyGraph.KeyTier.Advanced) advancedCount++;
+            }
+            if (advancedCount > 0)
+            {
+                _advancedToggle = new Sunny.UI.UILabel
+                {
+                    Location = new Point(0, 0),
+                    Size = new Size(270, 24),
+                    Cursor = Cursors.Hand,
+                    ForeColor = Color.DodgerBlue
+                };
+                _advancedToggle.Click += (s, e) => ToggleAdvanced();
+                _pnlEditors.Controls.Add(_advancedToggle);
+            }
+
+            int contentBottom = LayoutEditorRows();
 
             if (def.Keys.Count == 0)
             {
                 var info = new Sunny.UI.UILabel
                 {
-                    Location = new Point(0, y),
-                    Size = new Size(270, 80),
+                    Location = new Point(0, contentBottom),
+                    Size = new Size(270, 96),
                     Text = def.Info,
                     ForeColor = Color.Gray
                 };
                 _pnlEditors.Controls.Add(info);
                 _btnSaveNode.Enabled = false;
+                try { _pnlEditors.AutoScrollMinSize = new Size(0, contentBottom + 100); } catch { }
             }
             else if (!string.IsNullOrEmpty(def.Info))
             {
-                // 有 key 也有说明的节点（下料判定）：编辑器下面追加灰字指引。
-                // 以前 Info 只在无 key 时显示；下料节点收进事件口径/报表列后有 key 了，
-                // "判定口径在完成下电改"的指引不能丢，改成页脚保留（不占编辑器名额）。
+                // 有 key 也有说明的节点（完成下电/MES）：编辑器下面追加灰字指引，
+                // 告诉现场"迁走的那几项去哪改"。
                 var foot = new Sunny.UI.UILabel
                 {
-                    Location = new Point(0, y),
+                    Location = new Point(0, contentBottom),
                     Size = new Size(270, 60),
                     Text = def.Info,
                     ForeColor = Color.Gray
                 };
                 _pnlEditors.Controls.Add(foot);
+                try { _pnlEditors.AutoScrollMinSize = new Size(0, contentBottom + 64); } catch { }
             }
             UpdateStatus(viewingPreset
                 ? $"已选中【{def.Title}】（预置编辑中）：改完点“保存本节点”只是暂存，套用到自定义后才生效。"
                 : $"已选中【{def.Title}】，改完点“保存本节点”。");
+        }
+
+        /// <summary>
+        /// 展开/收起高级设置（只切可见性 + 重排，不重建控件——值不丢）。
+        /// </summary>
+        private void ToggleAdvanced()
+        {
+            _advancedExpanded = !_advancedExpanded;
+            _advancedExpandedNodeId = _selectedId;
+            LayoutEditorRows();
+            UpdateStatus(_advancedExpanded ? "已展开高级设置。" : "已收起高级设置。");
+        }
+
+        /// <summary>
+        /// 按"常用 → 折叠开关 → 高级"重排右栏（可见性 + Location，不销毁控件）。
+        /// 返回内容底部 y（页脚 Info/AutoScrollMinSize 用）。
+        /// </summary>
+        private int LayoutEditorRows()
+        {
+            // 先统一隐藏所有行/组标题，再按层摆位。
+            // 【为什么不能边排边藏】折叠时只排"常用"层，纯高级组（本层无行）会被
+            // 整组跳过——若指望"没排到"自然隐藏，那些高级行会保持 Visible=true
+            // 且停在 (0,0)，叠在常用项上（V2.0.5 harness 实测：折叠后 8 行全在某处）。
+            HideAllEditorRows();
+            UpdateGroupTitleVisibility();
+
+            int y = _headerOffset;
+            y = LayoutTier(PolicyGraph.KeyTier.Common, y);
+
+            if (_advancedToggle != null)
+            {
+                int advancedCount = 0;
+                foreach (var row in _editorRows)
+                {
+                    if (row.Key.Tier == PolicyGraph.KeyTier.Advanced) advancedCount++;
+                }
+                _advancedToggle.Location = new Point(0, y);
+                _advancedToggle.Text = _advancedExpanded
+                    ? "收起高级设置 <<"
+                    : "高级设置（" + advancedCount + " 项） >>";
+                _advancedToggle.Visible = true;
+                y += 28;
+            }
+
+            if (_advancedExpanded) y = LayoutTier(PolicyGraph.KeyTier.Advanced, y);
+
+            try { _pnlEditors.AutoScrollMinSize = new Size(0, y); } catch { }
+            ClampEditorScrollToContent();
+            // 布局还没跑完时 AutoScroll 范围可能仍是旧值：排队在布局完成后再钳一次。
+            // （内容变矮后滚动条/滚动位置不自动收敛是 WinForms 老问题，V1.88.15 同源）
+            if (IsHandleCreated && !IsDisposed)
+            {
+                try
+                {
+                    BeginInvoke((MethodInvoker)delegate
+                    {
+                        if (!IsDisposed && !Disposing) ClampEditorScrollToContent();
+                    });
+                }
+                catch { /* 窗已关：无需校正 */ }
+            }
+            return y;
+        }
+
+        /// <summary>
+        /// 组标题显隐按"当前可见层集合"一次判定：某组在常用层有行，或高级已展开且组内有高级行，
+        /// 标题就显示。
+        /// 【为什么不放在 LayoutTier 里】排高级层时会把"只有常用行"的组标题关掉——
+        /// 常用层刚打开的标题又被后一次布局覆盖（V2.0.5 harness 实锤：展开后
+        /// 压力保护/温度保护标题消失，上方留一段空白）。
+        /// </summary>
+        private void UpdateGroupTitleVisibility()
+        {
+            foreach (var group in _editorGroups)
+            {
+                if (group.Title == null) continue;
+                bool any = false;
+                foreach (var row in group.Rows)
+                {
+                    if (row.Key.Tier == PolicyGraph.KeyTier.Common || _advancedExpanded)
+                    {
+                        any = true;
+                        break;
+                    }
+                }
+                group.Title.Visible = any;
+            }
+        }
+
+        /// <summary>隐藏全部行与组标题（布局的唯一前置状态；可见性只由 LayoutTier 打开）。</summary>
+        private void HideAllEditorRows()
+        {
+            foreach (var group in _editorGroups)
+            {
+                if (group.Title != null) group.Title.Visible = false;
+                foreach (var row in group.Rows)
+                {
+                    row.Label.Visible = false;
+                    if (row.Badge != null) row.Badge.Visible = false;
+                    row.Editor.Visible = false;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 把滚动位置与缓动目标钳进当前内容范围。
+        /// 【为什么要钳缓动目标】折叠后内容变矮、旧目标超出可滚范围，定时器每帧
+        /// 请求同一个不可达位置（setter 被钳回），会 16ms 空转不停。
+        /// </summary>
+        private void ClampEditorScrollToContent()
+        {
+            if (_pnlEditors == null || _pnlEditors.IsDisposed) return;
+            try
+            {
+                int maxOffset = Math.Max(0,
+                    _pnlEditors.AutoScrollMinSize.Height - _pnlEditors.ClientSize.Height);
+                if (_scrollTarget > maxOffset) _scrollTarget = maxOffset;
+                int cur = Math.Abs(_pnlEditors.AutoScrollPosition.Y);
+                if (cur > maxOffset) _pnlEditors.AutoScrollPosition = new Point(0, maxOffset);
+                _lastAppliedOffset = Math.Abs(_pnlEditors.AutoScrollPosition.Y);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// 排某一层（常用/高级）的可见行并摆位。
+        /// 前置条件：HideAllEditorRows + UpdateGroupTitleVisibility 已定好隐藏/显示集合；
+        /// 本方法只负责"打开本层行"，不再改标题可见性（否则后一层会覆盖前一层的判定）。
+        /// 【行高】单行 22(标签)+26(框)+6(间距)=54；多行 22+96+6=124，与原平铺口径一致。
+        /// </summary>
+        private int LayoutTier(PolicyGraph.KeyTier tier, int y)
+        {
+            foreach (var group in _editorGroups)
+            {
+                // 只有"本层有行"的组才在本层给标题定位：常用组标题在排高级层时
+                // 不能再被搬下来（否则标题跑到展开开关后面，V2.0.5 harness 实锤）。
+                bool anyThisTier = false;
+                foreach (var row in group.Rows)
+                {
+                    if (row.Key.Tier == tier) { anyThisTier = true; break; }
+                }
+                if (anyThisTier && group.Title != null && group.Title.Visible)
+                {
+                    // 组与组之间留 8px（首个组不垫，避免图例下方多出空白）。
+                    if (y > _headerOffset) y += 8;
+                    group.Title.Location = new Point(0, y);
+                    y += 20;
+                }
+                // 非本层行保持 HideAllEditorRows 的隐藏态（不能靠 continue 隐藏：纯高级组
+                // 在折叠时整组都不会进到这里，必须由前置统一隐藏兜住）。
+                foreach (var row in group.Rows)
+                {
+                    if (row.Key.Tier != tier) continue;
+                    row.Label.Visible = true;
+                    if (row.Badge != null) row.Badge.Visible = true;
+                    row.Editor.Visible = true;
+
+                    row.Label.Location = new Point(0, y);
+                    if (row.Badge != null) row.Badge.Location = new Point(224, y);
+                    row.Editor.Location = new Point(0, y + 22);
+                    row.Editor.Width = 270;
+                    int editorH = row.Key.Kind == PolicyGraph.EditorKind.Multiline ? 96 : 26;
+                    row.Editor.Height = editorH;
+                    y += 22 + editorH + 6;
+                }
+            }
+            return y;
         }
 
         /// <summary>连线只读信息（条件在哪改指明，不让用户对着线发呆）。</summary>
@@ -946,22 +1237,13 @@ namespace AgingTestSystem.Views
         }
 
         /// <summary>
-        /// 按指定配置对象读 key 的存储口径字符串（反射只写这一处：真实/预览两个口径共用）。
-        /// 布尔存小写 true/false、枚举存英文名，与落盘口径一致。
+        /// 按指定配置对象读 key 的存储口径字符串（真实/预览两个口径共用）。
+        /// 反射实现统一在 `PolicyGraph.ReadConfigString`（与默认值徽标同源，
+        /// 避免窗体与图数据各抄一份、改口径时分叉）。
         /// </summary>
         private static string ReadConfigString(DeviceConfig cfg, string key)
         {
-            try
-            {
-                if (cfg == null) return "";
-                var prop = typeof(DeviceConfig).GetProperty(key);
-                if (prop == null) return "";
-                object v = prop.GetValue(cfg, null);
-                if (v == null) return "";
-                if (v is bool) return ((bool)v) ? "true" : "false";
-                return v.ToString();
-            }
-            catch { return ""; }
+            return PolicyGraph.ReadConfigString(cfg, key);
         }
 
         /// <summary>

@@ -15,7 +15,9 @@ namespace AgingTestSystem.Views
     /// 每个节点挂它真正能改的配置 key（右栏编辑器按此生成）——条件写在边上，
     /// 改条件的入口永远在端点节点里，连线本身只读（防对着线发呆）。
     /// MES上报是纯配置节点（无连线：上报是正交的，启动/完成/报警/下料四个事件都可能发，
-    /// 画连线反而误导；挂触发器/字段映射/静态字段 3 个跟项目的 key）。
+    /// 画连线反而误导；只挂"启用上报"总开关，触发器/字段映射/静态字段的入口在系统设置·MES 对接）。
+    /// 【配置分层（V2.0.5）】右栏按 NodeKey.Tier 分常用/高级（高级默认折叠），
+    /// 只影响显示；迁出策略窗的 key 见 MovedKeyTargets（仍跟项目进 Policy.json）。
     /// 【文本】BuildNodeLines / BuildEdgeLabel 纯静态，回归可单测（缺省配置长什么样锁死）。
     /// </summary>
     public static class PolicyGraph
@@ -33,17 +35,37 @@ namespace AgingTestSystem.Views
             Multiline
         }
 
+        /// <summary>
+        /// 配置项分层（只影响右栏"默认展开/折叠"，不参与存盘、不影响执行）。
+        /// 分层口径：现场按产品/工艺要动的 → 常用；工程细项/追溯/本机接线事实 → 高级。
+        /// 新增 key 必须显式声明分层（构造参数没有缺省值，漏写编译不过），
+        /// 防止以后加项默认挤进常用区、又把界面撑回一屏 30 项。
+        /// </summary>
+        public enum KeyTier
+        {
+            /// <summary>常用：默认展开（约 13 项，覆盖日常工艺决策）。</summary>
+            Common,
+            /// <summary>高级：默认折叠（工程细项/追溯/本机事实，改前先想清楚）。</summary>
+            Advanced
+        }
+
         /// <summary>节点可改的单个 key。</summary>
         public class NodeKey
         {
             public string Key;
             public string Label;
             public EditorKind Kind;
-            public NodeKey(string key, string label, EditorKind kind)
+            /// <summary>常用/高级（决定右栏默认展开还是折叠）。</summary>
+            public KeyTier Tier;
+            /// <summary>组名（可空；报警节点按"压力保护/温度保护/报警行为/…"分组显示）。</summary>
+            public string Group;
+            public NodeKey(string key, string label, EditorKind kind, KeyTier tier, string group = null)
             {
                 Key = key;
                 Label = label;
                 Kind = kind;
+                Tier = tier;
+                Group = group;
             }
         }
 
@@ -92,6 +114,10 @@ namespace AgingTestSystem.Views
         //（3 行文本 + 标题 + 内边距不挤）。power 与 alarm 中心对齐（横向边水平），
         // done 与 unload 中心对齐（横向边水平），alarm 底到 unload 顶留 55px 走
         // 竖向虚线。改坐标后“复位布局”即生效；老版本 PolicyLayout.json 见 LayoutStore。
+        //
+        // 【配置项归属（V2.0.5 简化）】工艺策略窗只放"现场按工艺要动的决策项"；
+        // 工程细项/追溯/本机接线事实迁回系统设置（见 MovedKeyTargets），
+        // 对应节点保留为只读状态节点（画布仍显示实时值，右栏给"去哪改"的指引）。
         public static readonly List<NodeDef> Nodes = new List<NodeDef>
         {
             new NodeDef
@@ -100,8 +126,8 @@ namespace AgingTestSystem.Views
                 DefaultRect = new Rectangle(60, 30, 220, 110),
                 Keys = new List<NodeKey>
                 {
-                    new NodeKey("ZeroDurationPolicy", "0时长策略", EditorKind.Enum),
-                    new NodeKey("EmptySnPolicy", "空SN策略", EditorKind.Enum),
+                    new NodeKey("ZeroDurationPolicy", "0时长策略", EditorKind.Enum, KeyTier.Common),
+                    new NodeKey("EmptySnPolicy", "空SN策略", EditorKind.Enum, KeyTier.Common),
                 }
             },
             new NodeDef
@@ -110,9 +136,10 @@ namespace AgingTestSystem.Views
                 DefaultRect = new Rectangle(60, 185, 220, 130),
                 Keys = new List<NodeKey>
                 {
-                    new NodeKey("SkipVacuum", "跳过抽真空", EditorKind.Bool),
-                    new NodeKey("VacuumConfirmTimeoutMs", "建立超时(ms)", EditorKind.Text),
-                    new NodeKey("CommunicationLossAlarmCount", "失联次数", EditorKind.Text),
+                    new NodeKey("SkipVacuum", "跳过抽真空", EditorKind.Bool, KeyTier.Common),
+                    new NodeKey("VacuumConfirmTimeoutMs", "建立超时(ms)", EditorKind.Text, KeyTier.Common),
+                    // 失联次数默认 3 次，几乎不动 → 高级（折叠后常用区只留两项）。
+                    new NodeKey("CommunicationLossAlarmCount", "失联次数", EditorKind.Text, KeyTier.Advanced),
                 }
             },
             new NodeDef
@@ -121,12 +148,11 @@ namespace AgingTestSystem.Views
                 DefaultRect = new Rectangle(60, 360, 220, 130),
                 Keys = new List<NodeKey>
                 {
-                    new NodeKey("MaxTestDurationSeconds", "全局时长(秒)", EditorKind.Text),
-                    new NodeKey("CompleteExpression", "完成表达式", EditorKind.Text),
-                    // 画面维度归属上电老化阶段：开关 + 字典都在本节点改，
-                    // 不用再去系统设置"工艺策略"分类里找。
-                    new NodeKey("DisplayModeEnabled", "启用画面维度", EditorKind.Bool),
-                    new NodeKey("DisplayModes", "画面字典(逗号分隔)", EditorKind.Text),
+                    new NodeKey("MaxTestDurationSeconds", "全局时长(秒)", EditorKind.Text, KeyTier.Common),
+                    // 完成表达式/画面维度属于"特定项目才用"的工程项 → 高级折叠。
+                    new NodeKey("CompleteExpression", "完成表达式", EditorKind.Text, KeyTier.Advanced),
+                    new NodeKey("DisplayModeEnabled", "启用画面维度", EditorKind.Bool, KeyTier.Advanced),
+                    new NodeKey("DisplayModes", "画面字典(逗号分隔)", EditorKind.Text, KeyTier.Advanced),
                 }
             },
             new NodeDef
@@ -135,14 +161,12 @@ namespace AgingTestSystem.Views
                 DefaultRect = new Rectangle(60, 535, 220, 125),
                 Keys = new List<NodeKey>
                 {
-                    new NodeKey("CompletionJudgePolicy", "完成判定", EditorKind.Enum),
-                    new NodeKey("CompletionAction", "完成动作", EditorKind.Enum),
-                    // 破空阀总闸收进本节点：无阀时点位行照常隐藏（见
-                    // ProcessPolicyForm.RebuildEditors），但开闸入口就在同一页，
-                    // 不用再跳去系统设置，改完保存即刷新点位行显隐。
-                    new NodeKey("VentValveEnabled", "本机装破空阀", EditorKind.Bool),
-                    new NodeKey("VentValveDoPoint", "破空阀点位", EditorKind.Text),
-                }
+                    new NodeKey("CompletionJudgePolicy", "完成判定", EditorKind.Enum, KeyTier.Common),
+                    new NodeKey("CompletionAction", "完成动作", EditorKind.Enum, KeyTier.Common),
+                    // 破空阀两项已迁系统设置：装没装、接哪个 DO 点是本机接线事实
+                    //（与蜂鸣器点位同一口径），换台机器就变，不跟工艺走。
+                },
+                Info = "破空阀开关/点位在系统设置 → 老化测试业务。"
             },
             new NodeDef
             {
@@ -150,26 +174,29 @@ namespace AgingTestSystem.Views
                 DefaultRect = new Rectangle(430, 340, 240, 150),
                 Keys = new List<NodeKey>
                 {
+                    // —— 常用（默认展开）：压力保护 / 温度保护 ——
                     // 压力报警总开关是第一项：关了阈值/方向都不看（常开不报警），先翻它再调阈值。
-                    new NodeKey("PressureAlarmEnabled", "压力报警开关", EditorKind.Bool),
-                    // 报警全关是第二项：最高级静默（DI/失联/规则/超温联停也不报），压住上面第一项；
-                    // 四个预置默认全关，只走手动或自定义开启。
-                    new NodeKey("MuteAllAlarms", "报警全关", EditorKind.Bool),
-                    // 压力报警阈值/方向是报警联动的核心：以前只能去系统设置
-                    // "报警参数"或公共参数窗改，驾驶舱看得到报警却改不了阈值，收进本节点。
-                    new NodeKey("AlarmPressureThresholdKPa", "报警阈值(kPa)", EditorKind.Text),
-                    new NodeKey("AlarmWhenPressureHigherThanThreshold", "报警方向(高于阈值)", EditorKind.Bool),
-                    new NodeKey("AgingPressureLossPolicy", "老化失压", EditorKind.Enum),
-                    new NodeKey("VacuumFailKind", "真空责任", EditorKind.Enum),
-                    new NodeKey("UseDiAlarmContact", "DI触点并入", EditorKind.Bool),
-                    new NodeKey("FanTempShutdownEnabled", "超温联停", EditorKind.Bool),
-                    new NodeKey("FanTempAlarmLimitC", "超温上限(°C)", EditorKind.Text),
-                    // 超温蜂鸣器：方式三档（持续/短鸣/断续）是工艺参数，跟项目走，在本节点改；
-                    // 点位 FanBuzzerDoPoint 是本机接线事实（哪个 DO 点接了蜂鸣器），
-                    // 不归策略管——去系统设置"老化测试业务"用下拉选空余预留输出点（选项已剔被占用点）。
-                    new NodeKey("FanBuzzerMode", "蜂鸣方式", EditorKind.Enum),
-                    new NodeKey("FanDisconnectPolicy", "风机断连", EditorKind.Enum),
-                    new NodeKey("CustomAlarmRules", "自定义规则", EditorKind.Multiline),
+                    new NodeKey("PressureAlarmEnabled", "压力报警开关", EditorKind.Bool, KeyTier.Common, "压力保护"),
+                    new NodeKey("AlarmPressureThresholdKPa", "报警阈值(kPa)", EditorKind.Text, KeyTier.Common, "压力保护"),
+                    // 超温相关收在温度保护组：上限/联停是安全关键，现场按炉温填。
+                    new NodeKey("FanTempAlarmLimitC", "超温上限(°C)", EditorKind.Text, KeyTier.Common, "温度保护"),
+                    new NodeKey("FanTempShutdownEnabled", "超温联停", EditorKind.Bool, KeyTier.Common, "温度保护"),
+
+                    // —— 高级（默认折叠）：报警行为 / 失压与责任 / 通讯与规则 ——
+                    // 报警全关是最高级静默（DI/失联/规则/超温联停也不报），误开等于关掉全部保护，
+                    // 放高级并标红（HighRiskKeys），四个预置默认全关。
+                    new NodeKey("MuteAllAlarms", "报警全关", EditorKind.Bool, KeyTier.Advanced, "报警行为"),
+                    // 报警方向与阈值是一对，但 90% 现场不动（默认低于阈值报警）→ 高级。
+                    new NodeKey("AlarmWhenPressureHigherThanThreshold", "报警方向(高于阈值)", EditorKind.Bool, KeyTier.Advanced, "报警行为"),
+                    // 蜂鸣方式跟超温工艺走（持续/短鸣/断续），但一次配好基本不动 → 高级。
+                    new NodeKey("FanBuzzerMode", "蜂鸣方式", EditorKind.Enum, KeyTier.Advanced, "报警行为"),
+                    // 老化中失压/真空责任/风机断连：都是"出事怎么处理"的策略，调试期才频繁切换。
+                    new NodeKey("AgingPressureLossPolicy", "老化失压", EditorKind.Enum, KeyTier.Advanced, "失压与责任"),
+                    new NodeKey("VacuumFailKind", "真空责任", EditorKind.Enum, KeyTier.Advanced, "失压与责任"),
+                    new NodeKey("FanDisconnectPolicy", "风机断连", EditorKind.Enum, KeyTier.Advanced, "失压与责任"),
+                    // DI 触点与自定义规则属于通讯/规则层，现场一般由工程一次配好。
+                    new NodeKey("UseDiAlarmContact", "DI触点并入", EditorKind.Bool, KeyTier.Advanced, "通讯与规则"),
+                    new NodeKey("CustomAlarmRules", "自定义规则", EditorKind.Multiline, KeyTier.Advanced, "通讯与规则"),
                 }
             },
             new NodeDef
@@ -178,27 +205,20 @@ namespace AgingTestSystem.Views
                 DefaultRect = new Rectangle(430, 30, 240, 105),
                 Keys = new List<NodeKey>
                 {
-                    new NodeKey("PowerLossPolicy", "恢复策略", EditorKind.Enum),
+                    new NodeKey("PowerLossPolicy", "恢复策略", EditorKind.Enum, KeyTier.Common),
                 }
             },
-            // 下料判定不再是纯展示节点：事件身份口径（CSV/报表/MES
-            // 三处统一）与报表列配置归属"产出追溯"，在本节点改；完成判定口径
-            // （自动PASS/待判定）仍在【完成下电】节点改，Info 保留该指引。
+            // 下料判定：本节点只读（V2.0.5 起）。事件身份口径/报表列属于"产出追溯"，
+            // 入口统一在系统设置 → 报表导出；完成判定口径仍在【完成下电】节点。
             new NodeDef
             {
                 Id = "unload", Title = "下料判定",
                 DefaultRect = new Rectangle(430, 545, 240, 115),
-                Keys = new List<NodeKey>
-                {
-                    new NodeKey("EventIdentityMode", "事件身份口径", EditorKind.Enum),
-                    new NodeKey("ReportColumns", "报表列(空=缺省)", EditorKind.Multiline),
-                },
-                Info = "待判定模式下，主界面操作区【下料判定】按钮录 PASS/FAIL。\r\n完成判定口径在【完成下电】节点改。"
+                Keys = new List<NodeKey>(),
+                Info = "本节点只读。\r\n事件身份口径/报表列在系统设置 → 报表导出。\r\n完成判定口径在【完成下电】节点改。"
             },
-            // MES上报纯配置节点：触发器/字段映射/静态字段 3 个跟项目的 key
-            // 全在这里改（连接类开关/地址跟机器，在系统设置 MES 对接分类里改）。
-            // 总闸 MesEnabled 收进本节点：以前节点上显示"开关：开/关"
-            // 却无处可改（看得到改不了），现在同一页翻开关。
+            // MES上报：只留"启用上报"总闸（现场偶尔临时关上报）。
+            // 触发器/字段映射/静态字段是对接工程配置，入口统一在系统设置 → MES 对接。
             // 无连线（上报正交于流程），画布右下角，绘制顺序最后。
             new NodeDef
             {
@@ -206,11 +226,9 @@ namespace AgingTestSystem.Views
                 DefaultRect = new Rectangle(430, 700, 240, 125),
                 Keys = new List<NodeKey>
                 {
-                    new NodeKey("MesEnabled", "启用上报", EditorKind.Bool),
-                    new NodeKey("MesTriggers", "上报触发器", EditorKind.Text),
-                    new NodeKey("MesFieldMap", "字段映射", EditorKind.Multiline),
-                    new NodeKey("MesStaticFields", "静态字段", EditorKind.Multiline),
-                }
+                    new NodeKey("MesEnabled", "启用上报", EditorKind.Bool, KeyTier.Common),
+                },
+                Info = "上报触发器/字段映射/静态字段在系统设置 → MES 对接。"
             },
         };
 
@@ -227,6 +245,72 @@ namespace AgingTestSystem.Views
             new EdgeDef("e_alarm_unload", "alarm", "unload", true),
         };
 
+        /// <summary>
+        /// 已迁出策略窗的 key → 新入口（"系统设置分类|中文名"）。
+        /// 【为什么保留映射】这些 key 仍是 PolicyKeys（仍跟项目走、仍进 Policy.json），
+        /// 只是编辑入口从策略窗移到系统设置：
+        /// ①设置表保存时的"该项由哪个策略节点管"点名仍能找到去处（LocateKey 非 null），
+        /// ②回归可锁"迁移项不在任何节点 Keys 里，但定位信息还在"，防以后又被加回策略窗。
+        /// </summary>
+        public static readonly Dictionary<string, string> MovedKeyTargets =
+            new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            { "MesTriggers", "系统设置·MES 对接|上报触发器" },
+            { "MesFieldMap", "系统设置·MES 对接|字段映射" },
+            { "MesStaticFields", "系统设置·MES 对接|静态字段" },
+            { "EventIdentityMode", "系统设置·报表导出|事件身份口径" },
+            { "ReportColumns", "系统设置·报表导出|报表列" },
+            { "VentValveEnabled", "系统设置·老化测试业务|本机装破空阀" },
+            { "VentValveDoPoint", "系统设置·老化测试业务|破空阀点位" },
+        };
+
+        /// <summary>
+        /// 高风险配置项（改错直接影响安全/整线）：右栏标红提示，不弹二次确认
+        /// （弹窗留给保存时的组合校验 ValidatePolicyCombination，避免双弹）。
+        /// </summary>
+        public static readonly HashSet<string> HighRiskKeys =
+            new HashSet<string>(StringComparer.Ordinal)
+        {
+            "MuteAllAlarms",          // 报警全关：DI/失联/规则/超温联停全静默
+            "SkipVacuum",             // 跳过抽真空：真空保护全丢，必须机械固定
+            "FanTempShutdownEnabled", // 超温联停：上限没填就开等于没配（保存会拦）
+        };
+
+        /// <summary>出厂缺省配置（只读，取默认值用；DeviceConfig 无参构造无副作用）。</summary>
+        private static readonly DeviceConfig DefaultConfig = new DeviceConfig();
+
+        /// <summary>
+        /// 取某 key 的出厂默认值（存储口径字符串：布尔小写/枚举英文名/数字原文）。
+        /// 【用途】右栏每项标"默认/已改"——现场一眼看出哪些是出厂值、哪些被本项目调过，
+        /// 不用逐项猜"这个数要不要动"。
+        /// 【为什么不手写默认值表】32 项各抄一份，DeviceConfig 改缺省值就分叉；
+        /// 直接读 new DeviceConfig() 的属性，新增 key 自动生效。
+        /// </summary>
+        public static string GetDefaultString(string key)
+        {
+            return ReadConfigString(DefaultConfig, key);
+        }
+
+        /// <summary>
+        /// 按指定配置对象读 key 的存储口径字符串（布尔小写 true/false、枚举英文名，与落盘一致）。
+        /// 【唯一口】右栏"当前值/默认值"两端都走这里：口径只写一份，
+        /// 别在窗体里再抄一份反射（改口径漏一处 = 徽标永远"已改"或永远"默认"）。
+        /// </summary>
+        public static string ReadConfigString(DeviceConfig cfg, string key)
+        {
+            if (cfg == null || string.IsNullOrEmpty(key)) return "";
+            try
+            {
+                var prop = typeof(DeviceConfig).GetProperty(key);
+                if (prop == null) return "";
+                object v = prop.GetValue(cfg, null);
+                if (v == null) return "";
+                if (v is bool) return ((bool)v) ? "true" : "false";
+                return v.ToString();
+            }
+            catch { return ""; }
+        }
+
         /// <summary>按 id 找节点（找不到返回 null）。</summary>
         public static NodeDef FindNode(string id)
         {
@@ -241,10 +325,11 @@ namespace AgingTestSystem.Views
         /// <summary>
         /// 按配置 key 反查它在哪个节点的哪一项（纯函数：设置表保存弹窗点名用）。
         /// 策略层是最高优先级：设置表里改了节点可配的项，保存后即进策略层，
-        /// 弹窗点出"【节点】事项"让用户知道去哪看。找不到返回 null（纯机器项，
-        /// 如串口参数，驾驶舱不管，保存不打扰）。
+        /// 弹窗点出"【节点】事项"让用户知道去哪看。
+        /// 已迁出策略窗的项（MovedKeyTargets）返回"【系统设置·分类】事项"，
+        /// 让弹窗仍能指出实际编辑入口；纯机器项（串口参数等）返回 null，保存不打扰。
         /// </summary>
-        /// <returns>"【节点标题】事项名"（如"【报警联动】压力报警开关"），无节点管返回 null</returns>
+        /// <returns>"【节点/系统设置分类】事项名"；无人管返回 null</returns>
         public static string LocateKey(string key)
         {
             if (string.IsNullOrEmpty(key)) return null;
@@ -255,6 +340,17 @@ namespace AgingTestSystem.Views
                 {
                     if (string.Equals(k.Key, key, StringComparison.Ordinal))
                         return "【" + n.Title + "】" + k.Label;
+                }
+            }
+            // 已迁出策略窗的项：仍给出去处（设置表保存弹窗可点名"去哪改"），
+            // 但不冒充策略节点——返回值直接写系统设置分类。
+            string moved;
+            if (MovedKeyTargets.TryGetValue(key, out moved) && !string.IsNullOrEmpty(moved))
+            {
+                int bar = moved.IndexOf('|');
+                if (bar > 0)
+                {
+                    return "【" + moved.Substring(0, bar) + "】" + moved.Substring(bar + 1);
                 }
             }
             return null;
