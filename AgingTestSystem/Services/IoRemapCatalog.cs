@@ -155,6 +155,25 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
+        /// 空余 DO 输出点池（给"从下拉选一个空余输出点"的场景用：超温蜂鸣器点位等）。
+        /// 池子 = 预留输出（BuildTargetEndpoints SpareOnly 同一口径：防误选工位阀/电编号），
+        /// 再剔除 excludeIoId=已被其它功能占用的点（如破空阀 VentValveDoPoint——
+        /// 同一点位挂两路功能，超温鸣叫与泄压会互相捅）。
+        /// 排序与源池一致（寄存器→通道升序，物理地址序）。config 非法/没有预留点
+        /// 返回空表（调用方下拉只剩"未接"项，永不越界）。
+        /// </summary>
+        public static List<IoRemapEndpoint> BuildSpareDoTargets(DeviceConfig config, int excludeIoId)
+        {
+            var result = new List<IoRemapEndpoint>();
+            foreach (var e in BuildTargetEndpoints(config, IoRemapTargetPool.SpareOnly))
+            {
+                if (excludeIoId > 0 && e.IoId == excludeIoId) continue;
+                result.Add(e);
+            }
+            return result;
+        }
+
+        /// <summary>
         /// 功能分组标题（左侧分组/筛选下拉共用；加新功能时改这里 + 下拉项 + 用例）。
         /// </summary>
         public static string GroupTitleOf(IoFunction function)

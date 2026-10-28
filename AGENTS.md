@@ -181,6 +181,16 @@
   风机断连与完成表达式不受影响）；
   A 与 C 除报警开关外全同（A 关/C 开）——A 以 C 为基准，数值（超时 0）只影响套用不影响身份；
   配方项（延时/时长）任何预置都不写（无配方默认 0，有配方按配方来）。
+  - **策略 key 归属迁移套路（2.0.4 蜂鸣器点位先例）**：挪 key 前先分清"工艺参数跟项目 Policy.json /
+    本机接线跟机器 exe.config"。挪动一触及六处：①`PolicyKeys` 出/入名单（出了老 Policy.json 残值
+    经名单过滤自动失效，项目未上线不写迁移）；②策略图该节点 `NodeKey` 删（PolicyNodeComboTests
+    期望数动态自算，不用改）；③设置表 `_descriptions` 文案 + `CreateValueCell` 新分支 + `_numericKeys`
+    退出（点级下拉"选一个空余点"必须按 config 现算，改 `CreateValueCell` 签名加 config——
+    回归里既有 2 参反射调用会 TargetParameterCountException 报模块级异常，同步 3 参）；
+    ④"空余点池"唯一口 = `IoRemapCatalog.BuildSpareDoTargets`（预留输出、剔除已占用点、
+    显示"Y地址 预留输出-N"、null 配置空表不抛），调用方禁各写一份；⑤下拉"当前值不在空余池"
+    补兜底项回显（现状摆出来引导换走，别静默洗掉）；⑥TestRunner 名单锁（"含X"改"只含Y"）
+    + `_numericKeys` 退出锁 + 豁免清单注释同步。改动后跑全量回归看 2443+ 全绿。
   预置顺序即试用顺序（V1.106 起 A=常用/B=标准/C=宽松/D=严格，常用首位；项目未上线，
   改名换序直改，不写迁移分支）。
   自定义槽与导入导出（2.0.0）：下拉里"自定义"只叫"自定义"（`PolicyPresets.CustomTitle` 单源，

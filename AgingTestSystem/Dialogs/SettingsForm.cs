@@ -241,7 +241,6 @@ namespace AgingTestSystem.Dialogs
                 { "CommunicationLossAlarmCount", (1, 10000, 0, 1) },
                 { "MaxTestDurationSeconds", (0, 86400, 0, 10) },
                 { "FanTempAlarmLimitC", (0, 200, 1, 0.5m) },
-                { "FanBuzzerDoPoint", (0, 65535, 0, 1) },
             };
 
         /// <summary>
@@ -313,7 +312,7 @@ namespace AgingTestSystem.Dialogs
             { "UseDiAlarmContact", "气压表报警触点(DI)是否并入报警判定（false/true）" },
             { "FanTempAlarmLimitC", "送风机温度告警上限（°C，0=不启用）" },
             { "FanTempShutdownEnabled", "超温是否全线联停（false=只记日志；true=超温自动停全部在测工位，默认false）" },
-            { "FanBuzzerDoPoint", "超温蜂鸣器DO输出点编号（0=未接，默认；现场确认输出信号地址后填，超温触发，阈值共用上面的告警上限）" },
+            { "FanBuzzerDoPoint", "超温蜂鸣器接的 DO 输出点（0=未接，默认；下拉只列空余的预留输出点，被破空阀占用的不会出现；存内部编号，超温沿写 ON，阈值共用上面的告警上限）" },
             { "FanBuzzerMode", "超温蜂鸣方式：持续响=超温一直响回温自动停（默认）/短鸣一声=响约3秒自动停/断续响=响2秒停2秒循环" },
 
             // ===== 载台电流（V1.74：Q2 通用骨架总开关，跟机器，结构型改后重启生效）=====
@@ -846,7 +845,7 @@ namespace AgingTestSystem.Dialogs
                     int rowIdx = _grid.Rows.Add();
                     _grid.Rows[rowIdx].Cells["colKey"].Value = key;
                     _grid.Rows[rowIdx].Cells["colDesc"].Value = desc ?? "";
-                    _grid.Rows[rowIdx].Cells["colValue"] = CreateValueCell(key, GetEffectiveValue(key));
+                    _grid.Rows[rowIdx].Cells["colValue"] = CreateValueCell(key, GetEffectiveValue(key), _config);
 
                     // 说明 tooltip：悬停任一单元格都显示完整说明，
                     // 超过 40 字自动换行（WinForms ToolTip 不自动换行，靠 WrapTooltip 插换行符）。
@@ -1559,11 +1558,19 @@ namespace AgingTestSystem.Dialogs
         /// - 策略项（V1.67，ProjectPolicyStore.EnumOptions）：下拉框中文显示、存英文名
         /// - PortName：下拉框列出系统当前检测到的所有串口，供用户直接选择
         /// - 串口通讯参数：波特率用可手输下拉（常用档位 + 自定义），数据位/停止位/校验位用固定选项下拉
+        /// - 蜂鸣器点位 FanBuzzerDoPoint：下拉只列空余的预留输出点（借用 config 排除已占用点）
         /// - 数字项（_numericKeys）：用 NumericUpDown 单元格，按范围限制上下限与小数位
         /// - 其余文本项：普通文本框
         /// </summary>
-        private static DataGridViewCell CreateValueCell(string key, string value)
+        private static DataGridViewCell CreateValueCell(string key, string value, DeviceConfig config)
         {
+            // 蜂鸣器点位：下拉选空余点（每台机器的预留区大小与破空阀占用情况都不同，
+            // 必须按 config 现算，不能像其它分支那样只看 key/值）。
+            if (key == "FanBuzzerDoPoint")
+            {
+                return CreateBuzzerPointComboCell(config, value);
+            }
+
             if (_boolKeys.Contains(key))
             {
                 return CreateStrictComboCell(
@@ -2042,6 +2049,56 @@ namespace AgingTestSystem.Dialogs
             return cell;
         }
 
+        /// <summary>
+        /// 蜂鸣器点位下拉单元格（DropDownList 只能选不能手输）：
+        /// 首项"未接(0)"存 0（不写任何通道=功能停用），其余 = 空余的预留输出点，
+        /// 池子只认 IoRemapCatalog.BuildSpareDoTargets 唯一口（预留输出，剔除已被
+        /// 破空阀占用的点），显示"Y地址 预留输出-N"，存 IoId 内部编号（与执行侧
+        /// SetOutput 同口径，现场按接线对地址）。
+        /// 当前值不在空余列表（脏值/撞工位编号/与破空阀撞点）时补一项
+        /// "编号N(当前值·已被占用)"回显——先把现状摆出来才好换走它；
+        /// 保存时 ValidateValue 与组合碰撞校验仍各拦一道（防手改 App.config 绕界面）。
+        /// </summary>
+        /// <param name="config">内存配置（算空余点池 + 取破空阀占用；null 时只剩未接项）</param>
+        /// <param name="currentValue">当前配置值（IoId 文本，"0"=未接）</param>
+        private static DataGridViewStrictComboBoxCell CreateBuzzerPointComboCell(DeviceConfig config, string currentValue)
+        {
+            var cell = new DataGridViewStrictComboBoxCell();
+            StyleComboCell(cell);
+            cell.DropDownWidth = 210;
+            cell.Items.Add(new ComboOption("未接(0)", "0"));
+
+            string cur = (currentValue ?? "").Trim();
+            int curVal;
+            int.TryParse(cur, out curVal);
+            bool foundCur = curVal == 0;
+            if (config != null)
+            {
+                foreach (var e in IoRemapCatalog.BuildSpareDoTargets(config, config.VentValveDoPoint))
+                {
+                    cell.Items.Add(new ComboOption(e.DisplayText, e.IoId.ToString()));
+                    if (e.IoId == curVal) foundCur = true;
+                }
+            }
+            if (!string.IsNullOrEmpty(cur) && !foundCur)
+            {
+                cell.Items.Add(new ComboOption("编号" + curVal + "(当前值·已被占用)", curVal.ToString()));
+            }
+
+            cell.DisplayMember = "Display";
+            cell.ValueMember = "Value";
+            // 当前值优先原样回显（含脏值），没值时落首项"未接"，下拉恒有选中态
+            if (!string.IsNullOrEmpty(cur))
+            {
+                cell.Value = curVal.ToString();
+            }
+            else
+            {
+                cell.Value = "0";
+            }
+            return cell;
+        }
+
         /// <summary>下拉单元格统一样式：扁平无灰底、白底深字，与页面风格一致</summary>
         private static void StyleComboCell(DataGridViewComboBoxCell cell)
         {
@@ -2333,7 +2390,8 @@ namespace AgingTestSystem.Dialogs
                     return true;
 
                 // 全局单点输出点位（非负整数，0=未配置；破空阀与超温蜂鸣器共用同一规则，
-                // 上限 65535=Modbus 点号 16 位；撞工位编号由组合校验 CheckPolicyCombination 拦）
+                // 上限 65535=Modbus 点号 16 位；撞工位编号由组合校验 CheckPolicyCombination 拦。
+                // 蜂鸣器界面已是"空余点下拉"选不出脏值，这里只拦手改 App.config 绕界面的情况）
                 case "VentValveDoPoint":
                 case "FanBuzzerDoPoint":
                     int ventPoint;

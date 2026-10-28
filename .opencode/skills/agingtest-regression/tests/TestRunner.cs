@@ -2346,18 +2346,19 @@ namespace AgingTestSystem.Tests
                 ProjectPolicyStore.PolicyKeys.Contains("FanTempShutdownEnabled"));
             Check("PolicyKeys 含真空超时(跟项目走，机器缺省15000不动)",
                 ProjectPolicyStore.PolicyKeys.Contains("VacuumConfirmTimeoutMs"));
-            Check("PolicyKeys 含蜂鸣器两项(点位/方式跟项目走)",
-                ProjectPolicyStore.PolicyKeys.Contains("FanBuzzerDoPoint")
-                && ProjectPolicyStore.PolicyKeys.Contains("FanBuzzerMode"));
+            Check("PolicyKeys 只含蜂鸣方式(点位改跟机器：本机接线事实，系统设置下拉选空余点)",
+                ProjectPolicyStore.PolicyKeys.Contains("FanBuzzerMode")
+                && !ProjectPolicyStore.PolicyKeys.Contains("FanBuzzerDoPoint"));
             bool optsOk = true;
             foreach (string k in ProjectPolicyStore.PolicyKeys)
             {
-                // VentValveDoPoint/VacuumConfirmTimeoutMs/FanBuzzerDoPoint 是数字项、
+                // VentValveDoPoint/VacuumConfirmTimeoutMs 是数字项、
                 // FanTempShutdownEnabled/SkipVacuum/DisplayModeEnabled/PressureAlarmEnabled/
                 // MuteAllAlarms 是布尔项、MesTriggers/MesFieldMap/MesStaticFields/CustomAlarmRules/
                 // CompleteExpression/ReportColumns/DisplayModes 是自由文本
-                // （V1.68/V1.69/V1.74/V1.75/2.0.0/2.0.0），都无策略下拉
-                if (k == "VentValveDoPoint" || k == "VacuumConfirmTimeoutMs" || k == "FanBuzzerDoPoint"
+                // （V1.68/V1.69/V1.74/V1.75/2.0.0），都无策略下拉。
+                // 蜂鸣器点位 FanBuzzerDoPoint 已从 PolicyKeys 移除（改跟机器 exe.config）。
+                if (k == "VentValveDoPoint" || k == "VacuumConfirmTimeoutMs"
                     || k == "FanTempShutdownEnabled" || k == "SkipVacuum"
                     || k == "DisplayModeEnabled" || k == "PressureAlarmEnabled"
                     || k == "MuteAllAlarms"
@@ -2459,6 +2460,73 @@ namespace AgingTestSystem.Tests
                 Check("蜂鸣方式脏值被拦",
                     (bool)miValidate.Invoke(null, args) == false);
             }
+
+            // ── 蜂鸣器点位改系统设置：下拉只选空余点（点位不再跟项目策略） ──
+            // 空余点池纯函数（IoRemapCatalog 唯一口）：72表/80入/160出 → 预留输出 IoId 225~240 共 16 个
+            var spareCfg = new DeviceConfig { TotalBarometers = 72, TotalInputs = 80, TotalOutputs = 160 };
+            var spare = IoRemapCatalog.BuildSpareDoTargets(spareCfg, 0);
+            Check("蜂鸣空余点池=16个预留输出(编号225~240)",
+                spare.Count == 16 && spare[0].IoId == 225 && spare[15].IoId == 240);
+            Check("空余点池显示文本含地址与名称(Y/预留输出-N)",
+                spare.Count > 0 && spare[0].DisplayText.Contains("Y")
+                && spare[0].DisplayText.Contains("预留输出-145"));
+            spareCfg.VentValveDoPoint = 225;
+            bool spareExOk = true;
+            foreach (var e in IoRemapCatalog.BuildSpareDoTargets(spareCfg, spareCfg.VentValveDoPoint))
+            {
+                if (e.IoId == 225) spareExOk = false;
+            }
+            Check("被破空阀占用的点不进空余池(剔除后15项)", spareExOk
+                && IoRemapCatalog.BuildSpareDoTargets(spareCfg, spareCfg.VentValveDoPoint).Count == 15);
+            Check("无预留区时空点池为空不抛",
+                IoRemapCatalog.BuildSpareDoTargets(
+                    new DeviceConfig { TotalBarometers = 72, TotalInputs = 72, TotalOutputs = 144 }, 0).Count == 0);
+            Check("配置null空点池不抛", IoRemapCatalog.BuildSpareDoTargets(null, 0) != null
+                && IoRemapCatalog.BuildSpareDoTargets(null, 0).Count == 0);
+
+            // CreateValueCell 反射（签名含 config：空余池按每台机器现算，不能只看 key）
+            var miCell = typeof(SettingsForm).GetMethod("CreateValueCell",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            Check("反射找到 CreateValueCell(3参数含config)",
+                miCell != null && miCell.GetParameters().Length == 3);
+            if (miCell != null && spare.Count == 16)
+            {
+                // 前提：spareCfg.VentValveDoPoint=225 已占 → 未接 + 15 空余 = 16 项
+                var cellA = miCell.Invoke(null, new object[] { "FanBuzzerDoPoint", "0", spareCfg })
+                    as Controls.DataGridViewStrictComboBoxCell;
+                Check("蜂鸣点位行返回下拉单元格", cellA != null);
+                if (cellA != null)
+                {
+                    int optCount = 0;
+                    string firstVal = null, lastVal = null;
+                    foreach (var o in cellA.Items)
+                    {
+                        var opt = o as Controls.ComboOption;
+                        if (opt == null) continue;
+                        if (firstVal == null) firstVal = opt.Value;
+                        lastVal = opt.Value;
+                        optCount++;
+                    }
+                    Check("下拉=未接+15空余(选项显示/存值成对)", optCount == 16
+                        && firstVal == "0" && lastVal == "240");
+                    Check("未接0回显首项", (string)cellA.Value == "0");
+                }
+                var cellB = miCell.Invoke(null, new object[] { "FanBuzzerDoPoint", "230", spareCfg })
+                    as Controls.DataGridViewStrictComboBoxCell;
+                Check("当前值是空余点原样回显不重复加项", cellB != null
+                    && cellB.Items.Count == 16 && (string)cellB.Value == "230");
+                var cellBad = miCell.Invoke(null, new object[] { "FanBuzzerDoPoint", "17", spareCfg })
+                    as Controls.DataGridViewStrictComboBoxCell;
+                Check("脏值(工位区17)补兜底项回显", cellBad != null
+                    && cellBad.Items.Count == 17 && (string)cellBad.Value == "17");
+                Check("配置null下拉只剩未接不抛",
+                    miCell.Invoke(null, new object[] { "FanBuzzerDoPoint", "0", null })
+                        is Controls.DataGridViewStrictComboBoxCell);
+            }
+            var nkf2 = typeof(SettingsForm).GetField("_numericKeys",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            var rngs2 = (Dictionary<string, ValueTuple<decimal, decimal, int, decimal>>)nkf2.GetValue(null);
+            Check("蜂鸣点位退出数字键表(改空余点下拉)", !rngs2.ContainsKey("FanBuzzerDoPoint"));
 
             // ── SettingsForm.NormalizePolicyValue（反射：脏值兜底回缺省） ──
             var miNorm = typeof(SettingsForm).GetMethod("NormalizePolicyValue", Flags);
@@ -4407,11 +4475,12 @@ namespace AgingTestSystem.Tests
             Check("调试日志开关不触发重连",
                 !SettingsForm.ScannerConnectionKeys.Contains("ScannerDebugLog"));
 
-            // —— CreateValueCell 分发（反射私有静态，返回类型即契约） ——
+            // —— CreateValueCell 分发（反射私有静态，返回类型即契约；
+            // 第 3 参为 DeviceConfig：蜂鸣器点位等"按机器现算选项"的 key 要用，其余可给空配置） ——
             var cvc = typeof(SettingsForm).GetMethod("CreateValueCell",
                 BindingFlags.NonPublic | BindingFlags.Static);
             Func<string, string, DataGridViewCell> cellOf = (k, v) =>
-                (DataGridViewCell)cvc.Invoke(null, new object[] { k, v });
+                (DataGridViewCell)cvc.Invoke(null, new object[] { k, v, new DeviceConfig() });
             var boolCell = cellOf("UseMockCommunication", "TRUE");
             Check("布尔→下拉且TRUE归一true",
                 boolCell is DataGridViewComboBoxCell && Equals(boolCell.Value, "true"));

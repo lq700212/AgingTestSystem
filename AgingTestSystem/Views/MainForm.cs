@@ -1195,8 +1195,10 @@ namespace AgingTestSystem.Views
             {
                 config.VentValveEnabled = ventEnabled;
             }
-            // 超温蜂鸣器（新现场需求：冷却送风机超温触发蜂鸣报警；点位/方式跟项目走，
-            // 随后 Policy.json 可按项目覆盖——非法方式名 ParsePolicyEnum 兜底回 Level）
+            // 超温蜂鸣器（新现场需求：冷却送风机超温触发蜂鸣报警）。
+            // 点位是本机接线事实跟机器走（App.config；系统设置下拉选空余预留输出点，
+            // 不再跟项目策略覆盖——负值钳 0 防手改文件）；方式跟项目走（Policy.json 可按项目覆盖，
+            // 非法方式名 ParsePolicyEnum 兜底回 Level）
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["FanBuzzerDoPoint"], out int buzzerPoint))
             {
                 config.FanBuzzerDoPoint = Math.Max(0, buzzerPoint);

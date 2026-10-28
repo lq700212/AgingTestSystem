@@ -269,7 +269,7 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `UseDiAlarmContact` | false | DI 报警触点并入判定（需现场确认电平） |
 | `FanTempAlarmLimitC` | 0 | 送风机温度告警上限(0=不启用) |
 | `FanTempShutdownEnabled` | false | 超温全线联停开关（默认关=只记日志；开=超温自动停全部在测工位） |
-| `FanBuzzerDoPoint` / `FanBuzzerMode` | 0 / Level | 超温蜂鸣器：点位0=未接不写通道（现场定性DO地址后填），方式 Level=持续响/Pulse=短鸣/Intermittent=断续；阈值共用超温上限，报警全关压制 |
+| `FanBuzzerDoPoint` / `FanBuzzerMode` | 0 / Level | 超温蜂鸣器：点位在系统设置"老化测试业务"下拉选**空余预留输出点**（0=未接不写通道，被破空阀占用的点不会出现在选项里；策略页已无此项），方式跟项目策略页；阈值共用超温上限，报警全关压制 |
 | `ZeroDurationPolicy` / `EmptySnPolicy` | Warn | 0时长/空SN启动策略（Warn=警告可继续 / Block=硬拦截） |
 | `FanDisconnectPolicy` | LogOnly | 送风机断连策略（LogOnly=提示后照跑 / BlockStart=阻断启动） |
 | `VacuumFailKind` | ProductFail | 真空失败责任（ProductFail=记FAIL / FixtureAlarm=记装夹异常） |
