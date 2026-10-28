@@ -241,6 +241,7 @@ namespace AgingTestSystem.Dialogs
                 { "CommunicationLossAlarmCount", (1, 10000, 0, 1) },
                 { "MaxTestDurationSeconds", (0, 86400, 0, 10) },
                 { "FanTempAlarmLimitC", (0, 200, 1, 0.5m) },
+                { "FanBuzzerDoPoint", (0, 65535, 0, 1) },
             };
 
         /// <summary>
@@ -312,6 +313,8 @@ namespace AgingTestSystem.Dialogs
             { "UseDiAlarmContact", "气压表报警触点(DI)是否并入报警判定（false/true）" },
             { "FanTempAlarmLimitC", "送风机温度告警上限（°C，0=不启用）" },
             { "FanTempShutdownEnabled", "超温是否全线联停（false=只记日志；true=超温自动停全部在测工位，默认false）" },
+            { "FanBuzzerDoPoint", "超温蜂鸣器DO输出点编号（0=未接，默认；现场确认输出信号地址后填，超温触发，阈值共用上面的告警上限）" },
+            { "FanBuzzerMode", "超温蜂鸣方式：持续响=超温一直响回温自动停（默认）/短鸣一声=响约3秒自动停/断续响=响2秒停2秒循环" },
 
             // ===== 载台电流（V1.74：Q2 通用骨架总开关，跟机器，结构型改后重启生效）=====
             { "UsePowerMeter", "是否启用载台电流回采（false=现状：不接电表，电流恒无数据；true=按Mock开关读数，电表到货即插即用）" },
@@ -422,7 +425,7 @@ namespace AgingTestSystem.Dialogs
             {
                 "VacuumConfirmTimeoutMs", "CommunicationLossAlarmCount",
                 "MaxTestDurationSeconds", "UseDiAlarmContact", "FanTempAlarmLimitC",
-                "FanTempShutdownEnabled"
+                "FanTempShutdownEnabled", "FanBuzzerDoPoint", "FanBuzzerMode"
             }),
             // 载台电流独立分类（Q2 骨架总开关，跟机器；显示在业务区后面，找得着）
             ("载台电流", new string[]
@@ -2329,15 +2332,16 @@ namespace AgingTestSystem.Dialogs
                     }
                     return true;
 
-                // 破空阀点位（非负整数，0=未配置）
+                // 全局单点输出点位（非负整数，0=未配置；破空阀与超温蜂鸣器共用同一规则，
+                // 上限 65535=Modbus 点号 16 位；撞工位编号由组合校验 CheckPolicyCombination 拦）
                 case "VentValveDoPoint":
+                case "FanBuzzerDoPoint":
                     int ventPoint;
                     if (!int.TryParse(value, out ventPoint) || ventPoint < 0)
                     {
-                        error = "应为 ≥0 的整数（0=未配置破空阀）";
+                        error = "应为 ≥0 的整数（0=未配置）";
                         return false;
                     }
-                    // 【大扫荡】上限 65535（Modbus 点号 16 位；与工位编号冲突由组合校验拦）。
                     if (ventPoint > 65535) { error = "点位超出范围（≤65535）"; return false; }
                     return true;
 
@@ -2419,8 +2423,13 @@ namespace AgingTestSystem.Dialogs
             // 【大扫荡】破空阀点位碰撞：配成某台阀/电编号 → 启动该台"开阀后同一 ID 写关"，
             // 真空永不建立还极难排查（保存时拦，运行侧 MapOutputChannel 双拦是第二道）。
             // 【复查补齐】判定本体在 AgingSequencer 纯函数（V1.67 约定），这里只调。
-            return AgingSequencer.ValidateVentPointCollision(
+            combo = AgingSequencer.ValidateVentPointCollision(
                 ventPoint, config.TotalInputs, config.TotalBarometers);
+            if (combo != null) return combo;
+            // 蜂鸣器点位同规则：超温沿会把 ON 写到配错的工位阀/电编号上，误动作更难排查。
+            int buzzerPoint = ResolveEffectiveInt(changes, "FanBuzzerDoPoint", config.FanBuzzerDoPoint);
+            return AgingSequencer.ValidateVentPointCollision(
+                buzzerPoint, config.TotalInputs, config.TotalBarometers, "超温蜂鸣器");
         }
 
         /// <summary>取某项的生效值：本次改了用本次的，否则用内存现值（下同三个；changes 可 null）。</summary>

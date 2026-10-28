@@ -1195,6 +1195,14 @@ namespace AgingTestSystem.Views
             {
                 config.VentValveEnabled = ventEnabled;
             }
+            // 超温蜂鸣器（新现场需求：冷却送风机超温触发蜂鸣报警；点位/方式跟项目走，
+            // 随后 Policy.json 可按项目覆盖——非法方式名 ParsePolicyEnum 兜底回 Level）
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["FanBuzzerDoPoint"], out int buzzerPoint))
+            {
+                config.FanBuzzerDoPoint = Math.Max(0, buzzerPoint);
+            }
+            config.FanBuzzerMode = ParsePolicyEnum(
+                System.Configuration.ConfigurationManager.AppSettings["FanBuzzerMode"], FanBuzzerMode.Level);
             // 载台电流总开关（无表=false 现状：不断任何线、不读数，电流恒 NaN）
             if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["UsePowerMeter"], out bool usePower))
             {
@@ -1964,6 +1972,9 @@ namespace AgingTestSystem.Views
             {
                 _fanShutdownTriggered = false;
             }
+
+            // 超温蜂鸣器驱动（新现场需求；判定→触发/收尾见 UpdateFanBuzzer 注释）
+            UpdateFanBuzzer(data);
         }
 
         /// <summary>
@@ -1981,6 +1992,190 @@ namespace AgingTestSystem.Views
         /// 避免超温期间每秒重复执行 StopTesting + 刷屏写日志。
         /// </summary>
         private bool _fanShutdownTriggered = false;
+
+        // =====================================================================
+        // 超温蜂鸣器（新现场需求：冷却送风机超温要触发蜂鸣报警）
+        // 硬件：蜂鸣器接 IO 耦合器 DO 输出点，点位 FanBuzzerDoPoint（0=未接，不写任何通道）；
+        // 触发阈值与告警/联停共用 FanTempAlarmLimitC（0=不启用则蜂鸣器跟着不工作）；
+        // 方式 FanBuzzerMode 三档：Level 持续响（默认）/ Pulse 短鸣一声 / Intermittent 断续响。
+        // 判定本体是纯函数 AgingSequencer.ShouldFanBuzzerAlarm（回归直接断言），
+        // 本文件只做边沿锁、方式轮转、收尾这些"执行"，改阈值/压制口径去 AgingSequencer。
+        // 写 IO 走 DeviceManager.SetOutput：内部未连接只发 OnError 不写通道、连接异常吞掉标记
+        // 断连（ModbusTcpIoController.WriteOutput），不会炸本线程。
+        // =====================================================================
+
+        /// <summary>短鸣一声时长（秒，Pulse 档响这么久自动停）。</summary>
+        private const int FanBuzzerPulseSeconds = 3;
+
+        /// <summary>断续响每相位时长（秒，Intermittent 档响这么久→停这么久循环）。</summary>
+        private const int FanBuzzerCycleSeconds = 2;
+
+        /// <summary>蜂鸣中边沿锁：true=本轮超温已处理过（叫着/已短鸣过），回温或全关时收尾复位 false。</summary>
+        private bool _fanBuzzerActive = false;
+
+        /// <summary>"IO 未连接写不进"边沿日志锁：未连接期间每周期重试，日志只记首次，免得每 2 秒刷一行。</summary>
+        private bool _fanBuzzerUnavailableLogged = false;
+
+        /// <summary>断续当前相位：true=正在响、false=在停（Tick 里翻转）。</summary>
+        private bool _fanBuzzerPhaseOn = false;
+
+        /// <summary>蜂鸣驱动定时器（Pulse 到点停响 / Intermittent 相位轮转）。
+        /// 懒建（不进 Designer，防 CodeDom 序列化坑），挂 components 容器随窗体自动释放。</summary>
+        private System.Windows.Forms.Timer _fanBuzzerTimer;
+
+        /// <summary>
+        /// 超温蜂鸣决策与执行（在 UpdateFanDisplay 末尾调用，UI 线程、每数据周期一次）。
+        /// - 触发沿（温度有效且超上限、未被全关压制）→ TryFanBuzzerStart 按方式启动；
+        /// - 回温沿（≤上限）或"报警全关"压制 → FinishFanBuzzer 收尾（停表 + 写 OFF + 清锁）；
+        /// - data 为 null（风机离线）或温度 NaN → 保持现状不动：探头失效已有"传感器无效"
+        ///   边沿日志与界面提示，蜂鸣器若在响就继续响（硬件提醒不被静默致盲），恢复读数
+        ///   后回温自然停；不在响也不凭空开。
+        /// </summary>
+        private void UpdateFanBuzzer(FanData data)
+        {
+            if (_mainClosing || this.IsDisposed || this.Disposing) return;
+
+            bool suppress = AgingSequencer.ShouldSuppressAlarm(_config.MuteAllAlarms);
+            bool shouldBuzz = false;
+            if (data != null && !float.IsNaN(data.Temperature))
+            {
+                shouldBuzz = AgingSequencer.ShouldFanBuzzerAlarm(
+                    data.Temperature, _config.FanTempAlarmLimitC, suppress);
+            }
+
+            if (shouldBuzz)
+            {
+                // 已在蜂鸣流程中（Level 响着 / Pulse 已叫过 / Intermittent 轮转中）：不重复触发
+                if (_fanBuzzerActive) return;
+                TryFanBuzzerStart();
+                return;
+            }
+
+            // 未超温：在叫 → 回温收尾；顺带静默恢复"写不进"日志锁（连通后能用一行新日志报下一个故障）
+            if (_fanBuzzerActive)
+            {
+                FinishFanBuzzer("温度已回落");
+            }
+            _fanBuzzerUnavailableLogged = false;
+        }
+
+        /// <summary>
+        /// 按蜂鸣方式启动（触发沿进入，成功才置 _fanBuzzerActive；
+        /// 点位未接静默关闭功能；IO 未连接不置锁，连通后下个数据周期自动开叫——
+        /// 蜂鸣是硬件提醒，写不进就重试，比"本轮直接放弃"更贴近现场预期）。
+        /// </summary>
+        private void TryFanBuzzerStart()
+        {
+            int point = _config.FanBuzzerDoPoint;
+            if (point <= 0) return;                     // 未接蜂鸣器：功能整体停用，不写通道不记日志
+
+            if (!_deviceManager.IsIoConnected)
+            {
+                if (!_fanBuzzerUnavailableLogged)
+                {
+                    _fanBuzzerUnavailableLogged = true;
+                    WriteLog($"[送风机] 超温触发蜂鸣器但 IO 未连接（点位 {point}），连接后自动重试");
+                }
+                return;
+            }
+
+            switch (_config.FanBuzzerMode)
+            {
+                case FanBuzzerMode.Pulse:
+                    // 短鸣一声：先响，PulseSeconds 秒后由 Tick 收尾自动停（本轮超温内不再触发）
+                    _deviceManager.SetOutput(point, true);
+                    break;
+                case FanBuzzerMode.Intermittent:
+                    // 断续响：先响，每 CycleSeconds 翻一个相位（响↔停），回温时收尾保证停在 OFF
+                    _deviceManager.SetOutput(point, true);
+                    _fanBuzzerPhaseOn = true;
+                    break;
+                default:
+                    // 持续响（Level）：触发沿写一次 ON，不涉及定时器，回温沿写 OFF
+                    _deviceManager.SetOutput(point, true);
+                    break;
+            }
+
+            // 写完立刻复查连接：这下发若因连接刚断而失败（内部吞异常置断连），
+            // 不置锁 → 下个数据周期自动重试，蜂鸣器不会"锁上不响"
+            if (!_deviceManager.IsIoConnected) return;
+
+            _fanBuzzerActive = true;
+            if (_config.FanBuzzerMode != FanBuzzerMode.Level)
+            {
+                EnsureFanBuzzerTimer();
+                _fanBuzzerTimer.Interval =
+                    (_config.FanBuzzerMode == FanBuzzerMode.Pulse
+                        ? FanBuzzerPulseSeconds : FanBuzzerCycleSeconds) * 1000;
+                _fanBuzzerTimer.Start();
+            }
+            WriteLog($"[送风机] 超温蜂鸣器启动（{_config.FanBuzzerMode}，点位 {point}），回温自动停");
+        }
+
+        /// <summary>懒建蜂鸣定时器（挂 components 容器随窗体自动释放；Tick 入口自查释放防关窗竞态）。</summary>
+        private void EnsureFanBuzzerTimer()
+        {
+            if (_fanBuzzerTimer != null) return;
+            _fanBuzzerTimer = new System.Windows.Forms.Timer(this.components);
+            _fanBuzzerTimer.Tick += FanBuzzerTimer_Tick;
+        }
+
+        /// <summary>
+        /// 蜂鸣定时器到点：Pulse=响够自动停（锁保持 active，回温才清——本轮超温只叫一声）；
+        /// Intermittent=翻相位（响↔停循环）。
+        /// </summary>
+        private void FanBuzzerTimer_Tick(object sender, EventArgs e)
+        {
+            // 关窗竞态自查（V1.72 四模式②）：定时器在关窗瞬间可能还排着一次 Tick
+            if (_mainClosing || this.IsDisposed || this.Disposing)
+            {
+                StopFanBuzzerTimer();
+                return;
+            }
+            int point = _config.FanBuzzerDoPoint;
+            if (point <= 0 || !_fanBuzzerActive)
+            {
+                StopFanBuzzerTimer();
+                return;
+            }
+
+            if (_config.FanBuzzerMode == FanBuzzerMode.Pulse)
+            {
+                StopFanBuzzerTimer();
+                _deviceManager.SetOutput(point, false);
+                return;
+            }
+
+            // Intermittent：翻相位（冲着"响↔停循环"来；收尾永远走 FinishFanBuzzer 完成 OFF）
+            _fanBuzzerPhaseOn = !_fanBuzzerPhaseOn;
+            _deviceManager.SetOutput(point, _fanBuzzerPhaseOn);
+        }
+
+        /// <summary>停蜂鸣定时器（存在才停；不释放——挂 components 由窗体统一释放）。</summary>
+        private void StopFanBuzzerTimer()
+        {
+            if (_fanBuzzerTimer != null && _fanBuzzerTimer.Enabled) _fanBuzzerTimer.Stop();
+        }
+
+        /// <summary>
+        /// 停蜂鸣收尾（回温 / 报警全关压制 / 程序退出三处入口）：先停表再写 OFF，最后清锁。
+        /// 没在蜂鸣流程或点位未接时是空操作（每周期刷新会带空参数进来，不能每次都真写一层）；
+        /// IO 已断连时跳过写 OFF 只清锁（写也到不了设备，避免白白发错误事件），连接恢复后
+        /// 若温度仍超限会重新走触发流程。
+        /// </summary>
+        /// <param name="reason">停止原因（写进日志，让现场知道为什么安静了）</param>
+        private void FinishFanBuzzer(string reason)
+        {
+            StopFanBuzzerTimer();
+            bool wasActive = _fanBuzzerActive;
+            _fanBuzzerActive = false;
+            _fanBuzzerPhaseOn = false;
+            if (wasActive && _config.FanBuzzerDoPoint > 0 && _deviceManager.IsIoConnected)
+            {
+                _deviceManager.SetOutput(_config.FanBuzzerDoPoint, false);
+                WriteLog($"[送风机] 超温蜂鸣器停止（{reason}）");
+            }
+        }
 
         /// <summary>
         /// 更新右侧整机状态汇总（）
@@ -3971,6 +4166,8 @@ namespace AgingTestSystem.Views
                 _deviceManager.OnFanDataUpdated -= DeviceManager_OnFanDataUpdated;
                 _deviceManager.OnDiagnostic -= DeviceManager_OnDiagnostic;
             }
+            // 蜂鸣器退出收尾：还响着就尽量写 OFF（要在 Dispose 前写，争一个"退出不残留输出"）
+            FinishFanBuzzer("程序退出");
             _deviceManager?.Dispose();
 
             if (_scanner != null)

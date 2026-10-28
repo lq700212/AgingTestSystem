@@ -287,17 +287,18 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 破空阀点位碰撞校验（【复查补齐】纯函数：V1.67 约定"判定类分支先写纯函数"，
-        /// 以前逻辑直接写在 SettingsForm.CheckPolicyCombination 里，单测够不着）。
-        /// 【为什么会撞】破空阀是全局单阀，走独立 DO 点；工位阀/载台电按
-        /// TotalInputs+id / TotalInputs+TotalBarometers+id 编址。若破空阀点位配进
-        /// 工位编号区间，启动该台"开阀后同一 ID 写关"→ 真空永不建立还极难排查。
+        /// 全局单点输出与工位编号区间碰撞校验（【复查补齐】纯函数：V1.67 约定"判定类分支先写纯函数"）。
+        /// 【为什么会撞】破空阀/超温蜂鸣器这类全局单点走独立 DO 点；工位阀/载台电按
+        /// TotalInputs+id / TotalInputs+TotalBarometers+id 编址。若点位配进
+        /// 工位编号区间，超温/到时会"写 ON/OFF 到某台的阀/电"→ 误动作还极难排查。
         /// </summary>
-        /// <param name="ventPoint">破空阀点位（≤0=未配置，不校验）</param>
+        /// <param name="ventPoint">全局单点输出点位（≤0=未配置，不校验）</param>
         /// <param name="totalInputs">DI 总数（输入占用 1~TotalInputs，输出从 TotalInputs+1 起）</param>
         /// <param name="totalBarometers">工位数（每台占 阀编号+电编号 共 2 个输出点）</param>
+        /// <param name="instanceName">点位归属名（报错文案用；缺省=破空阀，蜂鸣器传"超温蜂鸣器"）</param>
         /// <returns>矛盾描述；null=无碰撞</returns>
-        public static string ValidateVentPointCollision(int ventPoint, int totalInputs, int totalBarometers)
+        public static string ValidateVentPointCollision(int ventPoint, int totalInputs, int totalBarometers,
+            string instanceName = "破空阀")
         {
             if (ventPoint <= 0) return null;
             if (totalInputs < 0) totalInputs = 0;
@@ -306,7 +307,7 @@ namespace AgingTestSystem.Services
             int last = totalInputs + 2 * totalBarometers;
             if (ventPoint >= first && ventPoint <= last)
             {
-                return $"破空阀点位 {ventPoint} 与工位阀/载台电编号冲突"
+                return $"{instanceName}点位 {ventPoint} 与工位阀/载台电编号冲突"
                     + $"（{first}~{last} 已被 {totalBarometers} 台工位占用），请换预留点位";
             }
             return null;
@@ -330,6 +331,29 @@ namespace AgingTestSystem.Services
             {
                 return false;
             }
+            return temperatureC > limitC;
+        }
+
+        /// <summary>
+        /// 送风机超温是否应触发蜂鸣器（纯函数；新现场需求：冷却送风机超温要触发蜂鸣报警）。
+        /// 【与联停的口径差异】联停另受 FanTempShutdownEnabled 开关门控（停不停机是安全决策，默认关）；
+        /// 蜂鸣只看"超温上限 + 报警全关压制"——超温了就该叫，跟停不停机互不牵制。
+        /// 触发/停止的边沿锁与蜂鸣方式轮转由调用方 MainForm 持状态实现，本函数只判"此刻该不该叫"。
+        /// </summary>
+        /// <param name="temperatureC">送风机当前温度（°C；NaN=探头失效不当超温不叫，
+        /// 失效另有"传感器无效"边沿日志与界面提示，不静默致盲）</param>
+        /// <param name="limitC">告警上限（配置 FanTempAlarmLimitC；≤0=未启用，蜂鸣器也不工作——
+        /// 没有阈值就没有"超温"判据，与联停同口径）</param>
+        /// <param name="suppressAllAlarms">报警全关（配置 MuteAllAlarms；true=最高级静默，
+        /// 蜂鸣器跟着哑，与超温联停同口径压制）</param>
+        /// <returns>true=此刻应触发蜂鸣器</returns>
+        public static bool ShouldFanBuzzerAlarm(float temperatureC, float limitC, bool suppressAllAlarms)
+        {
+            if (limitC <= 0f || suppressAllAlarms)
+            {
+                return false;
+            }
+            // NaN 比较恒 false（fail-safe 约定）：探头失效不当超温，不误开蜂鸣器
             return temperatureC > limitC;
         }
     }

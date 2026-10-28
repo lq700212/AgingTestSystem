@@ -2196,6 +2196,31 @@ namespace AgingTestSystem.Tests
                 !AgingSequencer.IsFanOverTempShutdown(60f, 60f, true));
             Check("超限+开关开+上限>0才停",
                 AgingSequencer.IsFanOverTempShutdown(60.1f, 60f, true));
+
+            // ── 超温蜂鸣器判定（新现场需求：冷却送风机超温触发蜂鸣报警）──
+            // 口径与联停不同：不受联停开关门控（跳不叫与停不停机独立），只看上限+全关压制。
+            Check("蜂鸣上限0=不启用",
+                !AgingSequencer.ShouldFanBuzzerAlarm(999f, 0f, false));
+            Check("蜂鸣报警全关压制（不叫）",
+                !AgingSequencer.ShouldFanBuzzerAlarm(999f, 60f, true));
+            Check("蜂鸣恰等上限不叫(边界>)",
+                !AgingSequencer.ShouldFanBuzzerAlarm(60f, 60f, false));
+            Check("蜂鸣超限+未压制才叫",
+                AgingSequencer.ShouldFanBuzzerAlarm(60.1f, 60f, false));
+            Check("蜂鸣NaN探头失效不叫(fail-safe)",
+                !AgingSequencer.ShouldFanBuzzerAlarm(float.NaN, 60f, false));
+            Check("蜂鸣与联停开关无关(联停关也照叫)",
+                AgingSequencer.ShouldFanBuzzerAlarm(999f, 60f, false)
+                && !AgingSequencer.IsFanOverTempShutdown(999f, 60f, false));
+
+            // ── CheckPolicyCombination：蜂鸣点位撞工位编号 → 保存即拦（现值口径，changes=null）──
+            var buzzCfg = new DeviceConfig { TotalInputs = 16, TotalBarometers = 72, FanBuzzerDoPoint = 17 };
+            string buzzErr = SettingsForm.CheckPolicyCombination(buzzCfg, null);
+            Check("蜂鸣点位装进工位区间保存即拦(文案点名蜂鸣器)",
+                buzzErr != null && buzzErr.Contains("超温蜂鸣器"));
+            buzzCfg.FanBuzzerDoPoint = 200;
+            Check("蜂鸣点位预留区放行(全组合合法)",
+                SettingsForm.CheckPolicyCombination(buzzCfg, null) == null);
         }
 
         // =====================================================================
@@ -2285,6 +2310,16 @@ namespace AgingTestSystem.Tests
                 AgingSequencer.ValidateVentPointCollision(200, 16, 72) == null);
             Check("输入区点位放行(8)",
                 AgingSequencer.ValidateVentPointCollision(8, 16, 72) == null);
+            // 蜂鸣器点位同一条碰撞规则（instanceName 只换文案，判定本体一致：
+            // 超温沿写到工位阀/电编号会误动作，保存时拦是第一道）。
+            Check("蜂鸣器点位撞工位区被拦",
+                AgingSequencer.ValidateVentPointCollision(17, 16, 72, "超温蜂鸣器") != null);
+            Check("蜂鸣器点位文案点名蜂鸣器(不带'破空阀'字样)",
+                AgingSequencer.ValidateVentPointCollision(17, 16, 72, "超温蜂鸣器").Contains("超温蜂鸣器")
+                && !AgingSequencer.ValidateVentPointCollision(17, 16, 72, "超温蜂鸣器").Contains("破空阀"));
+            Check("破空阀缺省文案不变(instanceName 可选参)",
+                AgingSequencer.ValidateVentPointCollision(17, 16, 72).Contains("破空阀"
+                    + "点位 17"));
 
             // ── ProjectPolicyStore.ParseValue：大小写兼容，非法回null ──
             Check("枚举正常解析",
@@ -2311,15 +2346,18 @@ namespace AgingTestSystem.Tests
                 ProjectPolicyStore.PolicyKeys.Contains("FanTempShutdownEnabled"));
             Check("PolicyKeys 含真空超时(跟项目走，机器缺省15000不动)",
                 ProjectPolicyStore.PolicyKeys.Contains("VacuumConfirmTimeoutMs"));
+            Check("PolicyKeys 含蜂鸣器两项(点位/方式跟项目走)",
+                ProjectPolicyStore.PolicyKeys.Contains("FanBuzzerDoPoint")
+                && ProjectPolicyStore.PolicyKeys.Contains("FanBuzzerMode"));
             bool optsOk = true;
             foreach (string k in ProjectPolicyStore.PolicyKeys)
             {
-                // VentValveDoPoint/VacuumConfirmTimeoutMs 是数字项、
+                // VentValveDoPoint/VacuumConfirmTimeoutMs/FanBuzzerDoPoint 是数字项、
                 // FanTempShutdownEnabled/SkipVacuum/DisplayModeEnabled/PressureAlarmEnabled/
                 // MuteAllAlarms 是布尔项、MesTriggers/MesFieldMap/MesStaticFields/CustomAlarmRules/
                 // CompleteExpression/ReportColumns/DisplayModes 是自由文本
                 // （V1.68/V1.69/V1.74/V1.75/2.0.0/2.0.0），都无策略下拉
-                if (k == "VentValveDoPoint" || k == "VacuumConfirmTimeoutMs"
+                if (k == "VentValveDoPoint" || k == "VacuumConfirmTimeoutMs" || k == "FanBuzzerDoPoint"
                     || k == "FanTempShutdownEnabled" || k == "SkipVacuum"
                     || k == "DisplayModeEnabled" || k == "PressureAlarmEnabled"
                     || k == "MuteAllAlarms"
@@ -2352,6 +2390,8 @@ namespace AgingTestSystem.Tests
                 && dc.VentValveDoPoint == 0);
             Check("缺省身份口径=记录现值",
                 dc.EventIdentityMode == EventIdentityMode.RecordTime);
+            Check("缺省蜂鸣点位=0未接/方式=持续响(新增功能缺省=可用且不吵)",
+                dc.FanBuzzerDoPoint == 0 && dc.FanBuzzerMode == FanBuzzerMode.Level);
 
             // ── V1.76：事件身份口径（开关解析 + ResolveEventIdentity 纯函数）──
             Check("身份枚举解析StartSnapshot",
@@ -2394,6 +2434,29 @@ namespace AgingTestSystem.Tests
                     (bool)miValidate.Invoke(null, args) == true);
                 args = new object[] { "VentValveDoPoint", "-1", null };
                 Check("破空点位负数被拦",
+                    (bool)miValidate.Invoke(null, args) == false);
+                // 蜂鸣器点位与破空阀共用同一条范围校验（0~65535，0=未接合法）
+                args = new object[] { "FanBuzzerDoPoint", "0", null };
+                Check("蜂鸣点位0过(未接合法)",
+                    (bool)miValidate.Invoke(null, args) == true);
+                args = new object[] { "FanBuzzerDoPoint", "225", null };
+                Check("蜂鸣点位225过",
+                    (bool)miValidate.Invoke(null, args) == true);
+                args = new object[] { "FanBuzzerDoPoint", "-1", null };
+                Check("蜂鸣点位负数被拦",
+                    (bool)miValidate.Invoke(null, args) == false);
+                args = new object[] { "FanBuzzerDoPoint", "65536", null };
+                Check("蜂鸣点位超范围被拦",
+                    (bool)miValidate.Invoke(null, args) == false);
+                // 蜂鸣方式三档下拉（EnumOptions 驱动），脏值保存时拦
+                args = new object[] { "FanBuzzerMode", "Level", null };
+                Check("蜂鸣方式Level过",
+                    (bool)miValidate.Invoke(null, args) == true);
+                args = new object[] { "FanBuzzerMode", "intermittent", null };
+                Check("蜂鸣方式小写过(大小写不敏感)",
+                    (bool)miValidate.Invoke(null, args) == true);
+                args = new object[] { "FanBuzzerMode", "Auto", null };
+                Check("蜂鸣方式脏值被拦",
                     (bool)miValidate.Invoke(null, args) == false);
             }
 

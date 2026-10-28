@@ -164,6 +164,10 @@ namespace AgingTestSystem.Views
                     new NodeKey("UseDiAlarmContact", "DI触点并入", EditorKind.Bool),
                     new NodeKey("FanTempShutdownEnabled", "超温联停", EditorKind.Bool),
                     new NodeKey("FanTempAlarmLimitC", "超温上限(°C)", EditorKind.Text),
+                    // 超温蜂鸣器（新现场需求）：点位 0=未接（不写任何通道），
+                    // 现场确认 DO 地址后在这里或系统设置填；方式三档下拉（持续/短鸣/断续）。
+                    new NodeKey("FanBuzzerDoPoint", "蜂鸣点位(0=未接)", EditorKind.Text),
+                    new NodeKey("FanBuzzerMode", "蜂鸣方式", EditorKind.Enum),
                     new NodeKey("FanDisconnectPolicy", "风机断连", EditorKind.Enum),
                     new NodeKey("CustomAlarmRules", "自定义规则", EditorKind.Multiline),
                 }

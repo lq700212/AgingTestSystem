@@ -59,6 +59,11 @@ namespace AgingTestSystem.Services
             // 报警全关·最高级（布尔，默认 false=现状；true=阈值/超时/DI/失联/规则/超温联停全不报，
             // 优先级高于压力报警总开关。四个预置默认全关，只走手动或自定义开启，跟项目走）。
             "MuteAllAlarms",
+            // 超温蜂鸣器（新现场需求：冷却送风机超温触发蜂鸣器；输出信号地址现场确认后填）。
+            // 点位 0=未接（不写任何通道）；方式三档下拉。跟项目走；不进预置 Values/NumericValues
+            // （接不接蜂鸣器、接哪个点是本机接线事实，预置模板无权代填）。
+            "FanBuzzerDoPoint",
+            "FanBuzzerMode",
         };
 
         /// <summary>当前项目的策略文件路径（Projects/&lt;项目&gt;/Policy.json，当前生效值）。</summary>
@@ -496,6 +501,12 @@ namespace AgingTestSystem.Services
                         {
                             Tuple.Create("记录现值（现状）：事件瞬间绑定的SN/配方", "RecordTime"),
                             Tuple.Create("启动定格：该轮启动时的SN/配方，中途重绑不污染", "StartSnapshot"),
+                        } },
+                    { "FanBuzzerMode", new Tuple<string, string>[]
+                        {
+                            Tuple.Create("持续响（默认）：超温一直响，回温自动停", "Level"),
+                            Tuple.Create("短鸣一声：响约3秒自动停", "Pulse"),
+                            Tuple.Create("断续响：响2秒停2秒循环，回温自动停", "Intermittent"),
                         } },
                 };
             }

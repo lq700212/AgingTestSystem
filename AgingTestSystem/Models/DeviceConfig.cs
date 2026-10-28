@@ -592,10 +592,27 @@ namespace AgingTestSystem.Models
         /// <summary>
         /// 事件行 SN/配方取值（Q8 追溯口径开关，跟项目走）。
         /// RecordTime=记录现值（现状：事件瞬间绑定的 SN/配方）；
-        /// StartSnapshot=启动定格（该轮启动时的 SN/配方，中途重绑不污染已跑任务；
-        /// 无快照时回退现值）。CSV/报表/MES 三处统一走 DeviceManager.ResolveEventIdentity。
+        /// StartSnapshot=启动定格（该轮启动时绑定的 SN/配方，中途重绑不影响已跑任务的事件归属；
+        /// 无快照（复位后/未启动）回退现值。复位行永远是现值（复位=回到当前装夹）。
+        /// CSV/报表/MES 三处统一走 DeviceManager.ResolveEventIdentity。
         /// </summary>
         public EventIdentityMode EventIdentityMode { get; set; } = EventIdentityMode.RecordTime;
+
+        /// <summary>
+        /// 超温蜂鸣器 DO 输出点编号（内部编号，与 TotalInputs/DeviceId 同口径，如 225）。
+        /// 0 = 未接蜂鸣器（默认）：超温只走原告警日志/联停逻辑，不写任何通道，
+        /// 与 VentValveDoPoint"点位未知先配 0、现场确认后填"同口径。
+        /// 配好点位后现场改这里即上线，无需再改代码；写 IO 自带越界拦截（范围外只报错不动通道）。
+        /// 【输出信号地址需现场确认后填，现在先留 0】
+        /// </summary>
+        public int FanBuzzerDoPoint { get; set; } = 0;
+
+        /// <summary>
+        /// 超温蜂鸣方式（Level=持续响回温自动停（默认）/ Pulse=短鸣一声自动停 /
+        /// Intermittent=响停循环直到回温）。只管"怎么响"，响不响由点位与超温上限决定；
+        /// 报警全关 MuteAllAlarms 开着时三种方式都不响（与超温联停同口径压制）。
+        /// </summary>
+        public FanBuzzerMode FanBuzzerMode { get; set; } = FanBuzzerMode.Level;
 
         /// <summary>
         /// 破空阀 DO 输出点编号（内部编号，与 TotalInputs/DeviceId 同口径，如 225）。
