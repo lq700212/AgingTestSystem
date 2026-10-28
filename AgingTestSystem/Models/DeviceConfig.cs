@@ -599,8 +599,8 @@ namespace AgingTestSystem.Models
         public EventIdentityMode EventIdentityMode { get; set; } = EventIdentityMode.RecordTime;
 
         /// <summary>
-        /// 超温蜂鸣器 DO 输出点编号（内部编号，与 TotalInputs/DeviceId 同口径，如 225）。
-        /// 0 = 未接蜂鸣器（默认）：超温只走原告警日志/联停逻辑，不写任何通道，
+        /// 报警蜂鸣器 DO 输出点编号（内部编号，与 TotalInputs/DeviceId 同口径，如 225）。
+        /// 0 = 未接蜂鸣器（默认）：超温/真空异常只走原告警日志，不写任何通道，
         /// 与 VentValveDoPoint"点位未知先配 0、现场确认后填"同口径。
         /// 配好点位后现场改这里即上线，无需再改代码；写 IO 自带越界拦截（范围外只报错不动通道）。
         /// 【输出信号地址需现场确认后填，现在先留 0】
@@ -608,11 +608,21 @@ namespace AgingTestSystem.Models
         public int FanBuzzerDoPoint { get; set; } = 0;
 
         /// <summary>
-        /// 超温蜂鸣方式（Level=持续响回温自动停（默认）/ Pulse=短鸣一声自动停 /
-        /// Intermittent=响停循环直到回温）。只管"怎么响"，响不响由点位与超温上限决定；
+        /// 报警蜂鸣方式（Level=持续响，报警解除自动停（默认）/ Pulse=短鸣一声自动停 /
+        /// Intermittent=响停循环直到报警解除）。超温与真空异常共用这一份方式；
+        /// 只管"怎么响"，响不响由点位、超温上限、<see cref="VacuumAlarmBuzzerEnabled"/> 决定；
         /// 报警全关 MuteAllAlarms 开着时三种方式都不响（与超温联停同口径压制）。
         /// </summary>
         public FanBuzzerMode FanBuzzerMode { get; set; } = FanBuzzerMode.Level;
+
+        /// <summary>
+        /// 真空异常是否触发蜂鸣器（默认 true=响；接了点位就提醒）。
+        /// 【业务意义】真空类报警（老化中压力越限、真空建立超时、失压保持运行）只影响报警那一台
+        /// （关该台阀/断电或只记不停），不会联停整线；本开关只决定"要不要响"，
+        /// 不影响报警判定/结果/送风机。false=只亮报警灯与记日志，不响。
+        /// 与 FanTempShutdownEnabled（超温是否联停）完全独立：超温报警蜂鸣同样不需要打开联停。
+        /// </summary>
+        public bool VacuumAlarmBuzzerEnabled { get; set; } = true;
 
         /// <summary>
         /// 破空阀 DO 输出点编号（内部编号，与 TotalInputs/DeviceId 同口径，如 225）。

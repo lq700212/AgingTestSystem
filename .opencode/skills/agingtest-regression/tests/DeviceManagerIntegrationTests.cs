@@ -826,6 +826,129 @@ namespace AgingTestSystem.Tests
                 }
             }
 
+            // ---------- E26c 真空报警只退该台 + 风机保持（2.0.6 客户：报警只提醒，不关送风/压缩机） ----------
+            // 报警台退出测试（关阀断电）后若它是最后一台，旧逻辑"无在测即停风机"会把
+            // 炉子的冷却一起关掉；现在"在测 OR 未复位报警"都保持送风。
+            {
+                FakeBarometerReader reader5; FakeIoController io5; DeviceConfig config5;
+                DeviceManager dm5 = BuildTestManager(out reader5, out io5, out config5);
+                try { dm5.Dispose(); } catch { }
+                var mockFan5 = new MockFanController();
+                var dmf5 = new DeviceManager(config5, reader5, io5, mockFan5);
+                int vacuumAlarms = 0, alarmCleared = 0;
+                dmf5.OnVacuumAlarm += (s, e) =>
+                {
+                    if (e != null && e.DeviceId == 1) Interlocked.Increment(ref vacuumAlarms);
+                };
+                dmf5.OnAlarmCleared += (s, ids) =>
+                {
+                    if (ids == null || Array.IndexOf(ids, 1) >= 0) Interlocked.Increment(ref alarmCleared);
+                };
+                try
+                {
+                    Check("[扩展][报警] 风机+报警保持连接", dmf5.Start() && mockFan5.IsConnected);
+                    // 1 号压力保持常压（真空建立超时→真空类报警）；2 号抽到 -6（正常建立）
+                    reader5.SetPressure(1, 0m);
+                    reader5.SetPressure(2, -6m);
+                    dmf5.SetStationDelayTimes(1, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60));
+                    dmf5.SetStationDelayTimes(2, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(60));
+                    dmf5.StartTesting(new[] { 1, 2 });
+                    Check("[扩展][报警] 启动后 2 号仍在测试",
+                        WaitUntil(() =>
+                        {
+                            var d = dmf5.GetBarometerData(2);
+                            return d != null && d.Status == DeviceStatus.Testing;
+                        }, 3000));
+                    Check("[扩展][报警] 1 号真空建立超时报警",
+                        WaitUntil(() =>
+                        {
+                            var d = dmf5.GetBarometerData(1);
+                            return d != null && d.Status == DeviceStatus.Fault;
+                        }, 4000));
+                    Check("[扩展][报警] 真空报警事件已广播",
+                        WaitUntil(() => Volatile.Read(ref vacuumAlarms) >= 1, 1000));
+                    Check("[扩展][报警] 报警只退该台(1 号阀/电已关)",
+                        !io5.ReadOutput(ValveOut(config5, 1))
+                        && !io5.ReadOutput(PowerOut(config5, 1)));
+                    Check("[扩展][报警] 其他工位继续工作(2 号仍在测)",
+                        dmf5.GetBarometerData(2) != null
+                        && dmf5.GetBarometerData(2).Status == DeviceStatus.Testing);
+                    // 关键：1 号报警退出测试后风机不能停（炉子还在发热，停冷却会扩大故障）
+                    Thread.Sleep(400);
+                    Check("[扩展][报警] 报警未复位风机保持运行",
+                        mockFan5.ReadStatus() != null
+                        && mockFan5.ReadStatus().RunState == FanRunState.FixedValueRunning);
+
+                    // 复位 1 号 = 报警解除；2 号还在测，风机仍要保持
+                    dmf5.ResetDevices(new[] { 1 });
+                    Check("[扩展][报警] 复位后发解除事件",
+                        WaitUntil(() => Volatile.Read(ref alarmCleared) >= 1, 2000));
+                    Thread.Sleep(300);
+                    Check("[扩展][报警] 复位后仍有台在测→风机继续运行",
+                        mockFan5.ReadStatus() != null
+                        && mockFan5.ReadStatus().RunState == FanRunState.FixedValueRunning);
+
+                    // 末台停止 → 无在测无报警 → 风机才停
+                    dmf5.StopTesting(new[] { 2 });
+                    Check("[扩展][报警] 末台停止+无报警后风机停止",
+                        WaitUntil(() => mockFan5.ReadStatus() != null
+                            && mockFan5.ReadStatus().RunState == FanRunState.FixedValueStopped, 3000));
+                }
+                finally
+                {
+                    try { dmf5.StopAll(); } catch { }
+                    try { dmf5.Dispose(); } catch { }
+                    try { TestSessionStore.Clear(); } catch { }
+                }
+            }
+
+            // ---------- E26d 空闲台通讯失联不污染"报警保持送风"（2.0.6 回归锁） ----------
+            // _lastAlarmStates 同时是"报警边沿锁"和"未复位报警"判定源。空闲台失联原实现
+            // 也会置位且通讯恢复后不清 → 接入"有未复位报警就保持送风"后风机无限期空转。
+            // 这里锁死：空闲失联/恢复只能影响在线数，不能启动风机、不能残留报警态。
+            {
+                FakeBarometerReader reader6; FakeIoController io6; DeviceConfig config6;
+                DeviceManager dm6 = BuildTestManager(out reader6, out io6, out config6);
+                try { dm6.Dispose(); } catch { }
+                var mockFan6 = new MockFanController();
+                var dmf6 = new DeviceManager(config6, reader6, io6, mockFan6);
+                int vacuumAlarms6 = 0;
+                dmf6.OnVacuumAlarm += (s, e) => Interlocked.Increment(ref vacuumAlarms6);
+                try
+                {
+                    Check("[扩展][报警] 空闲失联用例启动", dmf6.Start());
+                    for (int i = 1; i <= config6.TotalBarometers; i++) reader6.SetPressure(i, 0m);
+                    Thread.Sleep(200);   // 先跑几轮正常采集
+
+                    var lastAlarmStates = (bool[])GetDmField(dmf6, "_lastAlarmStates");
+                    var readFailCounts = (int[])GetDmField(dmf6, "_readFailCounts");
+                    reader6.SetFail(1, true);   // 1 号空闲台通讯失联
+                    Check("[扩展][报警] 空闲台失联已累计到报警阈值",
+                        WaitUntil(() => readFailCounts != null
+                            && readFailCounts[0] >= config6.CommunicationLossAlarmCount, 3000));
+                    Thread.Sleep(300);
+                    Check("[扩展][报警] 空闲台失联不置报警边沿锁（不污染送风保持）",
+                        lastAlarmStates != null && !lastAlarmStates[0]);
+                    Check("[扩展][报警] 空闲台失联不启动送风机",
+                        !(bool)GetDmField(dmf6, "_fanRunning"));
+                    Check("[扩展][报警] 空闲台失联不报真空蜂鸣事件",
+                        Volatile.Read(ref vacuumAlarms6) == 0);
+
+                    reader6.SetFail(1, false);  // 通讯恢复
+                    Check("[扩展][报警] 空闲台恢复清报警边沿锁（不污染送风保持）",
+                        WaitUntil(() => lastAlarmStates != null && !lastAlarmStates[0], 3000));
+                    Thread.Sleep(300);
+                    Check("[扩展][报警] 空闲台恢复后风机仍不运行",
+                        !(bool)GetDmField(dmf6, "_fanRunning"));
+                }
+                finally
+                {
+                    try { dmf6.StopAll(); } catch { }
+                    try { dmf6.Dispose(); } catch { }
+                    try { TestSessionStore.Clear(); } catch { }
+                }
+            }
+
             // ---------- E28/E29 防火墙（独立 manager，Fake 开挂） ----------
             {
                 FakeBarometerReader reader3; FakeIoController io3; DeviceConfig config3;

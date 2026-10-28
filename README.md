@@ -201,7 +201,8 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 [老化] 计时时长=配方"烧屏时间"(>0)，否则回退 MaxTestDurationSeconds(0=不限时长手动停；启动框对 0 时长/空 SN 工位追加警告，可继续；策略可切硬拦截）
 [完成] 到时自动下电+关阀 → 状态"已完成·待取料"(面板蓝) → 日志记 PASS（策略=待判定时记"待判定"，下料时人工录 PASS/FAIL+不良代码+处置，进 CSV 追溯）→ 人工复位/重新扫码/下料判定回空闲
 [监控] 压力越限 / 真空建立失败 / 通讯失联 / DI触点(可选) / 送风机超温全线联停(可选，默认关) / 老化中失压(策略：停机报警，或只记事件继续老化）→ 报警联动
-[停止] 手动停止=中止(回空闲,不计判定)；末台时送风机自动停止
+        真空类报警只退故障那一台（关该台阀+断电），其他工位继续；蜂鸣器提醒（超温+真空共用，报警全关可压制）
+[停止] 手动停止=中止(回空闲,不计判定)；末台且无未复位报警时送风机才自动停止（报警未复位保持送风）
 [急停] 全部停止：全关阀+全断电+停送风机+清任务快照（带防误触确认）
 [断电恢复] 异常退出后再启动：检测到 TestSession.json 快照 → 弹窗选"恢复测试"或"放弃并安全关闭阀与电源"（策略：整台重测，或重抽真空+补足剩余时长，断电期间不计）
 [MES上报] 启动/完成/报警/下料判定四事件按触发器后台 POST JSON 到 MesEndpoint（映射/静态可配；Mock 只写 CSV；失败重试+离线缓存，永不阻断生产）
@@ -217,11 +218,14 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 4. **DI 报警触点**（可选）：`UseDiAlarmContact=true` 时启用，默认关
 
 联动动作：**报警进入边沿触发一次**（不是周期重复）→ 关该台真空阀 + 断载台上电 + 标故障；结果写 CSV 日志。
+**只退故障那一台，不联停整线**；真空类报警同时触发蜂鸣器（`VacuumAlarmBuzzerEnabled`，默认开；点位未接/报警全关则不响）。
 
 > 气压表是"双信号"：压力值走 RTU 供软件判报警（**联动只由此触发**）；报警硬件触点走 DI（X000~X107，NPN）只读进 UI 显示，不参与联动。
 
 ### 5.3 送风机生命周期（72 台共用，不能随某台停机）
-- 有任一台在测试 → 保持运行；全部停止 → 才允许停机。`UpdateFanLifecycle` 里"只下发一次命令"状态记忆防重复写。
+- 有任一台在测试 → 保持运行；**有未复位的报警台也保持运行**（报警台已退测试，但炉子还在发热，
+  停风会把单台故障扩大成过温事故）；两者都没有才允许停机。`UpdateFanLifecycle` 里"只下发一次命令"状态记忆防重复写。
+- 只有这样"报警只提醒、不关送风和压缩机"才成立：急停仍按设计停送风机（人工主动全停）。
 - 主界面不提供手动定值启/停按钮（与自动生命周期管理重复且误导），维护调试请用"关于→送风机测试"。
 - **IP 自动识别**：连接顺序 = FanLastIp.cache（上次成功）→ FanIpAddress → FanIpCandidates；候选列表配几个识别几个，设备换 IP 自动找到并更新缓存。
 
@@ -272,8 +276,9 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
 | `MaxTestDurationSeconds` | 0 | 老化最大时长(0=不限) |
 | `UseDiAlarmContact` | false | DI 报警触点并入判定（需现场确认电平） |
 | `FanTempAlarmLimitC` | 0 | 送风机温度告警上限(0=不启用) |
-| `FanTempShutdownEnabled` | false | 超温全线联停开关（默认关=只记日志；开=超温自动停全部在测工位） |
-| `FanBuzzerDoPoint` / `FanBuzzerMode` | 0 / Level | 超温蜂鸣器：点位在系统设置"老化测试业务"下拉选**空余预留输出点**（0=未接不写通道，被破空阀占用的点不会出现在选项里；策略页已无此项），方式跟项目策略页；阈值共用超温上限，报警全关压制 |
+| `FanTempShutdownEnabled` | false | 超温全线联停开关（默认关=只记日志+可蜂鸣；开=超温自动停全部在测工位）。**蜂鸣与联停独立**：联停关着蜂鸣照响 |
+| `FanBuzzerDoPoint` / `FanBuzzerMode` | 0 / Level | 报警蜂鸣器：点位在系统设置"老化测试业务"下拉选**空余预留输出点**（0=未接不写通道，被破空阀占用的点不会出现在选项里；策略页已无此项），方式跟项目策略页；**超温与真空异常共用**，报警全关压制 |
+| `VacuumAlarmBuzzerEnabled` | true | 真空异常是否蜂鸣（压力越限/真空建立超时/失压保持运行；只退该台不联停整线；点位未接则不响）。与超温联停完全独立，跟项目走 |
 | `ZeroDurationPolicy` / `EmptySnPolicy` | Warn | 0时长/空SN启动策略（Warn=警告可继续 / Block=硬拦截） |
 | `FanDisconnectPolicy` | LogOnly | 送风机断连策略（LogOnly=提示后照跑 / BlockStart=阻断启动） |
 | `VacuumFailKind` | ProductFail | 真空失败责任（ProductFail=记FAIL / FixtureAlarm=记装夹异常） |

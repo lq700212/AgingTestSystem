@@ -151,6 +151,7 @@ namespace AgingTestSystem.Dialogs
             "FanAutoDetectEnabled",
             "UseDiAlarmContact",
             "FanTempShutdownEnabled",
+            "VacuumAlarmBuzzerEnabled",
             "ScannerEnabled",
             "ScannerDebugLog",
             "MesEnabled",
@@ -311,9 +312,10 @@ namespace AgingTestSystem.Dialogs
             { "MaxTestDurationSeconds", "老化测试最大时长（秒，0=不限时手动停止）" },
             { "UseDiAlarmContact", "气压表报警触点(DI)是否并入报警判定（false/true）" },
             { "FanTempAlarmLimitC", "送风机温度告警上限（°C，0=不启用）" },
-            { "FanTempShutdownEnabled", "超温是否全线联停（false=只记日志；true=超温自动停全部在测工位，默认false）" },
-            { "FanBuzzerDoPoint", "超温蜂鸣器接的 DO 输出点（0=未接，默认；下拉只列空余的预留输出点，被破空阀占用的不会出现；存内部编号，超温沿写 ON，阈值共用上面的告警上限）" },
-            { "FanBuzzerMode", "超温蜂鸣方式：持续响=超温一直响回温自动停（默认）/短鸣一声=响约3秒自动停/断续响=响2秒停2秒循环" },
+            { "FanTempShutdownEnabled", "超温是否全线联停（false=只记日志+可蜂鸣；true=超温自动停全部在测工位，默认false）。蜂鸣只看蜂鸣点位与报警源，联停关着也能响" },
+            { "FanBuzzerDoPoint", "报警蜂鸣器接的 DO 输出点（0=未接，默认；下拉只列空余的预留输出点，被破空阀占用的不会出现；存内部编号，超温/真空异常沿写 ON）" },
+            { "FanBuzzerMode", "报警蜂鸣方式：持续响=报警一直响、解除自动停（默认）/短鸣一声=响约3秒自动停/断续响=响2秒停2秒循环。超温与真空异常共用" },
+            { "VacuumAlarmBuzzerEnabled", "真空异常是否蜂鸣（true=压力越限/真空建立超时/失压保持运行触发蜂鸣器，默认；false=只亮报警灯记日志）。真空报警只退故障那一台，不联停整线；本项不影响送风机" },
 
             // ===== 载台电流（V1.74：Q2 通用骨架总开关，跟机器，结构型改后重启生效）=====
             { "UsePowerMeter", "是否启用载台电流回采（false=现状：不接电表，电流恒无数据；true=按Mock开关读数，电表到货即插即用）" },
@@ -425,6 +427,7 @@ namespace AgingTestSystem.Dialogs
                 "VacuumConfirmTimeoutMs", "CommunicationLossAlarmCount",
                 "MaxTestDurationSeconds", "UseDiAlarmContact", "FanTempAlarmLimitC",
                 "FanTempShutdownEnabled", "FanBuzzerDoPoint", "FanBuzzerMode",
+                "VacuumAlarmBuzzerEnabled",
                 // 破空阀两项是本机接线事实（装没装、接哪个 DO 点），不是工艺参数：
                 // V2.0.5 从策略窗迁回本分类，与蜂鸣器点位同一口径。
                 "VentValveEnabled", "VentValveDoPoint"
@@ -2353,6 +2356,7 @@ namespace AgingTestSystem.Dialogs
                 case "FanAutoDetectEnabled":
                 case "UseDiAlarmContact":
                 case "FanTempShutdownEnabled":
+                case "VacuumAlarmBuzzerEnabled":
                 case "ScannerEnabled":
                 case "ScannerDebugLog":
                 case "MesEnabled":
@@ -2393,7 +2397,7 @@ namespace AgingTestSystem.Dialogs
                     }
                     return true;
 
-                // 全局单点输出点位（非负整数，0=未配置；破空阀与超温蜂鸣器共用同一规则，
+                // 全局单点输出点位（非负整数，0=未配置；破空阀与报警蜂鸣器共用同一规则，
                 // 上限 65535=Modbus 点号 16 位；撞工位编号由组合校验 CheckPolicyCombination 拦。
                 // 蜂鸣器界面已是"空余点下拉"选不出脏值，这里只拦手改 App.config 绕界面的情况）
                 case "VentValveDoPoint":
@@ -2488,10 +2492,10 @@ namespace AgingTestSystem.Dialogs
             combo = AgingSequencer.ValidateVentPointCollision(
                 ventPoint, config.TotalInputs, config.TotalBarometers);
             if (combo != null) return combo;
-            // 蜂鸣器点位同规则：超温沿会把 ON 写到配错的工位阀/电编号上，误动作更难排查。
+            // 蜂鸣器点位同规则：报警沿会把 ON 写到配错的工位阀/电编号上，误动作更难排查。
             int buzzerPoint = ResolveEffectiveInt(changes, "FanBuzzerDoPoint", config.FanBuzzerDoPoint);
             return AgingSequencer.ValidateVentPointCollision(
-                buzzerPoint, config.TotalInputs, config.TotalBarometers, "超温蜂鸣器");
+                buzzerPoint, config.TotalInputs, config.TotalBarometers, "报警蜂鸣器");
         }
 
         /// <summary>取某项的生效值：本次改了用本次的，否则用内存现值（下同三个；changes 可 null）。</summary>

@@ -288,14 +288,14 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 全局单点输出与工位编号区间碰撞校验（【复查补齐】纯函数：V1.67 约定"判定类分支先写纯函数"）。
-        /// 【为什么会撞】破空阀/超温蜂鸣器这类全局单点走独立 DO 点；工位阀/载台电按
+        /// 【为什么会撞】破空阀/报警蜂鸣器这类全局单点走独立 DO 点；工位阀/载台电按
         /// TotalInputs+id / TotalInputs+TotalBarometers+id 编址。若点位配进
         /// 工位编号区间，超温/到时会"写 ON/OFF 到某台的阀/电"→ 误动作还极难排查。
         /// </summary>
         /// <param name="ventPoint">全局单点输出点位（≤0=未配置，不校验）</param>
         /// <param name="totalInputs">DI 总数（输入占用 1~TotalInputs，输出从 TotalInputs+1 起）</param>
         /// <param name="totalBarometers">工位数（每台占 阀编号+电编号 共 2 个输出点）</param>
-        /// <param name="instanceName">点位归属名（报错文案用；缺省=破空阀，蜂鸣器传"超温蜂鸣器"）</param>
+        /// <param name="instanceName">点位归属名（报错文案用；缺省=破空阀，蜂鸣器传"报警蜂鸣器"）</param>
         /// <returns>矛盾描述；null=无碰撞</returns>
         public static string ValidateVentPointCollision(int ventPoint, int totalInputs, int totalBarometers,
             string instanceName = "破空阀")
@@ -355,6 +355,55 @@ namespace AgingTestSystem.Services
             }
             // NaN 比较恒 false（fail-safe 约定）：探头失效不当超温，不误开蜂鸣器
             return temperatureC > limitC;
+        }
+
+        /// <summary>
+        /// 报警蜂鸣总判定（纯函数：超温与真空异常共用同一个蜂鸣器）。
+        /// 【为什么合并】蜂鸣器只有一个 DO 点，两个报警源不能各写各的：
+        /// 任一路还在报警就必须继续响，两路都解除才允许停（否则先解除的那一路
+        /// 会把另一路的提醒关掉，现场漏掉真报警）。
+        /// </summary>
+        /// <param name="fanOverTemp">超温判定结果（已含阈值与开关，见 <see cref="ShouldFanBuzzerAlarm"/>）</param>
+        /// <param name="vacuumAlarmPending">是否存在未解除的真空异常台</param>
+        /// <param name="suppressAllAlarms">报警全关（配置 MuteAllAlarms；true=最高级静默）</param>
+        /// <returns>true=此刻蜂鸣器应处于触发/保持状态</returns>
+        public static bool ShouldAlarmBuzzer(bool fanOverTemp, bool vacuumAlarmPending, bool suppressAllAlarms)
+        {
+            if (suppressAllAlarms) return false;
+            return fanOverTemp || vacuumAlarmPending;
+        }
+
+        /// <summary>
+        /// 蜂鸣器是否必须保持现状（暂不收尾，纯函数）。
+        /// 【为什么不能一律收尾】超温告警功能已启用（送风机启用 + 上限 &gt; 0），但本轮
+        /// 拿不到有效温度（风机离线 / 探头 NaN）时，"温度没超"其实是"不知道"。
+        /// 此时若直接停蜂鸣，就是探头一坏、报警静音——比多响几声危险得多。
+        /// 所以保持当前状态等读数恢复：在响继续响，没响也不凭空开；
+        /// 有真空源在报时由真空源接管（不进入保持）。
+        /// </summary>
+        /// <param name="fanEnabled">送风机功能是否启用（未启用=根本没有温度数据源）</param>
+        /// <param name="limitC">超温告警上限（≤0 = 未启用超温告警）</param>
+        /// <param name="tempKnown">本轮是否读到有效温度（非 NaN）</param>
+        /// <param name="vacuumAlarmPending">是否存在未解除的真空异常台</param>
+        /// <param name="suppressAllAlarms">报警全关（最高级静默；true=无条件收尾，不保持）</param>
+        public static bool ShouldHoldAlarmBuzzer(bool fanEnabled, float limitC,
+            bool tempKnown, bool vacuumAlarmPending, bool suppressAllAlarms)
+        {
+            if (suppressAllAlarms) return false;
+            if (vacuumAlarmPending) return false;
+            return fanEnabled && limitC > 0f && !tempKnown;
+        }
+
+        /// <summary>
+        /// 送风机是否应保持运行（纯函数：在测或报警中，二者任一成立就保持）。
+        /// 【为什么报警也要保持】报警台会退出测试（关阀/断电），若它是最后一台，
+        /// 原逻辑"无在测就停送风机"会把炉子的冷却一起关掉——炉子还在发热，
+        /// 停风机会把故障扩大成过温事故。报警台未复位前必须保持送风，
+        /// 人工复位/急停后才按原逻辑停。
+        /// </summary>
+        public static bool ShouldKeepFanRunning(bool anyTesting, bool anyAlarm)
+        {
+            return anyTesting || anyAlarm;
         }
     }
 }

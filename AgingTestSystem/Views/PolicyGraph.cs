@@ -190,6 +190,9 @@ namespace AgingTestSystem.Views
                     new NodeKey("AlarmWhenPressureHigherThanThreshold", "报警方向(高于阈值)", EditorKind.Bool, KeyTier.Advanced, "报警行为"),
                     // 蜂鸣方式跟超温工艺走（持续/短鸣/断续），但一次配好基本不动 → 高级。
                     new NodeKey("FanBuzzerMode", "蜂鸣方式", EditorKind.Enum, KeyTier.Advanced, "报警行为"),
+                    // 真空异常蜂鸣：真空类报警只退单台、不联停整线，本项只管响不响。
+                    // 与"超温联停"独立——要"只响不停"就关联停、开本项。
+                    new NodeKey("VacuumAlarmBuzzerEnabled", "真空异常蜂鸣", EditorKind.Bool, KeyTier.Advanced, "报警行为"),
                     // 老化中失压/真空责任/风机断连：都是"出事怎么处理"的策略，调试期才频繁切换。
                     new NodeKey("AgingPressureLossPolicy", "老化失压", EditorKind.Enum, KeyTier.Advanced, "失压与责任"),
                     new NodeKey("VacuumFailKind", "真空责任", EditorKind.Enum, KeyTier.Advanced, "失压与责任"),

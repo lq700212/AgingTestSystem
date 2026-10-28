@@ -87,6 +87,24 @@ namespace AgingTestSystem.Services
         public long ElapsedMs;
     }
 
+    /// <summary>
+    /// 真空异常事件参数（蜂鸣提醒用；只报"真空类"报警，DI/失联/自定义规则不走本事件）。
+    /// </summary>
+    public class VacuumAlarmEventArgs : EventArgs
+    {
+        /// <summary>报警工位号（1~TotalBarometers）</summary>
+        public int DeviceId;
+
+        /// <summary>人话原因（压力越限/真空建立超时/失压保持运行）</summary>
+        public string Reason;
+
+        /// <summary>
+        /// true=老化中失压但策略=只记不停（工位仍在老化，压力恢复后自动解除）；
+        /// false=已停机报警（必须人工复位才解除）。
+        /// </summary>
+        public bool KeepRunning;
+    }
+
     public class DeviceManager : IDisposable
     {
         /// <summary>
@@ -466,6 +484,55 @@ namespace AgingTestSystem.Services
         /// 【注意】在后台线程触发，UI 层需用 BeginInvoke 切到 UI 线程。
         /// </summary>
         public event EventHandler<BarometerScanProgressEventArgs> OnScanProgress;
+
+        /// <summary>
+        /// 真空异常事件（蜂鸣提醒用；只在"真空类"报警边沿触发一次）。
+        /// 触发源：老化中压力越限、真空建立超时（停机报警）；
+        /// 以及 AgingPressureLossPolicy=KeepRunning 时的失压边沿（只记不停，压力恢复会再发清除事件）。
+        /// 【注意】在后台线程触发，UI 层需用 BeginInvoke 切到 UI 线程。
+        /// </summary>
+        public event EventHandler<VacuumAlarmEventArgs> OnVacuumAlarm;
+
+        /// <summary>
+        /// 报警解除事件（参数=已恢复空闲/已复位的工位号；null=全部解除，急停用）。
+        /// 复位/停止/急停/重新启动时触发，供蜂鸣器等提醒设施收尾。
+        /// 【注意】可能在 UI 线程（按钮）或后台线程（采集）触发，订阅方自行判 InvokeRequired。
+        /// </summary>
+        public event EventHandler<int[]> OnAlarmCleared;
+
+        /// <summary>
+        /// 逐个订阅者隔离地广播真空异常（一个订阅者抛异常不能拖累其它订阅者/采集线程）。
+        /// </summary>
+        private void RaiseVacuumAlarm(int deviceId, string reason, bool keepRunning)
+        {
+            var handler = OnVacuumAlarm;
+            if (handler == null) return;
+            var args = new VacuumAlarmEventArgs
+            {
+                DeviceId = deviceId,
+                Reason = reason ?? "",
+                KeepRunning = keepRunning
+            };
+            foreach (EventHandler<VacuumAlarmEventArgs> single in handler.GetInvocationList())
+            {
+                try { single(this, args); }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[真空报警事件] 订阅者异常: {ex.Message}"); }
+            }
+        }
+
+        /// <summary>
+        /// 广播报警解除（null=全部；逐个订阅者隔离）。
+        /// </summary>
+        private void RaiseAlarmCleared(int[] deviceIds)
+        {
+            var handler = OnAlarmCleared;
+            if (handler == null) return;
+            foreach (EventHandler<int[]> single in handler.GetInvocationList())
+            {
+                try { single(this, deviceIds); }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[报警解除事件] 订阅者异常: {ex.Message}"); }
+            }
+        }
 
         /// <summary>
         /// 上次启动失败的诊断信息（）
@@ -1954,14 +2021,22 @@ namespace AgingTestSystem.Services
         {
             if (_fanController == null) return;
 
-            // 判断是否有任何一台正在测试
+            // 判断是否有任何一台正在测试，或处于报警（未复位）
             bool anyTesting;
+            bool anyAlarm;
             lock (_stateLock)
             {
                 anyTesting = Array.IndexOf(_testingStates, true) >= 0;
+                anyAlarm = Array.IndexOf(_lastAlarmStates, true) >= 0;
             }
 
-            if (anyTesting && !_fanRunning)
+            // 【报警也保持送风】报警台会退出测试（关阀/断电），若它是最后一台，
+            // "无在测就停风机"会连炉子的冷却一起关掉——炉子还在发热，停风机会把
+            // 故障扩大成过温事故。报警台未复位前保持送风，人工复位/急停后才按原逻辑停。
+            // 判定收在 AgingSequencer.ShouldKeepFanRunning（回归可直接断言）。
+            bool keepRunning = AgingSequencer.ShouldKeepFanRunning(anyTesting, anyAlarm);
+
+            if (keepRunning && !_fanRunning)
             {
                 // 【大扫荡】失败重试节流：以前 _fanRunning 先置 true，失败也保持，
                 // "后台恢复后自动重新启动"的注释成空话（永不再试），整批无温控跑完。
@@ -1981,9 +2056,10 @@ namespace AgingTestSystem.Services
                     Diagnostic("送风机未连接，无法启动环境温控，正在后台自动重连（测试期间温度不受控！）");
                 }
             }
-            else if (!anyTesting && _fanRunning)
+            else if (!keepRunning && _fanRunning)
             {
-                // 最后一台退出测试：停止送风机（完成/停止/报警/急停外，退出即走这里）。
+                // 最后一台退出测试且没有未复位报警：停止送风机（完成/停止/报警/急停外，退出即走这里）。
+                // 报警台未复位时 keepRunning 仍为 true，会一直保持送风（见上）。
                 // 停失败不丢：以前 _fanRunning 先置 false，停命令丢了就再也不补
                 // （风机一直转，费电）。现在失败保持 _fanRunning=true，下轮继续补停；
                 // 事件只记一次（_fanStopNoted 边沿），停成功后清标记。
@@ -2127,6 +2203,9 @@ namespace AgingTestSystem.Services
             // 以前写丢了（耦合器离线静默丢失）状态机照进，真空超时后报假性"真空建立失败"。
             // 调用方必须 try/catch（见 StartTesting），失败的台不进测试态。
             _ioController.WriteOutput(_config.TotalInputs + deviceId, true);
+            // 开阀成功 = 本台重新启动，视为已确认旧报警：解除该台的蜂鸣提醒
+            //（人工复位之外的恢复路径；复位按钮/停止/急停另有各自的解除事件）
+            RaiseAlarmCleared(new[] { deviceId });
             // 新任务开始：失压标记清零（破空阀关闭已提至批量入口调一次，见 StartTesting）
 
             // ---- 3) 状态进入 Vacuuming，定格参数 ----
@@ -2311,6 +2390,9 @@ namespace AgingTestSystem.Services
             // 停止测试后快速跟踪压力回落
             StartQuickTracking(deviceIds);
 
+            // 手动停止 = 该台不再处于报警提醒状态（蜂鸣器随之收尾；仍在报警的其它台继续响）
+            RaiseAlarmCleared(validIds.ToArray());
+
             // 送风机生命周期联动（如果是最后一台，这里会停止送风机）
             UpdateFanLifecycle();
 
@@ -2429,6 +2511,12 @@ namespace AgingTestSystem.Services
                         cached.OutputStatus[1] = false;
                     }
                 }
+            }
+
+            // 复位成功 = 报警解除：通知蜂鸣器等提醒设施收尾（写失败的台保持原态、继续提醒）
+            if (resetOkIds.Count > 0)
+            {
+                RaiseAlarmCleared(resetOkIds.ToArray());
             }
 
             // 在测任务清单变化 → 快照落盘
@@ -2870,6 +2958,9 @@ namespace AgingTestSystem.Services
             // 急停成功即时刷屏（与停止/复位同口径：只翻 Testing→Idle，完成/故障留给复位）。
             MarkTestingCacheIdle(null);
             BroadcastCacheSnapshot();
+
+            // 急停 = 全部报警提醒解除（蜂鸣器收尾；急停按钮本来就要停送风机，不走"报警保持送风"）
+            RaiseAlarmCleared(null);
 
             // 停止送风机（急停时也停）
             // 【复查补齐】风机停失败不能跳过快照清理+急停记账：以前 Stop() 一抛，
@@ -3452,9 +3543,18 @@ namespace AgingTestSystem.Services
                             if (_readFailCounts[i] >= _config.CommunicationLossAlarmCount && !_lastAlarmStates[i]
                                 && !AgingSequencer.ShouldSuppressAlarm(_config.MuteAllAlarms))
                             {
-                                _lastAlarmStates[i] = true;
-                                _testingStates[i] = false;
-                                triggerAlarm = true;
+                                // 只有"测试中的台"失联才是一次报警：置边沿锁＋关阀断电标故障。
+                                // 【为什么空闲台不能置锁】它没有任何报警/断电动作，但 _lastAlarmStates
+                                // 同时被"报警未复位保持送风"和蜂鸣提醒当作现状读——置了会永久残留
+                                // （通讯恢复只清失败计数、不清这个锁），结果是空闲台一抖动，
+                                // 送风机就被当成"有未复位报警"一直转；顺带把该台下次失联的边沿吞掉。
+                                // 空闲台只累计失败次数，在线台数照实反映离线（回归 E26d 锁死）。
+                                if (wasTesting)
+                                {
+                                    _lastAlarmStates[i] = true;
+                                    _testingStates[i] = false;
+                                    triggerAlarm = true;
+                                }
                             }
                         }
 
@@ -3617,24 +3717,41 @@ namespace AgingTestSystem.Services
                             // 锁内调虽不会死锁（同线程可重入），但先拍更干净）。
                             string lossSn, lossRecipe;
                             GetEventIdentity(deviceId, out lossSn, out lossRecipe);
+                            bool lossEdge = false;
                             lock (_stateLock)
                             {
                                 if (!_lossNoted[deviceId - 1])
                                 {
                                     _lossNoted[deviceId - 1] = true;
-                                    TestEventLogger.Write(_currentLotNumber, deviceId, "失压保持运行",
-                                        $"老化中压力越限（{data.VacuumPressure} kPa），策略=只记不停，继续老化",
-                                        pressureKPa: data.VacuumPressure,
-                                        currentA: float.IsNaN(data.LoadCurrentA) ? (float?)null : data.LoadCurrentA,
-                                        sn: lossSn, recipe: lossRecipe, result: "");
+                                    lossEdge = true;
                                 }
+                            }
+                            // 记账与蜂鸣提醒都放锁外：CSV 落盘/UI 事件不能顶在状态锁上
+                            //（72 台齐报时会把全部状态访问串行放大）。
+                            if (lossEdge)
+                            {
+                                TestEventLogger.Write(_currentLotNumber, deviceId, "失压保持运行",
+                                    $"老化中压力越限（{data.VacuumPressure} kPa），策略=只记不停，继续老化",
+                                    pressureKPa: data.VacuumPressure,
+                                    currentA: float.IsNaN(data.LoadCurrentA) ? (float?)null : data.LoadCurrentA,
+                                    sn: lossSn, recipe: lossRecipe, result: "");
+                                // KeepRunning 也是真空异常：蜂鸣提醒一声/持续响，压力恢复自动解除。
+                                RaiseVacuumAlarm(deviceId,
+                                    $"老化中失压（{data.VacuumPressure} kPa），只记不停", true);
                             }
                         }
                         else
                         {
+                            // KeepRunning 失压恢复沿：解除该台的真空蜂鸣（恢复前一直响）。
+                            bool wasLossNoted;
                             lock (_stateLock)
                             {
+                                wasLossNoted = _lossNoted[deviceId - 1];
                                 _lossNoted[deviceId - 1] = false;
+                            }
+                            if (wasLossNoted)
+                            {
+                                RaiseAlarmCleared(new[] { deviceId });
                             }
 
                             // 自定义报警规则（只在内置没报警时评估；触发→产品 FAIL 联动，
@@ -4127,7 +4244,8 @@ namespace AgingTestSystem.Services
                 _sessionThresholdKPa[deviceId - 1] = _config.AlarmPressureThresholdKPa;
                 _sessionSn[deviceId - 1] = "";
                 _sessionRecipe[deviceId - 1] = "";
-                    _sessionSkipVacuum[deviceId - 1] = false;   // 【大扫荡】SkipVacuum 定格同步清
+                _sessionSkipVacuum[deviceId - 1] = false;   // 【大扫荡】SkipVacuum 定格同步清
+                _lossNoted[deviceId - 1] = false;   // 完成即任务结束，清失压保持标记
             }
 
             // 记录完成事件（Q22 策略化：AutoPass=标PASS（现状）；
@@ -4199,6 +4317,10 @@ namespace AgingTestSystem.Services
             {
                 System.Diagnostics.Debug.WriteLine($"[完成动作] 蜂鸣/泄压执行失败: {ex.Message}");
             }
+
+            // 完成 = 该台报警提醒解除（若此前是 KeepRunning 失压，任务已结束不再响；
+            // 其它仍在报警的台不受影响）
+            RaiseAlarmCleared(new[] { deviceId });
 
             // 在测任务清单变化 → 快照落盘
             SaveSessionSnapshot();
@@ -4319,6 +4441,13 @@ namespace AgingTestSystem.Services
 
             // 在测任务清单变化 → 快照落盘
             SaveSessionSnapshot();
+
+            // 真空类报警 → 蜂鸣提醒（只报真空类；DI/失联/自定义规则不走本事件）。
+            // 放在所有落盘/日志之后：订阅者（UI）出问题也不能影响报警记账。
+            if (vacuumCause)
+            {
+                RaiseVacuumAlarm(deviceId, reason, false);
+            }
 
             return result;
         }

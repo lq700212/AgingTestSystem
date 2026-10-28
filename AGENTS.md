@@ -642,6 +642,37 @@
   激活比对 + 计数格 + ini 隔离往返 + 窗构造 + V1.88.1 付费即恢复判定/成功位）；ini 测试走显式 path，不碰真实文件；
   激活窗只构造不 Show（错码调 handler 不断言弹窗）。
 
+## 报警提醒与联停解耦铁律（2.0.6 客户需求：报警只提醒，别关送风和压缩机）
+
+- **三件事互相独立，禁止互相门控**：①要不要报警（判定）②要不要蜂鸣（提醒）
+  ③要不要停机/联停（动作）。超温：`FanTempShutdownEnabled` 只管联停，默认 false；
+  蜂鸣只看 `FanTempAlarmLimitC>0` + `FanBuzzerDoPoint>0`，联停关着照响。
+  真空：`VacuumAlarmBuzzerEnabled`（默认 true）只管响不响，报警本身照旧只退故障那一台，
+  **绝不联停整线**（其他 71 台继续老化）。
+- **蜂鸣器只有一个 DO 点，两路源必须合并**：判定唯一口是
+  `AgingSequencer.ShouldAlarmBuzzer(fanOverTemp, vacuumAlarmPending, suppressAllAlarms)`，
+  任一路成立就响、两路都解除才停（禁止各写各的：先解除的一路会把另一路静默）。
+  真空源由 `DeviceManager.OnVacuumAlarm` / `OnAlarmCleared` 维护，主界面
+  `_vacuumAlarmStations` 按台登记；只报真空类（压力越限/建立超时/失压保持运行），
+  DI/失联/自定义规则不走本事件。`MuteAllAlarms` 是最高级静默，无条件压住。
+- **温度未知不许静默**：超温功能已启用（风机启用 + 上限>0）但本轮读不到有效温度
+  （离线/NaN）时，`ShouldHoldAlarmBuzzer` 让蜂鸣器保持现状（在响继续响、没响不开新的），
+  等读数恢复再按真实温度决定；否则探头一坏报警就静音。
+- **报警未复位保持送风**：`UpdateFanLifecycle` 的判定唯一口是
+  `ShouldKeepFanRunning(anyTesting, anyAlarm)`＝在测 **或** 有未复位报警。
+  报警台退出测试后即使已是最后一台，送风机也继续运行（炉子还在发热，停风会把
+  单台故障扩大成过温事故），人工复位/急停后才停。**急停例外**：急停按钮本来就要停风机。
+  **`_lastAlarmStates` 只许在"测试中的台"失联时置位**（2.0.6 血泪）：它既是报警边沿锁，
+  又被当作"未复位报警"现状读；空闲台失联没有任何报警/断电动作，置了会永久残留
+  （通讯恢复只清失败计数、不清该锁）——风机被误判有报警而长转，且该台下一次失联边沿被吞。
+  空闲台失联只累计失败次数，在线台数照实反映（回归 E26d 锁死）。
+- **解除事件的清账点必须齐**：启动（清旧报警）、停止、复位、急停、到时完成
+  五条路径都要发 `OnAlarmCleared` 并按台清 `_lossNoted`；漏一条就是"报警早解除了，
+  蜂鸣器还在响"。新增停机/完成路径先对照这张清单。
+- **新增配置项仍按五处同步**（DeviceConfig/App.config/MainForm/SettingsForm 的
+  `_boolKeys`+`ValidateValue`/`PolicyKeys`+`PolicyGraph`）；本项不进预置
+  `GovernedKeys/Values`——超温/真空共用蜂鸣器，预置无权替现场决定听不听。
+
 ## 全局健壮性铁律（V1.84 大扫荡沉淀，涉及落盘/路径/解析/账号/自绘一律先读）
 
 - **运行时 json 一律 `AtomicFile.WriteAllText`（临时文件+改名），禁止裸 `File.WriteAllText`**：

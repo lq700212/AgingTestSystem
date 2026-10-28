@@ -116,18 +116,18 @@ namespace AgingTestSystem.Models
     }
 
     /// <summary>
-    /// 送风机超温蜂鸣方式（新现场需求：冷却送风机超温要触发蜂鸣器）。
+    /// 报警蜂鸣方式（超温与真空异常共用同一个 DO 点，新现场需求）。
     /// 蜂鸣器接在 IO 耦合器 DO 输出点上，点位 FanBuzzerDoPoint 配好才工作（0=未接不写任何通道）；
-    /// 触发阈值与超温告警/联停共用 FanTempAlarmLimitC（现场只配一个数）。
+    /// 超温源触发阈值共用 FanTempAlarmLimitC，真空源由 VacuumAlarmBuzzerEnabled 控制是否参与。
     /// 新增功能没有"旧现状"，0 值取保守合理缺省（持续响），解析失败回它不会哑也不会吵。
     /// </summary>
     public enum FanBuzzerMode
     {
-        /// <summary>持续响（缺省）：超温沿置 ON 一直响，回温（≤上限）自动 OFF，等人处置最直接。</summary>
+        /// <summary>持续响（缺省）：报警沿置 ON 一直响，报警解除自动 OFF，等人处置最直接。</summary>
         Level = 0,
-        /// <summary>短鸣一声：响约 3 秒自动停，提示超温但不长时间吵人。</summary>
+        /// <summary>短鸣一声：响约 3 秒自动停，提示报警但不长时间吵人。</summary>
         Pulse = 1,
-        /// <summary>断续响：响 2 秒停 2 秒循环，回温自动 OFF（省电又不完全安静）。</summary>
+        /// <summary>断续响：响 2 秒停 2 秒循环，报警解除自动 OFF（省电又不完全安静）。</summary>
         Intermittent = 2
     }
 
