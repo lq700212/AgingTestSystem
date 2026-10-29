@@ -314,10 +314,12 @@ namespace AgingTestSystem.Dialogs
             { "UseDiAlarmContact", "气压表报警触点(DI)是否并入报警判定（false/true）" },
             { "FanTempAlarmLimitC", "送风机温度告警上限（°C，0=不启用）" },
             { "FanTempShutdownEnabled", "超温是否全线联停（false=只记日志+可蜂鸣；true=超温自动停全部在测工位，默认false）。蜂鸣只看蜂鸣点位与报警源，联停关着也能响" },
-            { "FanBuzzerDoPoint", "报警蜂鸣器接的 DO 输出点（0=未接，默认；下拉只列空余的预留输出点，被破空阀占用的不会出现；存内部编号，超温/真空异常沿写 ON）" },
-            { "FanBuzzerMode", "报警蜂鸣方式：持续响=报警一直响、解除自动停（默认）/短鸣一声=响约3秒自动停/断续响=响2秒停2秒循环。超温与真空异常共用" },
-            { "VacuumAlarmBuzzerEnabled", "真空异常是否蜂鸣（true=压力越限/真空建立超时/失压保持运行触发蜂鸣器，默认；false=只亮报警灯记日志）。真空报警只退故障那一台，不联停整线；本项不影响送风机" },
-            { "FanTempAlarmBuzzerEnabled", "超温是否蜂鸣（true=送风机温度超上限触发蜂鸣器，默认，即历史现状；false=超温只记日志不响）。与真空异常蜂鸣各管各的源、共用同一个蜂鸣器；不影响超温报警判定，也不影响超温联停开关" },
+            { "FanBuzzerDoPoint", "超温蜂鸣器接的 DO 输出点（0=未接，默认；下拉只列空余的预留输出点，被破空阀/真空蜂鸣器占用的不会出现；存内部编号，超温报警沿写 ON）" },
+            { "FanBuzzerMode", "超温蜂鸣方式：持续响=报警一直响、解除自动停（默认）/短鸣一声=响约3秒自动停/断续响=响2秒停2秒循环。" },
+            { "VacuumBuzzerDoPoint", "真空蜂鸣器接的 DO 输出点（0=未接，缺省；2.0.9 蜂鸣器分开，真空异常触发这台独立蜂鸣器。下拉只列空余的预留输出点，被破空阀/超温蜂鸣器占用的不会出现；存内部编号，真空报警沿写 ON）" },
+            { "VacuumBuzzerMode", "真空蜂鸣方式（与超温蜂鸣方式各存各的）：持续响=报警一直响、解除自动停（默认）/短鸣一声=响约3秒自动停/断续响=响2秒停2秒循环" },
+            { "VacuumAlarmBuzzerEnabled", "真空异常是否蜂鸣（true=压力越限/真空建立超时/失压保持运行触发真空蜂鸣器，默认；false=只亮报警灯记日志）。真空报警只退故障那一台，不联停整线；本项不影响送风机" },
+            { "FanTempAlarmBuzzerEnabled", "超温是否蜂鸣（true=送风机温度超上限触发超温蜂鸣器，默认，即历史现状；false=超温只记日志不响）。2.0.9 蜂鸣器分开，两路互不牵连；不影响超温报警判定，也不影响超温联停开关" },
 
             // ===== 载台电流（V1.74：Q2 通用骨架总开关，跟机器，结构型改后重启生效）=====
             { "UsePowerMeter", "是否启用载台电流回采（false=现状：不接电表，电流恒无数据；true=按Mock开关读数，电表到货即插即用）" },
@@ -429,6 +431,7 @@ namespace AgingTestSystem.Dialogs
                 "VacuumConfirmTimeoutMs", "CommunicationLossAlarmCount",
                 "MaxTestDurationSeconds", "UseDiAlarmContact", "FanTempAlarmLimitC",
                 "FanTempShutdownEnabled", "FanBuzzerDoPoint", "FanBuzzerMode",
+                "VacuumBuzzerDoPoint", "VacuumBuzzerMode",
                 "FanTempAlarmBuzzerEnabled", "VacuumAlarmBuzzerEnabled",
                 // 破空阀两项是本机接线事实（装没装、接哪个 DO 点），不是工艺参数：
                 // V2.0.5 从策略窗迁回本分类，与蜂鸣器点位同一口径。
@@ -1575,9 +1578,16 @@ namespace AgingTestSystem.Dialogs
         {
             // 蜂鸣器点位：下拉选空余点（每台机器的预留区大小与破空阀占用情况都不同，
             // 必须按 config 现算，不能像其它分支那样只看 key/值）。
+            // 2.0.9 蜂鸣器分开：两路各一行下拉，互相剔除对方已配的点（同一点只能归一路）。
             if (key == "FanBuzzerDoPoint")
             {
-                return CreateBuzzerPointComboCell(config, value);
+                return CreateBuzzerPointComboCell(config,
+                    config == null ? 0 : config.VacuumBuzzerDoPoint, value);
+            }
+            if (key == "VacuumBuzzerDoPoint")
+            {
+                return CreateBuzzerPointComboCell(config,
+                    config == null ? 0 : config.FanBuzzerDoPoint, value);
             }
 
             if (_boolKeys.Contains(key))
@@ -2061,16 +2071,19 @@ namespace AgingTestSystem.Dialogs
         /// <summary>
         /// 蜂鸣器点位下拉单元格（DropDownList 只能选不能手输）：
         /// 首项"未接(0)"存 0（不写任何通道=功能停用），其余 = 空余的预留输出点，
-        /// 池子只认 IoRemapCatalog.BuildSpareDoTargets 唯一口（预留输出，剔除已被
-        /// 破空阀占用的点），显示"Y地址 预留输出-N"，存 IoId 内部编号（与执行侧
-        /// SetOutput 同口径，现场按接线对地址）。
-        /// 当前值不在空余列表（脏值/撞工位编号/与破空阀撞点）时补一项
+        /// 池子只认 IoRemapCatalog.BuildSpareDoTargets 唯一口（预留输出，再剔除本机
+        /// 已配走的点：破空阀 + 2.0.9 分开的另一路蜂鸣器），显示"Y地址 预留输出-N"，
+        /// 存 IoId 内部编号（与执行侧 SetOutput 同口径，现场按接线对地址）。
+        /// 当前值不在空余列表（脏值/撞工位编号/与破空阀或另一路蜂鸣器撞点）时补一项
         /// "编号N(当前值·已被占用)"回显——先把现状摆出来才好换走它；
         /// 保存时 ValidateValue 与组合碰撞校验仍各拦一道（防手改 App.config 绕界面）。
         /// </summary>
         /// <param name="config">内存配置（算空余点池 + 取破空阀占用；null 时只剩未接项）</param>
+        /// <param name="otherBuzzerPoint">另一路蜂鸣器当前点位（本行下拉把它也剔出池子；
+        /// 0=另一路未接，不剔）</param>
         /// <param name="currentValue">当前配置值（IoId 文本，"0"=未接）</param>
-        private static DataGridViewStrictComboBoxCell CreateBuzzerPointComboCell(DeviceConfig config, string currentValue)
+        private static DataGridViewStrictComboBoxCell CreateBuzzerPointComboCell(
+            DeviceConfig config, int otherBuzzerPoint, string currentValue)
         {
             var cell = new DataGridViewStrictComboBoxCell();
             StyleComboCell(cell);
@@ -2083,7 +2096,8 @@ namespace AgingTestSystem.Dialogs
             bool foundCur = curVal == 0;
             if (config != null)
             {
-                foreach (var e in IoRemapCatalog.BuildSpareDoTargets(config, config.VentValveDoPoint))
+                foreach (var e in IoRemapCatalog.BuildSpareDoTargets(
+                    config, config.VentValveDoPoint, otherBuzzerPoint))
                 {
                     cell.Items.Add(new ComboOption(e.DisplayText, e.IoId.ToString()));
                     if (e.IoId == curVal) foundCur = true;
@@ -2400,11 +2414,13 @@ namespace AgingTestSystem.Dialogs
                     }
                     return true;
 
-                // 全局单点输出点位（非负整数，0=未配置；破空阀与报警蜂鸣器共用同一规则，
-                // 上限 65535=Modbus 点号 16 位；撞工位编号由组合校验 CheckPolicyCombination 拦。
-                // 蜂鸣器界面已是"空余点下拉"选不出脏值，这里只拦手改 App.config 绕界面的情况）
+                // 全局单点输出点位（非负整数，0=未配置；破空阀与两路蜂鸣器共用同一规则，
+                // 上限 65535=Modbus 点号 16 位；撞工位编号与两蜂鸣器互撞由组合校验
+                // CheckPolicyCombination 拦。蜂鸣器界面已是"空余点下拉"选不出脏值，
+                // 这里只拦手改 App.config 绕界面的情况）
                 case "VentValveDoPoint":
                 case "FanBuzzerDoPoint":
+                case "VacuumBuzzerDoPoint":
                     int ventPoint;
                     if (!int.TryParse(value, out ventPoint) || ventPoint < 0)
                     {
@@ -2496,9 +2512,17 @@ namespace AgingTestSystem.Dialogs
                 ventPoint, config.TotalInputs, config.TotalBarometers);
             if (combo != null) return combo;
             // 蜂鸣器点位同规则：报警沿会把 ON 写到配错的工位阀/电编号上，误动作更难排查。
-            int buzzerPoint = ResolveEffectiveInt(changes, "FanBuzzerDoPoint", config.FanBuzzerDoPoint);
-            return AgingSequencer.ValidateVentPointCollision(
-                buzzerPoint, config.TotalInputs, config.TotalBarometers, "报警蜂鸣器");
+            // 2.0.9 蜂鸣器分开：超温/真空两路各拦一道（报错文案点名各路蜂鸣器），
+            // 再拦两路互撞（同一点两路互踢，永远响不齐也停不齐）。
+            int fanBuzzerPoint = ResolveEffectiveInt(changes, "FanBuzzerDoPoint", config.FanBuzzerDoPoint);
+            int vacuumBuzzerPoint = ResolveEffectiveInt(changes, "VacuumBuzzerDoPoint", config.VacuumBuzzerDoPoint);
+            combo = AgingSequencer.ValidateVentPointCollision(
+                fanBuzzerPoint, config.TotalInputs, config.TotalBarometers, "超温蜂鸣器");
+            if (combo != null) return combo;
+            combo = AgingSequencer.ValidateVentPointCollision(
+                vacuumBuzzerPoint, config.TotalInputs, config.TotalBarometers, "真空蜂鸣器");
+            if (combo != null) return combo;
+            return AgingSequencer.ValidateBuzzerPointsCollision(fanBuzzerPoint, vacuumBuzzerPoint);
         }
 
         /// <summary>取某项的生效值：本次改了用本次的，否则用内存现值（下同三个；changes 可 null）。</summary>

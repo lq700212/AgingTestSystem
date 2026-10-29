@@ -2197,7 +2197,7 @@ namespace AgingTestSystem.Tests
             Check("超限+开关开+上限>0才停",
                 AgingSequencer.IsFanOverTempShutdown(60.1f, 60f, true));
 
-            // ── 报警蜂鸣器判定（超温源：冷却送风机超温触发蜂鸣报警）──
+            // ── 超温蜂鸣器判定（超温源：冷却送风机超温触发蜂鸣报警；2.0.9 真空路另判独立蜂鸣器）──
             // 口径与联停不同：不受联停开关门控（跳不叫与停不停机独立），只看上限+蜂鸣开关+全关压制。
             // 2.0.7 起超温蜂鸣可配置（FanTempAlarmBuzzerEnabled，默认 true=历史现状）。
             Check("蜂鸣上限0=不启用",
@@ -2221,39 +2221,32 @@ namespace AgingTestSystem.Tests
             Check("蜂鸣开关开=超温照叫(现状不变)",
                 AgingSequencer.ShouldFanBuzzerAlarm(999f, 60f, true, false));
 
-            // ── 2.0.6：报警蜂鸣合并（超温与真空异常共用同一个 DO 点）──
-            // 任一路还在报警就必须继续响，两路都解除才允许停。
-            Check("蜂鸣两路都无=不响",
-                !AgingSequencer.ShouldAlarmBuzzer(false, false, false));
-            Check("蜂鸣仅超温=响",
-                AgingSequencer.ShouldAlarmBuzzer(true, false, false));
-            Check("蜂鸣仅真空=响",
-                AgingSequencer.ShouldAlarmBuzzer(false, true, false));
-            Check("蜂鸣两路都有=响",
-                AgingSequencer.ShouldAlarmBuzzer(true, true, false));
-            Check("蜂鸣全关压制两路",
-                !AgingSequencer.ShouldAlarmBuzzer(true, true, true));
-            Check("先解除一路另一路仍响(超温)",
-                AgingSequencer.ShouldAlarmBuzzer(true, false, false));
-            Check("先解除一路另一路仍响(真空)",
-                AgingSequencer.ShouldAlarmBuzzer(false, true, false));
+            // ── 2.0.9：真空异常蜂鸣判定（蜂鸣器分开：真空这一路判独立蜂鸣器）──
+            // 真空源只退单台不联停；开关关=这一路不响（只记日志）；全关压制最高级静默。
+            Check("真空蜂鸣源无=不响",
+                !AgingSequencer.ShouldVacuumBuzzerAlarm(false, true, false));
+            Check("真空蜂鸣源有+开关开=响",
+                AgingSequencer.ShouldVacuumBuzzerAlarm(true, true, false));
+            Check("真空蜂鸣开关关=不响(只记日志)",
+                !AgingSequencer.ShouldVacuumBuzzerAlarm(true, false, false));
+            Check("真空蜂鸣全关压制",
+                !AgingSequencer.ShouldVacuumBuzzerAlarm(true, true, true));
 
-            // ── 2.0.6：温度未知保持（探头失效/风机离线不许静默；2.0.7 加蜂鸣开关参数）──
-            Check("温度未知+超温启用+无真空=保持",
-                AgingSequencer.ShouldHoldAlarmBuzzer(true, true, 60f, false, false, false));
-            Check("温度未知+有真空源=不保持(真空接管)",
-                !AgingSequencer.ShouldHoldAlarmBuzzer(true, true, 60f, false, true, false));
+            // ── 2.0.6：温度未知保持（探头失效/风机离线不许静默；2.0.7 加蜂鸣开关参数；
+            // 2.0.9 蜂鸣器分开后真空参数退场）──
+            Check("温度未知+超温启用=保持",
+                AgingSequencer.ShouldHoldAlarmBuzzer(true, true, 60f, false, false));
             Check("温度已知=不保持",
-                !AgingSequencer.ShouldHoldAlarmBuzzer(true, true, 60f, true, false, false));
+                !AgingSequencer.ShouldHoldAlarmBuzzer(true, true, 60f, true, false));
             Check("未启用风机=不保持(无温度源)",
-                !AgingSequencer.ShouldHoldAlarmBuzzer(false, true, 60f, false, false, false));
+                !AgingSequencer.ShouldHoldAlarmBuzzer(false, true, 60f, false, false));
             Check("超温上限0=不保持(未启用超温)",
-                !AgingSequencer.ShouldHoldAlarmBuzzer(true, true, 0f, false, false, false));
+                !AgingSequencer.ShouldHoldAlarmBuzzer(true, true, 0f, false, false));
             Check("报警全关不保持(最高级静默)",
-                !AgingSequencer.ShouldHoldAlarmBuzzer(true, true, 60f, false, false, true));
+                !AgingSequencer.ShouldHoldAlarmBuzzer(true, true, 60f, false, true));
             // 2.0.7：蜂鸣开关关掉后超温路整体不参与，"看不见温度"与它无关，不保持（立即收尾）
             Check("蜂鸣开关关=不保持(开关关立即收尾)",
-                !AgingSequencer.ShouldHoldAlarmBuzzer(true, false, 60f, false, false, false));
+                !AgingSequencer.ShouldHoldAlarmBuzzer(true, false, 60f, false, false));
 
             // ── 2.0.6：送风机保持（报警未复位不关风机，避免故障扩大成过温）──
             Check("在测=保持送风", AgingSequencer.ShouldKeepFanRunning(true, false));
@@ -2261,14 +2254,25 @@ namespace AgingTestSystem.Tests
             Check("在测+报警=保持送风", AgingSequencer.ShouldKeepFanRunning(true, true));
             Check("无在测无报警=可停送风", !AgingSequencer.ShouldKeepFanRunning(false, false));
 
-            // ── CheckPolicyCombination：蜂鸣点位撞工位编号 → 保存即拦（现值口径，changes=null）──
+            // ── CheckPolicyCombination：两路蜂鸣器点位各自撞工位编号/互相撞点 → 保存即拦
+            //    （现值口径，changes=null；2.0.9 蜂鸣器分开后超温/真空各拦一道，文案点名各路）──
             var buzzCfg = new DeviceConfig { TotalInputs = 16, TotalBarometers = 72, FanBuzzerDoPoint = 17 };
             string buzzErr = SettingsForm.CheckPolicyCombination(buzzCfg, null);
-            Check("蜂鸣点位装进工位区间保存即拦(文案点名蜂鸣器)",
-                buzzErr != null && buzzErr.Contains("报警蜂鸣器"));
+            Check("超温蜂鸣点位装进工位区间保存即拦(文案点名超温蜂鸣器)",
+                buzzErr != null && buzzErr.Contains("超温蜂鸣器"));
             buzzCfg.FanBuzzerDoPoint = 200;
-            Check("蜂鸣点位预留区放行(全组合合法)",
+            buzzCfg.VacuumBuzzerDoPoint = 18;
+            string vacErr = SettingsForm.CheckPolicyCombination(buzzCfg, null);
+            Check("真空蜂鸣点位装进工位区间保存即拦(文案点名真空蜂鸣器)",
+                vacErr != null && vacErr.Contains("真空蜂鸣器"));
+            buzzCfg.VacuumBuzzerDoPoint = 201; // 两路各在预留区、互不相同 → 全组合合法
+            Check("两路蜂鸣异点且都在预留区放行(全组合合法)",
                 SettingsForm.CheckPolicyCombination(buzzCfg, null) == null);
+            buzzCfg.FanBuzzerDoPoint = 201; // 两路配成同一点 → 互撞被拦
+            string clashErr = SettingsForm.CheckPolicyCombination(buzzCfg, null);
+            Check("两路蜂鸣同点互撞保存即拦(文案点两路名)",
+                clashErr != null && clashErr.Contains("超温蜂鸣器")
+                && clashErr.Contains("真空蜂鸣器"));
         }
 
         // =====================================================================
@@ -2358,16 +2362,31 @@ namespace AgingTestSystem.Tests
                 AgingSequencer.ValidateVentPointCollision(200, 16, 72) == null);
             Check("输入区点位放行(8)",
                 AgingSequencer.ValidateVentPointCollision(8, 16, 72) == null);
-            // 蜂鸣器点位同一条碰撞规则（instanceName 只换文案，判定本体一致：
-            // 报警沿写到工位阀/电编号会误动作，保存时拦是第一道）。
-            Check("蜂鸣器点位撞工位区被拦",
-                AgingSequencer.ValidateVentPointCollision(17, 16, 72, "报警蜂鸣器") != null);
-            Check("蜂鸣器点位文案点名蜂鸣器(不带'破空阀'字样)",
-                AgingSequencer.ValidateVentPointCollision(17, 16, 72, "报警蜂鸣器").Contains("报警蜂鸣器")
-                && !AgingSequencer.ValidateVentPointCollision(17, 16, 72, "报警蜂鸣器").Contains("破空阀"));
+            // 点位碰撞同一条规则给两路蜂鸣器复用（instanceName 只换文案，判定本体一致：
+            // 报警沿写到工位阀/电编号会误动作，保存时拦是第一道；2.0.9 蜂鸣器分开，
+            // 超温/真空在 CheckPolicyCombination 里各以自己的名字调它）。
+            Check("超温蜂鸣器点位撞工位区被拦",
+                AgingSequencer.ValidateVentPointCollision(17, 16, 72, "超温蜂鸣器") != null);
+            Check("蜂鸣器点位文案点名传入路名(不带'破空阀'字样)",
+                AgingSequencer.ValidateVentPointCollision(17, 16, 72, "超温蜂鸣器").Contains("超温蜂鸣器")
+                && !AgingSequencer.ValidateVentPointCollision(17, 16, 72, "超温蜂鸣器").Contains("破空阀"));
             Check("破空阀缺省文案不变(instanceName 可选参)",
                 AgingSequencer.ValidateVentPointCollision(17, 16, 72).Contains("破空阀"
                     + "点位 17"));
+            // 2.0.9：两路蜂鸣器互撞校验（蜂鸣器分开后新增：同一点两路互踢，
+            // 先响的一路会被另一路的关断动作压掉，保存时拦）。
+            Check("两路都未接(0)互撞不拦",
+                AgingSequencer.ValidateBuzzerPointsCollision(0, 0) == null);
+            Check("一路未接互撞不拦(0=未接，无从互踢)",
+                AgingSequencer.ValidateBuzzerPointsCollision(225, 0) == null
+                && AgingSequencer.ValidateBuzzerPointsCollision(0, 226) == null);
+            Check("两路异点互撞不拦",
+                AgingSequencer.ValidateBuzzerPointsCollision(225, 226) == null);
+            Check("两路同点互撞被拦",
+                AgingSequencer.ValidateBuzzerPointsCollision(225, 225) != null);
+            Check("互撞文案点两路名(超温+真空)",
+                AgingSequencer.ValidateBuzzerPointsCollision(225, 225).Contains("超温蜂鸣器")
+                && AgingSequencer.ValidateBuzzerPointsCollision(225, 225).Contains("真空蜂鸣器"));
 
             // ── ProjectPolicyStore.ParseValue：大小写兼容，非法回null ──
             Check("枚举正常解析",
@@ -2394,9 +2413,11 @@ namespace AgingTestSystem.Tests
                 ProjectPolicyStore.PolicyKeys.Contains("FanTempShutdownEnabled"));
             Check("PolicyKeys 含真空超时(跟项目走，机器缺省15000不动)",
                 ProjectPolicyStore.PolicyKeys.Contains("VacuumConfirmTimeoutMs"));
-            Check("PolicyKeys 只含蜂鸣方式(点位改跟机器：本机接线事实，系统设置下拉选空余点)",
+            Check("PolicyKeys 只含两路蜂鸣方式，不含两个点位(点位改跟机器：本机接线事实，系统设置下拉选空余点)",
                 ProjectPolicyStore.PolicyKeys.Contains("FanBuzzerMode")
-                && !ProjectPolicyStore.PolicyKeys.Contains("FanBuzzerDoPoint"));
+                && ProjectPolicyStore.PolicyKeys.Contains("VacuumBuzzerMode")
+                && !ProjectPolicyStore.PolicyKeys.Contains("FanBuzzerDoPoint")
+                && !ProjectPolicyStore.PolicyKeys.Contains("VacuumBuzzerDoPoint"));
             Check("PolicyKeys 含真空异常蜂鸣(2.0.6 跟项目走，预置不管辖)",
                 ProjectPolicyStore.PolicyKeys.Contains("VacuumAlarmBuzzerEnabled"));
             Check("PolicyKeys 含超温蜂鸣(2.0.7 跟项目走，预置不管辖)",
@@ -2410,7 +2431,8 @@ namespace AgingTestSystem.Tests
                 // MesTriggers/MesFieldMap/MesStaticFields/CustomAlarmRules/
                 // CompleteExpression/ReportColumns/DisplayModes 是自由文本
                 // （V1.68/V1.69/V1.74/V1.75/2.0.0/2.0.6/2.0.7），都无策略下拉。
-                // 蜂鸣器点位 FanBuzzerDoPoint 已从 PolicyKeys 移除（改跟机器 exe.config）。
+                // 蜂鸣器点位 FanBuzzerDoPoint/VacuumBuzzerDoPoint 都不在 PolicyKeys
+                // （2.0.9 起两路点位都跟机器 exe.config）；两路蜂鸣方式有枚举下拉，不走本豁免。
                 if (k == "VentValveDoPoint" || k == "VacuumConfirmTimeoutMs"
                     || k == "FanTempShutdownEnabled" || k == "SkipVacuum"
                     || k == "DisplayModeEnabled" || k == "PressureAlarmEnabled"
@@ -2445,8 +2467,9 @@ namespace AgingTestSystem.Tests
                 && dc.VentValveDoPoint == 0);
             Check("缺省身份口径=记录现值",
                 dc.EventIdentityMode == EventIdentityMode.RecordTime);
-            Check("缺省蜂鸣点位=0未接/方式=持续响(新增功能缺省=可用且不吵)",
-                dc.FanBuzzerDoPoint == 0 && dc.FanBuzzerMode == FanBuzzerMode.Level);
+            Check("缺省超温蜂鸣=0未接/持续响；真空蜂鸣同缺省(未接只记日志不响)",
+                dc.FanBuzzerDoPoint == 0 && dc.FanBuzzerMode == FanBuzzerMode.Level
+                && dc.VacuumBuzzerDoPoint == 0 && dc.VacuumBuzzerMode == FanBuzzerMode.Level);
 
             // ── V1.76：事件身份口径（开关解析 + ResolveEventIdentity 纯函数）──
             Check("身份枚举解析StartSnapshot",
@@ -2513,6 +2536,32 @@ namespace AgingTestSystem.Tests
                 args = new object[] { "FanBuzzerMode", "Auto", null };
                 Check("蜂鸣方式脏值被拦",
                     (bool)miValidate.Invoke(null, args) == false);
+                // 2.0.9 真空蜂鸣器两 key：点位与破空阀/超温路共用同一条范围校验
+                // （0~65535，0=未接合法）；方式走 EnumOptions 同口径下拉。
+                args = new object[] { "VacuumBuzzerDoPoint", "0", null };
+                Check("真空蜂鸣点位0过(未接合法)",
+                    (bool)miValidate.Invoke(null, args) == true);
+                args = new object[] { "VacuumBuzzerDoPoint", "225", null };
+                Check("真空蜂鸣点位225过",
+                    (bool)miValidate.Invoke(null, args) == true);
+                args = new object[] { "VacuumBuzzerDoPoint", "-1", null };
+                Check("真空蜂鸣点位负数被拦",
+                    (bool)miValidate.Invoke(null, args) == false);
+                args = new object[] { "VacuumBuzzerDoPoint", "65536", null };
+                Check("真空蜂鸣点位超范围被拦",
+                    (bool)miValidate.Invoke(null, args) == false);
+                args = new object[] { "VacuumBuzzerMode", "Level", null };
+                Check("真空蜂鸣方式Level过",
+                    (bool)miValidate.Invoke(null, args) == true);
+                args = new object[] { "VacuumBuzzerMode", "Pulse", null };
+                Check("真空蜂鸣方式Pulse过",
+                    (bool)miValidate.Invoke(null, args) == true);
+                args = new object[] { "VacuumBuzzerMode", "intermittent", null };
+                Check("真空蜂鸣方式小写过(大小写不敏感)",
+                    (bool)miValidate.Invoke(null, args) == true);
+                args = new object[] { "VacuumBuzzerMode", "Auto", null };
+                Check("真空蜂鸣方式脏值被拦",
+                    (bool)miValidate.Invoke(null, args) == false);
             }
 
             // ── 蜂鸣器点位改系统设置：下拉只选空余点（点位不再跟项目策略） ──
@@ -2573,14 +2622,46 @@ namespace AgingTestSystem.Tests
                     as Controls.DataGridViewStrictComboBoxCell;
                 Check("脏值(工位区17)补兜底项回显", cellBad != null
                     && cellBad.Items.Count == 17 && (string)cellBad.Value == "17");
+                // ── 2.0.9 真空路同一条空余点池下拉：与超温行同池、两行互剔对方已配点 ──
+                // 此刻 spareCfg：VentValve=225 已占、超温=0 未接 → 真空行=未接+15 空余=16 项
+                var cellV = miCell.Invoke(null, new object[] { "VacuumBuzzerDoPoint", "0", spareCfg })
+                    as Controls.DataGridViewStrictComboBoxCell;
+                Check("真空蜂鸣点位行返回下拉单元格", cellV != null);
+                if (cellV != null)
+                {
+                    Check("真空下拉=未接+15空余(与超温行同池)",
+                        cellV.Items.Count == 16 && (string)cellV.Value == "0");
+                }
+                // 互剔：超温配 230 后，真空行应把 230 剔出池（未接+14 空余=15 项）；
+                // 再把真空配 231，超温行同样看不到 231（15 项）。
+                spareCfg.FanBuzzerDoPoint = 230;
+                var cellV2 = miCell.Invoke(null, new object[] { "VacuumBuzzerDoPoint", "0", spareCfg })
+                    as Controls.DataGridViewStrictComboBoxCell;
+                spareCfg.VacuumBuzzerDoPoint = 231;
+                var cellF2 = miCell.Invoke(null, new object[] { "FanBuzzerDoPoint", "0", spareCfg })
+                    as Controls.DataGridViewStrictComboBoxCell;
+                Check("两路点位互剔(对方已配点不在本行下拉)",
+                    cellV2 != null && cellV2.Items.Count == 15
+                    && cellF2 != null && cellF2.Items.Count == 15);
+                // 当前值恰好是对方（超温）已配的 230：被剔出池 → 补兜底项回显，引导换走
+                var cellV3 = miCell.Invoke(null, new object[] { "VacuumBuzzerDoPoint", "230", spareCfg })
+                    as Controls.DataGridViewStrictComboBoxCell;
+                Check("真空当前值=超温已占点补兜底项回显",
+                    cellV3 != null && cellV3.Items.Count == 16 && (string)cellV3.Value == "230");
+                spareCfg.FanBuzzerDoPoint = 0; // 用例收尾复原，避免污染后续用例
+                spareCfg.VacuumBuzzerDoPoint = 0;
                 Check("配置null下拉只剩未接不抛",
                     miCell.Invoke(null, new object[] { "FanBuzzerDoPoint", "0", null })
+                        is Controls.DataGridViewStrictComboBoxCell);
+                Check("配置null真空下拉只剩未接不抛",
+                    miCell.Invoke(null, new object[] { "VacuumBuzzerDoPoint", "0", null })
                         is Controls.DataGridViewStrictComboBoxCell);
             }
             var nkf2 = typeof(SettingsForm).GetField("_numericKeys",
                 BindingFlags.NonPublic | BindingFlags.Static);
             var rngs2 = (Dictionary<string, ValueTuple<decimal, decimal, int, decimal>>)nkf2.GetValue(null);
-            Check("蜂鸣点位退出数字键表(改空余点下拉)", !rngs2.ContainsKey("FanBuzzerDoPoint"));
+            Check("两路蜂鸣点位都退出数字键表(改空余点下拉)", !rngs2.ContainsKey("FanBuzzerDoPoint")
+                && !rngs2.ContainsKey("VacuumBuzzerDoPoint"));
 
             // ── SettingsForm.NormalizePolicyValue（反射：脏值兜底回缺省） ──
             var miNorm = typeof(SettingsForm).GetMethod("NormalizePolicyValue", Flags);
@@ -3580,6 +3661,8 @@ namespace AgingTestSystem.Tests
                 Views.PolicyGraph.LocateKey("VacuumAlarmBuzzerEnabled") == "【报警联动】真空异常蜂鸣");
             Check("超温蜂鸣定位报警联动",
                 Views.PolicyGraph.LocateKey("FanTempAlarmBuzzerEnabled") == "【报警联动】超温蜂鸣");
+            Check("真空蜂鸣方式定位报警联动",
+                Views.PolicyGraph.LocateKey("VacuumBuzzerMode") == "【报警联动】真空蜂鸣方式");
             Check("零时长定位启动开阀",
                 Views.PolicyGraph.LocateKey("ZeroDurationPolicy") == "【启动开阀】0时长策略");
             Check("无节点key定位null",
@@ -3595,7 +3678,8 @@ namespace AgingTestSystem.Tests
                 && Views.PolicyGraph.LocateKey("ReportColumns") == "【系统设置·报表导出】报表列");
 
             // ── V2.0.5 配置分层锁（客户痛点"不知道哪些该动"） ──
-            // 常用 13 项 = 首屏一屏看完；高级 14 项默认折叠（2.0.6 +真空异常蜂鸣、2.0.7 +超温蜂鸣）。
+            // 常用 13 项 = 首屏一屏看完；高级 15 项默认折叠（2.0.6 +真空异常蜂鸣、
+            // 2.0.7 +超温蜂鸣、2.0.9 +真空蜂鸣方式）。
             // 新增 key 必须显式选 Tier（构造无缺省），这条锁防止以后又平铺回一屏 30 项。
             int commonCount = 0, advancedCount = 0;
             foreach (var n in Views.PolicyGraph.Nodes)
@@ -3607,10 +3691,10 @@ namespace AgingTestSystem.Tests
                 }
             }
             Check("常用13项（首屏一屏看完）", commonCount == 13);
-            Check("高级14项（默认折叠）", advancedCount == 14);
-            Check("报警节点4常用+10高级",
+            Check("高级15项（默认折叠）", advancedCount == 15);
+            Check("报警节点4常用+11高级",
                 CountNodeKeys("alarm", Views.PolicyGraph.KeyTier.Common) == 4
-                && CountNodeKeys("alarm", Views.PolicyGraph.KeyTier.Advanced) == 10);
+                && CountNodeKeys("alarm", Views.PolicyGraph.KeyTier.Advanced) == 11);
             Check("出厂值读取（A 未管辖项的基准兜底）",
                 Views.PolicyGraph.GetDefaultString("VacuumConfirmTimeoutMs") == "15000"
                 && Views.PolicyGraph.GetDefaultString("ZeroDurationPolicy") == "Warn"

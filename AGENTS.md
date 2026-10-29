@@ -643,26 +643,34 @@
   激活比对 + 计数格 + ini 隔离往返 + 窗构造 + V1.88.1 付费即恢复判定/成功位）；ini 测试走显式 path，不碰真实文件；
   激活窗只构造不 Show（错码调 handler 不断言弹窗）。
 
-## 报警提醒与联停解耦铁律（2.0.6 客户需求：报警只提醒，别关送风和压缩机；2.0.7 蜂鸣做成两个开关）
+## 报警提醒与联停解耦铁律（2.0.6 报警只提醒别联停；2.0.7 蜂鸣做成两个开关；2.0.9 蜂鸣器分成两路独立硬件）
 
 - **三件事互相独立，禁止互相门控**：①要不要报警（判定）②要不要蜂鸣（提醒）
   ③要不要停机/联停（动作）。超温：`FanTempShutdownEnabled` 只管联停，默认 false；
   响不响另由 `FanTempAlarmBuzzerEnabled`（2.0.7，默认 true=历史现状）+ `FanTempAlarmLimitC>0`
   + `FanBuzzerDoPoint>0` 决定，联停关着照响、蜂鸣关了只记日志。
   真空：`VacuumAlarmBuzzerEnabled`（默认 true）只管响不响，报警本身照旧只退故障那一台，
-  **绝不联停整线**（其他 71 台继续老化）。两路开关各管各的源、共用同一个蜂鸣器。
-- **蜂鸣器只有一个 DO 点，两路源必须合并**：判定唯一口是
-  `AgingSequencer.ShouldAlarmBuzzer(fanOverTemp, vacuumAlarmPending, suppressAllAlarms)`，
-  任一路成立就响、两路都解除才停（禁止各写各的：先解除的一路会把另一路静默）。
-  `fanOverTemp` 实参已含超温蜂鸣开关（`ShouldFanBuzzerAlarm(温度, 上限, 开关, 全关)` 内判）、
-  `vacuumAlarmPending` 实参已含真空蜂鸣开关（调用方 `_config.VacuumAlarmBuzzerEnabled &&` 门控）；
-  新增第三路源时照此把开关收进各自实参，不许在合并判定后再拆。
+  **绝不联停整线**（其他 71 台继续老化）。两路开关各管各的源、**各走各的蜂鸣器**
+  （2.0.9：超温/真空不再共用同一个 DO 点）。
+- **两路蜂鸣器互不合并，禁止合写判定**：超温路走 `FanBuzzerDoPoint/FanBuzzerMode`，
+  真空路走 `VacuumBuzzerDoPoint/VacuumBuzzerMode`（真空点位缺省 0=未接，只记
+  一次性"未接"提示不响；接线后在系统设置选点位即响）。判定唯一口是
+  `AgingSequencer.ShouldFanBuzzerAlarm(温度, 上限, 超温开关, 全关)` /
+  `ShouldVacuumBuzzerAlarm(真空报警在, 真空开关, 全关)`（合并判定的
+  `ShouldAlarmBuzzer` 已废除，不许任何"两路合一"的判定复活）。
+  两路执行驱动完全同构：`MainForm` 私有嵌套类 `AlarmBuzzerChannel` 一个类承载
+  （边沿锁/方式轮转/Pulse 定长/未连接重试/收尾），`_fanBuzzer`/`_vacuumBuzzer`
+  两份实例，**新增第三路照抄此模式加第三份实例，不许改写成循环列表共享边沿**。
+  两路各自启停：先解除的那一路先停，不许"等另一路"（合并时代"两路都解除才停"
+  的口径随之作废）。同套收纳的纯函数 `ValidateBuzzerPointsCollision` 拦两路
+  配同一点（互踢：先响的一路会被另一路的关断动作压掉），保存即拦。
   真空源由 `DeviceManager.OnVacuumAlarm` / `OnAlarmCleared` 维护，主界面
   `_vacuumAlarmStations` 按台登记；只报真空类（压力越限/建立超时/失压保持运行），
-  DI/失联/自定义规则不走本事件。`MuteAllAlarms` 是最高级静默，无条件压住。
+  DI/失联/自定义规则不走本事件。`MuteAllAlarms` 是最高级静默，两路一起压住。
 - **温度未知不许静默**：超温蜂鸣功能已启用（蜂鸣开关 + 风机启用 + 上限>0）但本轮读不到有效温度
-  （离线/NaN）时，`ShouldHoldAlarmBuzzer` 让蜂鸣器保持现状（在响继续响、没响不开新的），
-  等读数恢复再按真实温度决定；否则探头一坏报警就静音。
+  （离线/NaN）时，`ShouldHoldAlarmBuzzer` 让超温蜂鸣器保持现状（在响继续响、没响不开新的），
+  等读数恢复再按真实温度决定；否则探头一坏报警就静音。真空路瞬时判定无温度依赖，
+  不走保持。
   **蜂鸣开关关掉后不进入保持**（2.0.7）：超温路整体不参与蜂鸣，"看不见温度"与它无关，立即收尾。
 - **报警未复位保持送风**：`UpdateFanLifecycle` 的判定唯一口是
   `ShouldKeepFanRunning(anyTesting, anyAlarm)`＝在测 **或** 有未复位报警。
@@ -676,8 +684,11 @@
   五条路径都要发 `OnAlarmCleared` 并按台清 `_lossNoted`；漏一条就是"报警早解除了，
   蜂鸣器还在响"。新增停机/完成路径先对照这张清单。
 - **新增配置项仍按五处同步**（DeviceConfig/App.config/MainForm/SettingsForm 的
-  `_boolKeys`+`ValidateValue`/`PolicyKeys`+`PolicyGraph`）；本项不进预置
-  `GovernedKeys/Values`——超温/真空共用蜂鸣器，预置无权替现场决定听不听。
+  `_boolKeys`+`ValidateValue`/`PolicyKeys`+`PolicyGraph`）；两路蜂鸣开关与两路
+  方式**不进预置** `GovernedKeys/Values`——蜂鸣器接没接、响不响是现场硬件事实，
+  超温/真空听不听各自独立，预置无权替现场决定。两路**点位**（DoPoint）不进
+  `PolicyKeys`（本机接线事实跟机器 exe.config），两路**方式**（Mode）进
+  `PolicyKeys` 跟项目走。
 
 ## 全局健壮性铁律（V1.84 大扫荡沉淀，涉及落盘/路径/解析/账号/自绘一律先读）
 

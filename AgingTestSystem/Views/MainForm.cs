@@ -212,6 +212,13 @@ namespace AgingTestSystem.Views
             // 2. 加载配置（从 App.config 读取设备数量、采集间隔等）
             _config = LoadConfig();
 
+            // 蜂鸣通道要拿 _config 闭包与写日志，实例化放构造（readonly 字段不能用 this 初始化）：
+            // 点位/方式按路闭包现取（超温认 Fan 系 key、真空认 Vacuum 系 key），-drive
+            _fanBuzzer = new AlarmBuzzerChannel(this, FanBuzzerChannelTitle,
+                () => _config.FanBuzzerDoPoint, () => _config.FanBuzzerMode);
+            _vacuumBuzzer = new AlarmBuzzerChannel(this, VacuumBuzzerChannelTitle,
+                () => _config.VacuumBuzzerDoPoint, () => _config.VacuumBuzzerMode);
+
             // 2.5 启动时从本地 Recipes.json 加载配方列表
             LoadRecipes();
 
@@ -1198,16 +1205,23 @@ namespace AgingTestSystem.Views
             {
                 config.VentValveEnabled = ventEnabled;
             }
-            // 报警蜂鸣器（超温/真空异常共用；超温为原现场需求，真空异常 2.0.6 并入）。
+            // 报警蜂鸣器（2.0.9 起超温/真空异常分开，各用各的蜂鸣器）。
             // 点位是本机接线事实跟机器走（App.config；系统设置下拉选空余预留输出点，
             // 不再跟项目策略覆盖——负值钳 0 防手改文件）；方式跟项目走（Policy.json 可按项目覆盖，
-            // 非法方式名 ParsePolicyEnum 兜底回 Level）
+            // 非法方式名 ParsePolicyEnum 兜底回 Level）。超温沿用 Fan 系 key（老配置平滑过渡），
+            // 真空用新增 Vacuum 系 key（缺省 0=未接，接蜂鸣器后现场在系统设置配点位即响）。
             if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["FanBuzzerDoPoint"], out int buzzerPoint))
             {
                 config.FanBuzzerDoPoint = Math.Max(0, buzzerPoint);
             }
             config.FanBuzzerMode = ParsePolicyEnum(
                 System.Configuration.ConfigurationManager.AppSettings["FanBuzzerMode"], FanBuzzerMode.Level);
+            if (int.TryParse(System.Configuration.ConfigurationManager.AppSettings["VacuumBuzzerDoPoint"], out int vacuumBuzzerPoint))
+            {
+                config.VacuumBuzzerDoPoint = Math.Max(0, vacuumBuzzerPoint);
+            }
+            config.VacuumBuzzerMode = ParsePolicyEnum(
+                System.Configuration.ConfigurationManager.AppSettings["VacuumBuzzerMode"], FanBuzzerMode.Level);
             // 真空异常蜂鸣开关（跟项目走：随后 Policy.json 可按项目覆盖；
             // 缺省 true=接了点位就提醒。与超温联停 FanTempShutdownEnabled 完全独立）
             if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["VacuumAlarmBuzzerEnabled"], out bool vacuumBuzz))
@@ -1216,7 +1230,7 @@ namespace AgingTestSystem.Views
             }
             // 超温蜂鸣开关（跟项目走：随后 Policy.json 可按项目覆盖；
             // 缺省 true=历史现状超温照叫。2.0.7 客户要求可配置，关掉后超温只记日志，
-            // 真空那一路照常。与真空蜂鸣开关各管各的源，共用同一个蜂鸣器）
+            // 真空异常那路真空蜂鸣器不受影响。2.0.9 起两路蜂鸣器分开，互不牵连）
             if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["FanTempAlarmBuzzerEnabled"], out bool fanTempBuzz))
             {
                 config.FanTempAlarmBuzzerEnabled = fanTempBuzz;
@@ -2016,61 +2030,265 @@ namespace AgingTestSystem.Views
         private bool _fanShutdownTriggered = false;
 
         // =====================================================================
-        // 报警蜂鸣器（超温 + 真空异常共用同一个 DO 点）
-        // 硬件：蜂鸣器接 IO 耦合器 DO 输出点，点位 FanBuzzerDoPoint（0=未接，不写任何通道）；
-        // 超温源阈值共用 FanTempAlarmLimitC（0=不启用则超温不响），响不响另有开关
-        // FanTempAlarmBuzzerEnabled（默认 true=现状，2.0.7 起可配置）；
-        // 真空源由 VacuumAlarmBuzzerEnabled 控制是否参与（默认参与，只退单台不联停）；
-        // 方式 FanBuzzerMode 三档：Level 持续响（默认）/ Pulse 短鸣一声 / Intermittent 断续响。
-        // 判定本体是纯函数 AgingSequencer.ShouldFanBuzzerAlarm / ShouldAlarmBuzzer（回归直接断言），
-        // 本文件只做边沿锁、两路源合并、方式轮转、收尾这些"执行"，改阈值/压制口径去 AgingSequencer。
+        // 报警蜂鸣器（2.0.9 起超温/真空异常分开，各用各的蜂鸣器互不合并）
+        // 硬件：两个蜂鸣器分别接 IO 耦合器 DO 输出点；点位超温=FanBuzzerDoPoint、
+        // 真空=VacuumBuzzerDoPoint（0=未接，不写任何通道，只记提示日志让观众知道还得配点位）；
+        // 方式各配一份：超温=FanBuzzerMode、真空=VacuumBuzzerMode，三档 Level 持续响（默认）/
+        // Pulse 短鸣一声 / Intermittent 断续响；响不响另有开关 FanTempAlarmBuzzerEnabled /
+        // VacuumAlarmBuzzerEnabled（默认 true），报警全关 MuteAllAlarms 压制两路。
+        // 判定本体是纯函数 AgingSequencer.ShouldFanBuzzerAlarm / ShouldVacuumBuzzerAlarm /
+        // ShouldHoldAlarmBuzzer（回归直接断言），本文件只做边沿锁、方式轮转、收尾这些"执行"。
+        // 两路驱动逻辑完全同构，抽 AlarmBuzzerChannel 一个类承载，不许各写一份。
         // 写 IO 走 DeviceManager.SetOutput：内部未连接只发 OnError 不写通道、连接异常吞掉标记
         // 断连（ModbusTcpIoController.WriteOutput），不会炸本线程。
         // =====================================================================
 
-        /// <summary>短鸣一声时长（秒，Pulse 档响这么久自动停）。</summary>
+        /// <summary>短鸣一声时长（秒，Pulse 档响这么久自动停；两路共用同一节奏）。</summary>
         private const int FanBuzzerPulseSeconds = 3;
 
-        /// <summary>断续响每相位时长（秒，Intermittent 档响这么久→停这么久循环）。</summary>
+        /// <summary>断续响每相位时长（秒，Intermittent 档响这么久→停这么久循环；两路共用）。</summary>
         private const int FanBuzzerCycleSeconds = 2;
 
-        /// <summary>蜂鸣中边沿锁：true=本轮报警已处理过（叫着/已短鸣过），报警解除或全关时收尾复位 false。</summary>
-        private bool _fanBuzzerActive = false;
+        /// <summary>超温蜂鸣通道（点位/方式以闭包从 _config 每次现取，热改配置立即生效）。</summary>
+        private readonly AlarmBuzzerChannel _fanBuzzer;
+
+        /// <summary>真空蜂鸣通道（与超温同构，独立边沿锁与定时器）。</summary>
+        private readonly AlarmBuzzerChannel _vacuumBuzzer;
+
+        /// <summary>日志路名（超温/真空启动与停止日志按它区分两路）。</summary>
+        private const string FanBuzzerChannelTitle = "超温蜂鸣器";
+        private const string VacuumBuzzerChannelTitle = "真空蜂鸣器";
 
         /// <summary>
-        /// 当前存在真空异常提醒的工位集合（超温与真空共用同一个蜂鸣器，集合非空=真空源还在）。
+        /// 当前存在真空异常提醒的工位集合（真空蜂鸣器的报警源；集合非空且开关开=真空路应响）。
         /// 【只在 UI 线程读写】报警事件经 BeginInvoke 汇入；复位/停止/急停/重新启动走解除事件移除。
-        /// 不在响的时候清空必然导致"另一路还在报警却被静默"，所以只按台解除、不整体覆盖。
+        /// 不在响的时候清空必然导致"另一路还在报警却被静默"——分开两路后真空蜂鸣器只看本集合，
+        /// 超温蜂鸣器不再受它牵连，但本集合仍只按台解除、不整体覆盖（与报警灯同口径）。
         /// </summary>
         private readonly HashSet<int> _vacuumAlarmStations = new HashSet<int>();
 
         /// <summary>
-        /// 最近一次送风机数据（蜂鸣判定用）。真空报警事件可能先于下一轮送风机数据到达，
-        /// 没有这份缓存就只能等 1 秒轮询才响；风机未启用时为 null（真空蜂鸣照常工作）。
+        /// 最近一次送风机数据（超温蜂鸣判定用）。真空报警事件可能先于下一轮送风机数据到达，
+        /// 没有这份缓存就只能等 1 秒轮询才响；风机未启用时为 null（真空蜂鸣器照常工作）。
         /// </summary>
         private FanData _lastFanData;
 
-        /// <summary>"IO 未连接写不进"边沿日志锁：未连接期间每周期重试，日志只记首次，免得每 2 秒刷一行。</summary>
-        private bool _fanBuzzerUnavailableLogged = false;
+        /// <summary>
+        /// 单路蜂鸣通道驱动：每路一个实例，承载"边沿锁 + 方式轮转 + 定时器 + 收尾"这套
+        /// 与报警源无关的机制。点位/方式每次从 _config 现取（改配置立即生效），判定
+        /// （该不该叫）全部留在 AgingSequencer 纯函数与 UpdateAlarmBuzzer，本类只认
+        /// "要响/要停"两个指令，拿指令后保证"响了会停、停了停在 OFF、写不进会重试"。
+        /// 【关窗竞态】定时器挂 components 容器随窗体释放，Tick 入口自查释放（V1.72 四模式②）。
+        /// </summary>
+        private sealed class AlarmBuzzerChannel
+        {
+            /// <summary>宿主窗体（嵌套类拿 components/设备/日志/主关旗全走它）。</summary>
+            private readonly MainForm _host;
 
-        /// <summary>断续当前相位：true=正在响、false=在停（Tick 里翻转）。</summary>
-        private bool _fanBuzzerPhaseOn = false;
+            /// <summary>本路配置取值闭包（每次现取 _config，热更配置立即生效）。</summary>
+            private readonly Func<int> _doPointGetter;
+            private readonly Func<FanBuzzerMode> _modeGetter;
 
-        /// <summary>蜂鸣驱动定时器（Pulse 到点停响 / Intermittent 相位轮转）。
-        /// 懒建（不进 Designer，防 CodeDom 序列化坑），挂 components 容器随窗体自动释放。</summary>
-        private System.Windows.Forms.Timer _fanBuzzerTimer;
+            private readonly string _title;
+
+            /// <summary>蜂鸣中边沿锁：true=本路报警已处理过（叫着/已短鸣过），收尾时复位 false。</summary>
+            private bool _active;
+
+            /// <summary>断续当前相位：true=正在响、false=在停（Tick 里翻转）。</summary>
+            private bool _phaseOn;
+
+            /// <summary>"IO 未连接写不进"边沿日志锁：连接恢复后才复位，未连接期间只记首次。</summary>
+            private bool _unavailableLogged;
+
+            /// <summary>"点位未接配置还开着"边沿日志锁：防止每次报警都刷一条提示。</summary>
+            private bool _missingLogged;
+
+            private System.Windows.Forms.Timer _timer;
+
+            public AlarmBuzzerChannel(string title) { _title = title; }
+
+            /// <summary>
+            /// 实例化需宿主引用（readonly 字段不能在初始化器里用 this），在 MainForm 构造里创建：
+            /// 点位/方式闭包按路注入（超温认 FanBuzzerDoPoint/FanBuzzerMode、真空认 Vacuum 系）。
+            /// </summary>
+            public AlarmBuzzerChannel(MainForm host, string title,
+                Func<int> doPointGetter, Func<FanBuzzerMode> modeGetter)
+            {
+                _host = host;
+                _title = title;
+                _doPointGetter = doPointGetter;
+                _modeGetter = modeGetter;
+            }
+
+            /// <summary>本路是否正处于蜂鸣流程中（供调用方判"该停了还停不停"）。</summary>
+            public bool Running { get { return _active; } }
+
+            /// <summary>
+            /// 确保"应响"真的响了：已响不重复触发；点位未接/IO 未连接不置锁按下周期重试，
+            /// 且各记一条一次性提示让现场知道缺什么。
+            /// </summary>
+            /// <param name="reason">触发原因（写日志，现场据此知道是哪路报警）</param>
+            public void EnsureRunning(string reason)
+            {
+                if (_active) return;                       // 已在蜂鸣流程中（响着/已短鸣过/轮转中）
+                MainForm host = _host;
+                int point = _doPointGetter();
+                if (point <= 0)
+                {
+                    // 未接蜂鸣器：不写任何通道；提示只记一次（下次报警不再刷屏），
+                    // 手动让现场知道"开关开着但蜂鸣器没接线没配点位，要响请先配点位"。
+                    if (!_missingLogged)
+                    {
+                        _missingLogged = true;
+                        host.WriteLog($"[报警] {_title}未接（点位 0）：{reason}；只记日志不响，"
+                            + "接线后在系统设置'老化测试业务'选择本蜂鸣器点位");
+                    }
+                    return;
+                }
+                if (!host._deviceManager.IsIoConnected)
+                {
+                    if (!_unavailableLogged)
+                    {
+                        _unavailableLogged = true;
+                        host.WriteLog($"[报警] {_title}待触发但 IO 未连接（点位 {point}）：{reason}；连接后自动重试");
+                    }
+                    return;
+                }
+
+                FanBuzzerMode mode = _modeGetter();
+                switch (mode)
+                {
+                    case FanBuzzerMode.Pulse:
+                        // 短鸣一声：先响，PulseSeconds 秒后由 Tick 收尾自动停（本轮报警内不再触发）
+                        host._deviceManager.SetOutput(point, true);
+                        break;
+                    case FanBuzzerMode.Intermittent:
+                        // 断续响：先响，每 CycleSeconds 翻一个相位（响↔停），报警解除时收尾保证停在 OFF
+                        host._deviceManager.SetOutput(point, true);
+                        _phaseOn = true;
+                        break;
+                    default:
+                        // 持续响（Level）：触发沿写一次 ON，不涉及定时器，报警解除沿写 OFF
+                        host._deviceManager.SetOutput(point, true);
+                        break;
+                }
+
+                // 写完立刻复查连接：这下发若因连接刚断而失败（内部吞异常置断连），
+                // 不置锁 → 下个数据周期自动重试，蜂鸣器不会"锁上不响"
+                if (!host._deviceManager.IsIoConnected) return;
+
+                _active = true;
+                if (mode != FanBuzzerMode.Level)
+                {
+                    EnsureTimer(host);
+                    _timer.Interval =
+                        (mode == FanBuzzerMode.Pulse
+                            ? FanBuzzerPulseSeconds : FanBuzzerCycleSeconds) * 1000;
+                    _timer.Start();
+                }
+                host.WriteLog($"[报警] {_title}启动（{mode}，点位 {point}）：{reason}；本路报警解除后自动停");
+            }
+
+            /// <summary>
+            /// 停蜂鸣收尾（本路报警解除 / 报警全关压制 / 程序退出）：先停表再写 OFF，最后清锁。
+            /// 没在蜂鸣流程或点位未接时是空操作（每周期刷新会带空参数进来，不能每次都真写一层）；
+            /// IO 已断连时跳过写 OFF 只清锁（写也到不了设备，避免白白发错误事件），连接恢复后
+            /// 若报警仍在会重新走触发流程。
+            /// </summary>
+            /// <param name="reason">停止原因（写进日志，让现场知道为什么安静了）</param>
+            public void FinishIfRunning(string reason)
+            {
+                MainForm host = _host;
+                StopTimer();
+                bool wasActive = _active;
+                _active = false;
+                _phaseOn = false;
+                int point = _doPointGetter();
+                if (wasActive && point > 0 && host._deviceManager.IsIoConnected)
+                {
+                    host._deviceManager.SetOutput(point, false);
+                    host.WriteLog($"[报警] {_title}停止（{reason}）");
+                }
+            }
+
+            /// <summary>IO 重连后的残留补写：本路不该响却发现可能还响着（断连期间 OFF 没写进），幂等写 OFF。</summary>
+            public void WriteOffIfIdle()
+            {
+                if (_active) return;
+                MainForm host = _host;
+                int point = _doPointGetter();
+                if (point > 0 && host._deviceManager.IsIoConnected)
+                {
+                    host._deviceManager.SetOutput(point, false);
+                }
+            }
+
+            /// <summary>每轮判定周期末复位"未连接/未接点位"日志边沿（连接恢复后允许再记下一次）。</summary>
+            public void ResetLogEdges()
+            {
+                _unavailableLogged = false;
+                _missingLogged = false;
+            }
+
+            /// <summary>懒建本路定时器（挂 components 容器随窗体自动释放；Tick 入口自查释放防关窗竞态）。</summary>
+            private void EnsureTimer(MainForm host)
+            {
+                if (_timer != null) return;
+                _timer = new System.Windows.Forms.Timer(host.components);
+                _timer.Tick += Timer_Tick;
+            }
+
+            /// <summary>
+            /// 蜂鸣定时器到点：Pulse=响够自动停（锁保持 active，本路报警解除才清——本轮报警只叫一声）；
+            /// Intermittent=翻相位（响↔停循环）。
+            /// </summary>
+            private void Timer_Tick(object sender, EventArgs e)
+            {
+                MainForm host = _host;
+                if (host._mainClosing || host.IsDisposed || host.Disposing)
+                {
+                    // 关窗竞态自查（V1.72 四模式②）：定时器在关窗瞬间可能还排着一次 Tick
+                    StopTimer();
+                    return;
+                }
+                int point = _doPointGetter();
+                if (point <= 0 || !_active)
+                {
+                    StopTimer();
+                    return;
+                }
+
+                if (_modeGetter() == FanBuzzerMode.Pulse)
+                {
+                    StopTimer();
+                    host._deviceManager.SetOutput(point, false);
+                    return;
+                }
+
+                // Intermittent：翻相位（冲着"响↔停循环"来；收尾永远走 FinishIfRunning 完成 OFF）
+                _phaseOn = !_phaseOn;
+                host._deviceManager.SetOutput(point, _phaseOn);
+            }
+
+            /// <summary>停本路定时器（存在才停；不释放——挂 components 由窗体统一释放）。</summary>
+            private void StopTimer()
+            {
+                if (_timer != null && _timer.Enabled) _timer.Stop();
+            }
+        }
 
         /// <summary>
         /// 报警蜂鸣决策与执行（在 UpdateFanDisplay 末尾、真空报警/解除事件里调用，UI 线程）。
-        /// 【两路报警源合并】蜂鸣器只有一个 DO 点：
-        /// - 超温：`_lastFanData` 有效温度 &gt; FanTempAlarmLimitC；
-        /// - 真空异常：`_vacuumAlarmStations` 非空且 VacuumAlarmBuzzerEnabled（压力越限/
-        ///   真空建立超时/失压保持运行，只退那一台，不联停整线）。
-        /// 任一路成立就响，两路都解除才停——先解除的一路不许把另一路的提醒关掉。
-        /// 报警全关 MuteAllAlarms 压制全部（最高级静默）。
-        /// 【温度未知不静默】超温功能启用但本轮读不到温度（风机离线/NaN）时保持现状
-        /// （AgingSequencer.ShouldHoldAlarmBuzzer），读数恢复后按真实温度决定；
-        /// 在响继续响、没响不凭空开。
+        /// 【两路独立蜂鸣（2.0.9）】超温与真空异常各用各的蜂鸣器，互不合并：
+        /// - 超温：`_lastFanData` 有效温度 &gt; FanTempAlarmLimitC → 超温蜂鸣器；
+        /// - 真空异常：`_vacuumAlarmStations` 非空且 VacuumAlarmBuzzerEnabled → 真空蜂鸣器
+        ///   （压力越限/真空建立超时/失压保持运行，只退那一台，不联停整线）。
+        /// 每路各自"触发→响→解除→停"，一路解除不影响另一路还在响的提醒；
+        /// 报警全关 MuteAllAlarms 压制两路（最高级静默）。
+        /// 【超温温度未知不静默】超温功能启用但本轮读不到温度（风机离线/NaN）时保持现状
+        /// （AgingSequencer.ShouldHoldAlarmBuzzer），读数恢复后按真实温度决定；在响继续响、没响不凭空开。
+        /// 【真空未知无保持问题】真空源现状就是提醒集合本身（在不在报是一直看得见的），
+        /// 集合空了就收尾，不需要"保持"。
         /// </summary>
         private void UpdateAlarmBuzzer()
         {
@@ -2079,52 +2297,61 @@ namespace AgingTestSystem.Views
             bool suppress = AgingSequencer.ShouldSuppressAlarm(_config.MuteAllAlarms);
             bool tempKnown = _lastFanData != null && !float.IsNaN(_lastFanData.Temperature);
             // 超温蜂鸣开关（FanTempAlarmBuzzerEnabled）在 ShouldFanBuzzerAlarm 内判定：
-            // 关掉后超温这一路不参与蜂鸣（fanOverTemp 恒 false，原因文案也不会再提超温）
+            // 关掉后超温这一路不参与超温蜂鸣器（只记报警日志）。真空路状态与它互不影响。
             bool fanOverTemp = tempKnown && AgingSequencer.ShouldFanBuzzerAlarm(
                 _lastFanData.Temperature, _config.FanTempAlarmLimitC,
                 _config.FanTempAlarmBuzzerEnabled, suppress);
-            // 开关关掉后不再把"新报警"加进来；已在集合里的台仍按解除事件移除，
-            // 不在此处清空（清空会把其它台/超温源正在响的提醒一起静默）。
-            bool vacuumPending = _config.VacuumAlarmBuzzerEnabled && _vacuumAlarmStations.Count > 0;
-            bool shouldBuzz = AgingSequencer.ShouldAlarmBuzzer(fanOverTemp, vacuumPending, suppress);
+            // 真空源的开关门控收进纯函数 ShouldVacuumBuzzerAlarm（真空路判定唯一口），
+            // 这里只算"源在不在"；开关关=真空蜂鸣器这一路不响（只记报警日志），
+            // 已经在集合里的台仍按解除事件移除不在此清空（清掉会把正在提醒的台的
+            // 解除记录一起丢了，下一轮真空报警也就无从判"新报警"）。
+            bool vacuumPending = _vacuumAlarmStations.Count > 0;
+            bool vacuumShouldBuzz = AgingSequencer.ShouldVacuumBuzzerAlarm(
+                vacuumPending, _config.VacuumAlarmBuzzerEnabled, suppress);
 
-            if (shouldBuzz)
-            {
-                // 已在蜂鸣流程中（Level 响着 / Pulse 已叫过 / Intermittent 轮转中）：不重复触发
-                if (_fanBuzzerActive) return;
-                TryFanBuzzerStart(BuildAlarmBuzzerReason(fanOverTemp));
-                return;
-            }
-
-            if (_fanBuzzerActive)
-            {
-                // 温度未知且无真空源：保持现状，不因为"看不见温度"而静默
-                // （报警全关是最高级静默，不受保持约束）
-                if (AgingSequencer.ShouldHoldAlarmBuzzer(
-                    _config.FanEnabled, _config.FanTempAlarmBuzzerEnabled,
-                    _config.FanTempAlarmLimitC, tempKnown, vacuumPending, suppress))
-                {
-                    return;
-                }
-                FinishFanBuzzer(suppress ? "报警全关" : "报警已解除");
-            }
-            _fanBuzzerUnavailableLogged = false;
-        }
-
-        /// <summary>拼蜂鸣启动原因（写日志用，现场据此判断是哪一路报警）。</summary>
-        private string BuildAlarmBuzzerReason(bool fanOverTemp)
-        {
-            int vacuumCount = _vacuumAlarmStations.Count;
-            if (fanOverTemp && vacuumCount > 0)
-            {
-                return $"超温 {_lastFanData.Temperature:F2}°C（上限 {_config.FanTempAlarmLimitC:F2}°C）"
-                    + $" + 真空异常 {vacuumCount} 台";
-            }
+            // —— 超温蜂鸣器 ——
             if (fanOverTemp)
             {
-                return $"超温 {_lastFanData.Temperature:F2}°C（上限 {_config.FanTempAlarmLimitC:F2}°C）";
+                _fanBuzzer.EnsureRunning(BuildFanBuzzerReason());
             }
-            return $"真空异常 {vacuumCount} 台";
+            else if (_fanBuzzer.Running)
+            {
+                // 温度未知且开关开着：保持现状，不因为"看不见温度"而静默（报警全关除外）
+                if (!AgingSequencer.ShouldHoldAlarmBuzzer(
+                    _config.FanEnabled, _config.FanTempAlarmBuzzerEnabled,
+                    _config.FanTempAlarmLimitC, tempKnown, suppress))
+                {
+                    _fanBuzzer.FinishIfRunning(suppress ? "报警全关" : "超温已解除");
+                }
+            }
+
+            // —— 真空蜂鸣器（源只有提醒集合，集合空即收尾，无"保持"分支）——
+            if (vacuumShouldBuzz)
+            {
+                _vacuumBuzzer.EnsureRunning(BuildVacuumBuzzerReason());
+            }
+            else if (_vacuumBuzzer.Running)
+            {
+                _vacuumBuzzer.FinishIfRunning(suppress ? "报警全关" : "真空异常已解除");
+            }
+
+            // 本路"没有触发诉求且已停"时复位一次性日志边沿（未连接/未接点位提示重开记录权）。
+            // 保持期不能复位：温度未知+IO 未连接时若每轮复位，下轮会再记一条同样提示刷日志；
+            // 报警源在期间也不复位（未连接边沿等这一轮报警彻底了账再允许下一次）。
+            if (!fanOverTemp && !_fanBuzzer.Running) _fanBuzzer.ResetLogEdges();
+            if (!vacuumShouldBuzz && !_vacuumBuzzer.Running) _vacuumBuzzer.ResetLogEdges();
+        }
+
+        /// <summary>拼超温蜂鸣启动原因（写日志用，现场据此判断是哪一路报警）。</summary>
+        private string BuildFanBuzzerReason()
+        {
+            return $"超温 {_lastFanData.Temperature:F2}°C（上限 {_config.FanTempAlarmLimitC:F2}°C）";
+        }
+
+        /// <summary>拼真空蜂鸣启动原因（写日志用，现场据此判断是哪一路报警）。</summary>
+        private string BuildVacuumBuzzerReason()
+        {
+            return $"真空异常 {_vacuumAlarmStations.Count} 台";
         }
 
         /// <summary>
@@ -2208,125 +2435,6 @@ namespace AgingTestSystem.Views
                 }
             }
             UpdateAlarmBuzzer();
-        }
-
-        /// <summary>
-        /// 按蜂鸣方式启动（触发沿进入，成功才置 _fanBuzzerActive；
-        /// 点位未接静默关闭功能；IO 未连接不置锁，连通后下个数据周期/连接事件自动开叫——
-        /// 蜂鸣是硬件提醒，写不进就重试，比"本轮直接放弃"更贴近现场预期）。
-        /// </summary>
-        /// <param name="reason">触发原因（超温/真空异常，写日志用）</param>
-        private void TryFanBuzzerStart(string reason)
-        {
-            int point = _config.FanBuzzerDoPoint;
-            if (point <= 0) return;                     // 未接蜂鸣器：功能整体停用，不写通道不记日志
-
-            if (!_deviceManager.IsIoConnected)
-            {
-                if (!_fanBuzzerUnavailableLogged)
-                {
-                    _fanBuzzerUnavailableLogged = true;
-                    WriteLog($"[报警] 蜂鸣器待触发但 IO 未连接（点位 {point}）：{reason}；连接后自动重试");
-                }
-                return;
-            }
-
-            switch (_config.FanBuzzerMode)
-            {
-                case FanBuzzerMode.Pulse:
-                    // 短鸣一声：先响，PulseSeconds 秒后由 Tick 收尾自动停（本轮报警内不再触发）
-                    _deviceManager.SetOutput(point, true);
-                    break;
-                case FanBuzzerMode.Intermittent:
-                    // 断续响：先响，每 CycleSeconds 翻一个相位（响↔停），报警解除时收尾保证停在 OFF
-                    _deviceManager.SetOutput(point, true);
-                    _fanBuzzerPhaseOn = true;
-                    break;
-                default:
-                    // 持续响（Level）：触发沿写一次 ON，不涉及定时器，报警解除沿写 OFF
-                    _deviceManager.SetOutput(point, true);
-                    break;
-            }
-
-            // 写完立刻复查连接：这下发若因连接刚断而失败（内部吞异常置断连），
-            // 不置锁 → 下个数据周期自动重试，蜂鸣器不会"锁上不响"
-            if (!_deviceManager.IsIoConnected) return;
-
-            _fanBuzzerActive = true;
-            if (_config.FanBuzzerMode != FanBuzzerMode.Level)
-            {
-                EnsureFanBuzzerTimer();
-                _fanBuzzerTimer.Interval =
-                    (_config.FanBuzzerMode == FanBuzzerMode.Pulse
-                        ? FanBuzzerPulseSeconds : FanBuzzerCycleSeconds) * 1000;
-                _fanBuzzerTimer.Start();
-            }
-            WriteLog($"[报警] 蜂鸣器启动（{_config.FanBuzzerMode}，点位 {point}）：{reason}；报警解除后自动停");
-        }
-
-        /// <summary>懒建蜂鸣定时器（挂 components 容器随窗体自动释放；Tick 入口自查释放防关窗竞态）。</summary>
-        private void EnsureFanBuzzerTimer()
-        {
-            if (_fanBuzzerTimer != null) return;
-            _fanBuzzerTimer = new System.Windows.Forms.Timer(this.components);
-            _fanBuzzerTimer.Tick += FanBuzzerTimer_Tick;
-        }
-
-        /// <summary>
-        /// 蜂鸣定时器到点：Pulse=响够自动停（锁保持 active，报警解除才清——本轮报警只叫一声）；
-        /// Intermittent=翻相位（响↔停循环）。
-        /// </summary>
-        private void FanBuzzerTimer_Tick(object sender, EventArgs e)
-        {
-            // 关窗竞态自查（V1.72 四模式②）：定时器在关窗瞬间可能还排着一次 Tick
-            if (_mainClosing || this.IsDisposed || this.Disposing)
-            {
-                StopFanBuzzerTimer();
-                return;
-            }
-            int point = _config.FanBuzzerDoPoint;
-            if (point <= 0 || !_fanBuzzerActive)
-            {
-                StopFanBuzzerTimer();
-                return;
-            }
-
-            if (_config.FanBuzzerMode == FanBuzzerMode.Pulse)
-            {
-                StopFanBuzzerTimer();
-                _deviceManager.SetOutput(point, false);
-                return;
-            }
-
-            // Intermittent：翻相位（冲着"响↔停循环"来；收尾永远走 FinishFanBuzzer 完成 OFF）
-            _fanBuzzerPhaseOn = !_fanBuzzerPhaseOn;
-            _deviceManager.SetOutput(point, _fanBuzzerPhaseOn);
-        }
-
-        /// <summary>停蜂鸣定时器（存在才停；不释放——挂 components 由窗体统一释放）。</summary>
-        private void StopFanBuzzerTimer()
-        {
-            if (_fanBuzzerTimer != null && _fanBuzzerTimer.Enabled) _fanBuzzerTimer.Stop();
-        }
-
-        /// <summary>
-        /// 停蜂鸣收尾（报警解除 / 报警全关压制 / 程序退出三处入口）：先停表再写 OFF，最后清锁。
-        /// 没在蜂鸣流程或点位未接时是空操作（每周期刷新会带空参数进来，不能每次都真写一层）；
-        /// IO 已断连时跳过写 OFF 只清锁（写也到不了设备，避免白白发错误事件），连接恢复后
-        /// 若报警仍在会重新走触发流程。
-        /// </summary>
-        /// <param name="reason">停止原因（写进日志，让现场知道为什么安静了）</param>
-        private void FinishFanBuzzer(string reason)
-        {
-            StopFanBuzzerTimer();
-            bool wasActive = _fanBuzzerActive;
-            _fanBuzzerActive = false;
-            _fanBuzzerPhaseOn = false;
-            if (wasActive && _config.FanBuzzerDoPoint > 0 && _deviceManager.IsIoConnected)
-            {
-                _deviceManager.SetOutput(_config.FanBuzzerDoPoint, false);
-                WriteLog($"[报警] 蜂鸣器停止（{reason}）");
-            }
         }
 
         /// <summary>
@@ -2429,11 +2537,9 @@ namespace AgingTestSystem.Views
 
             UpdateAlarmBuzzer();
 
-            // 该响的已在上面置 active；这里只收拾"不该响却可能还响着"的残留（幂等写 OFF）
-            if (!_fanBuzzerActive && _config.FanBuzzerDoPoint > 0)
-            {
-                _deviceManager.SetOutput(_config.FanBuzzerDoPoint, false);
-            }
+            // 该响的已在上面置 active；这里只收拾"不该响却可能还响着"的残留（幂等写 OFF；两路各一）
+            _fanBuzzer.WriteOffIfIdle();
+            _vacuumBuzzer.WriteOffIfIdle();
         }
 
         /// <summary>
@@ -4355,8 +4461,9 @@ namespace AgingTestSystem.Views
                 _deviceManager.OnVacuumAlarm -= DeviceManager_OnVacuumAlarm;
                 _deviceManager.OnAlarmCleared -= DeviceManager_OnAlarmCleared;
             }
-            // 蜂鸣器退出收尾：还响着就尽量写 OFF（要在 Dispose 前写，争一个"退出不残留输出"）
-            FinishFanBuzzer("程序退出");
+            // 蜂鸣器退出收尾：还响着就尽量写 OFF（要在 Dispose 前写，争一个"退出不残留输出"；两路各一）
+            _fanBuzzer.FinishIfRunning("程序退出");
+            _vacuumBuzzer.FinishIfRunning("程序退出");
             _deviceManager?.Dispose();
 
             if (_scanner != null)

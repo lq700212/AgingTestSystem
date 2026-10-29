@@ -188,10 +188,12 @@ namespace AgingTestSystem.Views
                     new NodeKey("MuteAllAlarms", "报警全关", EditorKind.Bool, KeyTier.Advanced, "报警行为"),
                     // 报警方向与阈值是一对，但 90% 现场不动（默认低于阈值报警）→ 高级。
                     new NodeKey("AlarmWhenPressureHigherThanThreshold", "报警方向(高于阈值)", EditorKind.Bool, KeyTier.Advanced, "报警行为"),
-                    // 蜂鸣方式跟超温工艺走（持续/短鸣/断续），但一次配好基本不动 → 高级。
-                    new NodeKey("FanBuzzerMode", "蜂鸣方式", EditorKind.Enum, KeyTier.Advanced, "报警行为"),
-                    // 超温蜂鸣开关：超温默认触发蜂鸣（历史现状），2.0.7 起可配置关；
-                    // 与真空异常蜂鸣各管各的源，共用同一个蜂鸣器。
+                    // 蜂鸣方式分别跟超温/真空工艺走（持续/短鸣/断续），一次配好基本不动 → 高级。
+                    // 2.0.9 蜂鸣器分开：两路各存各的方式，节点名也各标一路。
+                    new NodeKey("FanBuzzerMode", "超温蜂鸣方式", EditorKind.Enum, KeyTier.Advanced, "报警行为"),
+                    new NodeKey("VacuumBuzzerMode", "真空蜂鸣方式", EditorKind.Enum, KeyTier.Advanced, "报警行为"),
+                    // 超温蜂鸣开关：超温默认触发超温蜂鸣器（历史现状），2.0.7 起可配置关；
+                    // 2.0.9 蜂鸣器分开，与真空异常蜂鸣各管各的蜂鸣器，互不牵连。
                     new NodeKey("FanTempAlarmBuzzerEnabled", "超温蜂鸣", EditorKind.Bool, KeyTier.Advanced, "报警行为"),
                     // 真空异常蜂鸣：真空类报警只退单台、不联停整线，本项只管响不响。
                     // 与"超温联停"独立——要"只响不停"就关联停、开本项。

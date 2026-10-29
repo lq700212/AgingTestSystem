@@ -155,19 +155,31 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 空余 DO 输出点池（给"从下拉选一个空余输出点"的场景用：报警蜂鸣器点位等）。
+        /// 空余 DO 输出点池（给"从下拉选一个空余输出点"的场景用：超温/真空蜂鸣器点位等）。
         /// 池子 = 预留输出（BuildTargetEndpoints SpareOnly 同一口径：防误选工位阀/电编号），
-        /// 再剔除 excludeIoId=已被其它功能占用的点（如破空阀 VentValveDoPoint——
-        /// 同一点位挂两路功能，报警鸣叫与泄压会互相捅）。
+        /// 再剔除已配走的点——excludeIoId 与 moreExcludedIoIds 里任何 >0 的都算占用。
+        /// 【为什么按点名列表剔】2.0.9 蜂鸣器分开后同一下拉要服务两路蜂鸣器：
+        /// 超温行剔除真空已配点、真空行剔除超温已配点（同一点挂两路，两边报警沿会互踢），
+        /// 破空阀占用的点两边都剔（同一点鸣叫与泄压会互相捅）。
         /// 排序与源池一致（寄存器→通道升序，物理地址序）。config 非法/没有预留点
         /// 返回空表（调用方下拉只剩"未接"项，永不越界）。
         /// </summary>
-        public static List<IoRemapEndpoint> BuildSpareDoTargets(DeviceConfig config, int excludeIoId)
+        public static List<IoRemapEndpoint> BuildSpareDoTargets(DeviceConfig config, int excludeIoId,
+            params int[] moreExcludedIoIds)
         {
             var result = new List<IoRemapEndpoint>();
             foreach (var e in BuildTargetEndpoints(config, IoRemapTargetPool.SpareOnly))
             {
                 if (excludeIoId > 0 && e.IoId == excludeIoId) continue;
+                bool occupied = false;
+                if (moreExcludedIoIds != null)
+                {
+                    foreach (int extra in moreExcludedIoIds)
+                    {
+                        if (extra > 0 && e.IoId == extra) { occupied = true; break; }
+                    }
+                }
+                if (occupied) continue;
                 result.Add(e);
             }
             return result;

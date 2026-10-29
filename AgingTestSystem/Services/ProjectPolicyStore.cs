@@ -59,22 +59,27 @@ namespace AgingTestSystem.Services
             // 报警全关·最高级（布尔，默认 false=现状；true=阈值/超时/DI/失联/规则/超温联停全不报，
             // 优先级高于压力报警总开关。四个预置默认全关，只走手动或自定义开启，跟项目走）。
             "MuteAllAlarms",
-            // 报警蜂鸣方式（超温 / 真空异常共用同一个 DO 点）：持续/短鸣/断续三档下拉。
-            // 方式是工艺参数跟项目走；点位 FanBuzzerDoPoint 不在本名单——它是本机接线事实
+            // 超温蜂鸣方式（2.0.9 蜂鸣器分开：只管超温蜂鸣器怎么响）：持续/短鸣/断续三档下拉。
+            // 超温蜂鸣方式是工艺参数跟项目走；点位 FanBuzzerDoPoint 不在本名单——它是本机接线事实
             // （蜂鸣器接在哪个预留 DO 点上，换台机器/换条接线就变），改跟机器 exe.config，
             // 在系统设置"老化测试业务"用下拉选空余预留输出点。不进预置 Values/NumericValues
             // （接不接蜂鸣器、方式怎么响，预置模板无权代填）。老项目 Policy.json 里若残留
             // 点位旧值，ParseValue 前的 PolicyKeys 过滤会自动忽略，不会盖掉机器配置。
             "FanBuzzerMode",
+            // 真空蜂鸣方式（2.0.9 蜂鸣器分开新增，与超温蜂鸣方式各存各的）：
+            // 持续/短鸣/断续三档下拉，工艺参数跟项目走；同 FanBuzzerMode 口径——
+            // 点位 VacuumBuzzerDoPoint 是本机接线事实不进本名单（改跟机器 exe.config），
+            // 不进预置 Values/NumericValues（预置模板无权代填）。
+            "VacuumBuzzerMode",
             // 真空异常是否蜂鸣（布尔，默认 true=响）：真空类报警（老化中压力越限/
             // 真空建立超时/失压保持运行）只退出/标记报警那一台，不联停整线；本开关只管响不响。
             // 与 FanTempShutdownEnabled（超温是否联停）完全独立，"只响不停"不需要开联停。
-            // 不进预置管辖（超温/真空共用同一蜂鸣器，预置无权替现场决定听不听）。
+            // 2.0.9 蜂鸣器分开：本开关触发独立的真空蜂鸣器，不进预置管辖（预置无权替现场决定听不听）。
             "VacuumAlarmBuzzerEnabled",
             // 超温是否蜂鸣（布尔，默认 true=响，即 2.0.7 之前的历史现状）：送风机温度超过
-            // FanTempAlarmLimitC 上限时是否触发蜂鸣器；false=超温只记日志不响。
-            // 不影响超温联停（要不要停机是另一件事）。与真空开关各管各的源、共用同一蜂鸣器，
-            // 同样不进预置管辖（预置无权替现场决定听不听）。
+            // FanTempAlarmLimitC 上限时是否触发超温蜂鸣器；false=超温只记日志不响。
+            // 不影响超温联停（要不要停机是另一件事）。2.0.9 蜂鸣器分开：与真空开关各管各的
+            // 蜂鸣器，同样不进预置管辖（预置无权替现场决定听不听）。
             "FanTempAlarmBuzzerEnabled",
         };
 
@@ -515,6 +520,13 @@ namespace AgingTestSystem.Services
                             Tuple.Create("启动定格：该轮启动时的SN/配方，中途重绑不污染", "StartSnapshot"),
                         } },
                     { "FanBuzzerMode", new Tuple<string, string>[]
+                        {
+                            Tuple.Create("持续响（默认）：报警一直响，解除自动停", "Level"),
+                            Tuple.Create("短鸣一声：响约3秒自动停", "Pulse"),
+                            Tuple.Create("断续响：响2秒停2秒循环，解除自动停", "Intermittent"),
+                        } },
+                    // 真空蜂鸣方式（2.0.9 蜂鸣器分开）：选项与超温蜂鸣方式同口径，显示文案共用一份说明。
+                    { "VacuumBuzzerMode", new Tuple<string, string>[]
                         {
                             Tuple.Create("持续响（默认）：报警一直响，解除自动停", "Level"),
                             Tuple.Create("短鸣一声：响约3秒自动停", "Pulse"),

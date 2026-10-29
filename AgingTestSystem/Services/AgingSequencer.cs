@@ -288,14 +288,14 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 全局单点输出与工位编号区间碰撞校验（【复查补齐】纯函数：V1.67 约定"判定类分支先写纯函数"）。
-        /// 【为什么会撞】破空阀/报警蜂鸣器这类全局单点走独立 DO 点；工位阀/载台电按
+        /// 【为什么会撞】破空阀/蜂鸣器这类全局单点走独立 DO 点；工位阀/载台电按
         /// TotalInputs+id / TotalInputs+TotalBarometers+id 编址。若点位配进
         /// 工位编号区间，超温/到时会"写 ON/OFF 到某台的阀/电"→ 误动作还极难排查。
         /// </summary>
         /// <param name="ventPoint">全局单点输出点位（≤0=未配置，不校验）</param>
         /// <param name="totalInputs">DI 总数（输入占用 1~TotalInputs，输出从 TotalInputs+1 起）</param>
         /// <param name="totalBarometers">工位数（每台占 阀编号+电编号 共 2 个输出点）</param>
-        /// <param name="instanceName">点位归属名（报错文案用；缺省=破空阀，蜂鸣器传"报警蜂鸣器"）</param>
+        /// <param name="instanceName">点位归属名（报错文案用；缺省=破空阀，蜂鸣器传"超温蜂鸣器"/"真空蜂鸣器"）</param>
         /// <returns>矛盾描述；null=无碰撞</returns>
         public static string ValidateVentPointCollision(int ventPoint, int totalInputs, int totalBarometers,
             string instanceName = "破空阀")
@@ -311,6 +311,23 @@ namespace AgingTestSystem.Services
                     + $"（{first}~{last} 已被 {totalBarometers} 台工位占用），请换预留点位";
             }
             return null;
+        }
+
+        /// <summary>
+        /// 两路蜂鸣器撞点校验（纯函数：2.0.9 蜂鸣器分开后新增，保存时拦）。
+        /// 【为什么撞不得】超温与真空蜂鸣器若配成同一点（非0），一路报警沿写 ON、
+        /// 另一路解除沿写 OFF，互踢永远响不齐也停不齐——同一点只能归一路。
+        /// 0（未接）不算撞点（不写任何通道）。
+        /// </summary>
+        /// <param name="fanBuzzerPoint">超温蜂鸣器点位（0=未接）</param>
+        /// <param name="vacuumBuzzerPoint">真空蜂鸣器点位（0=未接）</param>
+        /// <returns>矛盾描述；null=无撞点</returns>
+        public static string ValidateBuzzerPointsCollision(int fanBuzzerPoint, int vacuumBuzzerPoint)
+        {
+            if (fanBuzzerPoint <= 0 || vacuumBuzzerPoint <= 0) return null;
+            if (fanBuzzerPoint != vacuumBuzzerPoint) return null;
+            return $"超温蜂鸣器与真空蜂鸣器配成了同一个输出点 {fanBuzzerPoint}，"
+                + "两路报警会互踢对方的开关动作；请把其中一个换到其它空余的预留输出点";
         }
 
         /// <summary>
@@ -339,7 +356,7 @@ namespace AgingTestSystem.Services
         /// 【与联停的口径差异】联停另受 FanTempShutdownEnabled 开关门控（停不停机是安全决策，默认关）；
         /// 蜂鸣只看"超温上限 + 蜂鸣开关 + 报警全关压制"——超温了就该叫，跟停不停机互不牵制。
         /// 2.0.7 起蜂鸣本身也可配置（FanTempAlarmBuzzerEnabled，默认 true=历史现状）：
-        /// 客户现场可能嫌超温一直响吵，关掉后超温只记日志，真空那一路照常。
+        /// 客户现场可能嫌超温一直响吵，关掉后超温只记日志；真空异常另用独立的真空蜂鸣器，互不影响。
         /// 触发/停止的边沿锁与蜂鸣方式轮转由调用方 MainForm 持状态实现，本函数只判"此刻该不该叫"。
         /// </summary>
         /// <param name="temperatureC">送风机当前温度（°C；NaN=探头失效不当超温不叫，
@@ -363,43 +380,43 @@ namespace AgingTestSystem.Services
         }
 
         /// <summary>
-        /// 报警蜂鸣总判定（纯函数：超温与真空异常共用同一个蜂鸣器）。
-        /// 【为什么合并】蜂鸣器只有一个 DO 点，两个报警源不能各写各的：
-        /// 任一路还在报警就必须继续响，两路都解除才允许停（否则先解除的那一路
-        /// 会把另一路的提醒关掉，现场漏掉真报警）。
+        /// 真空异常蜂鸣判定（纯函数：真空异常这一路是否应触发真空蜂鸣器）。
+        /// 【2.0.9 蜂鸣器分开】超温与真空异常各用各的蜂鸣器（各自配点位/方式/开关互不合并），
+        /// 原共用判定 ShouldAlarmBuzzer 已废；本函数是真空路判定唯一口。
+        /// 真空源现状以调用方的 _vacuumAlarmStations 集合为准（真空报警只退单台、不联停整线），
+        /// 开关关=这一路不响（报警判定照旧，只记日志），报警全关 MuteAllAlarms 是最高级静默。
+        /// 触发/收尾的边沿锁与蜂鸣方式轮转由调用方 MainForm 持状态实现，本函数只判"此刻该不该叫"。
         /// </summary>
-        /// <param name="fanOverTemp">超温判定结果（已含阈值与蜂鸣开关，见 <see cref="ShouldFanBuzzerAlarm"/>）</param>
-        /// <param name="vacuumAlarmPending">是否存在未解除的真空异常台（已含真空蜂鸣开关，
-        /// 调用方按 VacuumAlarmBuzzerEnabled 门控）</param>
+        /// <param name="vacuumAlarmPending">是否存在未解除的真空异常台
+        /// （调用方先按 VacuumAlarmBuzzerEnabled 门控源集合再传，本函数再兜一道开关）</param>
+        /// <param name="buzzerEnabled">真空蜂鸣开关（配置 VacuumAlarmBuzzerEnabled）</param>
         /// <param name="suppressAllAlarms">报警全关（配置 MuteAllAlarms；true=最高级静默）</param>
-        /// <returns>true=此刻蜂鸣器应处于触发/保持状态</returns>
-        public static bool ShouldAlarmBuzzer(bool fanOverTemp, bool vacuumAlarmPending, bool suppressAllAlarms)
+        /// <returns>true=此刻真空蜂鸣器应处于触发状态</returns>
+        public static bool ShouldVacuumBuzzerAlarm(bool vacuumAlarmPending, bool buzzerEnabled,
+            bool suppressAllAlarms)
         {
-            if (suppressAllAlarms) return false;
-            return fanOverTemp || vacuumAlarmPending;
+            if (!buzzerEnabled || suppressAllAlarms) return false;
+            return vacuumAlarmPending;
         }
 
         /// <summary>
-        /// 蜂鸣器是否必须保持现状（暂不收尾，纯函数）。
+        /// 超温蜂鸣器是否必须保持现状（暂不收尾，纯函数）。
         /// 【为什么不能一律收尾】超温蜂鸣功能已启用（蜂鸣开关 + 送风机启用 + 上限 &gt; 0），但本轮
         /// 拿不到有效温度（风机离线 / 探头 NaN）时，"温度没超"其实是"不知道"。
         /// 此时若直接停蜂鸣，就是探头一坏、报警静音——比多响几声危险得多。
-        /// 所以保持当前状态等读数恢复：在响继续响，没响也不凭空开；
-        /// 有真空源在报时由真空源接管（不进入保持）。
-        /// 【2.0.7】超温蜂鸣开关关掉后，超温路整体不参与蜂鸣，"看不见温度"与它无关，
-        /// 不存在"保持"需求（真空源已由 vacuumAlarmPending 参数单独表达）。
+        /// 所以保持当前状态等读数恢复：在响继续响，没响也不凭空开。
+        /// 【2.0.7】超温蜂鸣开关关掉后，超温路整体不参与蜂鸣，"看不见温度"与它无关，不保持（立即收尾）。
+        /// 【2.0.9】真空异常已改用独立的真空蜂鸣器，与超温蜂鸣器互不影响，本函数不再需要真空参数。
         /// </summary>
         /// <param name="fanEnabled">送风机功能是否启用（未启用=根本没有温度数据源）</param>
         /// <param name="buzzerEnabled">超温蜂鸣开关（false=超温路不参与蜂鸣，不保持）</param>
         /// <param name="limitC">超温告警上限（≤0 = 未启用超温告警）</param>
         /// <param name="tempKnown">本轮是否读到有效温度（非 NaN）</param>
-        /// <param name="vacuumAlarmPending">是否存在未解除的真空异常台</param>
         /// <param name="suppressAllAlarms">报警全关（最高级静默；true=无条件收尾，不保持）</param>
         public static bool ShouldHoldAlarmBuzzer(bool fanEnabled, bool buzzerEnabled, float limitC,
-            bool tempKnown, bool vacuumAlarmPending, bool suppressAllAlarms)
+            bool tempKnown, bool suppressAllAlarms)
         {
             if (suppressAllAlarms) return false;
-            if (vacuumAlarmPending) return false;
             return buzzerEnabled && fanEnabled && limitC > 0f && !tempKnown;
         }
 
