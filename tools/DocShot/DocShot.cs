@@ -83,7 +83,70 @@ static class DocShot
     [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
     [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
     [DllImport("user32.dll")] static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint f);
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
+    [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
     struct RECT { public int Left, Top, Right, Bottom; }
+
+    // ---- 真屏截图防抢屏：遮挡检测 ＋ 定向最小化 ----
+    // （2026-10-29 双图翻车沉淀：01-main/18-ioremap 两张真屏截图拍进了 OpenCode
+    // 窗口内容——不能按"目标窗必然在前台"截图。TopMost 只保证压住非 topmost 窗；
+    // 遮挡者自己也是置顶窗时（或焦点被抢的同层窗），焦点窗永远在上，目标窗照样被盖。
+    // Correct做法是拍前实测"谁与截图矩形相交"：只与目标窗矩形相交的外部进程可见窗
+    // 最小化（IsIconic 的不动，用户本来就收着的不管），登记起来拍完统一恢复。
+    // 不相交的窗口一概不碰——别的进程窗口只需为挡路的负责，不必全屏清场。
+    // PrintWindow 截图走窗口自身 DC，不经过屏幕，不需要这个保护。）
+    static readonly System.Collections.Generic.HashSet<IntPtr> minimizedOthers =
+        new System.Collections.Generic.HashSet<IntPtr>();
+    const int SW_MINIMIZE = 6, SW_RESTORE = 9;
+
+    static void MinimizeBlockers(Form f)
+    {
+        try
+        {
+            RECT tr; GetWindowRect(f.Handle, out tr);
+            uint me = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+            EnumWindows((h, l) =>
+            {
+                try
+                {
+                    uint pid; GetWindowThreadProcessId(h, out pid);
+                    if (pid == me || !IsWindowVisible(h) || IsIconic(h)) return true;
+                    var cls = new System.Text.StringBuilder(64);
+                    GetClassName(h, cls, 64);
+                    string c = cls.ToString();
+                    // 系统表面不动：任务栏/桌面/Alt+Tab 切换条/提示层
+                    if (c == "Shell_TrayWnd" || c == "Progman" || c == "WorkerW"
+                        || c == "MSCTFIME UI" || c == "Tooltips_class32"
+                        || c.StartsWith("Windows.UI")) return true;
+                    RECT wr; GetWindowRect(h, out wr);
+                    // 只处理"真的盖住截图区"的窗口：矩形相交才最小化
+                    bool intersect = wr.Left < tr.Right && tr.Left < wr.Right
+                        && wr.Top < tr.Bottom && tr.Top < wr.Bottom;
+                    if (!intersect) return true;
+                    ShowWindow(h, SW_MINIMIZE);
+                    minimizedOthers.Add(h);
+                    var cap = new System.Text.StringBuilder(128);
+                    GetWindowText(h, cap, 128);
+                    Console.WriteLine("BLOCKER minimized: '" + cap + "' class=" + c);
+                }
+                catch { }
+                return true;
+            }, IntPtr.Zero);
+            Application.DoEvents();
+            Thread.Sleep(150); // 最小化动画收尾，避免半路截到中间态
+        }
+        catch { }
+    }
+
+    static void RestoreBlockers()
+    {
+        foreach (var h in minimizedOthers)
+        {
+            try { ShowWindow(h, SW_RESTORE); }
+            catch { }
+        }
+        minimizedOthers.Clear();
+    }
 
     static string outDir = @"E:\Project\AgingTestSystem\docs\images";
     static int failCount = 0;
@@ -115,9 +178,49 @@ static class DocShot
     [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr h, EnumWinProc cb, IntPtr l);
     [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
     [DllImport("user32.dll")] static extern bool PostMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
+    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint flags);
     const uint GW_OWNER = 4;
     const uint BM_CLICK = 0xF5;
     const uint WM_CLOSE = 0x10;
+    const uint SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOACTIVATE = 0x10;
+    static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+
+    // ---- 后台静默三件（用户提的"截图别一直占前台、别打扰干别的工作"） ----
+    // ①焦点借用即还：Form.Show() 天然抢焦点弹到前台。借一次就马上把焦点还给
+    //   Show 之前用户正在用的窗口（harness 进程 Spawn 后自己调用是允许的），
+    //   打字浏览统统不被打断。②屏外窗：PrintWindow 走窗口自身 DC 与屏幕无关，
+    //   Show 后把窗口挪到 (-3000,-3000)，视野里再无弹窗。③NOACTIVATE 置顶：
+    //   真屏路径必须内容在屏幕最上，但置顶用 SetWindowPos(NOACTION)，不抢焦点。
+    static void ShowSilently(Form f, bool useScreen)
+    {
+        IntPtr prev = GetForegroundWindow(); // 用户此刻在用的窗（可能为 0）
+        f.Show();
+        Application.DoEvents();
+        MakeSilentAfterShow(f, prev, useScreen);
+    }
+
+    // 已 Show 过的窗补做静默：焦点借即还＋（真屏 NOACTIVATE 置顶｜PrintWindow 挪屏外）
+    static void MakeSilentAfterShow(Form f, IntPtr prev, bool useScreen)
+    {
+        if (prev != IntPtr.Zero && prev != f.Handle)
+        {
+            try { SetForegroundWindow(prev); }
+            catch { } // 焦点借即还：失败就退化为旧行为（静默降级，不炸）
+        }
+        if (useScreen)
+        {
+            // 真屏窗：置顶保住画面最前，但不抢输入焦点
+            SetWindowPos(f.Handle, HWND_TOPMOST, 0, 0, 0, 0,
+                SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+        }
+        else
+        {
+            // PrintWindow 窗：挪到屏幕外，人眼看不见它（位置与渲染无关）
+            f.Location = new Point(-3000, -3000);
+        }
+    }
 
     static void StartWatchdog()
     {
@@ -225,10 +328,8 @@ static class DocShot
 
     static Bitmap CaptureScreen(Form f)
     {
-        bool oldTop = f.TopMost;
-        f.TopMost = true;
-        Application.DoEvents();
-        Thread.Sleep(400);
+        // 遮挡者最小化/NOACTIVATE 置顶已由 Shot.ShowSilently＋MinimizeBlockers 处理；
+        // 这里只做纯像素拷贝（客户区）＋标题栏拼接。
         var r = f.RectangleToScreen(f.ClientRectangle);
         var bmp = new Bitmap(Math.Max(1, r.Width), Math.Max(1, r.Height));
         using (var g = Graphics.FromImage(bmp))
@@ -243,7 +344,6 @@ static class DocShot
             g.DrawImage(bmp, 0, titleH);
         }
         bmp.Dispose();
-        f.TopMost = oldTop;
         return full;
     }
 
@@ -275,9 +375,9 @@ static class DocShot
         try
         {
             f.StartPosition = FormStartPosition.CenterScreen;
-            f.Show();
-            Application.DoEvents();
+            ShowSilently(f, useScreen); // Show ＋ 焦点借即还 ＋ 屏外窗/NOACTIVATE 置顶
             Track(f); // 看门狗名单：自己打开的不算意外弹窗
+            if (useScreen) MinimizeBlockers(f); // 只收走真正挡住截图区的窗，拍完恢复
             Thread.Sleep(sleepMs);
             Application.DoEvents();
             Track(f); // 睡后重登记一次：SunnyUI 主题/字体可能 RecreateHandle，老句柄失登记会被看门狗当弹窗关掉（07 号坑）
@@ -299,12 +399,13 @@ static class DocShot
                     Application.DoEvents();
                 }
             }
+            if (useScreen) RestoreBlockers(); // 拍完立刻还回挡路的窗，别让它们收着等收尾
         }
         catch (Exception ex) { failCount++; Console.WriteLine("FAIL " + name + " : " + ex.GetType().Name + " " + ex.Message); }
         finally { Untrack(f); } // 直接 Dispose，不 Close（防 FormClosing 确认框卡住）
     }
 
-    // ---- R1：模拟用户打字（反射填输入框， 대체 타이핑） ----
+    // ---- R1：模拟用户打字（反射填输入框，唯一允许的"伪造"——本就是用户输入） ----
     static void Fill(Form f, string field, string text)
     {
         var fi = f.GetType().GetField(field, BindingFlags.NonPublic | BindingFlags.Instance);
@@ -437,8 +538,10 @@ static class DocShot
             // 正式 ID 绑定：模拟扫码枪逐条扫入（生产路径）
             var idf = new IdBindingForm(lot, null, dm);
             idf.StartPosition = FormStartPosition.CenterScreen;
+            var idPrev = GetForegroundWindow();
             idf.Show();
             Application.DoEvents();
+            MakeSilentAfterShow(idf, idPrev, false);
             Thread.Sleep(500);
             ScanBarcode(idf, "01"); ScanBarcode(idf, "SN2509140001");
             ScanBarcode(idf, "02"); ScanBarcode(idf, "SN2509140002");
@@ -457,10 +560,17 @@ static class DocShot
             Shot(new CommunicationTestForm(dm), "16-comtest.png", false, 800);
             // 送风机窗"连接后每 2s 自动读数"：多等两个周期再拍，否则温湿度全是"--"
             Shot(new FanTestForm(dm), "17-fantest.png", false, 5000);
+            // 2.0.1 客户自助校准窗（温度模式，客户版校准节配图）：Show 时即拉一次
+            // 当前读数（dm.GetFanData()，Mock 下 FanEnabled=true 自动有 Mock 风机），
+            // 等 2s 保证"上位机当前"回显有值；窗内写的是缺省斜率 0.1，与文档口径一致。
+            Shot(new FanCalibrationForm(dm, cfg, FanCalibrationTarget.Temperature),
+                "19-calibration.png", false, 2000);
 
             var login = new LoginForm(um, UserRole.Operator);
             login.StartPosition = FormStartPosition.CenterScreen;
-            login.Show(); Application.DoEvents(); Thread.Sleep(400);
+            var lgPrev = GetForegroundWindow();
+            login.Show(); Application.DoEvents();
+            MakeSilentAfterShow(login, lgPrev, false); Thread.Sleep(400);
             Fill(login, "txtPassword", "123456");
             Application.DoEvents(); Thread.Sleep(300);
             using (var bmp = CapturePrint(login))
@@ -473,7 +583,9 @@ static class DocShot
 
             var lot2 = new InputLotForm(null, null);
             lot2.StartPosition = FormStartPosition.CenterScreen;
-            lot2.Show(); Application.DoEvents(); Thread.Sleep(400);
+            var lotPrev = GetForegroundWindow();
+            lot2.Show(); Application.DoEvents();
+            MakeSilentAfterShow(lot2, lotPrev, false); Thread.Sleep(400);
             Fill(lot2, "txtLot", lot);
             Application.DoEvents(); Thread.Sleep(300);
             using (var bmp = CapturePrint(lot2))
@@ -511,7 +623,9 @@ static class DocShot
             Shot(new UserManagementForm(um), "14-usermgmt.png", false, 600);
             var common = new CommonParameterForm(dm);
             common.StartPosition = FormStartPosition.CenterScreen;
-            common.Show(); Application.DoEvents(); Thread.Sleep(400);
+            var cmPrev = GetForegroundWindow();
+            common.Show(); Application.DoEvents();
+            MakeSilentAfterShow(common, cmPrev, false); Thread.Sleep(400);
             FillNum(common, "nudThreshold", -5);
             Application.DoEvents(); Thread.Sleep(300);
             using (var bmp = CapturePrint(common))
@@ -533,8 +647,9 @@ static class DocShot
             // =true（后台 Start 秒连免等待）→ 删残留 TestSession.json（防启动恢复弹窗）→
             // Show → 在主窗自带 dm 上用公开 API 跑演示任务（与现场操作同一条路）：
             // 1/2/5/6 号阈值 0（恒到位、绝不误报）长烧屏演"老化中"，3/4 号阈值 0
-            // 短烧屏 12 秒演"已完成"，7 号阈值 -11（恒越限）演"故障"。阈值 0/-11 下
-            // 原生 Mock 的 15% 坏读数翻不出花样，全程确定性。→ 勾选两台演示
+            // 短烧屏 12 秒演"已完成"，7 号阈值 -11（Mock 值 -6~-10 恒高于阈值＝恒不到位，
+            // 15 秒建立超时报故障）演"故障"。阈值 0/-11 下原生 Mock 的 15% 坏读数
+            // 翻不出花样，全程确定性（前提：压力报警开着＋真空超时非 0，见上 fixture）。→ 勾选两台演示
             // 正方形选中框 → 真屏截图。网格＋状态栏＋运行状态全是 dm 真实状态，
             // 天然一致，无需任何反射灌数。
             var mainWin = new MainForm();
@@ -544,7 +659,27 @@ static class DocShot
                     BindingFlags.NonPublic | BindingFlags.Instance);
                 var mainCfg = cfgField != null
                     ? cfgField.GetValue(mainWin) as DeviceConfig : null;
-                if (mainCfg != null) mainCfg.UseMockCommunication = true;
+                if (mainCfg != null)
+                {
+                    mainCfg.UseMockCommunication = true;
+                    // 演示要三态齐全（3/4 完成、7 号故障、其余老化中），但当前项目的
+                    // 策略层（Policy.json，2.0.x 加载 App.config → Policy 叠加、策略赢）
+                    // 若是 A 档：压力报警总开关关 ＋ 真空超时写 0——7 号阈值的越限报警
+                    // 被总开关压死、"建立超时"判定又因超时=0 永不触发（fault 恒 0 的根因，
+                    // 实测确认）。这两项是演示开关，不是工艺身份，演示前必须掰回：
+                    // 阈值 -11 下 Mock 值（-6~-10）恒高于阈值＝恒不到位 ⇒ 15 秒建立
+                    // 超时报故障，确定性强；其余 71 台阈值 0 恒到位不受影响。
+                    if (!mainCfg.PressureAlarmEnabled)
+                    {
+                        mainCfg.PressureAlarmEnabled = true;
+                        Console.WriteLine("  fixture: 项目策略关着压力报警，演示需开回 true");
+                    }
+                    if (mainCfg.VacuumConfirmTimeoutMs <= 0)
+                    {
+                        mainCfg.VacuumConfirmTimeoutMs = 15000;
+                        Console.WriteLine("  fixture: 项目策略把真空超时写成 0，演示需开回 15000");
+                    }
+                }
             }
             catch (Exception ex) { Console.WriteLine("  main mock flag fail: " + ex.Message); }
             try
@@ -559,8 +694,10 @@ static class DocShot
             }
             catch (Exception ex) { Console.WriteLine("  snap delete fail: " + ex.Message); }
             mainWin.StartPosition = FormStartPosition.CenterScreen;
+            var mwPrev = GetForegroundWindow();
             mainWin.Show();
             Application.DoEvents();
+            MakeSilentAfterShow(mainWin, mwPrev, true); // NOACTIVATE 置顶，不抢用户焦点
             Track(mainWin); // 看门狗名单：自己打开的不算意外弹窗
             Thread.Sleep(2500); // 等 Load 建画布＋后台 mock Start 完成
             Application.DoEvents();
@@ -575,7 +712,7 @@ static class DocShot
                 // 72 台全开满载（V1.88.19 血泪：只开 7 台时其余 65 台空闲格显示
                 // Mock 自造的 SN0009~/配方A1~A5＋每秒乱跳的假延时，文档没法看；
                 // 全开后每格 SN/配方/时间全是本次真实下发的演示值，无 Mock 噪声）：
-                // 阈值 0＝恒到位绝不误报，7 号阈值 -11 恒越限演故障。
+                // 阈值 0＝恒到位绝不误报，7 号阈值 -11 恒不到位 ⇒ 15 秒建立超时演故障。
                 int[] allIds = new int[72];
                 for (int i = 1; i <= 72; i++)
                 {
@@ -613,6 +750,7 @@ static class DocShot
                 Application.DoEvents();
                 Thread.Sleep(800);
                 Application.DoEvents();
+                MinimizeBlockers(mainWin); // 拍前收走挡路的窗（OpenCode 等），拍完恢复
                 using (var bmp = CaptureScreen(mainWin))
                 {
                     bmp.Save(Path.Combine(outDir, "01-main.png"), ImageFormat.Png);
@@ -620,6 +758,7 @@ static class DocShot
                         + "01-main.png " + bmp.Width + "x" + bmp.Height);
                     if (!HasContent(bmp)) failCount++;
                 }
+                RestoreBlockers(); // 拍完立刻还回，保住用户桌面原状
             }
             catch (Exception ex)
             {
@@ -638,6 +777,7 @@ static class DocShot
         finally
         {
             // ---- 环境还原 ----
+            RestoreBlockers(); // 兜底：防异常退出把挡路的窗（OpenCode 等）留在最小化
             try
             {
                 if (File.Exists(todayCsv)) File.Delete(todayCsv);

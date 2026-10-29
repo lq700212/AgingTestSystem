@@ -15,13 +15,17 @@ DocShot —— 说明文档截图 harness（带 Mock 生产数据版）
        "/r:$bin\Newtonsoft.Json.dll" "/r:$bin\NModbus.dll" "/r:$bin\NModbus.Serial.dll" `
        "/r:$bin\DocumentFormat.OpenXml.dll"
      （源文件含中文无 BOM，必须带 /codepage:65001，否则中文乱码）
-  3) 到 $bin 目录下运行 .\DocShot.exe，全程约 3 分钟，不要动鼠标键盘，
-     跑完看末尾 ALL PASS（有 FAIL 就去看对应 PNG，文件照样存下来人工复核）。
+  3) 到 $bin 目录下运行 .\DocShot.exe，全程约 3 分 40 秒（后台静默跑，
+     跑的时候正常干别的，不抢焦点不闪屏，见文末"防抢屏与后台静默"小节），
+     看末尾 ALL PASS（有 FAIL 就去看对应 PNG，文件照样存下来人工复核）。
   4) 跑完删掉 $bin\DocShot.exe（别污染 bin），当天 TestLog CSV 会自动备份还原，
      不会污染真实日志。
-  5) 收尾跑 python check_docs.py（截断标记/图片双向引用/PDF 配对/
+  5) 涉密打码（重拍后必跑，skill §三 R4）：13-activation.png 里设备ID/设备码是本机
+     明文，坐标与命令见文末"涉密打码"小节；打码后 4 倍放大人眼复核无字符残留，
+     复核临时图看完即删。
+  6) 收尾跑 python check_docs.py（截断标记/图片双向引用/PDF 配对/
      客户版禁词/编码/git 范围，全绿才收工；单脚本跨平台，不做 ps1 版）。
-  6) 转 PDF：先 pip install markdown，再 python md_to_pdf.py
+  7) 转 PDF：先 pip install markdown，再 python md_to_pdf.py
      （md→样式 HTML→Edge 无头打印，同名 .pdf 落 docs/；
      截一张 HTML 无头 screenshot 人眼看字体/图片/表格，三者正常＝PDF 正常；
      成功后 .html 自删，--keep-html 仅调试保留，docs 下不许残留 html）。
@@ -60,8 +64,11 @@ DocShot —— 说明文档截图 harness（带 Mock 生产数据版）
     （后台 Start 秒连）→ 删残留 TestSession.json（防启动恢复弹窗）→ Show →
     在主窗自带 dm 上用公开 API 跑演示任务（现场操作同一条路），72 台全开满载：
     69 台阈值 0 长烧屏演"老化中"、3/4 号阈值 0 短烧屏 12 秒演"已完成"、
-    7 号阈值 -11 恒越限演"故障"（只开 7 台时其余空闲格会显示 Mock 自造的
-    SN0009~/配方A1~A5＋乱跳假延时，文档没法看，故全开）。
+    7 号阈值 -11 恒不到位（Mock 值 -6~-10 恒高于该阈值 ⇒ 15 秒建立超时报故障）
+    演"故障"。注意策略层：当前项目若是 A 档会把"压力报警开关关＋真空超时写 0"
+    叠进生效配置，7 号报警出不来（fault 恒 0，实测踩过）——harness fixture 已把
+    这两项掰回开关态再跑（只开 7 台时其余空闲格会显示 Mock 自造的
+    SN0009~/配方A1~A5＋乱跳假延时，文档没法看,故全开）。
     阈值 0/-11 钳死后原生 Mock 的 15% 坏读数翻不出花样，全程确定性；网格＋状态栏＋运行状态全是 dm 真实状态天然一致
     （反射灌数版会导致"格子在测、状态栏测试中0"自相矛盾，已删）。
     拍前先勾选两台演示正方形选中框 → 真屏截图。标题栏即窗口名，不另起演示窗。
@@ -70,3 +77,33 @@ DocShot —— 说明文档截图 harness（带 Mock 生产数据版）
   - 送风机窗"连接后每 2s 自动读数"，拍前多等两个周期（sleep 5000），否则温湿度全"--"。
   - 下料判定/策略活台数要在状态新鲜时先拍（老化中的台 300 秒后会完成，故障/完成态稳定）。
   - 拍之前确认当天 TestLog CSV 备份逻辑正常（hadCsv=True 时还原），别把演示数据留在真实日志里。
+
+截图防抢屏与后台静默（重拍时还想着用电脑的现实需求，实测生效）：
+  - 血泪：旧版 TopMost+CopyFromScreen 抢焦点，01-main/18-ioremap 曾把 OpenCode
+    终端窗口的下半截拍进图里——遮挡者同为置顶窗时，焦点窗永远压在目标窗之上，
+    "关掉所有窗口清场"既粗暴又挡不住后台随时弹回的程序。
+  - 现行机制（DocShot.cs 内置，三层）：
+    1) MinimizeBlockers/RestoreBlockers：只最小化"与目标窗矩形相交"的外部可见窗
+       （IsIconic 已最小化的不动、最大化按矩形判别交）；单张拍完立即还原，
+       Main 的 finally 再兜底恢复一次，异常中途退出也不留最小化现场。
+    2) 后台静默三件：焦点借用即还（ShowSilently/MakeSilentAfterShow 记录
+       GetForegroundWindow 前值，Show 后 SetForegroundWindow 归还）；
+       PrintWindow 路径窗口挪屏外 (-3000,-3000)（PrintWindow 不需要真在前台）；
+       真屏路径 SetWindowPos NOACTIVATE 置顶不抢焦点；CaptureScreen 只做
+       纯像素拷贝＋标题栏拼接。
+    3) 真屏截图仅 3 张：01-main/10-policy/18-ioremap（GDI 直绘画布，
+       PrintWindow 滚动后丢文字），其余 16 张全走 PrintWindow，天然后台。
+  - 实测后台静默版全程约 3 分 40 秒。
+
+涉密打码（blur_sensitive.py，skill §三 R4 项目侧沉淀）：
+  - 13-activation.png 设备ID/设备码是本机明文，重拍后必打码；三份 md 共用同一
+    文件名，打一个覆盖全体；PDF 内嵌旧图，重转 PDF 才是干净版。
+  - 实测命令与坐标（409x433，2026-10 重拍）：
+      python blur_sensitive.py docs\images\13-activation.png 26,145,387,173 22,243,383,271
+    （设备ID值框外框 (26,145,387,173)、设备码值框外框 (22,243,383,271)；
+    apply() 内缩 3px 打米色值区不伤蓝边框；--keep 默认 4，LCD 字体分不出
+    字隙时自动退整区糊；激活码输入框（空框 y335~357）不打码。）
+  - --auto 教训：它靠">=60% 宽同色水平蓝线段"找输入框上下边框；组框型窗口
+    （UIGroupBox 蓝边大矩形包着 UITextBox）会把组框边框当成输入框边框配对，
+    打码落到组框标题/状态行文字上、值区明文原封不动（13-activation 实测踩中，
+    4 倍复核才抓到）。凡组框窗一律手工坐标；打码结果必须 4 倍放大人眼复核。

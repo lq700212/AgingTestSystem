@@ -346,7 +346,8 @@ Models（BarometerData / FanData / IoStatus / DeviceConfig / RecipeConfig / Stat
   （自动完成"构建 → 真机冒烟 → 全量回归"；日常小改可加 `-Affected` 只测影响面；用法与覆盖范围见 `.opencode/skills/agingtest-regression/SKILL.md`）。
 - 运行时文件不入库：配方/工位设置/策略跟项目走（`Projects/<项目>/`，位于运行目录 bin/ 下）；
   用户/快照/日志/连接缓存/激活文件跟机器（`Users.json` / `TestSession.json` / `Logs/` / `*.cache` / `MainSetting.ini`，见 `.gitignore`）。
-- 界面截图来源：`docs/images/`（培训三件套共用同一套截图；README 门面图即取自该目录）。
+- 界面截图来源：`docs/images/`（培训三件套共用同一套截图；README 门面图即取自该目录；
+  换界面后由 `tools/DocShot` 一键重出，激活窗截图的设备ID/设备码已打码，重拍后重打码流程见该目录说明.txt）。
 
 ## 10. 常见问题排查
 
