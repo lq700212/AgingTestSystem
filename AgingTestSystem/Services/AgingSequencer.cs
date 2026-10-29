@@ -337,19 +337,24 @@ namespace AgingTestSystem.Services
         /// <summary>
         /// 送风机超温是否应触发蜂鸣器（纯函数；新现场需求：冷却送风机超温要触发蜂鸣报警）。
         /// 【与联停的口径差异】联停另受 FanTempShutdownEnabled 开关门控（停不停机是安全决策，默认关）；
-        /// 蜂鸣只看"超温上限 + 报警全关压制"——超温了就该叫，跟停不停机互不牵制。
+        /// 蜂鸣只看"超温上限 + 蜂鸣开关 + 报警全关压制"——超温了就该叫，跟停不停机互不牵制。
+        /// 2.0.7 起蜂鸣本身也可配置（FanTempAlarmBuzzerEnabled，默认 true=历史现状）：
+        /// 客户现场可能嫌超温一直响吵，关掉后超温只记日志，真空那一路照常。
         /// 触发/停止的边沿锁与蜂鸣方式轮转由调用方 MainForm 持状态实现，本函数只判"此刻该不该叫"。
         /// </summary>
         /// <param name="temperatureC">送风机当前温度（°C；NaN=探头失效不当超温不叫，
         /// 失效另有"传感器无效"边沿日志与界面提示，不静默致盲）</param>
         /// <param name="limitC">告警上限（配置 FanTempAlarmLimitC；≤0=未启用，蜂鸣器也不工作——
         /// 没有阈值就没有"超温"判据，与联停同口径）</param>
+        /// <param name="buzzerEnabled">超温蜂鸣开关（配置 FanTempAlarmBuzzerEnabled；
+        /// false=超温这一路不参与蜂鸣，只记日志）</param>
         /// <param name="suppressAllAlarms">报警全关（配置 MuteAllAlarms；true=最高级静默，
         /// 蜂鸣器跟着哑，与超温联停同口径压制）</param>
         /// <returns>true=此刻应触发蜂鸣器</returns>
-        public static bool ShouldFanBuzzerAlarm(float temperatureC, float limitC, bool suppressAllAlarms)
+        public static bool ShouldFanBuzzerAlarm(float temperatureC, float limitC,
+            bool buzzerEnabled, bool suppressAllAlarms)
         {
-            if (limitC <= 0f || suppressAllAlarms)
+            if (!buzzerEnabled || limitC <= 0f || suppressAllAlarms)
             {
                 return false;
             }
@@ -363,8 +368,9 @@ namespace AgingTestSystem.Services
         /// 任一路还在报警就必须继续响，两路都解除才允许停（否则先解除的那一路
         /// 会把另一路的提醒关掉，现场漏掉真报警）。
         /// </summary>
-        /// <param name="fanOverTemp">超温判定结果（已含阈值与开关，见 <see cref="ShouldFanBuzzerAlarm"/>）</param>
-        /// <param name="vacuumAlarmPending">是否存在未解除的真空异常台</param>
+        /// <param name="fanOverTemp">超温判定结果（已含阈值与蜂鸣开关，见 <see cref="ShouldFanBuzzerAlarm"/>）</param>
+        /// <param name="vacuumAlarmPending">是否存在未解除的真空异常台（已含真空蜂鸣开关，
+        /// 调用方按 VacuumAlarmBuzzerEnabled 门控）</param>
         /// <param name="suppressAllAlarms">报警全关（配置 MuteAllAlarms；true=最高级静默）</param>
         /// <returns>true=此刻蜂鸣器应处于触发/保持状态</returns>
         public static bool ShouldAlarmBuzzer(bool fanOverTemp, bool vacuumAlarmPending, bool suppressAllAlarms)
@@ -375,23 +381,26 @@ namespace AgingTestSystem.Services
 
         /// <summary>
         /// 蜂鸣器是否必须保持现状（暂不收尾，纯函数）。
-        /// 【为什么不能一律收尾】超温告警功能已启用（送风机启用 + 上限 &gt; 0），但本轮
+        /// 【为什么不能一律收尾】超温蜂鸣功能已启用（蜂鸣开关 + 送风机启用 + 上限 &gt; 0），但本轮
         /// 拿不到有效温度（风机离线 / 探头 NaN）时，"温度没超"其实是"不知道"。
         /// 此时若直接停蜂鸣，就是探头一坏、报警静音——比多响几声危险得多。
         /// 所以保持当前状态等读数恢复：在响继续响，没响也不凭空开；
         /// 有真空源在报时由真空源接管（不进入保持）。
+        /// 【2.0.7】超温蜂鸣开关关掉后，超温路整体不参与蜂鸣，"看不见温度"与它无关，
+        /// 不存在"保持"需求（真空源已由 vacuumAlarmPending 参数单独表达）。
         /// </summary>
         /// <param name="fanEnabled">送风机功能是否启用（未启用=根本没有温度数据源）</param>
+        /// <param name="buzzerEnabled">超温蜂鸣开关（false=超温路不参与蜂鸣，不保持）</param>
         /// <param name="limitC">超温告警上限（≤0 = 未启用超温告警）</param>
         /// <param name="tempKnown">本轮是否读到有效温度（非 NaN）</param>
         /// <param name="vacuumAlarmPending">是否存在未解除的真空异常台</param>
         /// <param name="suppressAllAlarms">报警全关（最高级静默；true=无条件收尾，不保持）</param>
-        public static bool ShouldHoldAlarmBuzzer(bool fanEnabled, float limitC,
+        public static bool ShouldHoldAlarmBuzzer(bool fanEnabled, bool buzzerEnabled, float limitC,
             bool tempKnown, bool vacuumAlarmPending, bool suppressAllAlarms)
         {
             if (suppressAllAlarms) return false;
             if (vacuumAlarmPending) return false;
-            return fanEnabled && limitC > 0f && !tempKnown;
+            return buzzerEnabled && fanEnabled && limitC > 0f && !tempKnown;
         }
 
         /// <summary>

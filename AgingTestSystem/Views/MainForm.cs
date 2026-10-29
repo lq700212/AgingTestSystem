@@ -1214,6 +1214,13 @@ namespace AgingTestSystem.Views
             {
                 config.VacuumAlarmBuzzerEnabled = vacuumBuzz;
             }
+            // 超温蜂鸣开关（跟项目走：随后 Policy.json 可按项目覆盖；
+            // 缺省 true=历史现状超温照叫。2.0.7 客户要求可配置，关掉后超温只记日志，
+            // 真空那一路照常。与真空蜂鸣开关各管各的源，共用同一个蜂鸣器）
+            if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["FanTempAlarmBuzzerEnabled"], out bool fanTempBuzz))
+            {
+                config.FanTempAlarmBuzzerEnabled = fanTempBuzz;
+            }
             // 载台电流总开关（无表=false 现状：不断任何线、不读数，电流恒 NaN）
             if (bool.TryParse(System.Configuration.ConfigurationManager.AppSettings["UsePowerMeter"], out bool usePower))
             {
@@ -2011,7 +2018,8 @@ namespace AgingTestSystem.Views
         // =====================================================================
         // 报警蜂鸣器（超温 + 真空异常共用同一个 DO 点）
         // 硬件：蜂鸣器接 IO 耦合器 DO 输出点，点位 FanBuzzerDoPoint（0=未接，不写任何通道）；
-        // 超温源阈值共用 FanTempAlarmLimitC（0=不启用则超温不响）；
+        // 超温源阈值共用 FanTempAlarmLimitC（0=不启用则超温不响），响不响另有开关
+        // FanTempAlarmBuzzerEnabled（默认 true=现状，2.0.7 起可配置）；
         // 真空源由 VacuumAlarmBuzzerEnabled 控制是否参与（默认参与，只退单台不联停）；
         // 方式 FanBuzzerMode 三档：Level 持续响（默认）/ Pulse 短鸣一声 / Intermittent 断续响。
         // 判定本体是纯函数 AgingSequencer.ShouldFanBuzzerAlarm / ShouldAlarmBuzzer（回归直接断言），
@@ -2070,8 +2078,11 @@ namespace AgingTestSystem.Views
 
             bool suppress = AgingSequencer.ShouldSuppressAlarm(_config.MuteAllAlarms);
             bool tempKnown = _lastFanData != null && !float.IsNaN(_lastFanData.Temperature);
+            // 超温蜂鸣开关（FanTempAlarmBuzzerEnabled）在 ShouldFanBuzzerAlarm 内判定：
+            // 关掉后超温这一路不参与蜂鸣（fanOverTemp 恒 false，原因文案也不会再提超温）
             bool fanOverTemp = tempKnown && AgingSequencer.ShouldFanBuzzerAlarm(
-                _lastFanData.Temperature, _config.FanTempAlarmLimitC, suppress);
+                _lastFanData.Temperature, _config.FanTempAlarmLimitC,
+                _config.FanTempAlarmBuzzerEnabled, suppress);
             // 开关关掉后不再把"新报警"加进来；已在集合里的台仍按解除事件移除，
             // 不在此处清空（清空会把其它台/超温源正在响的提醒一起静默）。
             bool vacuumPending = _config.VacuumAlarmBuzzerEnabled && _vacuumAlarmStations.Count > 0;
@@ -2090,7 +2101,8 @@ namespace AgingTestSystem.Views
                 // 温度未知且无真空源：保持现状，不因为"看不见温度"而静默
                 // （报警全关是最高级静默，不受保持约束）
                 if (AgingSequencer.ShouldHoldAlarmBuzzer(
-                    _config.FanEnabled, _config.FanTempAlarmLimitC, tempKnown, vacuumPending, suppress))
+                    _config.FanEnabled, _config.FanTempAlarmBuzzerEnabled,
+                    _config.FanTempAlarmLimitC, tempKnown, vacuumPending, suppress))
                 {
                     return;
                 }

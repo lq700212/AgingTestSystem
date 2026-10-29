@@ -610,10 +610,20 @@ namespace AgingTestSystem.Models
         /// <summary>
         /// 报警蜂鸣方式（Level=持续响，报警解除自动停（默认）/ Pulse=短鸣一声自动停 /
         /// Intermittent=响停循环直到报警解除）。超温与真空异常共用这一份方式；
-        /// 只管"怎么响"，响不响由点位、超温上限、<see cref="VacuumAlarmBuzzerEnabled"/> 决定；
+        /// 只管"怎么响"，响不响由点位、超温上限与 <see cref="FanTempAlarmBuzzerEnabled"/>、
+        /// 真空 <see cref="VacuumAlarmBuzzerEnabled"/> 决定；
         /// 报警全关 MuteAllAlarms 开着时三种方式都不响（与超温联停同口径压制）。
         /// </summary>
         public FanBuzzerMode FanBuzzerMode { get; set; } = FanBuzzerMode.Level;
+
+        /// <summary>
+        /// 超温是否触发蜂鸣器（默认 true=响，即 2.0.3~2.0.6 的现状行为；2.0.7 起可配置）。
+        /// 【业务意义】只决定"超温这一路要不要响"，不影响超温报警判定/界面红字/日志，
+        /// 更不影响超温联停 FanTempShutdownEnabled（要不要停机是另一件事）。
+        /// false=超温只记日志不响；真空异常那一路由 VacuumAlarmBuzzerEnabled 独立决定，互不牵制。
+        /// 与真空开关一样不进预置管辖（超温/真空共用同一个蜂鸣器，预置无权替现场决定听不听）。
+        /// </summary>
+        public bool FanTempAlarmBuzzerEnabled { get; set; } = true;
 
         /// <summary>
         /// 真空异常是否触发蜂鸣器（默认 true=响；接了点位就提醒）。

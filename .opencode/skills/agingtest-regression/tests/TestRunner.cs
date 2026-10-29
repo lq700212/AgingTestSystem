@@ -2198,20 +2198,28 @@ namespace AgingTestSystem.Tests
                 AgingSequencer.IsFanOverTempShutdown(60.1f, 60f, true));
 
             // ── 报警蜂鸣器判定（超温源：冷却送风机超温触发蜂鸣报警）──
-            // 口径与联停不同：不受联停开关门控（跳不叫与停不停机独立），只看上限+全关压制。
+            // 口径与联停不同：不受联停开关门控（跳不叫与停不停机独立），只看上限+蜂鸣开关+全关压制。
+            // 2.0.7 起超温蜂鸣可配置（FanTempAlarmBuzzerEnabled，默认 true=历史现状）。
             Check("蜂鸣上限0=不启用",
-                !AgingSequencer.ShouldFanBuzzerAlarm(999f, 0f, false));
+                !AgingSequencer.ShouldFanBuzzerAlarm(999f, 0f, true, false));
             Check("蜂鸣报警全关压制（不叫）",
-                !AgingSequencer.ShouldFanBuzzerAlarm(999f, 60f, true));
+                !AgingSequencer.ShouldFanBuzzerAlarm(999f, 60f, true, true));
             Check("蜂鸣恰等上限不叫(边界>)",
-                !AgingSequencer.ShouldFanBuzzerAlarm(60f, 60f, false));
+                !AgingSequencer.ShouldFanBuzzerAlarm(60f, 60f, true, false));
             Check("蜂鸣超限+未压制才叫",
-                AgingSequencer.ShouldFanBuzzerAlarm(60.1f, 60f, false));
+                AgingSequencer.ShouldFanBuzzerAlarm(60.1f, 60f, true, false));
             Check("蜂鸣NaN探头失效不叫(fail-safe)",
-                !AgingSequencer.ShouldFanBuzzerAlarm(float.NaN, 60f, false));
+                !AgingSequencer.ShouldFanBuzzerAlarm(float.NaN, 60f, true, false));
             Check("蜂鸣与联停开关无关(联停关也照叫)",
-                AgingSequencer.ShouldFanBuzzerAlarm(999f, 60f, false)
+                AgingSequencer.ShouldFanBuzzerAlarm(999f, 60f, true, false)
                 && !AgingSequencer.IsFanOverTempShutdown(999f, 60f, false));
+            // ── 2.0.7：超温蜂鸣开关（关=超温这一路不叫，只记日志）──
+            Check("蜂鸣开关关=超温不叫",
+                !AgingSequencer.ShouldFanBuzzerAlarm(999f, 60f, false, false));
+            Check("蜂鸣开关关+全关=仍不叫",
+                !AgingSequencer.ShouldFanBuzzerAlarm(999f, 60f, false, true));
+            Check("蜂鸣开关开=超温照叫(现状不变)",
+                AgingSequencer.ShouldFanBuzzerAlarm(999f, 60f, true, false));
 
             // ── 2.0.6：报警蜂鸣合并（超温与真空异常共用同一个 DO 点）──
             // 任一路还在报警就必须继续响，两路都解除才允许停。
@@ -2230,19 +2238,22 @@ namespace AgingTestSystem.Tests
             Check("先解除一路另一路仍响(真空)",
                 AgingSequencer.ShouldAlarmBuzzer(false, true, false));
 
-            // ── 2.0.6：温度未知保持（探头失效/风机离线不许静默）──
+            // ── 2.0.6：温度未知保持（探头失效/风机离线不许静默；2.0.7 加蜂鸣开关参数）──
             Check("温度未知+超温启用+无真空=保持",
-                AgingSequencer.ShouldHoldAlarmBuzzer(true, 60f, false, false, false));
+                AgingSequencer.ShouldHoldAlarmBuzzer(true, true, 60f, false, false, false));
             Check("温度未知+有真空源=不保持(真空接管)",
-                !AgingSequencer.ShouldHoldAlarmBuzzer(true, 60f, false, true, false));
+                !AgingSequencer.ShouldHoldAlarmBuzzer(true, true, 60f, false, true, false));
             Check("温度已知=不保持",
-                !AgingSequencer.ShouldHoldAlarmBuzzer(true, 60f, true, false, false));
+                !AgingSequencer.ShouldHoldAlarmBuzzer(true, true, 60f, true, false, false));
             Check("未启用风机=不保持(无温度源)",
-                !AgingSequencer.ShouldHoldAlarmBuzzer(false, 60f, false, false, false));
+                !AgingSequencer.ShouldHoldAlarmBuzzer(false, true, 60f, false, false, false));
             Check("超温上限0=不保持(未启用超温)",
-                !AgingSequencer.ShouldHoldAlarmBuzzer(true, 0f, false, false, false));
+                !AgingSequencer.ShouldHoldAlarmBuzzer(true, true, 0f, false, false, false));
             Check("报警全关不保持(最高级静默)",
-                !AgingSequencer.ShouldHoldAlarmBuzzer(true, 60f, false, false, true));
+                !AgingSequencer.ShouldHoldAlarmBuzzer(true, true, 60f, false, false, true));
+            // 2.0.7：蜂鸣开关关掉后超温路整体不参与，"看不见温度"与它无关，不保持（立即收尾）
+            Check("蜂鸣开关关=不保持(开关关立即收尾)",
+                !AgingSequencer.ShouldHoldAlarmBuzzer(true, false, 60f, false, false, false));
 
             // ── 2.0.6：送风机保持（报警未复位不关风机，避免故障扩大成过温）──
             Check("在测=保持送风", AgingSequencer.ShouldKeepFanRunning(true, false));
@@ -2388,20 +2399,23 @@ namespace AgingTestSystem.Tests
                 && !ProjectPolicyStore.PolicyKeys.Contains("FanBuzzerDoPoint"));
             Check("PolicyKeys 含真空异常蜂鸣(2.0.6 跟项目走，预置不管辖)",
                 ProjectPolicyStore.PolicyKeys.Contains("VacuumAlarmBuzzerEnabled"));
+            Check("PolicyKeys 含超温蜂鸣(2.0.7 跟项目走，预置不管辖)",
+                ProjectPolicyStore.PolicyKeys.Contains("FanTempAlarmBuzzerEnabled"));
             bool optsOk = true;
             foreach (string k in ProjectPolicyStore.PolicyKeys)
             {
                 // VentValveDoPoint/VacuumConfirmTimeoutMs 是数字项、
                 // FanTempShutdownEnabled/SkipVacuum/DisplayModeEnabled/PressureAlarmEnabled/
-                // MuteAllAlarms/VacuumAlarmBuzzerEnabled 是布尔项、
+                // MuteAllAlarms/VacuumAlarmBuzzerEnabled/FanTempAlarmBuzzerEnabled 是布尔项、
                 // MesTriggers/MesFieldMap/MesStaticFields/CustomAlarmRules/
                 // CompleteExpression/ReportColumns/DisplayModes 是自由文本
-                // （V1.68/V1.69/V1.74/V1.75/2.0.0/2.0.6），都无策略下拉。
+                // （V1.68/V1.69/V1.74/V1.75/2.0.0/2.0.6/2.0.7），都无策略下拉。
                 // 蜂鸣器点位 FanBuzzerDoPoint 已从 PolicyKeys 移除（改跟机器 exe.config）。
                 if (k == "VentValveDoPoint" || k == "VacuumConfirmTimeoutMs"
                     || k == "FanTempShutdownEnabled" || k == "SkipVacuum"
                     || k == "DisplayModeEnabled" || k == "PressureAlarmEnabled"
                     || k == "MuteAllAlarms" || k == "VacuumAlarmBuzzerEnabled"
+                    || k == "FanTempAlarmBuzzerEnabled"
                     || k == "MesTriggers" || k == "MesFieldMap" || k == "MesStaticFields"
                     || k == "CustomAlarmRules" || k == "CompleteExpression"
                     || k == "ReportColumns" || k == "DisplayModes") continue;
@@ -3564,6 +3578,8 @@ namespace AgingTestSystem.Tests
                 Views.PolicyGraph.LocateKey("MuteAllAlarms") == "【报警联动】报警全关");
             Check("真空异常蜂鸣定位报警联动",
                 Views.PolicyGraph.LocateKey("VacuumAlarmBuzzerEnabled") == "【报警联动】真空异常蜂鸣");
+            Check("超温蜂鸣定位报警联动",
+                Views.PolicyGraph.LocateKey("FanTempAlarmBuzzerEnabled") == "【报警联动】超温蜂鸣");
             Check("零时长定位启动开阀",
                 Views.PolicyGraph.LocateKey("ZeroDurationPolicy") == "【启动开阀】0时长策略");
             Check("无节点key定位null",
@@ -3579,7 +3595,7 @@ namespace AgingTestSystem.Tests
                 && Views.PolicyGraph.LocateKey("ReportColumns") == "【系统设置·报表导出】报表列");
 
             // ── V2.0.5 配置分层锁（客户痛点"不知道哪些该动"） ──
-            // 常用 13 项 = 首屏一屏看完；高级 13 项默认折叠（2.0.6 +真空异常蜂鸣）。
+            // 常用 13 项 = 首屏一屏看完；高级 14 项默认折叠（2.0.6 +真空异常蜂鸣、2.0.7 +超温蜂鸣）。
             // 新增 key 必须显式选 Tier（构造无缺省），这条锁防止以后又平铺回一屏 30 项。
             int commonCount = 0, advancedCount = 0;
             foreach (var n in Views.PolicyGraph.Nodes)
@@ -3591,10 +3607,10 @@ namespace AgingTestSystem.Tests
                 }
             }
             Check("常用13项（首屏一屏看完）", commonCount == 13);
-            Check("高级13项（默认折叠）", advancedCount == 13);
-            Check("报警节点4常用+9高级",
+            Check("高级14项（默认折叠）", advancedCount == 14);
+            Check("报警节点4常用+10高级",
                 CountNodeKeys("alarm", Views.PolicyGraph.KeyTier.Common) == 4
-                && CountNodeKeys("alarm", Views.PolicyGraph.KeyTier.Advanced) == 9);
+                && CountNodeKeys("alarm", Views.PolicyGraph.KeyTier.Advanced) == 10);
             Check("出厂值读取（A 未管辖项的基准兜底）",
                 Views.PolicyGraph.GetDefaultString("VacuumConfirmTimeoutMs") == "15000"
                 && Views.PolicyGraph.GetDefaultString("ZeroDurationPolicy") == "Warn"
@@ -4386,10 +4402,10 @@ namespace AgingTestSystem.Tests
                     !ok("VacuumConfirmTimeoutMs", "abc") && !ok("VacuumConfirmTimeoutMs", "")
                     && !ok("VacuumConfirmTimeoutMs", "600001"));
 
-                // _boolKeys 20 项逐项过校验（防"只加一边"的配置漂移；V1.68 +MesEnabled/MesMockEnabled；V1.69 +SkipVacuum；V1.73 +VentValveEnabled；V1.74 +UsePowerMeter；V1.75 +DisplayModeEnabled；2.0.0 +PressureAlarmEnabled；2.0.0 +MuteAllAlarms；2.0.6 +VacuumAlarmBuzzerEnabled）
+                // _boolKeys 21 项逐项过校验（防"只加一边"的配置漂移；V1.68 +MesEnabled/MesMockEnabled；V1.69 +SkipVacuum；V1.73 +VentValveEnabled；V1.74 +UsePowerMeter；V1.75 +DisplayModeEnabled；2.0.0 +PressureAlarmEnabled；2.0.0 +MuteAllAlarms；2.0.6 +VacuumAlarmBuzzerEnabled；2.0.7 +FanTempAlarmBuzzerEnabled）
                 var boolKeys = (HashSet<string>)typeof(SettingsForm).GetField("_boolKeys",
                     BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
-                Check("布尔键20项", boolKeys != null && boolKeys.Count == 20);
+                Check("布尔键21项", boolKeys != null && boolKeys.Count == 21);
                 if (boolKeys != null)
                 {
                     bool allBoolOk = boolKeys.All(k => ok(k, "true") && ok(k, "false") && !ok(k, "YES"));
@@ -4399,6 +4415,7 @@ namespace AgingTestSystem.Tests
                         && boolKeys.Contains("PressureAlarmEnabled")
                         && boolKeys.Contains("MuteAllAlarms")
                         && boolKeys.Contains("VacuumAlarmBuzzerEnabled")
+                        && boolKeys.Contains("FanTempAlarmBuzzerEnabled")
                         && boolKeys.Contains("ScannerDebugLog")
                         && boolKeys.Contains("UseMockCommunication")
                         && boolKeys.Contains("MesEnabled")

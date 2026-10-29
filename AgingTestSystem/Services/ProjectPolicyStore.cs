@@ -71,6 +71,11 @@ namespace AgingTestSystem.Services
             // 与 FanTempShutdownEnabled（超温是否联停）完全独立，"只响不停"不需要开联停。
             // 不进预置管辖（超温/真空共用同一蜂鸣器，预置无权替现场决定听不听）。
             "VacuumAlarmBuzzerEnabled",
+            // 超温是否蜂鸣（布尔，默认 true=响，即 2.0.7 之前的历史现状）：送风机温度超过
+            // FanTempAlarmLimitC 上限时是否触发蜂鸣器；false=超温只记日志不响。
+            // 不影响超温联停（要不要停机是另一件事）。与真空开关各管各的源、共用同一蜂鸣器，
+            // 同样不进预置管辖（预置无权替现场决定听不听）。
+            "FanTempAlarmBuzzerEnabled",
         };
 
         /// <summary>当前项目的策略文件路径（Projects/&lt;项目&gt;/Policy.json，当前生效值）。</summary>

@@ -642,22 +642,27 @@
   激活比对 + 计数格 + ini 隔离往返 + 窗构造 + V1.88.1 付费即恢复判定/成功位）；ini 测试走显式 path，不碰真实文件；
   激活窗只构造不 Show（错码调 handler 不断言弹窗）。
 
-## 报警提醒与联停解耦铁律（2.0.6 客户需求：报警只提醒，别关送风和压缩机）
+## 报警提醒与联停解耦铁律（2.0.6 客户需求：报警只提醒，别关送风和压缩机；2.0.7 蜂鸣做成两个开关）
 
 - **三件事互相独立，禁止互相门控**：①要不要报警（判定）②要不要蜂鸣（提醒）
   ③要不要停机/联停（动作）。超温：`FanTempShutdownEnabled` 只管联停，默认 false；
-  蜂鸣只看 `FanTempAlarmLimitC>0` + `FanBuzzerDoPoint>0`，联停关着照响。
+  响不响另由 `FanTempAlarmBuzzerEnabled`（2.0.7，默认 true=历史现状）+ `FanTempAlarmLimitC>0`
+  + `FanBuzzerDoPoint>0` 决定，联停关着照响、蜂鸣关了只记日志。
   真空：`VacuumAlarmBuzzerEnabled`（默认 true）只管响不响，报警本身照旧只退故障那一台，
-  **绝不联停整线**（其他 71 台继续老化）。
+  **绝不联停整线**（其他 71 台继续老化）。两路开关各管各的源、共用同一个蜂鸣器。
 - **蜂鸣器只有一个 DO 点，两路源必须合并**：判定唯一口是
   `AgingSequencer.ShouldAlarmBuzzer(fanOverTemp, vacuumAlarmPending, suppressAllAlarms)`，
   任一路成立就响、两路都解除才停（禁止各写各的：先解除的一路会把另一路静默）。
+  `fanOverTemp` 实参已含超温蜂鸣开关（`ShouldFanBuzzerAlarm(温度, 上限, 开关, 全关)` 内判）、
+  `vacuumAlarmPending` 实参已含真空蜂鸣开关（调用方 `_config.VacuumAlarmBuzzerEnabled &&` 门控）；
+  新增第三路源时照此把开关收进各自实参，不许在合并判定后再拆。
   真空源由 `DeviceManager.OnVacuumAlarm` / `OnAlarmCleared` 维护，主界面
   `_vacuumAlarmStations` 按台登记；只报真空类（压力越限/建立超时/失压保持运行），
   DI/失联/自定义规则不走本事件。`MuteAllAlarms` 是最高级静默，无条件压住。
-- **温度未知不许静默**：超温功能已启用（风机启用 + 上限>0）但本轮读不到有效温度
+- **温度未知不许静默**：超温蜂鸣功能已启用（蜂鸣开关 + 风机启用 + 上限>0）但本轮读不到有效温度
   （离线/NaN）时，`ShouldHoldAlarmBuzzer` 让蜂鸣器保持现状（在响继续响、没响不开新的），
   等读数恢复再按真实温度决定；否则探头一坏报警就静音。
+  **蜂鸣开关关掉后不进入保持**（2.0.7）：超温路整体不参与蜂鸣，"看不见温度"与它无关，立即收尾。
 - **报警未复位保持送风**：`UpdateFanLifecycle` 的判定唯一口是
   `ShouldKeepFanRunning(anyTesting, anyAlarm)`＝在测 **或** 有未复位报警。
   报警台退出测试后即使已是最后一台，送风机也继续运行（炉子还在发热，停风会把
