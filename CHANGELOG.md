@@ -35,6 +35,11 @@
 - harness 重跑 19 张图全出，01-main 三态齐全（aging 69 / comp 2 / fault 1）；
   check_docs.py 全绿（无截断标记/19 图双向引用/PDF 配对/客户版禁词/编码/git 范围）；
   三份 PDF 重转（打码后重转是 R4 红线），PDF 页渲染人眼复核（校准图、激活窗打码效果）。
+- [2026-10-29 追记] 同日用 `git filter-repo` 清洗了历史：`docs/images/13-activation.png`
+  两个历史版本与三份 PDF 的全部历史版本（共 23 个 blob，最早自 11c87af 就内嵌明文）
+  整体替换为打码版/干净版，旧明文对象已 `gc --prune=now` 物理清除；main 与 tags 2.0.0/2.0.1
+  已 force push，**全部 commit hash 从本轮起变更**——按旧 hash（如 9a865ae）追溯历史会失配，
+  请以本 CHANGELOG 各版本小节为准。远端（GitHub）侧旧对象缓存会在其 GC 后消失。
 
 ## 2.0.7 — 超温蜂鸣也可配置：两路报警各自开关（客户需求）
 

@@ -22,6 +22,7 @@
    - 写文件用 write 工具；仅追加/改一行用 edit 工具。
    - 新增中文文件后自查：`[IO.File]::ReadAllText(path, UTF8).Contains("预期中文")` 能命中。
 2. **不提交运行时数据与机密**：`Users.json`（密码为 PBKDF2 哈希，明文不落盘，见 `PasswordHasher.cs`）、`Recipes.json`、`StationSettings.json` 等程序运行生成的 json 一律 gitignore，绝不入库。
+   - **涉密已经进 git 历史时的清洗套路（2.0.8，2026-10-29 实操沉淀）**：①先 `git bundle create <备份> --all` 备份到仓库外（验证通过即删，备份含明文不能留）；②`git rev-list --all -- <路径>` 枚举该路径全部历史 blob（文档图类涉密往往是"每个历史版本一个 blob"，比单提交多得多）；③`git filter-repo --force --blob-callback` 按 git blob sha（`sha1("blob <len>\0"+data)`，先用 HEAD 已知 blob 自算校准公式）精确替换——图片/嵌图 PDF 只能整 blob 替换（`--replace-text` 只管文本）；④改写后 `git reflog expire --expire=now --all` ＋ `git gc --prune=now`，再 `git cat-file --batch-all-objects --batch-check` 全枚举复验"旧明文 sha 一个不存在、目标路径全历史只剩干净 sha"，物理级才算干净；⑤`git push --force` main＋全部 tags；⑥filter-repo 会删除 origin remote（记得 `remote add` 恢复）并重写全部后代 commit hash（事后按旧 hash 追溯会失配，以 CHANGELOG 小节为准）。
 3. **改动后必须构建验证**，禁止提交编译不过的代码。
 4. **不主动 commit/push**，除非用户明确要求；提交前先 `git status` + `git diff` 确认只包含预期改动。
 5. **代码注释精简但把话说全（V1.89 用户原则）**：关键方法/流程/边界条件/配置依赖写清"做什么 + 为什么这么写 + 怎么改"，让小白能看懂学会；**禁止写版本流水账**（`【V1.xx …】`标签、"原来…现在…"、"血泪/实锤"叙事一律不进代码，历史包袱只留 `CHANGELOG.md`）。允许的一句话出处（如"Sunny 标签缺省 AutoSize=false"）保留，杜绝只写变量名的废话注释（如 `i++ // 自增`）。参考 `WorkstationGridView.cs` / `RecipeManagerForm.cs` 头部与关键方法。
